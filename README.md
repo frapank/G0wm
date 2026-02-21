@@ -1,7 +1,7 @@
 # dwl - dwm for Wayland
 
-Join us on our [Discord server]
-Or Matrix: [#dwl-official:matrix.org]
+Join us on our [Discord server]  
+Or Matrix: [#dwl-official:matrix.org]  
 Or on our IRC channel: [#dwl on Libera Chat]
 
 dwl is a compact, hackable compositor for [Wayland] based on [wlroots]. It is
