@@ -74,7 +74,10 @@
 #include <xcb/xcb_icccm.h>
 #endif
 
+#include "dbus.h"
 #include "drwl.h"
+#include "systray/tray.h"
+#include "systray/watcher.h"
 #include "util.h"
 #include "xdg-shell-protocol.h"
 
@@ -103,7 +106,7 @@ enum {
     SchemeUrg,
     SchemeTitle,
     SchemeTitleSel
-};                                                  /* color schemes */
+}; /* color schemes */
 enum { CurNormal, CurPressed, CurMove, CurResize }; /* cursor */
 enum { XDGShell, LayerShell, X11 };                 /* client types */
 enum {
@@ -123,7 +126,8 @@ enum {
     ClkStatus,
     ClkTitle,
     ClkClient,
-    ClkRoot
+    ClkRoot,
+    ClkTray
 }; /* clicks */
 
 typedef union {
@@ -255,8 +259,9 @@ struct Monitor {
     } b; /* bar area */
     struct {
         int height;
-        int real_height;      /* non-scaled */
-    } t;                      /* per-client title bar */
+        int real_height; /* non-scaled */
+    } t;                 /* per-client title bar */
+    Tray* tray;
     struct wlr_box w;         /* window area, layout-relative */
     struct wl_list layers[4]; /* LayerSurface.link */
     const Layout* lt[2];
@@ -441,6 +446,9 @@ static void togglegaps(const Arg* arg);
 static void toggletabbed(const Arg* arg);
 static void toggletag(const Arg* arg);
 static void toggleview(const Arg* arg);
+static void trayactivate(const Arg* arg);
+static void traymenu(const Arg* arg);
+static void traynotify(void* data);
 static void unlocksession(struct wl_listener* listener, void* data);
 static void unmaplayersurfacenotify(struct wl_listener* listener, void* data);
 static void unmapnotify(struct wl_listener* listener, void* data);
@@ -517,6 +525,10 @@ static Monitor* selmon;
 
 static char stext[256];
 static struct wl_event_source* status_event_source;
+
+static DBusConnection* bus_conn;
+static struct wl_event_source* bus_source;
+static Watcher watcher = { .running = 0 };
 
 static const struct wlr_buffer_impl buffer_impl = {
     .destroy = bufdestroy,
@@ -867,8 +879,9 @@ void bufrelease(struct wl_listener* listener, void* data)
 
 void buttonpress(struct wl_listener* listener, void* data)
 {
-    unsigned int i = 0, x = 0;
-    double cx;
+    unsigned int i = 0, x = 0, ti = 0, trayitems;
+    double cx, tx;
+    int traywidth, statusw;
     unsigned int click;
     struct wlr_pointer_button_event* event = data;
     struct wlr_keyboard* keyboard;
@@ -902,6 +915,8 @@ void buttonpress(struct wl_listener* listener, void* data)
                 (buffer = wlr_scene_buffer_from_node(node)) &&
                 buffer == selmon->scene_buffer) {
                 cx = (cursor->x - selmon->m.x) * selmon->wlr_output->scale;
+                traywidth = tray_get_width(selmon->tray);
+                statusw = TEXTW(selmon, stext) - selmon->lrpad + 2;
                 do
                     x += TEXTW(selmon, tags[i]);
                 while (cx >= x && ++i < LENGTH(tags));
@@ -910,8 +925,17 @@ void buttonpress(struct wl_listener* listener, void* data)
                     arg.ui = 1 << i;
                 } else if (cx < x + TEXTW(selmon, selmon->ltsymbol))
                     click = ClkLtSymbol;
-                else if (cx > selmon->b.width -
-                                  (TEXTW(selmon, stext) - selmon->lrpad + 2)) {
+                else if (traywidth && cx > selmon->b.width - traywidth) {
+                    /* the tray slots are evenly sized, so which one was hit
+                     * follows from the cursor offset into the tray */
+                    trayitems = watcher_get_n_items(&watcher);
+                    tx = selmon->b.width - traywidth;
+                    while (trayitems && ++ti < trayitems &&
+                           cx >= (tx += (double)traywidth / trayitems))
+                        ;
+                    click = ClkTray;
+                    arg.ui = ti - 1;
+                } else if (cx > selmon->b.width - (statusw + traywidth)) {
                     click = ClkStatus;
                 } else
                     click = ClkTitle;
@@ -929,8 +953,10 @@ void buttonpress(struct wl_listener* listener, void* data)
                 if (CLEANMASK(mods) == CLEANMASK(b->mod) &&
                     event->button == b->button && click == b->click &&
                     b->func) {
-                    b->func(click == ClkTagBar && b->arg.i == 0 ? &arg
-                                                                : &b->arg);
+                    b->func((click == ClkTagBar || click == ClkTray) &&
+                                    b->arg.i == 0
+                                ? &arg
+                                : &b->arg);
                     return;
                 }
             }
@@ -1011,6 +1037,13 @@ void cleanup(void)
 
     destroykeyboardgroup(&kb_group->destroy, NULL);
 
+    if (watcher.running)
+        watcher_stop(&watcher);
+    if (bus_conn) {
+        stopbus(bus_conn, bus_source);
+        dbus_connection_unref(bus_conn);
+    }
+
     /* If it's not destroyed manually, it will cause a use-after-free of
      * wlr_seat. Destroy it until it's fixed on the wlroots side */
     wlr_backend_destroy(backend);
@@ -1037,6 +1070,9 @@ void cleanupmon(struct wl_listener* listener, void* data)
 
     for (i = 0; i < LENGTH(m->pool); i++)
         wlr_buffer_drop(&m->pool[i]->base);
+
+    if (m->tray)
+        destroytray(m->tray);
 
     drwl_setimage(m->drw, NULL);
     drwl_destroy(m->drw);
@@ -1734,7 +1770,7 @@ Monitor* dirtomon(enum wlr_direction dir)
 
 void drawbar(Monitor* m)
 {
-    int x, w, tw = 0;
+    int x, w, tw = 0, traywidth;
     int boxs = m->drw->font->height / 9;
     int boxw = m->drw->font->height / 6 + 2;
     uint32_t i, occ = 0, urg = 0;
@@ -1749,12 +1785,20 @@ void drawbar(Monitor* m)
     if (!(buf = bufget(m->pool, LENGTH(m->pool), m->b.width, m->b.height)))
         return;
     drwl_setimage(m->drw, buf->image);
+    traywidth = tray_get_width(m->tray);
 
     /* draw status first so it can be overdrawn by tags later */
     if (m == selmon) { /* status is only drawn on selected monitor */
         drwl_setscheme(m->drw, colors[SchemeNorm]);
         tw = TEXTW(m, stext) - m->lrpad + 2; /* 2px right padding */
-        drwl_text(m->drw, m->b.width - tw, 0, tw, m->b.height, 0, stext, 0);
+        drwl_text(m->drw,
+                  m->b.width - (tw + traywidth),
+                  0,
+                  tw,
+                  m->b.height,
+                  0,
+                  stext,
+                  0);
     }
 
     wl_list_for_each(c, &clients, link)
@@ -1788,7 +1832,7 @@ void drawbar(Monitor* m)
     drwl_setscheme(m->drw, colors[SchemeNorm]);
     x = drwl_text(m->drw, x, 0, w, m->b.height, m->lrpad / 2, m->ltsymbol, 0);
 
-    if ((w = m->b.width - tw - x) > m->b.height) {
+    if ((w = m->b.width - (tw + x + traywidth)) > m->b.height) {
         if (c) {
             drwl_setscheme(m->drw,
                            colors[m == selmon ? SchemeSel : SchemeNorm]);
@@ -1808,6 +1852,20 @@ void drawbar(Monitor* m)
         }
     }
 
+    if (traywidth > 0)
+        pixman_image_composite32(PIXMAN_OP_SRC,
+                                 m->tray->image,
+                                 NULL,
+                                 m->drw->image,
+                                 0,
+                                 0,
+                                 0,
+                                 0,
+                                 m->b.width - traywidth,
+                                 0,
+                                 traywidth,
+                                 m->b.height);
+
     wlr_scene_buffer_set_dest_size(
         m->scene_buffer, m->b.real_width, m->b.real_height);
     wlr_scene_node_set_position(
@@ -1823,6 +1881,21 @@ void drawbars(void)
     Monitor* m = NULL;
 
     wl_list_for_each(m, &mons, link) drawbar(m);
+}
+
+void traynotify(void* data)
+{
+    drawbar((Monitor*)data);
+}
+
+void trayactivate(const Arg* arg)
+{
+    tray_leftclicked(selmon->tray, arg->ui);
+}
+
+void traymenu(const Arg* arg)
+{
+    tray_rightclicked(selmon->tray, arg->ui, dmenucmd);
 }
 
 /* Renders the client's own title bar. In the tabbed layout every client of the
@@ -3270,6 +3343,18 @@ void setup(void)
                                                statusin,
                                                NULL);
 
+    /* The tray is a StatusNotifierWatcher on the session bus. Missing it is
+     * not fatal: dwl just comes up without a tray. */
+    if (showbar && showsystray) {
+        if ((bus_conn = dbus_bus_get(DBUS_BUS_SESSION, NULL)) &&
+            (bus_source = startbus(bus_conn, event_loop)))
+            watcher_start(&watcher, bus_conn, event_loop);
+        else
+            fprintf(stderr,
+                    "Couldn't connect to the session bus, "
+                    "systray not available\n");
+    }
+
     /* Make sure XWayland clients don't connect to the parent X server,
      * e.g when running in the x11 backend or the wayland backend and the
      * compositor has Xwayland support */
@@ -3672,7 +3757,7 @@ void updatemons(struct wl_listener* listener, void* data)
 
 void updatebar(Monitor* m)
 {
-    int rw, rh;
+    int rw, rh, iconsize;
     char fontattrs[12];
 
     wlr_output_transformed_resolution(m->wlr_output, &rw, &rh);
@@ -3699,6 +3784,27 @@ void updatebar(Monitor* m)
     m->b.real_height = (int)((float)m->b.height / m->wlr_output->scale);
     m->t.height = m->drw->font->height + (int)titlepadding;
     m->t.real_height = (int)((float)m->t.height / m->wlr_output->scale);
+
+    if (showbar && showsystray) {
+        if (m->tray)
+            destroytray(m->tray);
+        /* systrayiconsize is unscaled, like cursor_size; 0 fills the bar */
+        iconsize = systrayiconsize
+                       ? (int)((float)systrayiconsize * m->wlr_output->scale)
+                       : m->b.height;
+        m->tray = createtray(m,
+                             m->b.height,
+                             MIN(iconsize, m->b.height),
+                             (int)systrayspacing,
+                             colors[SchemeNorm],
+                             fonts,
+                             fontattrs,
+                             &traynotify,
+                             &watcher);
+        if (!m->tray)
+            die("Couldn't create tray for monitor");
+        wl_list_insert(&watcher.trays, &m->tray->link);
+    }
 }
 
 void updatetitle(struct wl_listener* listener, void* data)
