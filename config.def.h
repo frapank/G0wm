@@ -21,6 +21,9 @@ static const char *fonts[]                 = {"monospace:size=10"};
 static const float rootcolor[]             = COLOR(0x000000ff);
 /* This conforms to the xdg-protocol. Set the alpha to zero to restore the old behavior */
 static const float fullscreen_bg[]         = {0.0f, 0.0f, 0.0f, 1.0f}; /* You can also use glsl colors */
+static const int showsystray               = 1;  /* 0 means no systray */
+static const unsigned int systrayspacing   = 2;  /* systray icon spacing */
+static const unsigned int systrayiconsize  = 16; /* icon size, 0 fills the bar */
 static const int titlebar                  = 1;  /* 0 means no per-window title bar */
 static const unsigned int titlepadding     = 6;  /* title bar height on top of the font height */
 static uint32_t colors[][3]                = {
@@ -141,6 +144,7 @@ static const enum libinput_config_tap_button_map button_map = LIBINPUT_CONFIG_TA
 #define SHCMD(cmd) { .v = (const char*[]){ "/bin/sh", "-c", cmd, NULL } }
 
 /* commands */
+static const char *dmenucmd[] = { "wmenu", NULL };
 static const char *termcmd[] = { "foot", NULL };
 static const char *menucmd[] = { "wmenu-run", NULL };
 
@@ -204,6 +208,8 @@ static const Button buttons[] = {
 	{ ClkClient,   MODKEY, BTN_LEFT,   moveresize,     {.ui = CurMove} },
 	{ ClkClient,   MODKEY, BTN_MIDDLE, togglefloating, {0} },
 	{ ClkClient,   MODKEY, BTN_RIGHT,  moveresize,     {.ui = CurResize} },
+	{ ClkTray,     0,      BTN_LEFT,   trayactivate,   {0} },
+	{ ClkTray,     0,      BTN_RIGHT,  traymenu,       {0} },
 	{ ClkTagBar,   0,      BTN_LEFT,   view,           {0} },
 	{ ClkTagBar,   0,      BTN_RIGHT,  toggleview,     {0} },
 	{ ClkTagBar,   MODKEY, BTN_LEFT,   tag,            {0} },
