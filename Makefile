@@ -12,20 +12,33 @@ DWLDEVCFLAGS = -g -Wpedantic -Wall -Wextra -Wdeclaration-after-statement \
 	-Wfloat-conversion
 
 # CFLAGS / LDFLAGS
-PKGS      = wayland-server xkbcommon libinput pixman-1 fcft $(XLIBS)
+PKGS      = wayland-server xkbcommon libinput pixman-1 fcft dbus-1 $(XLIBS)
 DWLCFLAGS = `$(PKG_CONFIG) --cflags $(PKGS)` $(WLR_INCS) $(DWLCPPFLAGS) $(DWLDEVCFLAGS) $(CFLAGS)
 LDLIBS    = `$(PKG_CONFIG) --libs $(PKGS)` $(WLR_LIBS) -lm $(LIBS)
 
 .PHONY: all clean dist install uninstall remove format format-check
 
+TRAYOBJS = systray/watcher.o systray/tray.o systray/item.o systray/icon.o \
+	systray/menu.o systray/helpers.o
+TRAYDEPS = systray/watcher.h systray/tray.h systray/item.h systray/icon.h \
+	systray/menu.h systray/helpers.h
+
 all: dwl
-dwl: dwl.o util.o
-	$(CC) dwl.o util.o $(DWLCFLAGS) $(LDFLAGS) $(LDLIBS) -o $@
-dwl.o: dwl.c client.h config.h config.mk cursor-shape-v1-protocol.h \
+dwl: dwl.o util.o dbus.o $(TRAYOBJS)
+	$(CC) dwl.o util.o dbus.o $(TRAYOBJS) $(DWLCFLAGS) $(LDFLAGS) $(LDLIBS) -o $@
+dwl.o: dwl.c client.h dbus.h config.h config.mk cursor-shape-v1-protocol.h \
 	ext-image-copy-capture-v1-protocol.h \
 	pointer-constraints-unstable-v1-protocol.h wlr-layer-shell-unstable-v1-protocol.h \
-	wlr-output-power-management-unstable-v1-protocol.h xdg-shell-protocol.h
+	wlr-output-power-management-unstable-v1-protocol.h xdg-shell-protocol.h \
+	$(TRAYDEPS)
 util.o: util.c util.h
+dbus.o: dbus.c dbus.h
+systray/watcher.o: systray/watcher.c $(TRAYDEPS)
+systray/tray.o: systray/tray.c $(TRAYDEPS)
+systray/item.o: systray/item.c $(TRAYDEPS)
+systray/icon.o: systray/icon.c $(TRAYDEPS)
+systray/menu.o: systray/menu.c $(TRAYDEPS)
+systray/helpers.o: systray/helpers.c $(TRAYDEPS)
 
 # wayland-scanner is a tool which generates C headers and rigging for Wayland
 # protocols, which are specified in XML. wlroots requires you to rig these up
@@ -69,12 +82,13 @@ format-check:
 	done
 
 clean:
-	rm -f dwl *.o *-protocol.h
+	rm -f dwl *.o *-protocol.h systray/*.o
 
 dist: clean
 	mkdir -p dwl-$(VERSION)
 	cp -R LICENSE* Makefile CHANGELOG.md README.md client.h config.def.h \
 		config.mk protocols dwl.1 dwl.c drwl.h util.c util.h dwl.desktop \
+		dbus.c dbus.h systray \
 		start-dwl dwl-status.sh \
 		dwl-$(VERSION)
 	tar -caf dwl-$(VERSION).tar.gz dwl-$(VERSION)
