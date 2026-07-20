@@ -1276,6 +1276,10 @@ createmon(struct wl_listener *listener, void *data)
 			strncpy(m->ltsymbol, m->lt[m->sellt]->symbol, sizeof(m->ltsymbol));
 			wlr_output_state_set_scale(&state, r->scale);
 			wlr_output_state_set_transform(&state, r->rr);
+			/* Load (or reuse, if already cached) the xcursor theme at this
+			 * monitor's scale so the cursor renders crisp and sized
+			 * relative to cursor_size * scale, not just cursor_size. */
+			wlr_xcursor_manager_load(cursor_mgr, r->scale);
 			break;
 		}
 	}
@@ -2081,7 +2085,7 @@ mapnotify(struct wl_listener *listener, void *data)
 	c->geom.height += 2 * c->bw;
 
 	/* Insert this client into client lists. */
-	wl_list_insert(&clients, &c->link);
+	wl_list_insert(clients.prev, &c->link); /* attach at the bottom of the stack */
 	wl_list_insert(&fstack, &c->flink);
 
 	/* Set initial monitor, tags, floating status, and focus:
@@ -2880,9 +2884,15 @@ setup(void)
 	 * Xcursor themes to source cursor images from and makes sure that cursor
 	 * images are available at all scale factors on the screen (necessary for
 	 * HiDPI support). Scaled cursors will be loaded with each output. */
+	/* Passing NULL as the theme name makes libxcursor look for a theme called
+	 * "default", which many systems don't ship; wlroots then falls back to a
+	 * fixed-size built-in cursor that ignores cursor_size entirely. Naming a
+	 * theme explicitly in config.h avoids that. */
 	snprintf(cursor_size_str, sizeof(cursor_size_str), "%d", cursor_size);
-	cursor_mgr = wlr_xcursor_manager_create(NULL, cursor_size);
+	cursor_mgr = wlr_xcursor_manager_create(cursor_theme, cursor_size);
 	setenv("XCURSOR_SIZE", cursor_size_str, 1);
+	if (cursor_theme)
+		setenv("XCURSOR_THEME", cursor_theme, 1);
 
 	/*
 	 * wlr_cursor *only* displays an image on screen. It does not move around
