@@ -65,6 +65,22 @@ effect the next time dwl is executed.
 As in the [dwm] community, we encourage users to share patches they have
 created. Check out the [dwl-patches] repository!
 
+### Used patches
+
+This checkout has the following [dwl-patches] applied on top of upstream dwl,
+adapted to this tree where needed. See `config.h`/`config.def.h` for the
+resulting configuration knobs.
+
+- **[bar]** — internal i3-like status bar (tags, layout symbol, focused
+  client title, external status text), rendered with `fcft`/`pixman`.
+  Configured for an always-black bar with white text and black window
+  borders (`colors[]` in `config.h`).
+- **[gaps]** — gaps between tiled clients, toggled at runtime with
+  `MODKEY+g`. Configured to a 3px gap (`gappx` in `config.h`).
+- **[autostart]** — runs commands listed in the `autostart[]` array in
+  `config.h` at startup and terminates them on exit, instead of relying on
+  the `-s` flag. Used here to start `swaybg` for the wallpaper.
+
 ## Running dwl
 
 dwl can be run on any of the backends supported by wlroots. This means you can
@@ -201,6 +217,9 @@ inspiration, and to the various contributors to the project, including:
 [0.7-rc1]: https://codeberg.org/dwl/dwl/releases/tag/v0.7-rc1
 [0.x branch]: https://codeberg.org/dwl/dwl/branches
 [anopa]: https://jjacky.com/anopa/
+[bar]: https://codeberg.org/dwl/dwl-patches/wiki/bar
+[gaps]: https://codeberg.org/dwl/dwl-patches/wiki/gaps
+[autostart]: https://codeberg.org/dwl/dwl-patches/wiki/autostart
 [dinit]: https://davmac.org/projects/dinit/
 [dwl-patches]: https://codeberg.org/dwl/dwl-patches
 [list of useful resources on our wiki]: https://codeberg.org/dwl/dwl/wiki/Home#migrating-from-x
