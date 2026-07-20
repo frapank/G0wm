@@ -16,6 +16,8 @@ PKGS      = wayland-server xkbcommon libinput pixman-1 fcft $(XLIBS)
 DWLCFLAGS = `$(PKG_CONFIG) --cflags $(PKGS)` $(WLR_INCS) $(DWLCPPFLAGS) $(DWLDEVCFLAGS) $(CFLAGS)
 LDLIBS    = `$(PKG_CONFIG) --libs $(PKGS)` $(WLR_LIBS) -lm $(LIBS)
 
+.PHONY: all clean dist install uninstall remove format format-check
+
 all: dwl
 dwl: dwl.o util.o
 	$(CC) dwl.o util.o $(DWLCFLAGS) $(LDFLAGS) $(LDLIBS) -o $@
@@ -52,6 +54,20 @@ xdg-shell-protocol.h:
 
 config.h:
 	cp config.def.h $@
+
+# Formatting, per .clang-format. drwl.h is vendored and config*.h are
+# alignment-sensitive tables, so neither is reformatted.
+FMT_SRC = dwl.c client.h util.c util.h
+
+format:
+	clang-format -i $(FMT_SRC)
+
+format-check:
+	@for f in $(FMT_SRC); do \
+		clang-format "$$f" | diff -u - "$$f" || \
+			{ echo "Wrong format in $$f, run 'make format'" >&2; exit 1; }; \
+	done
+
 clean:
 	rm -f dwl *.o *-protocol.h
 
