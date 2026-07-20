@@ -91,6 +91,22 @@ resulting configuration knobs.
   the stack instead of becoming the new master. This keeps whichever window
   is master in place, so the 2nd window you open lands in the stack (right
   side) rather than displacing the 1st one out of master (left side).
+- **[movestack]** (by Nikita Ivanov) — moves the focused client up or down
+  the stack, bound to `MODKEY+Shift+h/j/k/l` here.
+
+### Local additions
+
+Not from [dwl-patches] — written for this tree:
+
+- **Title bars** — every window gets a title bar showing its title, drawn
+  with the same `drwl` code as the bar. Height and colors come from
+  `titlebar`/`titlepadding` and the `SchemeTitle`/`SchemeTitleSel` entries
+  of `colors[]`; clicking a title bar focuses its window.
+- **Tabbed layout** — an i3/sway-style `tabbed` layout toggled with
+  `MODKEY+t`. The group is laid out as a single window and the members'
+  title bars are packed into its one title row as tabs, so `MODKEY+h/l`
+  cycles between them. Pressing `MODKEY+t` again restores the previous
+  layout.
 
 ## Running dwl
 
@@ -232,6 +248,7 @@ inspiration, and to the various contributors to the project, including:
 [bar]: https://codeberg.org/dwl/dwl-patches/wiki/bar
 [cursortheme]: https://codeberg.org/dwl/dwl-patches/wiki/cursortheme
 [gaps]: https://codeberg.org/dwl/dwl-patches/wiki/gaps
+[movestack]: https://codeberg.org/dwl/dwl-patches/src/branch/main/patches/movestack
 [autostart]: https://codeberg.org/dwl/dwl-patches/wiki/autostart
 [dinit]: https://davmac.org/projects/dinit/
 [dwl-patches]: https://codeberg.org/dwl/dwl-patches
