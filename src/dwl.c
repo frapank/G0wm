@@ -1436,13 +1436,19 @@ void createmon(struct wl_listener* listener, void* data)
             wlr_xcursor_manager_load(cursor_mgr, r->scale);
             if (r->width && r->height) {
                 struct wlr_output_mode* m2;
+                int32_t want = r->refresh * 1000, best_diff = INT32_MAX;
                 wl_list_for_each(m2, &wlr_output->modes, link) {
+                    int32_t diff = abs(m2->refresh - want);
                     if (m2->width == r->width && m2->height == r->height
-                        && m2->refresh == r->refresh * 1000) {
+                        && diff < best_diff) {
                         mode = m2;
-                        break;
+                        best_diff = diff;
                     }
                 }
+                if (!mode)
+                    wlr_log(WLR_ERROR,
+                        "no %dx%d mode found on %s, using preferred mode",
+                        r->width, r->height, wlr_output->name);
             }
             break;
         }
