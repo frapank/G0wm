@@ -25,6 +25,7 @@ static const int showsystray               = 1;  /* 0 means no systray */
 static const unsigned int systrayspacing   = 2;  /* systray icon spacing */
 static const unsigned int systrayiconsize  = 16; /* icon size, 0 fills the bar */
 static const int titlebar                  = 1;  /* 0 means no per-window title bar */
+static const int barwintitle               = 0;  /* 1 shows the focused window's title in the top bar too (redundant with titlebar) */
 static const unsigned int titlepadding     = 6;  /* title bar height on top of the font height */
 static uint32_t colors[][3]                = {
 	/*                   fg          bg          border    */
