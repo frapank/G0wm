@@ -16,7 +16,7 @@ static const int topbar                    = 1; /* 0 means bottom bar */
  * falls back to a tiny built-in cursor that ignores cursor_size. Final size is
  * cursor_size times the monitor's scale in monrules. */
 static const char *cursor_theme            = "Adwaita";
-static const int cursor_size               = 21; /* xcursor base size, default is 24 */
+static const int cursor_size               = 16; /* xcursor base size, default is 24 */
 static const char *fonts[]                 = {"DejaVu Sans Mono:size=11"};
 static const float rootcolor[]             = COLOR(0x000000ff);
 /* This conforms to the xdg-protocol. Set the alpha to zero to restore the old behavior */
@@ -45,7 +45,7 @@ static int log_level = WLR_ERROR;
 /* Autostart: NULL-terminated argv per command, plus a NULL to end the array.
  * Killed on dwl exit. */
 static const char *const autostart[] = {
-	"swaybg", "-i", "/home/user/.sway/wallnew.png", "-m", "fill", NULL,
+	"swaybg", "-i", "/home/user/.sway/gentoo.png", "-m", "fill", NULL,
 	NULL /* terminate */
 };
 
@@ -70,10 +70,10 @@ static const Layout layouts[] = {
  * WARNING: negative values other than (-1, -1) cause problems with Xwayland clients due to
  * https://gitlab.freedesktop.org/xorg/xserver/-/issues/899 */
 static const MonitorRule monrules[] = {
-   /* name        mfact  nmaster scale layout       rotate/reflect                x    y
-    * example of a HiDPI laptop monitor:
-    { "eDP-1",    0.5f,  1,      2,    &layouts[0], WL_OUTPUT_TRANSFORM_NORMAL,   -1,  -1 }, */
-	{ NULL,       0.55f, 1,      2,    &layouts[0], WL_OUTPUT_TRANSFORM_NORMAL,   -1,  -1 },
+   /* name        mfact  nmaster scale layout       rotate/reflect                x     y   width height refresh */
+	{ "DP-2",     0.55f, 1,      1,    &layouts[0], WL_OUTPUT_TRANSFORM_NORMAL,   0,    0,  1920, 1080, 240 },
+	{ "HDMI-A-1", 0.55f, 1,      1,    &layouts[0], WL_OUTPUT_TRANSFORM_NORMAL,   1920, 0,  1280, 1024, 75 },
+	{ NULL,       0.55f, 1,      1,    &layouts[0], WL_OUTPUT_TRANSFORM_NORMAL,   -1,   -1, 0,    0,    0 },
 	/* default monitor rule: can be changed but cannot be eliminated; at least one monitor rule must exist */
 };
 

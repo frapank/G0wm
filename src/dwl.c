@@ -287,6 +287,8 @@ typedef struct {
     const Layout* lt;
     enum wl_output_transform rr;
     int x, y;
+    int width, height; /* 0,0 means use the preferred mode */
+    int refresh;       /* Hz, ignored when width/height are 0 */
 } MonitorRule;
 
 typedef struct {
@@ -1400,6 +1402,7 @@ void createmon(struct wl_listener* listener, void* data)
     const MonitorRule* r;
     size_t i;
     struct wlr_output_state state;
+    struct wlr_output_mode* mode = NULL;
     Monitor* m;
 
     if (!wlr_output_init_render(wlr_output, alloc, drw))
@@ -1431,15 +1434,26 @@ void createmon(struct wl_listener* listener, void* data)
              * monitor's scale so the cursor renders crisp and sized
              * relative to cursor_size * scale, not just cursor_size. */
             wlr_xcursor_manager_load(cursor_mgr, r->scale);
+            if (r->width && r->height) {
+                struct wlr_output_mode* m2;
+                wl_list_for_each(m2, &wlr_output->modes, link) {
+                    if (m2->width == r->width && m2->height == r->height
+                        && m2->refresh == r->refresh * 1000) {
+                        mode = m2;
+                        break;
+                    }
+                }
+            }
             break;
         }
     }
 
     /* The mode is a tuple of (width, height, refresh rate), and each
-     * monitor supports only a specific set of modes. We just pick the
-     * monitor's preferred mode; a more sophisticated compositor would let
-     * the user configure it. */
-    wlr_output_state_set_mode(&state, wlr_output_preferred_mode(wlr_output));
+     * monitor supports only a specific set of modes. Use the mode matched
+     * against the rule above, falling back to the preferred mode when the
+     * rule didn't request one (or it wasn't found). */
+    wlr_output_state_set_mode(
+        &state, mode ? mode : wlr_output_preferred_mode(wlr_output));
 
     /* Set up event listeners */
     LISTEN(&wlr_output->events.frame, &m->frame, rendermon);
