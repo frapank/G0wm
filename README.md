@@ -39,6 +39,9 @@ dwl has the following dependencies:
 - wayland
 - wlroots (compiled with the libinput backend)
 - xkbcommon
+- fcft (bar and title bar text)
+- libdbus (systray; set `showsystray = 0` to leave it unused, but it is still
+  linked in)
 - wayland-protocols (compile-time only)
 - pkg-config (compile-time only)
 
@@ -93,6 +96,22 @@ resulting configuration knobs.
   side) rather than displacing the 1st one out of master (left side).
 - **[movestack]** (by Nikita Ivanov) — moves the focused client up or down
   the stack, bound to `MODKEY+Shift+h/j/k/l` here.
+- **[bar-systray]** (by [janetski]) — a StatusNotifierItem tray at the right
+  end of the bar, adding a `libdbus` dependency. Left click activates an item,
+  right click opens its menu through `dmenucmd`. Size and spacing come from
+  `systrayiconsize`/`systrayspacing`, and `showsystray` turns it off.
+  Ported from 0.7 to this tree, with three changes: icons are drawn at a
+  configurable size centered in the bar instead of always filling its height;
+  `destroytray()` unlinks the tray before freeing it (it was left on the
+  watcher's list, so re-creating a monitor's tray left a dangling pointer);
+  and the watcher accepts registrations under a well-known bus name, which is
+  what KStatusNotifierItem (so every Qt/KDE app) sends and which was
+  previously rejected as a bad argument. A missing session bus now logs a
+  warning instead of aborting startup.
+
+  Note that it does not read icons from the filesystem, by design: apps that
+  publish an icon *name* rather than pixel data show the first letter of
+  their name instead of an icon.
 
 ### Local additions
 
@@ -249,6 +268,8 @@ inspiration, and to the various contributors to the project, including:
 [cursortheme]: https://codeberg.org/dwl/dwl-patches/wiki/cursortheme
 [gaps]: https://codeberg.org/dwl/dwl-patches/wiki/gaps
 [movestack]: https://codeberg.org/dwl/dwl-patches/src/branch/main/patches/movestack
+[bar-systray]: https://codeberg.org/dwl/dwl-patches/src/branch/main/patches/bar-systray
+[janetski]: https://codeberg.org/janetski
 [autostart]: https://codeberg.org/dwl/dwl-patches/wiki/autostart
 [dinit]: https://davmac.org/projects/dinit/
 [dwl-patches]: https://codeberg.org/dwl/dwl-patches
