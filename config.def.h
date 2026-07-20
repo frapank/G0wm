@@ -12,11 +12,11 @@ static const unsigned int gappx            = 10; /* gap pixel between windows */
 static const unsigned int borderpx         = 1;  /* border pixel of windows */
 static const int showbar                   = 1; /* 0 means no bar */
 static const int topbar                    = 1; /* 0 means bottom bar */
-/* Cursor theme name as found under /usr/share/icons or ~/.icons; NULL uses the
- * system "default" theme, which not every system ships - if the cursor comes
- * out tiny and cursor_size has no effect, name a theme here explicitly. */
+/* Naming a theme is required unless a "default" one exists, otherwise wlroots
+ * falls back to a tiny built-in cursor that ignores cursor_size. Final size is
+ * cursor_size times the monitor's scale in monrules. */
 static const char *cursor_theme            = NULL;
-static const int cursor_size               = 24; /* xcursor base size */
+static const int cursor_size               = 24; /* xcursor base size, default is 24 */
 static const char *fonts[]                 = {"monospace:size=10"};
 static const float rootcolor[]             = COLOR(0x000000ff);
 /* This conforms to the xdg-protocol. Set the alpha to zero to restore the old behavior */
@@ -43,10 +43,12 @@ static char *tags[] = { "1", "2", "3", "4", "5", "6", "7", "8", "9" };
 /* logging */
 static int log_level = WLR_ERROR;
 
-/* Autostart */
+/* Autostart: NULL-terminated argv per command, plus a NULL to end the array.
+ * Killed on dwl exit. */
 static const char *const autostart[] = {
-        "wbg", "/path/to/your/image", NULL,
-        NULL /* terminate */
+	/* example: set a wallpaper with your tool of choice */
+	/* "swaybg", "-i", "/path/to/your/image", "-m", "fill", NULL, */
+	NULL /* terminate */
 };
 
 static const Rule rules[] = {
@@ -62,7 +64,7 @@ static const Layout layouts[] = {
 	{ "[]=",      tile },
 	{ "><>",      NULL },    /* no layout function means floating behavior */
 	{ "[M]",      monocle },
-	{ "|||",      tabbed },
+	{ "|||",      tabbed },  /* i3/sway-style tabs, toggled with mod+t */
 };
 
 /* monitors */
@@ -70,10 +72,10 @@ static const Layout layouts[] = {
  * WARNING: negative values other than (-1, -1) cause problems with Xwayland clients due to
  * https://gitlab.freedesktop.org/xorg/xserver/-/issues/899 */
 static const MonitorRule monrules[] = {
-   /* name        mfact  nmaster scale layout       rotate/reflect                x    y
-    * example of a HiDPI laptop monitor:
-    { "eDP-1",    0.5f,  1,      2,    &layouts[0], WL_OUTPUT_TRANSFORM_NORMAL,   -1,  -1 }, */
-	{ NULL,       0.55f, 1,      1,    &layouts[0], WL_OUTPUT_TRANSFORM_NORMAL,   -1,  -1 },
+   /* name        mfact  nmaster scale layout       rotate/reflect                x     y   width height refresh */
+	/* example of a HiDPI laptop monitor:
+	{ "eDP-1",    0.5f,  1,      2,    &layouts[0], WL_OUTPUT_TRANSFORM_NORMAL,   -1,   -1, 0,    0,    0 }, */
+	{ NULL,       0.55f, 1,      1,    &layouts[0], WL_OUTPUT_TRANSFORM_NORMAL,   -1,   -1, 0,    0,    0 },
 	/* default monitor rule: can be changed but cannot be eliminated; at least one monitor rule must exist */
 };
 
@@ -144,36 +146,75 @@ static const enum libinput_config_tap_button_map button_map = LIBINPUT_CONFIG_TA
 /* helper for spawning shell commands in the pre dwm-5.0 fashion */
 #define SHCMD(cmd) { .v = (const char*[]){ "/bin/sh", "-c", cmd, NULL } }
 
-/* commands */
-static const char *dmenucmd[] = { "wmenu", NULL };
-static const char *termcmd[] = { "foot", NULL };
-static const char *menucmd[] = { "wmenu-run", NULL };
+/* commands: replace with whatever terminal/launcher/file manager/browser you have installed */
+static const char *dmenucmd[]       = { "wmenu", NULL };
+static const char *termcmd[]        = { "foot", NULL };
+static const char *menucmd[]        = { "wmenu-run", NULL };
+static const char *filemanagercmd[] = { "xterm", "-e", "ranger", NULL };
+static const char *browsercmd[]     = { "firefox", NULL };
 
 static const Key keys[] = {
 	/* Note that Shift changes certain key codes: 2 -> at, etc. */
 	/* modifier                  key                  function          argument */
-	{ MODKEY,                    XKB_KEY_p,           spawn,            {.v = menucmd} },
-	{ MODKEY|WLR_MODIFIER_SHIFT, XKB_KEY_Return,      spawn,            {.v = termcmd} },
-	{ MODKEY,                    XKB_KEY_b,           togglebar,        {0} },
+
+	/* --- APPLICATIONS AND SYSTEM --- */
+	{ MODKEY,                    XKB_KEY_q,           spawn,            {.v = termcmd} },
+	{ MODKEY,                    XKB_KEY_f,           spawn,            {.v = filemanagercmd} },
+	{ MODKEY,                    XKB_KEY_r,           spawn,            {.v = menucmd} },
+	{ MODKEY,                    XKB_KEY_b,           spawn,            {.v = browsercmd} },
+	{ MODKEY,                    XKB_KEY_c,           killclient,       {0} },
+	{ MODKEY|WLR_MODIFIER_SHIFT, XKB_KEY_f,           togglefullscreen, {0} },
+	{ MODKEY,                    XKB_KEY_v,           togglefloating,   {0} },
+	{ MODKEY,                    XKB_KEY_g,           togglegaps,       {0} },
+	{ MODKEY|WLR_MODIFIER_SHIFT, XKB_KEY_b,           togglebar,        {0} },
+	{ 0,                         XKB_KEY_Print,       spawn,            SHCMD("grim -g \"$(slurp)\" - | swappy -f -") },
+	{ MODKEY,                    XKB_KEY_t,           toggletabbed,     {.v = &layouts[3]} },
+	{ MODKEY,                    XKB_KEY_e,           togglefullscreen, {0} },
+
+	/* --- FOCUS CONTROL --- */
+	/* dwl has one master/stack list, not a 2D tree: h/k walk it backwards and
+	 * j/l forwards. In the tabbed layout this cycles through the tabs. */
+	{ MODKEY,                    XKB_KEY_h,           focusstack,       {.i = -1} },
 	{ MODKEY,                    XKB_KEY_j,           focusstack,       {.i = +1} },
 	{ MODKEY,                    XKB_KEY_k,           focusstack,       {.i = -1} },
+	{ MODKEY,                    XKB_KEY_l,           focusstack,       {.i = +1} },
+
+	/* --- MOVE WINDOW POSITION --- */
+	{ MODKEY|WLR_MODIFIER_SHIFT, XKB_KEY_h,           movestack,        {.i = -1} },
 	{ MODKEY|WLR_MODIFIER_SHIFT, XKB_KEY_j,           movestack,        {.i = +1} },
 	{ MODKEY|WLR_MODIFIER_SHIFT, XKB_KEY_k,           movestack,        {.i = -1} },
+	{ MODKEY|WLR_MODIFIER_SHIFT, XKB_KEY_l,           movestack,        {.i = +1} },
+
+	/* --- RESIZE --- */
+	/* Floating clients move their edges; tiled ones only react to h/l, which
+	 * adjust the master area, as the stack splits the height evenly. */
+	{ MODKEY|WLR_MODIFIER_SHIFT|WLR_MODIFIER_ALT, XKB_KEY_h, resizewidth,  {.i = -50} },
+	{ MODKEY|WLR_MODIFIER_SHIFT|WLR_MODIFIER_ALT, XKB_KEY_l, resizewidth,  {.i = +50} },
+	{ MODKEY|WLR_MODIFIER_SHIFT|WLR_MODIFIER_ALT, XKB_KEY_k, resizeheight, {.i = -50} },
+	{ MODKEY|WLR_MODIFIER_SHIFT|WLR_MODIFIER_ALT, XKB_KEY_j, resizeheight, {.i = +50} },
+
+	{ MODKEY|WLR_MODIFIER_CTRL,  XKB_KEY_h,           setmfact,         {.f = -0.05f} },
+	{ MODKEY|WLR_MODIFIER_CTRL,  XKB_KEY_l,           setmfact,         {.f = +0.05f} },
+
+	/* --- MEDIA CONTROLS --- */
+	{ 0, XKB_KEY_XF86AudioRaiseVolume,  spawn, SHCMD("wpctl set-volume @DEFAULT_AUDIO_SINK@ 5%+") },
+	{ 0, XKB_KEY_XF86AudioLowerVolume,  spawn, SHCMD("wpctl set-volume @DEFAULT_AUDIO_SINK@ 5%-") },
+	{ 0, XKB_KEY_XF86AudioMute,         spawn, SHCMD("wpctl set-mute @DEFAULT_AUDIO_SINK@ toggle") },
+	{ 0, XKB_KEY_XF86AudioMicMute,      spawn, SHCMD("wpctl set-mute @DEFAULT_AUDIO_SOURCE@ toggle") },
+	{ 0, XKB_KEY_XF86MonBrightnessUp,   spawn, SHCMD("brightnessctl s 10%+") },
+	{ 0, XKB_KEY_XF86MonBrightnessDown, spawn, SHCMD("brightnessctl s 10%-") },
+	{ 0, XKB_KEY_XF86AudioNext,         spawn, SHCMD("playerctl next") },
+	{ 0, XKB_KEY_XF86AudioPause,        spawn, SHCMD("playerctl play-pause") },
+	{ 0, XKB_KEY_XF86AudioPlay,         spawn, SHCMD("playerctl play-pause") },
+	{ 0, XKB_KEY_XF86AudioPrev,         spawn, SHCMD("playerctl previous") },
+
+	/* --- dwl defaults --- */
 	{ MODKEY,                    XKB_KEY_i,           incnmaster,       {.i = +1} },
 	{ MODKEY,                    XKB_KEY_d,           incnmaster,       {.i = -1} },
-	{ MODKEY,                    XKB_KEY_h,           setmfact,         {.f = -0.05f} },
-	{ MODKEY,                    XKB_KEY_l,           setmfact,         {.f = +0.05f} },
 	{ MODKEY,                    XKB_KEY_Return,      zoom,             {0} },
 	{ MODKEY,                    XKB_KEY_Tab,         view,             {0} },
-	{ MODKEY,                    XKB_KEY_g,           togglegaps,       {0} },
-	{ MODKEY|WLR_MODIFIER_SHIFT, XKB_KEY_c,           killclient,       {0} },
-	{ MODKEY,                    XKB_KEY_t,           setlayout,        {.v = &layouts[0]} },
-	{ MODKEY,                    XKB_KEY_f,           setlayout,        {.v = &layouts[1]} },
 	{ MODKEY,                    XKB_KEY_m,           setlayout,        {.v = &layouts[2]} },
-	{ MODKEY|WLR_MODIFIER_SHIFT, XKB_KEY_t,           toggletabbed,     {.v = &layouts[3]} },
 	{ MODKEY,                    XKB_KEY_space,       setlayout,        {0} },
-	{ MODKEY|WLR_MODIFIER_SHIFT, XKB_KEY_space,       togglefloating,   {0} },
-	{ MODKEY,                    XKB_KEY_e,           togglefullscreen, {0} },
 	{ MODKEY,                    XKB_KEY_0,           view,             {.ui = ~0} },
 	{ MODKEY|WLR_MODIFIER_SHIFT, XKB_KEY_parenright,  tag,              {.ui = ~0} },
 	{ MODKEY,                    XKB_KEY_comma,       focusmon,         {.i = WLR_DIRECTION_LEFT} },
