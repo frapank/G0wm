@@ -1,8 +1,9 @@
 # dwl - dwm for Wayland
 
-Join us on our [Discord server]  
-Or Matrix: [#dwl-official:matrix.org]  
-Or on our IRC channel: [#dwl on Libera Chat]
+> [!WARNING]
+> This repository is a **personal fork** of the [DWL](https://codeberg.org/dwl/dwl) project.
+>
+> It is **not** intended to replace DWL or present itself as a different project. It is simply my own fork containing a set of personal patches and configuration choices that match my workflow and philosophy.
 
 dwl is a compact, hackable compositor for [Wayland] based on [wlroots]. It is
 intended to fill the same space in the Wayland world that [dwm] does in X11,
@@ -64,6 +65,32 @@ effect the next time dwl is executed.
 
 As in the [dwm] community, we encourage users to share patches they have
 created. Check out the [dwl-patches] repository!
+
+### Used patches
+
+This checkout has the following [dwl-patches] applied on top of upstream dwl,
+adapted to this tree where needed. See `config.h`/`config.def.h` for the
+resulting configuration knobs.
+
+- **[bar]** — internal i3-like status bar (tags, layout symbol, focused
+  client title, external status text), rendered with `fcft`/`pixman`.
+  Configured for an always-black bar with white text and black window
+  borders (`colors[]` in `config.h`).
+- **[gaps]** — gaps between tiled clients, toggled at runtime with
+  `MODKEY+g`. Configured to a 3px gap (`gappx` in `config.h`).
+- **[autostart]** — runs commands listed in the `autostart[]` array in
+  `config.h` at startup and terminates them on exit, instead of relying on
+  the `-s` flag. Used here to start `swaybg` for the wallpaper.
+- **[cursortheme]** — makes the xcursor theme and size configurable via
+  `cursor_theme`/`cursor_size` in `config.h` (and exports `XCURSOR_THEME`/
+  `XCURSOR_SIZE` so clients match). Naming a theme is required on systems
+  with no `default` cursor theme installed: otherwise wlroots falls back to
+  a 10x16px built-in cursor that ignores `cursor_size`. Set to `"Adwaita"`
+  at size 48 here, which the monitor scale in `monrules` multiplies.
+- **[attachbottom]** — newly opened windows are appended to the bottom of
+  the stack instead of becoming the new master. This keeps whichever window
+  is master in place, so the 2nd window you open lands in the stack (right
+  side) rather than displacing the 1st one out of master (left side).
 
 ## Running dwl
 
@@ -201,6 +228,11 @@ inspiration, and to the various contributors to the project, including:
 [0.7-rc1]: https://codeberg.org/dwl/dwl/releases/tag/v0.7-rc1
 [0.x branch]: https://codeberg.org/dwl/dwl/branches
 [anopa]: https://jjacky.com/anopa/
+[attachbottom]: https://codeberg.org/dwl/dwl-patches/wiki/attachbottom
+[bar]: https://codeberg.org/dwl/dwl-patches/wiki/bar
+[cursortheme]: https://codeberg.org/dwl/dwl-patches/wiki/cursortheme
+[gaps]: https://codeberg.org/dwl/dwl-patches/wiki/gaps
+[autostart]: https://codeberg.org/dwl/dwl-patches/wiki/autostart
 [dinit]: https://davmac.org/projects/dinit/
 [dwl-patches]: https://codeberg.org/dwl/dwl-patches
 [list of useful resources on our wiki]: https://codeberg.org/dwl/dwl/wiki/Home#migrating-from-x

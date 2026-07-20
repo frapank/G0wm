@@ -6,19 +6,39 @@
 /* appearance */
 static const int sloppyfocus               = 1;  /* focus follows mouse */
 static const int bypass_surface_visibility = 0;  /* 1 means idle inhibitors will disable idle tracking even if it's surface isn't visible  */
+static const int smartgaps                 = 0;  /* 1 means no outer gap when there is only one window */
+static int gaps                            = 1;  /* 1 means gaps between windows are added */
+static const unsigned int gappx            = 10; /* gap pixel between windows */
 static const unsigned int borderpx         = 1;  /* border pixel of windows */
-static const float rootcolor[]             = COLOR(0x222222ff);
-static const float bordercolor[]           = COLOR(0x444444ff);
-static const float focuscolor[]            = COLOR(0x005577ff);
-static const float urgentcolor[]           = COLOR(0xff0000ff);
+static const int showbar                   = 1; /* 0 means no bar */
+static const int topbar                    = 1; /* 0 means bottom bar */
+/* Cursor theme name as found under /usr/share/icons or ~/.icons; NULL uses the
+ * system "default" theme, which not every system ships - if the cursor comes
+ * out tiny and cursor_size has no effect, name a theme here explicitly. */
+static const char *cursor_theme            = NULL;
+static const int cursor_size               = 24; /* xcursor base size */
+static const char *fonts[]                 = {"monospace:size=10"};
+static const float rootcolor[]             = COLOR(0x000000ff);
 /* This conforms to the xdg-protocol. Set the alpha to zero to restore the old behavior */
 static const float fullscreen_bg[]         = {0.0f, 0.0f, 0.0f, 1.0f}; /* You can also use glsl colors */
+static uint32_t colors[][3]                = {
+	/*               fg          bg          border    */
+	[SchemeNorm] = { 0xbbbbbbff, 0x222222ff, 0x444444ff },
+	[SchemeSel]  = { 0xeeeeeeff, 0x005577ff, 0x005577ff },
+	[SchemeUrg]  = { 0,          0,          0x770000ff },
+};
 
-/* tagging - TAGCOUNT must be no greater than 31 */
-#define TAGCOUNT (9)
+/* tagging */
+static char *tags[] = { "1", "2", "3", "4", "5", "6", "7", "8", "9" };
 
 /* logging */
 static int log_level = WLR_ERROR;
+
+/* Autostart */
+static const char *const autostart[] = {
+        "wbg", "/path/to/your/image", NULL,
+        NULL /* terminate */
+};
 
 static const Rule rules[] = {
 	/* app_id             title       tags mask     isfloating   monitor */
@@ -123,14 +143,18 @@ static const Key keys[] = {
 	/* modifier                  key                  function          argument */
 	{ MODKEY,                    XKB_KEY_p,           spawn,            {.v = menucmd} },
 	{ MODKEY|WLR_MODIFIER_SHIFT, XKB_KEY_Return,      spawn,            {.v = termcmd} },
+	{ MODKEY,                    XKB_KEY_b,           togglebar,        {0} },
 	{ MODKEY,                    XKB_KEY_j,           focusstack,       {.i = +1} },
 	{ MODKEY,                    XKB_KEY_k,           focusstack,       {.i = -1} },
+	{ MODKEY|WLR_MODIFIER_SHIFT, XKB_KEY_j,           movestack,        {.i = +1} },
+	{ MODKEY|WLR_MODIFIER_SHIFT, XKB_KEY_k,           movestack,        {.i = -1} },
 	{ MODKEY,                    XKB_KEY_i,           incnmaster,       {.i = +1} },
 	{ MODKEY,                    XKB_KEY_d,           incnmaster,       {.i = -1} },
 	{ MODKEY,                    XKB_KEY_h,           setmfact,         {.f = -0.05f} },
 	{ MODKEY,                    XKB_KEY_l,           setmfact,         {.f = +0.05f} },
 	{ MODKEY,                    XKB_KEY_Return,      zoom,             {0} },
 	{ MODKEY,                    XKB_KEY_Tab,         view,             {0} },
+	{ MODKEY,                    XKB_KEY_g,           togglegaps,       {0} },
 	{ MODKEY|WLR_MODIFIER_SHIFT, XKB_KEY_c,           killclient,       {0} },
 	{ MODKEY,                    XKB_KEY_t,           setlayout,        {.v = &layouts[0]} },
 	{ MODKEY,                    XKB_KEY_f,           setlayout,        {.v = &layouts[1]} },
@@ -166,7 +190,15 @@ static const Key keys[] = {
 };
 
 static const Button buttons[] = {
-	{ MODKEY, BTN_LEFT,   moveresize,     {.ui = CurMove} },
-	{ MODKEY, BTN_MIDDLE, togglefloating, {0} },
-	{ MODKEY, BTN_RIGHT,  moveresize,     {.ui = CurResize} },
+	{ ClkLtSymbol, 0,      BTN_LEFT,   setlayout,      {.v = &layouts[0]} },
+	{ ClkLtSymbol, 0,      BTN_RIGHT,  setlayout,      {.v = &layouts[2]} },
+	{ ClkTitle,    0,      BTN_MIDDLE, zoom,           {0} },
+	{ ClkStatus,   0,      BTN_MIDDLE, spawn,          {.v = termcmd} },
+	{ ClkClient,   MODKEY, BTN_LEFT,   moveresize,     {.ui = CurMove} },
+	{ ClkClient,   MODKEY, BTN_MIDDLE, togglefloating, {0} },
+	{ ClkClient,   MODKEY, BTN_RIGHT,  moveresize,     {.ui = CurResize} },
+	{ ClkTagBar,   0,      BTN_LEFT,   view,           {0} },
+	{ ClkTagBar,   0,      BTN_RIGHT,  toggleview,     {0} },
+	{ ClkTagBar,   MODKEY, BTN_LEFT,   tag,            {0} },
+	{ ClkTagBar,   MODKEY, BTN_RIGHT,  toggletag,      {0} },
 };
