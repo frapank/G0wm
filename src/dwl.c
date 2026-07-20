@@ -265,6 +265,8 @@ struct Monitor {
     struct wlr_box w;         /* window area, layout-relative */
     struct wl_list layers[4]; /* LayerSurface.link */
     const Layout* lt[2];
+    const Layout* taglt[32][2];
+    unsigned int tagsellt[32];
     int gaps;
     unsigned int seltags;
     unsigned int sellt;
@@ -439,6 +441,8 @@ static void startdrag(struct wl_listener* listener, void* data);
 static int statusin(int fd, unsigned int mask, void* data);
 static void tag(const Arg* arg);
 static void tabbed(Monitor* m);
+static unsigned int tagindex(uint32_t tagset);
+static Client* tabtop(Monitor* m);
 static void tagmon(const Arg* arg);
 static void tile(Monitor* m);
 static void togglebar(const Arg* arg);
@@ -1428,6 +1432,10 @@ void createmon(struct wl_listener* listener, void* data)
             m->lt[0] = r->lt;
             m->lt[1] = &layouts[LENGTH(layouts) > 1 && r->lt != &layouts[1]];
             strncpy(m->ltsymbol, m->lt[m->sellt]->symbol, sizeof(m->ltsymbol));
+            for (i = 0; i < LENGTH(m->taglt); i++) {
+                m->taglt[i][0] = m->lt[0];
+                m->taglt[i][1] = m->lt[1];
+            }
             wlr_output_state_set_scale(&state, r->scale);
             wlr_output_state_set_transform(&state, r->rr);
             /* Load (or reuse, if already cached) the xcursor theme at this
@@ -1944,8 +1952,13 @@ void drawtitle(Client* c)
         return;
 
     drwl_setimage(m->drw, buf->image);
-    drwl_setscheme(m->drw,
-                   colors[c == focustop(m) ? SchemeTitleSel : SchemeTitle]);
+    drwl_setscheme(
+        m->drw,
+        colors[c == (m->lt[m->sellt]->arrange == tabbed && !c->isfloating
+                         ? tabtop(m)
+                         : focustop(m))
+                   ? SchemeTitleSel
+                   : SchemeTitle]);
     drwl_text(m->drw,
               0,
               0,
@@ -3481,8 +3494,21 @@ void tabbed(Monitor* m)
         resize(c, b, 0);
     }
     snprintf(m->ltsymbol, LENGTH(m->ltsymbol), "|%d|", n);
-    if ((c = focustop(m)))
+    if ((c = tabtop(m)))
         wlr_scene_node_raise_to_top(&c->scene->node);
+}
+
+Client* tabtop(Monitor* m)
+{
+    Client* c;
+    wl_list_for_each(c, &fstack, flink) if (VISIBLEON(c, m) && !c->isfloating &&
+                                            !c->isfullscreen) return c;
+    return NULL;
+}
+
+unsigned int tagindex(uint32_t tagset)
+{
+    return tagset ? (unsigned int)__builtin_ctz(tagset) : 0;
 }
 
 void tagmon(const Arg* arg)
@@ -3852,11 +3878,25 @@ void urgent(struct wl_listener* listener, void* data)
 
 void view(const Arg* arg)
 {
+    unsigned int i;
+
     if (!selmon || (arg->ui & TAGMASK) == selmon->tagset[selmon->seltags])
         return;
+
+    i = tagindex(selmon->tagset[selmon->seltags]);
+    selmon->taglt[i][0] = selmon->lt[0];
+    selmon->taglt[i][1] = selmon->lt[1];
+    selmon->tagsellt[i] = selmon->sellt;
+
     selmon->seltags ^= 1; /* toggle sel tagset */
     if (arg->ui & TAGMASK)
         selmon->tagset[selmon->seltags] = arg->ui & TAGMASK;
+
+    i = tagindex(selmon->tagset[selmon->seltags]);
+    selmon->lt[0] = selmon->taglt[i][0];
+    selmon->lt[1] = selmon->taglt[i][1];
+    selmon->sellt = selmon->tagsellt[i];
+
     focusclient(focustop(selmon), 1);
     arrange(selmon);
     drawbars();
