@@ -1861,7 +1861,7 @@ void drawbar(Monitor* m)
     x = drwl_text(m->drw, x, 0, w, m->b.height, m->lrpad / 2, m->ltsymbol, 0);
 
     if ((w = m->b.width - (tw + x + traywidth)) > m->b.height) {
-        if (c) {
+        if (barwintitle && c) {
             drwl_setscheme(m->drw,
                            colors[m == selmon ? SchemeSel : SchemeNorm]);
             drwl_text(m->drw,
@@ -3119,6 +3119,8 @@ void setmon(Client* c, Monitor* m, uint32_t newtags)
         c->tags =
             newtags ? newtags
                     : m->tagset[m->seltags]; /* assign tags of target monitor */
+        c->prev.x = (m->w.width - c->prev.width) / 2 + m->m.x;
+        c->prev.y = (m->w.height - c->prev.height) / 2 + m->m.y;
         setfullscreen(c, c->isfullscreen); /* This will call arrange(c->mon) */
         setfloating(c, c->isfloating);
     }

@@ -25,6 +25,7 @@ static const int showsystray               = 1;  /* 0 means no systray */
 static const unsigned int systrayspacing   = 2;  /* systray icon spacing */
 static const unsigned int systrayiconsize  = 16; /* icon size, 0 fills the bar */
 static const int titlebar                  = 1;  /* 0 means no per-window title bar */
+static const int barwintitle               = 0;  /* 1 shows the focused window's title in the top bar too (redundant with titlebar) */
 static const unsigned int titlepadding     = 6;  /* title bar height on top of the font height */
 static uint32_t colors[][3]                = {
 	/*                   fg          bg          border    */
@@ -123,7 +124,7 @@ static const uint32_t send_events_mode = LIBINPUT_CONFIG_SEND_EVENTS_ENABLED;
 LIBINPUT_CONFIG_ACCEL_PROFILE_FLAT
 LIBINPUT_CONFIG_ACCEL_PROFILE_ADAPTIVE
 */
-static const enum libinput_config_accel_profile accel_profile = LIBINPUT_CONFIG_ACCEL_PROFILE_ADAPTIVE;
+static const enum libinput_config_accel_profile accel_profile = LIBINPUT_CONFIG_ACCEL_PROFILE_FLAT;
 static const double accel_speed = 0.0;
 
 /* You can choose between:
