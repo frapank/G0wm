@@ -21,11 +21,16 @@ static const char *fonts[]                 = {"monospace:size=10"};
 static const float rootcolor[]             = COLOR(0x000000ff);
 /* This conforms to the xdg-protocol. Set the alpha to zero to restore the old behavior */
 static const float fullscreen_bg[]         = {0.0f, 0.0f, 0.0f, 1.0f}; /* You can also use glsl colors */
+static const int titlebar                  = 1;  /* 0 means no per-window title bar */
+static const unsigned int titlepadding     = 6;  /* title bar height on top of the font height */
 static uint32_t colors[][3]                = {
-	/*               fg          bg          border    */
-	[SchemeNorm] = { 0xbbbbbbff, 0x222222ff, 0x444444ff },
-	[SchemeSel]  = { 0xeeeeeeff, 0x005577ff, 0x005577ff },
-	[SchemeUrg]  = { 0,          0,          0x770000ff },
+	/*                   fg          bg          border    */
+	[SchemeNorm]     = { 0xbbbbbbff, 0x222222ff, 0x444444ff },
+	[SchemeSel]      = { 0xeeeeeeff, 0x005577ff, 0x005577ff },
+	[SchemeUrg]      = { 0,          0,          0x770000ff },
+	/* title bars, unfocused and focused (border unused) */
+	[SchemeTitle]    = { 0xbbbbbbff, 0x222222ff, 0x444444ff },
+	[SchemeTitleSel] = { 0xeeeeeeff, 0x005577ff, 0x005577ff },
 };
 
 /* tagging */
@@ -53,6 +58,7 @@ static const Layout layouts[] = {
 	{ "[]=",      tile },
 	{ "><>",      NULL },    /* no layout function means floating behavior */
 	{ "[M]",      monocle },
+	{ "|||",      tabbed },
 };
 
 /* monitors */
@@ -159,6 +165,7 @@ static const Key keys[] = {
 	{ MODKEY,                    XKB_KEY_t,           setlayout,        {.v = &layouts[0]} },
 	{ MODKEY,                    XKB_KEY_f,           setlayout,        {.v = &layouts[1]} },
 	{ MODKEY,                    XKB_KEY_m,           setlayout,        {.v = &layouts[2]} },
+	{ MODKEY|WLR_MODIFIER_SHIFT, XKB_KEY_t,           toggletabbed,     {.v = &layouts[3]} },
 	{ MODKEY,                    XKB_KEY_space,       setlayout,        {0} },
 	{ MODKEY|WLR_MODIFIER_SHIFT, XKB_KEY_space,       togglefloating,   {0} },
 	{ MODKEY,                    XKB_KEY_e,           togglefullscreen, {0} },
