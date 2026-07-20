@@ -8,16 +8,16 @@ static const int sloppyfocus               = 1;  /* focus follows mouse */
 static const int bypass_surface_visibility = 0;  /* 1 means idle inhibitors will disable idle tracking even if it's surface isn't visible  */
 static const int smartgaps                 = 0;  /* 1 means no outer gap when there is only one window */
 static int gaps                            = 1;  /* 1 means gaps between windows are added */
-static const unsigned int gappx            = 3;  /* gap pixel between windows */
+static const unsigned int gappx            = 10; /* gap pixel between windows */
 static const unsigned int borderpx         = 1;  /* border pixel of windows */
 static const int showbar                   = 1; /* 0 means no bar */
 static const int topbar                    = 1; /* 0 means bottom bar */
 /* Naming a theme is required unless a "default" one exists, otherwise wlroots
  * falls back to a tiny built-in cursor that ignores cursor_size. Final size is
  * cursor_size times the monitor's scale in monrules. */
-static const char *cursor_theme            = "Adwaita";
-static const int cursor_size               = 16; /* xcursor base size, default is 24 */
-static const char *fonts[]                 = {"DejaVu Sans Mono:size=11"};
+static const char *cursor_theme            = NULL;
+static const int cursor_size               = 24; /* xcursor base size, default is 24 */
+static const char *fonts[]                 = {"monospace:size=10"};
 static const float rootcolor[]             = COLOR(0x000000ff);
 /* This conforms to the xdg-protocol. Set the alpha to zero to restore the old behavior */
 static const float fullscreen_bg[]         = {0.0f, 0.0f, 0.0f, 1.0f}; /* You can also use glsl colors */
@@ -29,12 +29,12 @@ static const int barwintitle               = 0;  /* 1 shows the focused window's
 static const unsigned int titlepadding     = 6;  /* title bar height on top of the font height */
 static uint32_t colors[][3]                = {
 	/*                   fg          bg          border    */
-	[SchemeNorm]     = { 0xffffffff, 0x000000ff, 0x000000ff },
-	[SchemeSel]      = { 0xffffffff, 0x000000ff, 0x000000ff },
-	[SchemeUrg]      = { 0xffffffff, 0x000000ff, 0xff0000ff },
+	[SchemeNorm]     = { 0xbbbbbbff, 0x222222ff, 0x444444ff },
+	[SchemeSel]      = { 0xeeeeeeff, 0x005577ff, 0x005577ff },
+	[SchemeUrg]      = { 0,          0,          0x770000ff },
 	/* title bars, unfocused and focused (border unused) */
-	[SchemeTitle]    = { 0x888888ff, 0x000000ff, 0x000000ff },
-	[SchemeTitleSel] = { 0xffffffff, 0x000000ff, 0x000000ff },
+	[SchemeTitle]    = { 0xbbbbbbff, 0x222222ff, 0x444444ff },
+	[SchemeTitleSel] = { 0xeeeeeeff, 0x005577ff, 0x005577ff },
 };
 
 /* tagging */
@@ -46,7 +46,8 @@ static int log_level = WLR_ERROR;
 /* Autostart: NULL-terminated argv per command, plus a NULL to end the array.
  * Killed on dwl exit. */
 static const char *const autostart[] = {
-	"swaybg", "-i", "/home/user/.sway/gentoo.png", "-m", "fill", NULL,
+	/* example: set a wallpaper with your tool of choice */
+	/* "swaybg", "-i", "/path/to/your/image", "-m", "fill", NULL, */
 	NULL /* terminate */
 };
 
@@ -72,8 +73,8 @@ static const Layout layouts[] = {
  * https://gitlab.freedesktop.org/xorg/xserver/-/issues/899 */
 static const MonitorRule monrules[] = {
    /* name        mfact  nmaster scale layout       rotate/reflect                x     y   width height refresh */
-	{ "DP-2",     0.55f, 1,      1,    &layouts[0], WL_OUTPUT_TRANSFORM_NORMAL,   0,    0,  1920, 1080, 240 },
-	{ "HDMI-A-1", 0.55f, 1,      1,    &layouts[0], WL_OUTPUT_TRANSFORM_NORMAL,   1920, 0,  1280, 1024, 75 },
+	/* example of a HiDPI laptop monitor:
+	{ "eDP-1",    0.5f,  1,      2,    &layouts[0], WL_OUTPUT_TRANSFORM_NORMAL,   -1,   -1, 0,    0,    0 }, */
 	{ NULL,       0.55f, 1,      1,    &layouts[0], WL_OUTPUT_TRANSFORM_NORMAL,   -1,   -1, 0,    0,    0 },
 	/* default monitor rule: can be changed but cannot be eliminated; at least one monitor rule must exist */
 };
@@ -124,7 +125,7 @@ static const uint32_t send_events_mode = LIBINPUT_CONFIG_SEND_EVENTS_ENABLED;
 LIBINPUT_CONFIG_ACCEL_PROFILE_FLAT
 LIBINPUT_CONFIG_ACCEL_PROFILE_ADAPTIVE
 */
-static const enum libinput_config_accel_profile accel_profile = LIBINPUT_CONFIG_ACCEL_PROFILE_FLAT;
+static const enum libinput_config_accel_profile accel_profile = LIBINPUT_CONFIG_ACCEL_PROFILE_ADAPTIVE;
 static const double accel_speed = 0.0;
 
 /* You can choose between:
@@ -133,8 +134,8 @@ LIBINPUT_CONFIG_TAP_MAP_LMR -- 1/2/3 finger tap maps to left/middle/right
 */
 static const enum libinput_config_tap_button_map button_map = LIBINPUT_CONFIG_TAP_MAP_LRM;
 
-/* Super/Windows key */
-#define MODKEY WLR_MODIFIER_LOGO
+/* If you want to use the windows key for MODKEY, use WLR_MODIFIER_LOGO */
+#define MODKEY WLR_MODIFIER_ALT
 
 #define TAGKEYS(KEY,SKEY,TAG) \
 	{ MODKEY,                    KEY,            view,            {.ui = 1 << TAG} }, \
@@ -145,12 +146,12 @@ static const enum libinput_config_tap_button_map button_map = LIBINPUT_CONFIG_TA
 /* helper for spawning shell commands in the pre dwm-5.0 fashion */
 #define SHCMD(cmd) { .v = (const char*[]){ "/bin/sh", "-c", cmd, NULL } }
 
-/* commands */
+/* commands: replace with whatever terminal/launcher/file manager/browser you have installed */
 static const char *dmenucmd[]       = { "wmenu", NULL };
 static const char *termcmd[]        = { "foot", NULL };
-static const char *menucmd[]        = { "fuzzel", NULL };
-static const char *filemanagercmd[] = { "thunar", NULL };
-static const char *browsercmd[]     = { "librewolf", NULL };
+static const char *menucmd[]        = { "wmenu-run", NULL };
+static const char *filemanagercmd[] = { "xterm", "-e", "ranger", NULL };
+static const char *browsercmd[]     = { "firefox", NULL };
 
 static const Key keys[] = {
 	/* Note that Shift changes certain key codes: 2 -> at, etc. */
