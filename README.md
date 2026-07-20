@@ -1,8 +1,9 @@
 # dwl - dwm for Wayland
 
-Join us on our [Discord server]  
-Or Matrix: [#dwl-official:matrix.org]  
-Or on our IRC channel: [#dwl on Libera Chat]
+> [!WARNING]
+> This repository is a **personal fork** of the [DWL](https://codeberg.org/dwl/dwl) project.
+>
+> It is **not** intended to replace DWL or present itself as a different project. It is simply my own fork containing a set of personal patches and configuration choices that match my workflow and philosophy.
 
 dwl is a compact, hackable compositor for [Wayland] based on [wlroots]. It is
 intended to fill the same space in the Wayland world that [dwm] does in X11,
