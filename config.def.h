@@ -12,7 +12,11 @@ static const unsigned int gappx            = 10; /* gap pixel between windows */
 static const unsigned int borderpx         = 1;  /* border pixel of windows */
 static const int showbar                   = 1; /* 0 means no bar */
 static const int topbar                    = 1; /* 0 means bottom bar */
-static const int cursor_size               = 24; /* xcursor size in pixels */
+/* Cursor theme name as found under /usr/share/icons or ~/.icons; NULL uses the
+ * system "default" theme, which not every system ships - if the cursor comes
+ * out tiny and cursor_size has no effect, name a theme here explicitly. */
+static const char *cursor_theme            = NULL;
+static const int cursor_size               = 24; /* xcursor base size */
 static const char *fonts[]                 = {"monospace:size=10"};
 static const float rootcolor[]             = COLOR(0x000000ff);
 /* This conforms to the xdg-protocol. Set the alpha to zero to restore the old behavior */
