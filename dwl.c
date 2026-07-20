@@ -91,7 +91,7 @@
 #define TEXTW(mon, text)        (drwl_font_getwidth(mon->drw, text) + mon->lrpad)
 
 /* enums */
-enum { SchemeNorm, SchemeSel, SchemeUrg }; /* color schemes */
+enum { SchemeNorm, SchemeSel, SchemeUrg, SchemeTitle, SchemeTitleSel }; /* color schemes */
 enum { CurNormal, CurPressed, CurMove, CurResize }; /* cursor */
 enum { XDGShell, LayerShell, X11 }; /* client types */
 enum { LyrBg, LyrBottom, LyrTile, LyrFloat, LyrTop, LyrFS, LyrOverlay, LyrBlock, NUM_LAYERS }; /* scene layers */
@@ -111,6 +111,14 @@ typedef struct {
 	void (*func)(const Arg *);
 	const Arg arg;
 } Button;
+
+typedef struct {
+	struct wlr_buffer base;
+	struct wl_listener release;
+	bool busy;
+	Img *image;
+	uint32_t data[];
+} Buffer;
 
 typedef struct Monitor Monitor;
 typedef struct {
@@ -147,6 +155,10 @@ typedef struct {
 	struct wl_listener configure;
 	struct wl_listener set_hints;
 #endif
+	struct wlr_scene_buffer *title;
+	Buffer *titlepool[2];
+	int titlex, titlew; /* title bar placement, relative to the border box */
+	int titlebufw; /* pixel width titlepool was allocated at */
 	unsigned int bw;
 	uint32_t tags;
 	int isfloating, isurgent, isfullscreen;
@@ -195,14 +207,6 @@ typedef struct {
 	void (*arrange)(Monitor *);
 } Layout;
 
-typedef struct {
-	struct wlr_buffer base;
-	struct wl_listener release;
-	bool busy;
-	Img *image;
-	uint32_t data[];
-} Buffer;
-
 struct Monitor {
 	struct wl_list link;
 	struct wlr_output *wlr_output;
@@ -220,6 +224,10 @@ struct Monitor {
 		int real_width, real_height; /* non-scaled */
 		float scale;
 	} b; /* bar area */
+	struct {
+		int height;
+		int real_height; /* non-scaled */
+	} t; /* per-client title bar */
 	struct wlr_box w; /* window area, layout-relative */
 	struct wl_list layers[4]; /* LayerSurface.link */
 	const Layout *lt[2];
@@ -283,7 +291,8 @@ static void bufdestroy(struct wlr_buffer *buffer);
 static bool bufdatabegin(struct wlr_buffer *buffer, uint32_t flags,
 		void **data, uint32_t *format, size_t *stride);
 static void bufdataend(struct wlr_buffer *buffer);
-static Buffer *bufmon(Monitor *m);
+static Buffer *bufget(Buffer **pool, size_t poollen, int width, int height);
+static void bufpooldrop(Buffer **pool, size_t poollen);
 static void bufrelease(struct wl_listener *listener, void *data);
 static void buttonpress(struct wl_listener *listener, void *data);
 static void chvt(const Arg *arg);
@@ -322,6 +331,7 @@ static void destroykeyboardgroup(struct wl_listener *listener, void *data);
 static Monitor *dirtomon(enum wlr_direction dir);
 static void drawbar(Monitor *m);
 static void drawbars(void);
+static void drawtitle(Client *c);
 static void focusclient(Client *c, int lift);
 static void focusmon(const Arg *arg);
 static void focusstack(const Arg *arg);
@@ -367,6 +377,8 @@ static void setfloating(Client *c, int floating);
 static void setfullscreen(Client *c, int fullscreen);
 static void setlayout(const Arg *arg);
 static void setmfact(const Arg *arg);
+static void settitle(Client *c);
+static int titleheight(Client *c);
 static void setmon(Client *c, Monitor *m, uint32_t newtags);
 static void setpsel(struct wl_listener *listener, void *data);
 static void setsel(struct wl_listener *listener, void *data);
@@ -375,12 +387,14 @@ static void spawn(const Arg *arg);
 static void startdrag(struct wl_listener *listener, void *data);
 static int statusin(int fd, unsigned int mask, void *data);
 static void tag(const Arg *arg);
+static void tabbed(Monitor *m);
 static void tagmon(const Arg *arg);
 static void tile(Monitor *m);
 static void togglebar(const Arg *arg);
 static void togglefloating(const Arg *arg);
 static void togglefullscreen(const Arg *arg);
 static void togglegaps(const Arg *arg);
+static void toggletabbed(const Arg *arg);
 static void toggletag(const Arg *arg);
 static void toggleview(const Arg *arg);
 static void unlocksession(struct wl_listener *listener, void *data);
@@ -738,24 +752,26 @@ bufdataend(struct wlr_buffer *wlr_buffer)
 {
 }
 
+/* Grabs a free width*height buffer from pool, allocating it on first use. The
+ * bar and every client's title bar own a pool, as their sizes differ. */
 Buffer *
-bufmon(Monitor *m)
+bufget(Buffer **pool, size_t poollen, int width, int height)
 {
 	size_t i;
 	Buffer *buf = NULL;
 
-	for (i = 0; i < LENGTH(m->pool); i++) {
-		if (m->pool[i]) {
-			if (m->pool[i]->busy)
+	for (i = 0; i < poollen; i++) {
+		if (pool[i]) {
+			if (pool[i]->busy)
 				continue;
-			buf = m->pool[i];
+			buf = pool[i];
 			break;
 		}
 
-		buf = ecalloc(1, sizeof(Buffer) + (m->b.width * 4 * m->b.height));
-		buf->image = drwl_image_create(NULL, m->b.width, m->b.height, buf->data);
-		wlr_buffer_init(&buf->base, &buffer_impl, m->b.width, m->b.height);
-		m->pool[i] = buf;
+		buf = ecalloc(1, sizeof(Buffer) + ((size_t)width * 4 * (size_t)height));
+		buf->image = drwl_image_create(NULL, width, height, buf->data);
+		wlr_buffer_init(&buf->base, &buffer_impl, width, height);
+		pool[i] = buf;
 		break;
 	}
 	if (!buf)
@@ -764,8 +780,19 @@ bufmon(Monitor *m)
 	buf->busy = true;
 	LISTEN(&buf->base.events.release, &buf->release, bufrelease);
 	wlr_buffer_lock(&buf->base);
-	drwl_setimage(m->drw, buf->image);
 	return buf;
+}
+
+void
+bufpooldrop(Buffer **pool, size_t poollen)
+{
+	size_t i;
+
+	for (i = 0; i < poollen; i++)
+		if (pool[i]) {
+			wlr_buffer_drop(&pool[i]->base);
+			pool[i] = NULL;
+		}
 }
 
 void
@@ -1628,10 +1655,16 @@ drawbar(Monitor *m)
 	Client *c;
 	Buffer *buf;
 
+	/* Title bars are refreshed on the same events as the bar */
+	wl_list_for_each(c, &clients, link)
+		if (c->mon == m)
+			drawtitle(c);
+
 	if (!m->scene_buffer->node.enabled)
 		return;
-	if (!(buf = bufmon(m)))
+	if (!(buf = bufget(m->pool, LENGTH(m->pool), m->b.width, m->b.height)))
 		return;
+	drwl_setimage(m->drw, buf->image);
 
 	/* draw status first so it can be overdrawn by tags later */
 	if (m == selmon) { /* status is only drawn on selected monitor */
@@ -1690,6 +1723,42 @@ drawbars(void)
 
 	wl_list_for_each(m, &mons, link)
 		drawbar(m);
+}
+
+/* Renders the client's own title bar. In the tabbed layout every client of the
+ * group shares one row, so these end up drawn side by side as tabs. */
+void
+drawtitle(Client *c)
+{
+	Monitor *m = c->mon;
+	Buffer *buf;
+	int w;
+
+	if (!c->title)
+		return;
+	settitle(c);
+	if (!m || !titlebar || c->isfullscreen || c->titlew <= 0
+			|| !c->scene->node.enabled) {
+		wlr_scene_node_set_enabled(&c->title->node, 0);
+		return;
+	}
+
+	w = (int)((float)c->titlew * m->wlr_output->scale);
+	if (w != c->titlebufw) {
+		bufpooldrop(c->titlepool, LENGTH(c->titlepool));
+		c->titlebufw = w;
+	}
+	if (!(buf = bufget(c->titlepool, LENGTH(c->titlepool), w, m->t.height)))
+		return;
+
+	drwl_setimage(m->drw, buf->image);
+	drwl_setscheme(m->drw, colors[c == focustop(m) ? SchemeTitleSel : SchemeTitle]);
+	drwl_text(m->drw, 0, 0, (unsigned int)w, m->t.height, m->lrpad / 2,
+		client_get_title(c), 0);
+
+	wlr_scene_node_set_enabled(&c->title->node, 1);
+	wlr_scene_buffer_set_buffer(c->title, &buf->base);
+	wlr_buffer_unlock(&buf->base);
 }
 
 void
@@ -2079,6 +2148,10 @@ mapnotify(struct wl_listener *listener, void *data)
 			(float[])COLOR(colors[c->isurgent ? SchemeUrg : SchemeNorm][ColBorder]));
 		c->border[i]->node.data = c;
 	}
+
+	c->title = wlr_scene_buffer_create(c->scene, NULL);
+	c->title->node.data = c;
+	wlr_scene_node_set_enabled(&c->title->node, 0);
 
 	/* Initialize client geometry with room for border */
 	client_set_tiled(c, WLR_EDGE_TOP | WLR_EDGE_BOTTOM | WLR_EDGE_LEFT | WLR_EDGE_RIGHT);
@@ -2511,9 +2584,12 @@ resize(Client *c, struct wlr_box geo, int interact)
 {
 	struct wlr_box *bbox;
 	struct wlr_box clip;
+	int th;
 
 	if (!c->mon || !client_surface(c)->mapped)
 		return;
+
+	th = titleheight(c);
 
 	bbox = interact ? &sgeom : &c->mon->w;
 
@@ -2523,7 +2599,7 @@ resize(Client *c, struct wlr_box geo, int interact)
 
 	/* Update scene-graph, including borders */
 	wlr_scene_node_set_position(&c->scene->node, c->geom.x, c->geom.y);
-	wlr_scene_node_set_position(&c->scene_surface->node, c->bw, c->bw);
+	wlr_scene_node_set_position(&c->scene_surface->node, c->bw, c->bw + th);
 	wlr_scene_rect_set_size(c->border[0], c->geom.width, c->bw);
 	wlr_scene_rect_set_size(c->border[1], c->geom.width, c->bw);
 	wlr_scene_rect_set_size(c->border[2], c->bw, c->geom.height - 2 * c->bw);
@@ -2534,9 +2610,12 @@ resize(Client *c, struct wlr_box geo, int interact)
 
 	/* this is a no-op if size hasn't changed */
 	c->resize = client_set_size(c, c->geom.width - 2 * c->bw,
-			c->geom.height - 2 * c->bw);
+			c->geom.height - 2 * c->bw - th);
 	client_get_clip(c, &clip);
+	clip.height -= th;
 	wlr_scene_subsurface_tree_set_clip(&c->scene_surface->node, &clip);
+
+	settitle(c);
 }
 
 void
@@ -2720,6 +2799,46 @@ setmfact(const Arg *arg)
 		return;
 	selmon->mfact = f;
 	arrange(selmon);
+}
+
+/* Sizes and places the client's title bar. It spans the whole window, except
+ * in the tabbed layout where each client of the group only gets its own slice
+ * of the shared row - which is what turns the title bars into tabs. */
+void
+settitle(Client *c)
+{
+	Monitor *m = c->mon;
+	Client *w;
+	int i = 0, n = 0, x = 0, tw;
+
+	if (!c->title || !m)
+		return;
+
+	tw = c->geom.width - 2 * (int)c->bw;
+	if (m->lt[m->sellt]->arrange == tabbed && !c->isfloating && !c->isfullscreen) {
+		wl_list_for_each(w, &clients, link) {
+			if (!VISIBLEON(w, m) || w->isfloating || w->isfullscreen)
+				continue;
+			if (w == c)
+				i = n;
+			n++;
+		}
+		if (n) {
+			x = tw * i / n;
+			tw = tw * (i + 1) / n - x;
+		}
+	}
+
+	c->titlex = x;
+	c->titlew = tw;
+	wlr_scene_node_set_position(&c->title->node, (int)c->bw + x, (int)c->bw);
+	wlr_scene_buffer_set_dest_size(c->title, MAX(tw, 1), titleheight(c));
+}
+
+int
+titleheight(Client *c)
+{
+	return titlebar && c->mon && !c->isfullscreen ? c->mon->t.real_height : 0;
 }
 
 void
@@ -3069,6 +3188,39 @@ tag(const Arg *arg)
 	drawbars();
 }
 
+/* i3/sway-style tabbed layout: the group behaves as a single window, and the
+ * clients' title bars are packed into its one title row as tabs. */
+void
+tabbed(Monitor *m)
+{
+	unsigned int e = m->gaps;
+	struct wlr_box b;
+	Client *c;
+	int n = 0;
+
+	wl_list_for_each(c, &clients, link)
+		if (VISIBLEON(c, m) && !c->isfloating && !c->isfullscreen)
+			n++;
+	if (n == 0)
+		return;
+	if (smartgaps == n)
+		e = 0;
+
+	b.x = m->w.x + (int)(gappx * e);
+	b.y = m->w.y + (int)(gappx * e);
+	b.width = m->w.width - 2 * (int)(gappx * e);
+	b.height = m->w.height - 2 * (int)(gappx * e);
+
+	wl_list_for_each(c, &clients, link) {
+		if (!VISIBLEON(c, m) || c->isfloating || c->isfullscreen)
+			continue;
+		resize(c, b, 0);
+	}
+	snprintf(m->ltsymbol, LENGTH(m->ltsymbol), "|%d|", n);
+	if ((c = focustop(m)))
+		wlr_scene_node_raise_to_top(&c->scene->node);
+}
+
 void
 tagmon(const Arg *arg)
 {
@@ -3151,6 +3303,17 @@ togglegaps(const Arg *arg)
 	arrange(selmon);
 }
 
+/* Switches to the tabbed layout passed in arg, or back to the layout that was
+ * selected before it if we are already tabbed - setlayout() with an empty arg
+ * flips lt[] back to the other slot, which still holds it. */
+void
+toggletabbed(const Arg *arg)
+{
+	if (!selmon || !arg || !arg->v)
+		return;
+	setlayout(selmon->lt[selmon->sellt]->arrange == tabbed ? &(Arg){0} : arg);
+}
+
 void
 toggletag(const Arg *arg)
 {
@@ -3223,6 +3386,9 @@ unmapnotify(struct wl_listener *listener, void *data)
 	}
 
 	wlr_scene_node_destroy(&c->scene->node);
+	c->title = NULL;
+	bufpooldrop(c->titlepool, LENGTH(c->titlepool));
+	c->titlebufw = 0;
 	drawbars();
 	motionnotify(0, NULL, 0, 0, 0, 0);
 }
@@ -3343,7 +3509,6 @@ updatemons(struct wl_listener *listener, void *data)
 void
 updatebar(Monitor *m)
 {
-	size_t i;
 	int rw, rh;
 	char fontattrs[12];
 
@@ -3353,11 +3518,7 @@ updatebar(Monitor *m)
 
 	wlr_scene_node_set_enabled(&m->scene_buffer->node, m->wlr_output->enabled ? showbar : 0);
 
-	for (i = 0; i < LENGTH(m->pool); i++)
-		if (m->pool[i]) {
-			wlr_buffer_drop(&m->pool[i]->base);
-			m->pool[i] = NULL;
-		}
+	bufpooldrop(m->pool, LENGTH(m->pool));
 
 	if (m->b.scale == m->wlr_output->scale && m->drw)
 		return;
@@ -3371,6 +3532,8 @@ updatebar(Monitor *m)
 	m->lrpad = m->drw->font->height;
 	m->b.height = m->drw->font->height + 2;
 	m->b.real_height = (int)((float)m->b.height / m->wlr_output->scale);
+	m->t.height = m->drw->font->height + (int)titlepadding;
+	m->t.real_height = (int)((float)m->t.height / m->wlr_output->scale);
 }
 
 void
@@ -3460,7 +3623,16 @@ xytonode(double x, double y, struct wlr_surface **psurface,
 		if (node->type == WLR_SCENE_NODE_BUFFER) {
 			scene_surface = wlr_scene_surface_try_from_buffer(
 					wlr_scene_buffer_from_node(node));
-			if (!scene_surface) continue;
+			if (!scene_surface) {
+				/* A title bar carries no surface but knows its client */
+				for (pnode = node; pnode && !c; pnode = &pnode->parent->node)
+					c = pnode->data;
+				if (c && c->type == LayerShell)
+					c = NULL;
+				if (c)
+					break;
+				continue;
+			}
 			surface = scene_surface->surface;
 		}
 		/* Walk the tree to find a node that knows the client */
