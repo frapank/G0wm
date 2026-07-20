@@ -340,6 +340,7 @@ static void locksession(struct wl_listener *listener, void *data);
 static void mapnotify(struct wl_listener *listener, void *data);
 static void maximizenotify(struct wl_listener *listener, void *data);
 static void monocle(Monitor *m);
+static void movestack(const Arg *arg);
 static void motionabsolute(struct wl_listener *listener, void *data);
 static void motionnotify(uint32_t time, struct wlr_input_device *device, double sx,
 		double sy, double sx_unaccel, double sy_unaccel);
@@ -2145,6 +2146,41 @@ monocle(Monitor *m)
 }
 
 void
+movestack(const Arg *arg)
+{
+	Client *c, *sel = focustop(selmon);
+
+	if (!sel || wl_list_length(&clients) <= 1)
+		return;
+
+	if (arg->i > 0) {
+		wl_list_for_each(c, &sel->link, link) {
+			if (&c->link == &clients) {
+				c = wl_container_of(&clients, c, link);
+				break; /* wrap past the sentinel node */
+			}
+			if (VISIBLEON(c, selmon))
+				break; /* found it */
+		}
+	} else {
+		wl_list_for_each_reverse(c, &sel->link, link) {
+			if (&c->link == &clients) {
+				c = wl_container_of(&clients, c, link);
+				break; /* wrap past the sentinel node */
+			}
+			if (VISIBLEON(c, selmon))
+				break; /* found it */
+		}
+		/* backup one client */
+		c = wl_container_of(c->link.prev, c, link);
+	}
+
+	wl_list_remove(&sel->link);
+	wl_list_insert(&c->link, &sel->link);
+	arrange(selmon);
+}
+
+void
 motionabsolute(struct wl_listener *listener, void *data)
 {
 	/* This event is forwarded by the cursor when a pointer emits an _absolute_
@@ -2519,8 +2555,14 @@ resizewidth(const Arg *arg)
 {
 	Client *c = focustop(selmon);
 
-	if (!c || !c->isfloating)
+	if (!c)
 		return;
+	if (!c->isfloating) {
+		/* A tiled client has no free geometry, so widen/narrow the master
+		 * area instead - dwl's equivalent of resizing a sway split. */
+		setmfact(&(Arg){.f = arg->i > 0 ? +0.05f : -0.05f});
+		return;
+	}
 	resize(c, (struct wlr_box){.x = c->geom.x, .y = c->geom.y,
 		.width = MAX(1, c->geom.width + arg->i), .height = c->geom.height}, 1);
 }
