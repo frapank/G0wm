@@ -59,6 +59,27 @@ version of [wlroots].
 
 To enable XWayland, you should uncomment its flags in `config.mk`.
 
+### Repository layout
+
+Upstream dwl keeps everything in one flat directory. This fork uses a
+conventional tree instead:
+
+```
+config.def.h     user configuration, copied to config.h on first build
+src/             dwl.c, util.c, and the systray sources
+include/         client.h, util.h, dbus.h, systray/*.h
+external/        drwl.h, vendored from the drwl project
+protocols/       wlr protocol XML fed to wayland-scanner
+build/           objects and generated headers (gitignored, `make clean`)
+docs/            man page
+scripts/         start-dwl, dwl-status.sh
+share/           dwl.desktop
+```
+
+`config.def.h` and `config.h` deliberately stay at the root, since they are
+the files you actually edit. Note that the Makefile uses GNU make pattern
+rules and is no longer `.POSIX:`.
+
 ## Configuration
 
 All configuration is done by editing `config.h` and recompiling, in the same
