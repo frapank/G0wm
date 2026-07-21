@@ -2925,8 +2925,9 @@ void resize(Client* c, struct wlr_box geo, int interact)
         &c->border[3]->node, c->geom.width - c->bw, c->bw);
 
     /* this is a no-op if size hasn't changed */
-    c->resize = client_set_size(
-        c, c->geom.width - 2 * c->bw, c->geom.height - 2 * c->bw - th);
+    c->resize = client_set_size(c,
+                                 c->geom.width - 2 * c->bw,
+                                 MAX(1, c->geom.height - 2 * c->bw - th));
     client_get_clip(c, &clip);
     clip.height -= th;
     wlr_scene_subsurface_tree_set_clip(&c->scene_surface->node, &clip);
@@ -3636,8 +3637,8 @@ void tagmon(const Arg* arg)
 
 void tile(Monitor* m)
 {
-    unsigned int h, r, e = m->gaps, mw, my, ty;
-    int i, n = 0;
+    unsigned int r, e = m->gaps, mw;
+    int h, my, ty, i, n = 0;
     Client* c;
 
     wl_list_for_each(c, &clients, link) if (VISIBLEON(c, m) && !c->isfloating &&
@@ -3659,7 +3660,8 @@ void tile(Monitor* m)
             continue;
         if (i < m->nmaster) {
             r = MIN(n, m->nmaster) - i;
-            h = (m->w.height - my - gappx * e - gappx * e * (r - 1)) / r;
+            h = MAX(
+                1, ((int)m->w.height - my - (int)(gappx * e * r)) / (int)r);
             resize(c,
                    (struct wlr_box){ .x = m->w.x + gappx * e,
                                      .y = m->w.y + my,
@@ -3669,7 +3671,8 @@ void tile(Monitor* m)
             my += c->geom.height + gappx * e;
         } else {
             r = n - i;
-            h = (m->w.height - ty - gappx * e - gappx * e * (r - 1)) / r;
+            h = MAX(
+                1, ((int)m->w.height - ty - (int)(gappx * e * r)) / (int)r);
             resize(c,
                    (struct wlr_box){ .x = m->w.x + mw,
                                      .y = m->w.y + ty,
