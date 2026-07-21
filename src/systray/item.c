@@ -66,7 +66,8 @@ extract_image(DBusMessageIter *iter, dbus_int32_t *width, dbus_int32_t *height,
 	if (dbus_message_iter_get_arg_type(&bytes) != DBUS_TYPE_BYTE)
 		goto fail;
 	dbus_message_iter_get_fixed_array(&bytes, &buf, size);
-	if (size == 0)
+	if (*size == 0 || *width <= 0 || *height <= 0 ||
+	    (dbus_int64_t)*size != (dbus_int64_t)*width * *height * 4)
 		goto fail;
 
 	return buf;

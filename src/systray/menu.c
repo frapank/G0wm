@@ -439,10 +439,11 @@ read_dict(DBusMessageIter *dict, dbus_int32_t itemid, MenuItem *mi,
 		return 1;
 
 	/*
-	 * 4 characters for checkmark and submenu indicator,
-	 * 1 for nul terminator
+	 * Up to 4 bytes for the checkmark prefix ("☐ "/"✓ ") and 4 bytes
+	 * for the submenu suffix (" →"), both may apply at once, plus
+	 * 1 for the nul terminator.
 	 */
-	if (strlen(label) + 5 > LABEL_MAX) {
+	if (strlen(label) + 9 > LABEL_MAX) {
 		fprintf(stderr, "Too long menu entry label: %s! Skipping...\n",
 		        label);
 		return 1;
