@@ -441,6 +441,7 @@ static void setup(void);
 static void spawn(const Arg* arg);
 static void startdrag(struct wl_listener* listener, void* data);
 static int statusin(int fd, unsigned int mask, void* data);
+static void swapclients(Client* a, Client* b);
 static void tag(const Arg* arg);
 static void tabbed(Monitor* m);
 static unsigned int tagindex(uint32_t tagset);
@@ -2620,6 +2621,15 @@ void motionnotify(uint32_t time,
 
     /* If we are currently grabbing the mouse, handle and return */
     if (cursor_mode == CurMove) {
+        /* A tiled client keeps its slot in the layout: dragging it just swaps
+         * it with the tile under the cursor, i3/sway style. */
+        if (!grabc->isfloating) {
+            if (c && c != grabc && !c->isfloating && c->mon == grabc->mon) {
+                swapclients(grabc, c);
+                arrange(grabc->mon);
+            }
+            return;
+        }
         /* Move the grabbed client to the new position. */
         resize(grabc,
                (struct wlr_box){ .x = (int)round(cursor->x) - grabcx,
@@ -2674,8 +2684,12 @@ void moveresize(const Arg* arg)
     if (!grabc || client_is_unmanaged(grabc) || grabc->isfullscreen)
         return;
 
-    /* Float the window and tell motionnotify to grab it */
-    setfloating(grabc, 1);
+    /* Float the window and tell motionnotify to grab it - except when moving a
+     * tiled client under a real layout, which stays tiled and is swapped with
+     * the tile it is dragged onto instead. */
+    if (arg->ui != CurMove || grabc->isfloating || !grabc->mon ||
+        !grabc->mon->lt[grabc->mon->sellt]->arrange)
+        setfloating(grabc, 1);
     switch (cursor_mode = arg->ui) {
         case CurMove:
             grabcx = (int)round(cursor->x) - grabc->geom.x;
@@ -2781,8 +2795,10 @@ void pointerfocus(Client* c,
 {
     struct timespec now;
 
-    if (surface != seat->pointer_state.focused_surface && sloppyfocus && time &&
-        c && !client_is_unmanaged(c))
+    /* Only a real client surface takes focus: hovering a title bar (a tab) or
+     * a border has no surface, and must not select anything until clicked. */
+    if (surface && surface != seat->pointer_state.focused_surface &&
+        sloppyfocus && time && c && !client_is_unmanaged(c))
         focusclient(c, 0);
 
     /* If surface is NULL, clear pointer focus */
@@ -3533,6 +3549,25 @@ int statusin(int fd, unsigned int mask, void* data)
     drawbars();
 
     return 0;
+}
+
+/* Exchanges two clients in the tiling order, which is all a layout looks at. */
+void swapclients(Client* a, Client* b)
+{
+    struct wl_list *aprev = a->link.prev, *bprev = b->link.prev;
+
+    if (aprev == &b->link) {
+        wl_list_remove(&a->link);
+        wl_list_insert(bprev, &a->link);
+    } else if (bprev == &a->link) {
+        wl_list_remove(&b->link);
+        wl_list_insert(aprev, &b->link);
+    } else {
+        wl_list_remove(&a->link);
+        wl_list_remove(&b->link);
+        wl_list_insert(bprev, &a->link);
+        wl_list_insert(aprev, &b->link);
+    }
 }
 
 void tag(const Arg* arg)
