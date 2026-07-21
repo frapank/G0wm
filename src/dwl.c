@@ -908,7 +908,7 @@ void buttonpress(struct wl_listener* listener, void* data)
     struct wlr_scene_node* node;
     struct wlr_scene_buffer* buffer;
     uint32_t mods;
-    Arg arg = { 0 };
+    Arg arg = { .v = NULL }; /* .v is the widest member: zeroes the whole union */
     Client* c;
     const Button* b;
 
@@ -3712,13 +3712,17 @@ void togglegaps(const Arg* arg)
 }
 
 /* Switches to the tabbed layout passed in arg, or back to the layout that was
- * selected before it if we are already tabbed - setlayout() with an empty arg
- * flips lt[] back to the other slot, which still holds it. */
+ * selected before it if we are already tabbed - setlayout(NULL) flips lt[] back
+ * to the other slot, which still holds it.
+ *
+ * Passing NULL rather than &(Arg){0}: Arg is a union, so that initialiser only
+ * covers its first member (int i) and leaves the rest of ->v as whatever was on
+ * the stack, which setlayout() then stores as the layout pointer. */
 void toggletabbed(const Arg* arg)
 {
     if (!selmon || !arg || !arg->v)
         return;
-    setlayout(selmon->lt[selmon->sellt]->arrange == tabbed ? &(Arg){ 0 } : arg);
+    setlayout(selmon->lt[selmon->sellt]->arrange == tabbed ? NULL : arg);
 }
 
 void toggletag(const Arg* arg)
