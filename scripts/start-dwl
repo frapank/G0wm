@@ -23,8 +23,10 @@ log_dir="${XDG_STATE_HOME:-$HOME/.local/state}/dwl"
 mkdir -p "$log_dir"
 
 cleanup() {
-    pkill -u "$(id -u)" -x 'dwl-status.sh|swaybg' 2>/dev/null || true
+    pkill -u "$(id -u)" -x 'dwl-status.sh|swaybg|pipewire|wireplumber' 2>/dev/null || true
 }
 trap cleanup EXIT
 
-dwl-status.sh | dbus-run-session -- dwl >>"$log_dir/dwl.log" 2>&1
+dwl-status.sh | dbus-run-session -- sh -c \
+    'pipewire >/dev/null 2>&1 & wireplumber >/dev/null 2>&1 & exec dwl' \
+    >>"$log_dir/dwl.log" 2>&1
