@@ -133,6 +133,10 @@ resulting configuration knobs.
   Note that it does not read icons from the filesystem, by design: apps that
   publish an icon *name* rather than pixel data show the first letter of
   their name instead of an icon.
+- **[hide-cursor-when-typing]** (by [unixchad]) — hides the mouse cursor as
+  soon as a key is pressed, restoring it on the next pointer motion or
+  button press, like `xbanish`. Toggle with `hide_cursor_when_typing` in
+  `config.h`.
 
 ### Local additions
 
@@ -290,6 +294,8 @@ inspiration, and to the various contributors to the project, including:
 [gaps]: https://codeberg.org/dwl/dwl-patches/wiki/gaps
 [movestack]: https://codeberg.org/dwl/dwl-patches/src/branch/main/patches/movestack
 [bar-systray]: https://codeberg.org/dwl/dwl-patches/src/branch/main/patches/bar-systray
+[hide-cursor-when-typing]: https://codeberg.org/dwl/dwl-patches/src/branch/main/patches/hide-cursor-when-typing
+[unixchad]: https://codeberg.org/unixchad
 [janetski]: https://codeberg.org/janetski
 [autostart]: https://codeberg.org/dwl/dwl-patches/wiki/autostart
 [dinit]: https://davmac.org/projects/dinit/
