@@ -171,157 +171,107 @@ static const char* filemanagercmd[] = { "xterm", "-e", "ranger", NULL };
 static const char* browsercmd[]     = { "firefox", NULL };
 
 static const Key keys[] = {
-    /* Note that Shift changes certain key codes: 2 -> at, etc. */
-    /* modifier                  key                  function          argument */
+	/* Note that Shift changes certain key codes: 2 -> at, etc. */
+	/* modifier                  key                  function          argument */
 
-    /* --- APPLICATIONS AND SYSTEM --- */
-    { MODKEY, XKB_KEY_q, spawn, { .v = termcmd } },
-    { MODKEY, XKB_KEY_f, spawn, { .v = filemanagercmd } },
-    { MODKEY, XKB_KEY_r, spawn, { .v = menucmd } },
-    { MODKEY, XKB_KEY_b, spawn, { .v = browsercmd } },
-    { MODKEY, XKB_KEY_c, killclient, { 0 } },
-    { MODKEY | WLR_MODIFIER_SHIFT, XKB_KEY_f, togglefullscreen, { 0 } },
-    { MODKEY, XKB_KEY_v, togglefloating, { 0 } },
-    { MODKEY, XKB_KEY_g, togglegaps, { 0 } },
-    { MODKEY | WLR_MODIFIER_SHIFT, XKB_KEY_b, togglebar, { 0 } },
-    { 0, XKB_KEY_Print, spawn, SHCMD("grim -g \"$(slurp)\" - | swappy -f -") },
-    { MODKEY, XKB_KEY_t, toggletabbed, { .v = &layouts[3] } },
-    { MODKEY, XKB_KEY_e, togglefullscreen, { 0 } },
+	/* --- APPLICATIONS AND SYSTEM --- */
+	{ MODKEY,                    XKB_KEY_q,           spawn,            {.v = termcmd} },
+	{ MODKEY,                    XKB_KEY_f,           spawn,            {.v = filemanagercmd} },
+	{ MODKEY,                    XKB_KEY_r,           spawn,            {.v = menucmd} },
+	{ MODKEY,                    XKB_KEY_b,           spawn,            {.v = browsercmd} },
+	{ MODKEY,                    XKB_KEY_c,           killclient,       {0} },
+	{ MODKEY|WLR_MODIFIER_SHIFT, XKB_KEY_f,           togglefullscreen, {0} },
+	{ MODKEY,                    XKB_KEY_v,           togglefloating,   {0} },
+	{ MODKEY,                    XKB_KEY_g,           togglegaps,       {0} },
+	{ MODKEY|WLR_MODIFIER_SHIFT, XKB_KEY_b,           togglebar,        {0} },
+	{ 0,                         XKB_KEY_Print,       spawn,            SHCMD("grim -g \"$(slurp)\" - | swappy -f -") },
+	{ MODKEY,                    XKB_KEY_t,           toggletabbed,     {.v = &layouts[3]} },
+	{ MODKEY,                    XKB_KEY_e,           togglefullscreen, {0} },
 
-    /* --- FOCUS CONTROL --- */
-    /* dwl has one master/stack list, not a 2D tree: h/k walk it backwards and
-     * j/l forwards. In the tabbed layout this cycles through the tabs. */
-    { MODKEY, XKB_KEY_h, focusstack, { .i = -1 } },
-    { MODKEY, XKB_KEY_j, focusstack, { .i = +1 } },
-    { MODKEY, XKB_KEY_k, focusstack, { .i = -1 } },
-    { MODKEY, XKB_KEY_l, focusstack, { .i = +1 } },
+	/* --- FOCUS CONTROL --- */
+	/* dwl has one master/stack list, not a 2D tree: h/k walk it backwards and
+	 * j/l forwards. In the tabbed layout this cycles through the tabs. */
+	{ MODKEY,                    XKB_KEY_h,           focusstack,       {.i = -1} },
+	{ MODKEY,                    XKB_KEY_j,           focusstack,       {.i = +1} },
+	{ MODKEY,                    XKB_KEY_k,           focusstack,       {.i = -1} },
+	{ MODKEY,                    XKB_KEY_l,           focusstack,       {.i = +1} },
 
-    /* --- MOVE WINDOW POSITION --- */
-    { MODKEY | WLR_MODIFIER_SHIFT, XKB_KEY_h, movestack, { .i = -1 } },
-    { MODKEY | WLR_MODIFIER_SHIFT, XKB_KEY_j, movestack, { .i = +1 } },
-    { MODKEY | WLR_MODIFIER_SHIFT, XKB_KEY_k, movestack, { .i = -1 } },
-    { MODKEY | WLR_MODIFIER_SHIFT, XKB_KEY_l, movestack, { .i = +1 } },
+	/* --- MOVE WINDOW POSITION --- */
+	{ MODKEY|WLR_MODIFIER_SHIFT, XKB_KEY_h,           movestack,        {.i = -1} },
+	{ MODKEY|WLR_MODIFIER_SHIFT, XKB_KEY_j,           movestack,        {.i = +1} },
+	{ MODKEY|WLR_MODIFIER_SHIFT, XKB_KEY_k,           movestack,        {.i = -1} },
+	{ MODKEY|WLR_MODIFIER_SHIFT, XKB_KEY_l,           movestack,        {.i = +1} },
 
-    /* --- RESIZE --- */
-    /* Floating clients move their edges; tiled ones only react to h/l, which
-     * adjust the master area, as the stack splits the height evenly. */
-    { MODKEY | WLR_MODIFIER_SHIFT | WLR_MODIFIER_ALT,
-      XKB_KEY_h,
-      resizewidth,
-      { .i = -50 } },
-    { MODKEY | WLR_MODIFIER_SHIFT | WLR_MODIFIER_ALT,
-      XKB_KEY_l,
-      resizewidth,
-      { .i = +50 } },
-    { MODKEY | WLR_MODIFIER_SHIFT | WLR_MODIFIER_ALT,
-      XKB_KEY_k,
-      resizeheight,
-      { .i = -50 } },
-    { MODKEY | WLR_MODIFIER_SHIFT | WLR_MODIFIER_ALT,
-      XKB_KEY_j,
-      resizeheight,
-      { .i = +50 } },
+	/* --- RESIZE --- */
+	/* Floating clients move their edges; tiled ones only react to h/l, which
+	 * adjust the master area, as the stack splits the height evenly. */
+	{ MODKEY|WLR_MODIFIER_SHIFT|WLR_MODIFIER_ALT, XKB_KEY_h, resizewidth,  {.i = -50} },
+	{ MODKEY|WLR_MODIFIER_SHIFT|WLR_MODIFIER_ALT, XKB_KEY_l, resizewidth,  {.i = +50} },
+	{ MODKEY|WLR_MODIFIER_SHIFT|WLR_MODIFIER_ALT, XKB_KEY_k, resizeheight, {.i = -50} },
+	{ MODKEY|WLR_MODIFIER_SHIFT|WLR_MODIFIER_ALT, XKB_KEY_j, resizeheight, {.i = +50} },
 
-    { MODKEY | WLR_MODIFIER_CTRL, XKB_KEY_h, setmfact, { .f = -0.05f } },
-    { MODKEY | WLR_MODIFIER_CTRL, XKB_KEY_l, setmfact, { .f = +0.05f } },
+	{ MODKEY|WLR_MODIFIER_CTRL,  XKB_KEY_h,           setmfact,         {.f = -0.05f} },
+	{ MODKEY|WLR_MODIFIER_CTRL,  XKB_KEY_l,           setmfact,         {.f = +0.05f} },
 
-    /* --- MEDIA CONTROLS --- */
-    { 0,
-      XKB_KEY_XF86AudioRaiseVolume,
-      spawn,
-      SHCMD("wpctl set-volume @DEFAULT_AUDIO_SINK@ 5%+") },
-    { 0,
-      XKB_KEY_XF86AudioLowerVolume,
-      spawn,
-      SHCMD("wpctl set-volume @DEFAULT_AUDIO_SINK@ 5%-") },
-    { 0,
-      XKB_KEY_XF86AudioMute,
-      spawn,
-      SHCMD("wpctl set-mute @DEFAULT_AUDIO_SINK@ toggle") },
-    { 0,
-      XKB_KEY_XF86AudioMicMute,
-      spawn,
-      SHCMD("wpctl set-mute @DEFAULT_AUDIO_SOURCE@ toggle") },
-    { 0, XKB_KEY_XF86MonBrightnessUp, spawn, SHCMD("brightnessctl s 10%+") },
-    { 0, XKB_KEY_XF86MonBrightnessDown, spawn, SHCMD("brightnessctl s 10%-") },
-    { 0, XKB_KEY_XF86AudioNext, spawn, SHCMD("playerctl next") },
-    { 0, XKB_KEY_XF86AudioPause, spawn, SHCMD("playerctl play-pause") },
-    { 0, XKB_KEY_XF86AudioPlay, spawn, SHCMD("playerctl play-pause") },
-    { 0, XKB_KEY_XF86AudioPrev, spawn, SHCMD("playerctl previous") },
+	/* --- MEDIA CONTROLS --- */
+	{ 0, XKB_KEY_XF86AudioRaiseVolume,  spawn, SHCMD("wpctl set-volume @DEFAULT_AUDIO_SINK@ 5%+") },
+	{ 0, XKB_KEY_XF86AudioLowerVolume,  spawn, SHCMD("wpctl set-volume @DEFAULT_AUDIO_SINK@ 5%-") },
+	{ 0, XKB_KEY_XF86AudioMute,         spawn, SHCMD("wpctl set-mute @DEFAULT_AUDIO_SINK@ toggle") },
+	{ 0, XKB_KEY_XF86AudioMicMute,      spawn, SHCMD("wpctl set-mute @DEFAULT_AUDIO_SOURCE@ toggle") },
+	{ 0, XKB_KEY_XF86MonBrightnessUp,   spawn, SHCMD("brightnessctl s 10%+") },
+	{ 0, XKB_KEY_XF86MonBrightnessDown, spawn, SHCMD("brightnessctl s 10%-") },
+	{ 0, XKB_KEY_XF86AudioNext,         spawn, SHCMD("playerctl next") },
+	{ 0, XKB_KEY_XF86AudioPause,        spawn, SHCMD("playerctl play-pause") },
+	{ 0, XKB_KEY_XF86AudioPlay,         spawn, SHCMD("playerctl play-pause") },
+	{ 0, XKB_KEY_XF86AudioPrev,         spawn, SHCMD("playerctl previous") },
 
-    /* --- dwl defaults --- */
-    { MODKEY, XKB_KEY_i, incnmaster, { .i = +1 } },
-    { MODKEY, XKB_KEY_d, incnmaster, { .i = -1 } },
-    { MODKEY, XKB_KEY_Return, zoom, { 0 } },
-    { MODKEY, XKB_KEY_Tab, view, { 0 } },
-    { MODKEY, XKB_KEY_m, setlayout, { .v = &layouts[2] } },
-    { MODKEY, XKB_KEY_space, setlayout, { 0 } },
-    { MODKEY, XKB_KEY_0, view, { .ui = ~0 } },
-    { MODKEY | WLR_MODIFIER_SHIFT, XKB_KEY_parenright, tag, { .ui = ~0 } },
-    { MODKEY, XKB_KEY_comma, focusmon, { .i = WLR_DIRECTION_LEFT } },
-    { MODKEY, XKB_KEY_period, focusmon, { .i = WLR_DIRECTION_RIGHT } },
-    { MODKEY | WLR_MODIFIER_SHIFT,
-      XKB_KEY_less,
-      tagmon,
-      { .i = WLR_DIRECTION_LEFT } },
-    { MODKEY | WLR_MODIFIER_SHIFT,
-      XKB_KEY_greater,
-      tagmon,
-      { .i = WLR_DIRECTION_RIGHT } },
-    TAGKEYS(XKB_KEY_1, XKB_KEY_exclam, 0),
-    TAGKEYS(XKB_KEY_2, XKB_KEY_at, 1),
-    TAGKEYS(XKB_KEY_3, XKB_KEY_numbersign, 2),
-    TAGKEYS(XKB_KEY_4, XKB_KEY_dollar, 3),
-    TAGKEYS(XKB_KEY_5, XKB_KEY_percent, 4),
-    TAGKEYS(XKB_KEY_6, XKB_KEY_asciicircum, 5),
-    TAGKEYS(XKB_KEY_7, XKB_KEY_ampersand, 6),
-    TAGKEYS(XKB_KEY_8, XKB_KEY_asterisk, 7),
-    TAGKEYS(XKB_KEY_9, XKB_KEY_parenleft, 8),
-    { MODKEY | WLR_MODIFIER_SHIFT, XKB_KEY_q, quit, { 0 } },
+	/* --- dwl defaults --- */
+	{ MODKEY,                    XKB_KEY_i,           incnmaster,       {.i = +1} },
+	{ MODKEY,                    XKB_KEY_d,           incnmaster,       {.i = -1} },
+	{ MODKEY,                    XKB_KEY_Return,      zoom,             {0} },
+	{ MODKEY,                    XKB_KEY_Tab,         view,             {0} },
+	{ MODKEY,                    XKB_KEY_m,           setlayout,        {.v = &layouts[2]} },
+	{ MODKEY,                    XKB_KEY_space,       setlayout,        {0} },
+	{ MODKEY,                    XKB_KEY_0,           view,             {.ui = ~0} },
+	{ MODKEY|WLR_MODIFIER_SHIFT, XKB_KEY_parenright,  tag,              {.ui = ~0} },
+	{ MODKEY,                    XKB_KEY_comma,       focusmon,         {.i = WLR_DIRECTION_LEFT} },
+	{ MODKEY,                    XKB_KEY_period,      focusmon,         {.i = WLR_DIRECTION_RIGHT} },
+	{ MODKEY|WLR_MODIFIER_SHIFT, XKB_KEY_less,        tagmon,           {.i = WLR_DIRECTION_LEFT} },
+	{ MODKEY|WLR_MODIFIER_SHIFT, XKB_KEY_greater,     tagmon,           {.i = WLR_DIRECTION_RIGHT} },
+	TAGKEYS(          XKB_KEY_1, XKB_KEY_exclam,                        0),
+	TAGKEYS(          XKB_KEY_2, XKB_KEY_at,                            1),
+	TAGKEYS(          XKB_KEY_3, XKB_KEY_numbersign,                    2),
+	TAGKEYS(          XKB_KEY_4, XKB_KEY_dollar,                        3),
+	TAGKEYS(          XKB_KEY_5, XKB_KEY_percent,                       4),
+	TAGKEYS(          XKB_KEY_6, XKB_KEY_asciicircum,                   5),
+	TAGKEYS(          XKB_KEY_7, XKB_KEY_ampersand,                     6),
+	TAGKEYS(          XKB_KEY_8, XKB_KEY_asterisk,                      7),
+	TAGKEYS(          XKB_KEY_9, XKB_KEY_parenleft,                     8),
+	{ MODKEY|WLR_MODIFIER_SHIFT, XKB_KEY_q,           quit,             {0} },
 
-    /* Ctrl-Alt-Backspace and Ctrl-Alt-Fx used to be handled by X server */
-    { WLR_MODIFIER_CTRL | WLR_MODIFIER_ALT,
-      XKB_KEY_Terminate_Server,
-      quit,
-      { 0 } },
-/* Ctrl-Alt-Fx is used to switch to another VT, if you don't know what a VT is
- * do not remove them.
- */
-#define CHVT(n)                                                                \
-    {                                                                          \
-        WLR_MODIFIER_CTRL | WLR_MODIFIER_ALT, XKB_KEY_XF86Switch_VT_##n, chvt, \
-        {                                                                      \
-            .ui = (n)                                                          \
-        }                                                                      \
-    }
-    CHVT(1),
-    CHVT(2),
-    CHVT(3),
-    CHVT(4),
-    CHVT(5),
-    CHVT(6),
-    CHVT(7),
-    CHVT(8),
-    CHVT(9),
-    CHVT(10),
-    CHVT(11),
-    CHVT(12),
+	/* Ctrl-Alt-Backspace and Ctrl-Alt-Fx used to be handled by X server */
+	{ WLR_MODIFIER_CTRL|WLR_MODIFIER_ALT,XKB_KEY_Terminate_Server, quit, {0} },
+	/* Ctrl-Alt-Fx is used to switch to another VT, if you don't know what a VT is
+	 * do not remove them.
+	 */
+#define CHVT(n) { WLR_MODIFIER_CTRL|WLR_MODIFIER_ALT,XKB_KEY_XF86Switch_VT_##n, chvt, {.ui = (n)} }
+	CHVT(1), CHVT(2), CHVT(3), CHVT(4), CHVT(5), CHVT(6),
+	CHVT(7), CHVT(8), CHVT(9), CHVT(10), CHVT(11), CHVT(12),
 };
 
 static const Button buttons[] = {
-    { ClkLtSymbol, 0, BTN_LEFT, setlayout, { .v = &layouts[0] } },
-    { ClkLtSymbol, 0, BTN_RIGHT, setlayout, { .v = &layouts[2] } },
-    { ClkTitle, 0, BTN_MIDDLE, zoom, { 0 } },
-    { ClkTitle, 0, BTN_LEFT, notifyclick, { 0 } },
-    { ClkTitle, 0, BTN_RIGHT, notifydismiss, { 0 } },
-    { ClkStatus, 0, BTN_MIDDLE, spawn, { .v = termcmd } },
-    { ClkClient, MODKEY, BTN_LEFT, moveresize, { .ui = CurMove } },
-    { ClkClient, MODKEY, BTN_MIDDLE, togglefloating, { 0 } },
-    { ClkClient, MODKEY, BTN_RIGHT, moveresize, { .ui = CurResize } },
-    { ClkTray, 0, BTN_LEFT, trayactivate, { 0 } },
-    { ClkTray, 0, BTN_RIGHT, traymenu, { 0 } },
-    { ClkTagBar, 0, BTN_LEFT, view, { 0 } },
-    { ClkTagBar, 0, BTN_RIGHT, toggleview, { 0 } },
-    { ClkTagBar, MODKEY, BTN_LEFT, tag, { 0 } },
-    { ClkTagBar, MODKEY, BTN_RIGHT, toggletag, { 0 } },
-};
+	{ ClkLtSymbol, 0,      BTN_LEFT,   setlayout,      {.v = &layouts[0]} },
+	{ ClkLtSymbol, 0,      BTN_RIGHT,  setlayout,      {.v = &layouts[2]} },
+	{ ClkTitle,    0,      BTN_MIDDLE, zoom,           {0} },
+	{ ClkTitle,    0,      BTN_LEFT,   notifyclick,    {0} },
+	{ ClkStatus,   0,      BTN_MIDDLE, spawn,          {.v = termcmd} },
+	{ ClkClient,   MODKEY, BTN_LEFT,   moveresize,     {.ui = CurMove} },
+	{ ClkClient,   MODKEY, BTN_MIDDLE, togglefloating, {0} },
+	{ ClkClient,   MODKEY, BTN_RIGHT,  moveresize,     {.ui = CurResize} },
+	{ ClkTray,     0,      BTN_LEFT,   trayactivate,   {0} },
+	{ ClkTray,     0,      BTN_RIGHT,  traymenu,       {0} },
+	{ ClkTagBar,   0,      BTN_LEFT,   view,           {0} },
+	{ ClkTagBar,   0,      BTN_RIGHT,  toggleview,     {0} },
+	{ ClkTagBar,   MODKEY, BTN_LEFT,   tag,            {0} },
+	{ ClkTagBar,   MODKEY, BTN_RIGHT,  toggletag,      {0} },
+}
