@@ -27,6 +27,8 @@ static const unsigned int systrayiconsize  = 16; /* icon size, 0 fills the bar *
 static const int titlebar                  = 1;  /* 0 means no per-window title bar */
 static const int barwintitle               = 0;  /* 1 shows the focused window's title in the top bar too (redundant with titlebar) */
 static const unsigned int titlepadding     = 6;  /* title bar height on top of the font height */
+static const int shownotifications         = 1;  /* 0 means no bar notifications (see README) */
+static const unsigned int notification_timeout = 5; /* seconds a notification stays in the bar */
 static uint32_t colors[][3]                = {
 	/*                   fg          bg          border    */
 	[SchemeNorm]     = { 0xbbbbbbff, 0x222222ff, 0x444444ff },
@@ -248,6 +250,7 @@ static const Button buttons[] = {
 	{ ClkLtSymbol, 0,      BTN_LEFT,   setlayout,      {.v = &layouts[0]} },
 	{ ClkLtSymbol, 0,      BTN_RIGHT,  setlayout,      {.v = &layouts[2]} },
 	{ ClkTitle,    0,      BTN_MIDDLE, zoom,           {0} },
+	{ ClkTitle,    0,      BTN_LEFT,   notifyclick,    {0} },
 	{ ClkStatus,   0,      BTN_MIDDLE, spawn,          {.v = termcmd} },
 	{ ClkClient,   MODKEY, BTN_LEFT,   moveresize,     {.ui = CurMove} },
 	{ ClkClient,   MODKEY, BTN_MIDDLE, togglefloating, {0} },

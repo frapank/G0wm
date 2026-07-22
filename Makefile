@@ -26,12 +26,12 @@ DWLCFLAGS = `$(PKG_CONFIG) --cflags $(PKGS)` $(WLR_INCS) $(DWLCPPFLAGS) $(DWLDEV
 LDLIBS    = `$(PKG_CONFIG) --libs $(PKGS)` $(WLR_LIBS) -lm $(LIBS)
 
 # Sources. The systray and its dbus glue come from the bar-systray patch.
-SRC = $(SRCDIR)/dwl.c $(SRCDIR)/util.c $(SRCDIR)/dbus.c \
+SRC = $(SRCDIR)/dwl.c $(SRCDIR)/util.c $(SRCDIR)/dbus.c $(SRCDIR)/notify.c \
 	$(SRCDIR)/systray/watcher.c $(SRCDIR)/systray/tray.c \
 	$(SRCDIR)/systray/item.c $(SRCDIR)/systray/icon.c \
 	$(SRCDIR)/systray/menu.c $(SRCDIR)/systray/helpers.c
 OBJ = $(SRC:$(SRCDIR)/%.c=$(BUILDDIR)/%.o)
-HDR = $(INCDIR)/client.h $(INCDIR)/util.h $(INCDIR)/dbus.h \
+HDR = $(INCDIR)/client.h $(INCDIR)/util.h $(INCDIR)/dbus.h $(INCDIR)/notify.h \
 	$(INCDIR)/systray/watcher.h $(INCDIR)/systray/tray.h \
 	$(INCDIR)/systray/item.h $(INCDIR)/systray/icon.h \
 	$(INCDIR)/systray/menu.h $(INCDIR)/systray/helpers.h \

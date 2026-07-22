@@ -10,6 +10,7 @@
 #include <signal.h>
 #include <stdio.h>
 #include <stdlib.h>
+#include <string.h>
 #include <sys/wait.h>
 #include <time.h>
 #include <unistd.h>
@@ -75,6 +76,7 @@
 #endif
 
 #include "dbus.h"
+#include "notify.h"
 #include "drwl.h"
 #include "systray/tray.h"
 #include "systray/watcher.h"
@@ -407,6 +409,8 @@ static void motionnotify(uint32_t time,
                          double sy_unaccel);
 static void motionrelative(struct wl_listener* listener, void* data);
 static void moveresize(const Arg* arg);
+static unsigned int notifyboxwidth(Monitor* m);
+static void notifyclick(const Arg* arg);
 static void outputmgrapply(struct wl_listener* listener, void* data);
 static void outputmgrapplyortest(struct wlr_output_configuration_v1* config,
                                  int test);
@@ -549,6 +553,8 @@ static struct wl_event_source* status_event_source;
 static DBusConnection* bus_conn;
 static struct wl_event_source* bus_source;
 static Watcher watcher = { .running = 0 };
+static unsigned int notifyshownid;
+static size_t notifyoff;
 
 static const struct wlr_buffer_impl buffer_impl = {
     .destroy = bufdestroy,
@@ -1064,6 +1070,8 @@ void cleanup(void)
 
     if (watcher.running)
         watcher_stop(&watcher);
+    if (shownotifications)
+        notify_stop();
     if (bus_conn) {
         stopbus(bus_conn, bus_source);
         dbus_connection_unref(bus_conn);
@@ -1883,7 +1891,22 @@ void drawbar(Monitor* m)
     x = drwl_text(m->drw, x, 0, w, m->b.height, m->lrpad / 2, m->ltsymbol, 0);
 
     if ((w = m->b.width - (tw + x + traywidth)) > m->b.height) {
-        if (barwintitle && c) {
+        if (shownotifications && m == selmon && notify_getid()) {
+            const char* text = notify_gettext();
+            if (notifyshownid != notify_getid()) {
+                notifyshownid = notify_getid();
+                notifyoff = 0;
+            }
+            drwl_setscheme(m->drw, colors[SchemeSel]);
+            drwl_text(m->drw,
+                      x,
+                      0,
+                      w,
+                      m->b.height,
+                      m->lrpad / 2,
+                      notifyoff < strlen(text) ? text + notifyoff : text,
+                      0);
+        } else if (barwintitle && c) {
             drwl_setscheme(m->drw,
                            colors[m == selmon ? SchemeSel : SchemeNorm]);
             drwl_text(m->drw,
@@ -2721,6 +2744,69 @@ void moveresize(const Arg* arg)
     }
 }
 
+/* Must mirror the box drawbar() leaves between the layout symbol and the
+ * status/tray, or clicks would measure against the wrong width. */
+unsigned int notifyboxwidth(Monitor* m)
+{
+    unsigned int i, x = 0, statusw, traywidth;
+
+    for (i = 0; i < LENGTH(tags); i++)
+        x += TEXTW(m, tags[i]);
+    x += TEXTW(m, m->ltsymbol);
+    traywidth = (unsigned int)tray_get_width(m->tray);
+    statusw = (unsigned int)(TEXTW(m, stext) - m->lrpad + 2);
+    return (unsigned int)m->b.width > x + statusw + traywidth
+               ? (unsigned int)m->b.width - (x + statusw + traywidth)
+               : 0;
+}
+
+void notifyclick(const Arg* arg)
+{
+    const char* text;
+    char buf[512]; /* matches NOTIFY_TEXTMAX in notify.c */
+    unsigned int boxw;
+    size_t len, off, cut, good, n;
+
+    if (!shownotifications || !(text = notify_gettext()))
+        return;
+    if (notifyshownid != notify_getid()) {
+        notifyshownid = notify_getid();
+        notifyoff = 0;
+    }
+
+    boxw = notifyboxwidth(selmon);
+    len = strlen(text);
+    off = notifyoff < len ? notifyoff : 0;
+
+    if (drwl_font_getwidth(selmon->drw, text + off) <= boxw) {
+        notifyoff = 0;
+        drawbars();
+        return;
+    }
+
+    good = off;
+    for (cut = off + 1; cut <= len; cut++) {
+        if (cut < len && (text[cut] & 0xC0) == 0x80)
+            continue; /* not a UTF-8 codepoint boundary yet */
+        n = cut - off;
+        if (n >= sizeof(buf))
+            break;
+        memcpy(buf, text + off, n);
+        buf[n] = '\0';
+        if (drwl_font_getwidth(selmon->drw, buf) > boxw)
+            break;
+        good = cut;
+    }
+    if (good == off) {
+        /* not even one codepoint fits: force progress anyway */
+        good = off + 1;
+        while (good < len && (text[good] & 0xC0) == 0x80)
+            good++;
+    }
+    notifyoff = good < len ? good : 0;
+    drawbars();
+}
+
 void outputmgrapply(struct wl_listener* listener, void* data)
 {
     struct wlr_output_configuration_v1* config = data;
@@ -3488,16 +3574,20 @@ void setup(void)
                                                statusin,
                                                NULL);
 
-    /* The tray is a StatusNotifierWatcher on the session bus. Missing it is
-     * not fatal: dwl just comes up without a tray. */
-    if (showbar && showsystray) {
+    /* Missing the session bus is not fatal: dwl comes up without a tray
+     * and/or bar notifications. */
+    if (showbar && (showsystray || shownotifications)) {
         if ((bus_conn = dbus_bus_get(DBUS_BUS_SESSION, NULL)) &&
-            (bus_source = startbus(bus_conn, event_loop)))
-            watcher_start(&watcher, bus_conn, event_loop);
-        else
+            (bus_source = startbus(bus_conn, event_loop))) {
+            if (showsystray)
+                watcher_start(&watcher, bus_conn, event_loop);
+            if (shownotifications)
+                notify_start(
+                    bus_conn, event_loop, notification_timeout, drawbars);
+        } else
             fprintf(stderr,
                     "Couldn't connect to the session bus, "
-                    "systray not available\n");
+                    "systray/notifications not available\n");
     }
 
     /* Make sure XWayland clients don't connect to the parent X server,
