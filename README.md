@@ -160,6 +160,20 @@ Not from [dwl-patches] — written for this tree:
   Toggle with `shownotifications` in `config.h`; when off (or if another
   notification daemon like mako/dunst/swaync already owns the bus name), dwl
   doesn't touch the bus name and nothing changes.
+- **Graphics tablet support** — pen tablets (tested on a Wacom Intuos S) move
+  the cursor and click like a pointer. `inputdevice()` attaches
+  `WLR_INPUT_DEVICE_TABLET` devices to the cursor the same way pointers are,
+  but wlroots reports tablet tool motion and clicks on separate
+  `tablet_tool_axis`/`tablet_tool_tip` signals instead of the generic pointer
+  ones, so two listeners translate them: `tabletaxis()` turns an axis event
+  into the same absolute-to-relative motion `motionabsolute()` does for
+  pointers (skipping events that update neither X nor Y, e.g. pressure-only
+  samples), and `tablettip()` maps the tool tip touching down/up to a
+  synthetic `BTN_LEFT` press/release through the existing `buttonpress()`.
+  Both send a `wlr_seat_pointer_notify_frame()` afterwards, since tablets
+  don't emit a frame event of their own and clients hold pointer events back
+  until one arrives. Pressure, tilt, the pad buttons, and the eraser end are
+  not forwarded — only cursor motion and the tip-as-click.
 
 ## Running dwl
 
