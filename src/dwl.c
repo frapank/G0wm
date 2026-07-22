@@ -76,8 +76,8 @@
 #endif
 
 #include "dbus.h"
-#include "notify.h"
 #include "drwl.h"
+#include "notify.h"
 #include "systray/tray.h"
 #include "systray/watcher.h"
 #include "util.h"
@@ -107,7 +107,8 @@ enum {
     SchemeSel,
     SchemeUrg,
     SchemeTitle,
-    SchemeTitleSel
+    SchemeTitleSel,
+    SchemeNotify
 }; /* color schemes */
 enum { CurNormal, CurPressed, CurMove, CurResize }; /* cursor */
 enum { XDGShell, LayerShell, X11 };                 /* client types */
@@ -257,6 +258,8 @@ struct Monitor {
     struct {
         int width, height;
         int real_width, real_height; /* non-scaled */
+        int titlew; /* free box shared by the window title and the
+                     * notification, 0 when it doesn't fit */
         float scale;
     } b; /* bar area */
     struct {
@@ -409,8 +412,9 @@ static void motionnotify(uint32_t time,
                          double sy_unaccel);
 static void motionrelative(struct wl_listener* listener, void* data);
 static void moveresize(const Arg* arg);
-static unsigned int notifyboxwidth(Monitor* m);
 static void notifyclick(const Arg* arg);
+static void notifydismiss(const Arg* arg);
+static void notifysync(void);
 static void outputmgrapply(struct wl_listener* listener, void* data);
 static void outputmgrapplyortest(struct wlr_output_configuration_v1* config,
                                  int test);
@@ -1890,21 +1894,27 @@ void drawbar(Monitor* m)
     drwl_setscheme(m->drw, colors[SchemeNorm]);
     x = drwl_text(m->drw, x, 0, w, m->b.height, m->lrpad / 2, m->ltsymbol, 0);
 
-    if ((w = m->b.width - (tw + x + traywidth)) > m->b.height) {
-        if (shownotifications && m == selmon && notify_getid()) {
-            const char* text = notify_gettext();
-            if (notifyshownid != notify_getid()) {
-                notifyshownid = notify_getid();
-                notifyoff = 0;
-            }
-            drwl_setscheme(m->drw, colors[SchemeSel]);
+    /* Remember the free box for notifyclick(): the title and the notification
+     * share it, so its geometry must be measured in exactly one place. */
+    w = m->b.width - (tw + x + traywidth);
+    m->b.titlew = w > m->b.height ? w : 0;
+
+    if (m->b.titlew) {
+        /* A notification takes the box over for as long as it lasts, so the
+         * window title (if barwintitle is on) steps aside and comes back
+         * once the notification expires or is dismissed. */
+        const char* text =
+            shownotifications && m == selmon ? notify_gettext() : NULL;
+        if (text) {
+            notifysync();
+            drwl_setscheme(m->drw, colors[SchemeNotify]);
             drwl_text(m->drw,
                       x,
                       0,
                       w,
                       m->b.height,
                       m->lrpad / 2,
-                      notifyoff < strlen(text) ? text + notifyoff : text,
+                      text + (notifyoff < strlen(text) ? notifyoff : 0),
                       0);
         } else if (barwintitle && c) {
             drwl_setscheme(m->drw,
@@ -2744,41 +2754,28 @@ void moveresize(const Arg* arg)
     }
 }
 
-/* Must mirror the box drawbar() leaves between the layout symbol and the
- * status/tray, or clicks would measure against the wrong width. */
-unsigned int notifyboxwidth(Monitor* m)
-{
-    unsigned int i, x = 0, statusw, traywidth;
-
-    for (i = 0; i < LENGTH(tags); i++)
-        x += TEXTW(m, tags[i]);
-    x += TEXTW(m, m->ltsymbol);
-    traywidth = (unsigned int)tray_get_width(m->tray);
-    statusw = (unsigned int)(TEXTW(m, stext) - m->lrpad + 2);
-    return (unsigned int)m->b.width > x + statusw + traywidth
-               ? (unsigned int)m->b.width - (x + statusw + traywidth)
-               : 0;
-}
-
+/* Scrolls the notification on by one screenful, wrapping to the start once
+ * the tail has been shown. Bound to a click on the box the notification and
+ * the window title share (ClkTitle). */
 void notifyclick(const Arg* arg)
 {
     const char* text;
-    char buf[512]; /* matches NOTIFY_TEXTMAX in notify.c */
-    unsigned int boxw;
+    char buf[NOTIFY_TEXTMAX];
+    int boxw;
     size_t len, off, cut, good, n;
 
-    if (!shownotifications || !(text = notify_gettext()))
+    if (!shownotifications || !selmon || !selmon->b.titlew ||
+        !(text = notify_gettext()))
         return;
-    if (notifyshownid != notify_getid()) {
-        notifyshownid = notify_getid();
-        notifyoff = 0;
-    }
+    notifysync();
 
-    boxw = notifyboxwidth(selmon);
+    /* drwl_text() spends lrpad/2 of the box on the left padding: measuring
+     * against the full width would scroll text past unread. */
+    boxw = selmon->b.titlew - selmon->lrpad / 2;
     len = strlen(text);
     off = notifyoff < len ? notifyoff : 0;
 
-    if (drwl_font_getwidth(selmon->drw, text + off) <= boxw) {
+    if (boxw <= 0 || (int)drwl_font_getwidth(selmon->drw, text + off) <= boxw) {
         notifyoff = 0;
         drawbars();
         return;
@@ -2793,7 +2790,7 @@ void notifyclick(const Arg* arg)
             break;
         memcpy(buf, text + off, n);
         buf[n] = '\0';
-        if (drwl_font_getwidth(selmon->drw, buf) > boxw)
+        if ((int)drwl_font_getwidth(selmon->drw, buf) > boxw)
             break;
         good = cut;
     }
@@ -2805,6 +2802,23 @@ void notifyclick(const Arg* arg)
     }
     notifyoff = good < len ? good : 0;
     drawbars();
+}
+
+/* Puts the notification away early, giving the box back to the window title. */
+void notifydismiss(const Arg* arg)
+{
+    if (shownotifications)
+        notify_dismiss();
+}
+
+/* A notification that just arrived (or replaced another one) is shown from
+ * its start, whatever the previous one had been scrolled to. */
+void notifysync(void)
+{
+    if (notifyshownid != notify_getid()) {
+        notifyshownid = notify_getid();
+        notifyoff = 0;
+    }
 }
 
 void outputmgrapply(struct wl_listener* listener, void* data)

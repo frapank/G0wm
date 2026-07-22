@@ -50,7 +50,7 @@ GENHDR = $(GENDIR)/cursor-shape-v1-protocol.h \
 	$(GENDIR)/wlr-output-power-management-unstable-v1-protocol.h \
 	$(GENDIR)/xdg-shell-protocol.h
 
-.PHONY: all clean dist install uninstall remove format format-check
+.PHONY: all clean dist install uninstall remove format format-check test
 
 all: dwl
 
