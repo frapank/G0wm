@@ -10,6 +10,7 @@
 #include <signal.h>
 #include <stdio.h>
 #include <stdlib.h>
+#include <string.h>
 #include <sys/wait.h>
 #include <time.h>
 #include <unistd.h>
@@ -76,6 +77,7 @@
 
 #include "dbus.h"
 #include "drwl.h"
+#include "notify.h"
 #include "systray/tray.h"
 #include "systray/watcher.h"
 #include "util.h"
@@ -105,7 +107,8 @@ enum {
     SchemeSel,
     SchemeUrg,
     SchemeTitle,
-    SchemeTitleSel
+    SchemeTitleSel,
+    SchemeNotify
 }; /* color schemes */
 enum { CurNormal, CurPressed, CurMove, CurResize }; /* cursor */
 enum { XDGShell, LayerShell, X11 };                 /* client types */
@@ -255,6 +258,8 @@ struct Monitor {
     struct {
         int width, height;
         int real_width, real_height; /* non-scaled */
+        int titlew; /* free box shared by the window title and the
+                     * notification, 0 when it doesn't fit */
         float scale;
     } b; /* bar area */
     struct {
@@ -407,6 +412,9 @@ static void motionnotify(uint32_t time,
                          double sy_unaccel);
 static void motionrelative(struct wl_listener* listener, void* data);
 static void moveresize(const Arg* arg);
+static void notifyclick(const Arg* arg);
+static void notifydismiss(const Arg* arg);
+static void notifysync(void);
 static void outputmgrapply(struct wl_listener* listener, void* data);
 static void outputmgrapplyortest(struct wlr_output_configuration_v1* config,
                                  int test);
@@ -549,6 +557,8 @@ static struct wl_event_source* status_event_source;
 static DBusConnection* bus_conn;
 static struct wl_event_source* bus_source;
 static Watcher watcher = { .running = 0 };
+static unsigned int notifyshownid;
+static size_t notifyoff;
 
 static const struct wlr_buffer_impl buffer_impl = {
     .destroy = bufdestroy,
@@ -1064,6 +1074,8 @@ void cleanup(void)
 
     if (watcher.running)
         watcher_stop(&watcher);
+    if (shownotifications)
+        notify_stop();
     if (bus_conn) {
         stopbus(bus_conn, bus_source);
         dbus_connection_unref(bus_conn);
@@ -1882,8 +1894,29 @@ void drawbar(Monitor* m)
     drwl_setscheme(m->drw, colors[SchemeNorm]);
     x = drwl_text(m->drw, x, 0, w, m->b.height, m->lrpad / 2, m->ltsymbol, 0);
 
-    if ((w = m->b.width - (tw + x + traywidth)) > m->b.height) {
-        if (barwintitle && c) {
+    /* Remember the free box for notifyclick(): the title and the notification
+     * share it, so its geometry must be measured in exactly one place. */
+    w = m->b.width - (tw + x + traywidth);
+    m->b.titlew = w > m->b.height ? w : 0;
+
+    if (m->b.titlew) {
+        /* A notification takes the box over for as long as it lasts, so the
+         * window title (if barwintitle is on) steps aside and comes back
+         * once the notification expires or is dismissed. */
+        const char* text =
+            shownotifications && m == selmon ? notify_gettext() : NULL;
+        if (text) {
+            notifysync();
+            drwl_setscheme(m->drw, colors[SchemeNotify]);
+            drwl_text(m->drw,
+                      x,
+                      0,
+                      w,
+                      m->b.height,
+                      m->lrpad / 2,
+                      text + (notifyoff < strlen(text) ? notifyoff : 0),
+                      0);
+        } else if (barwintitle && c) {
             drwl_setscheme(m->drw,
                            colors[m == selmon ? SchemeSel : SchemeNorm]);
             drwl_text(m->drw,
@@ -2721,6 +2754,73 @@ void moveresize(const Arg* arg)
     }
 }
 
+/* Scrolls the notification on by one screenful, wrapping to the start once
+ * the tail has been shown. Bound to a click on the box the notification and
+ * the window title share (ClkTitle). */
+void notifyclick(const Arg* arg)
+{
+    const char* text;
+    char buf[NOTIFY_TEXTMAX];
+    int boxw;
+    size_t len, off, cut, good, n;
+
+    if (!shownotifications || !selmon || !selmon->b.titlew ||
+        !(text = notify_gettext()))
+        return;
+    notifysync();
+
+    /* drwl_text() spends lrpad/2 of the box on the left padding: measuring
+     * against the full width would scroll text past unread. */
+    boxw = selmon->b.titlew - selmon->lrpad / 2;
+    len = strlen(text);
+    off = notifyoff < len ? notifyoff : 0;
+
+    if (boxw <= 0 || (int)drwl_font_getwidth(selmon->drw, text + off) <= boxw) {
+        notifyoff = 0;
+        drawbars();
+        return;
+    }
+
+    good = off;
+    for (cut = off + 1; cut <= len; cut++) {
+        if (cut < len && (text[cut] & 0xC0) == 0x80)
+            continue; /* not a UTF-8 codepoint boundary yet */
+        n = cut - off;
+        if (n >= sizeof(buf))
+            break;
+        memcpy(buf, text + off, n);
+        buf[n] = '\0';
+        if ((int)drwl_font_getwidth(selmon->drw, buf) > boxw)
+            break;
+        good = cut;
+    }
+    if (good == off) {
+        /* not even one codepoint fits: force progress anyway */
+        good = off + 1;
+        while (good < len && (text[good] & 0xC0) == 0x80)
+            good++;
+    }
+    notifyoff = good < len ? good : 0;
+    drawbars();
+}
+
+/* Puts the notification away early, giving the box back to the window title. */
+void notifydismiss(const Arg* arg)
+{
+    if (shownotifications)
+        notify_dismiss();
+}
+
+/* A notification that just arrived (or replaced another one) is shown from
+ * its start, whatever the previous one had been scrolled to. */
+void notifysync(void)
+{
+    if (notifyshownid != notify_getid()) {
+        notifyshownid = notify_getid();
+        notifyoff = 0;
+    }
+}
+
 void outputmgrapply(struct wl_listener* listener, void* data)
 {
     struct wlr_output_configuration_v1* config = data;
@@ -3488,16 +3588,20 @@ void setup(void)
                                                statusin,
                                                NULL);
 
-    /* The tray is a StatusNotifierWatcher on the session bus. Missing it is
-     * not fatal: dwl just comes up without a tray. */
-    if (showbar && showsystray) {
+    /* Missing the session bus is not fatal: dwl comes up without a tray
+     * and/or bar notifications. */
+    if (showbar && (showsystray || shownotifications)) {
         if ((bus_conn = dbus_bus_get(DBUS_BUS_SESSION, NULL)) &&
-            (bus_source = startbus(bus_conn, event_loop)))
-            watcher_start(&watcher, bus_conn, event_loop);
-        else
+            (bus_source = startbus(bus_conn, event_loop))) {
+            if (showsystray)
+                watcher_start(&watcher, bus_conn, event_loop);
+            if (shownotifications)
+                notify_start(
+                    bus_conn, event_loop, notification_timeout, drawbars);
+        } else
             fprintf(stderr,
                     "Couldn't connect to the session bus, "
-                    "systray not available\n");
+                    "systray/notifications not available\n");
     }
 
     /* Make sure XWayland clients don't connect to the parent X server,

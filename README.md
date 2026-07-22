@@ -138,6 +138,28 @@ Not from [dwl-patches] — written for this tree:
   title bars are packed into its one title row as tabs, so `MODKEY+h/l`
   cycles between them. Pressing `MODKEY+t` again restores the previous
   layout.
+- **Bar notifications** (`src/notify.c`) — a minimal
+  `org.freedesktop.Notifications` server on the session bus that renders the
+  most recent notification (`app: summary - body`) centered in the same bar
+  space used for the title/blank area, computed so it never overlaps the
+  tags, layout symbol, status text, or systray. Long text is truncated with
+  an ellipsis (the same way titles already are); left-clicking it scrolls to
+  whatever didn't fit, wrapping back to the start once you reach the end.
+  Right-clicking dismisses it early. Only one notification is tracked at a
+  time — a new one always replaces whatever is showing — and it auto-hides
+  after `notification_timeout` seconds, or after the `expire_timeout` the
+  client asked for when that is shorter (a request to never expire is not
+  honoured: the bar has a single slot, capped at 60s either way). Clients are
+  told what happened through the usual `NotificationClosed` signal, and
+  `replaces_id` updates a notification in place.
+
+  That bar space is shared with `barwintitle`: while a notification is up it
+  takes the box over, drawn in `SchemeNotify` so it doesn't read as a window
+  title, and the title comes back as soon as it expires or is dismissed.
+
+  Toggle with `shownotifications` in `config.h`; when off (or if another
+  notification daemon like mako/dunst/swaync already owns the bus name), dwl
+  doesn't touch the bus name and nothing changes.
 
 ## Running dwl
 
