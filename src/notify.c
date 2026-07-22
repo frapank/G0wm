@@ -30,8 +30,7 @@ static struct {
  * control characters become spaces, invalid bytes are dropped and a sequence
  * that doesn't fit is left out entirely. Anything on this path comes straight
  * from an arbitrary bus client, and half a codepoint renders as garbage. */
-static void
-sanitize(char* dst, size_t dstsz, const char* src)
+static void sanitize(char* dst, size_t dstsz, const char* src)
 {
     size_t i = 0, n, k;
     unsigned char c;
@@ -39,12 +38,12 @@ sanitize(char* dst, size_t dstsz, const char* src)
     if (!dstsz)
         return;
     for (; src && (c = (unsigned char)*src); src += n) {
-        n = c < 0x80    ? 1
-            : c < 0xC2  ? 0 /* continuation byte or overlong lead */
-            : c < 0xE0  ? 2
-            : c < 0xF0  ? 3
-            : c < 0xF5  ? 4
-                        : 0;
+        n = c < 0x80   ? 1
+            : c < 0xC2 ? 0 /* continuation byte or overlong lead */
+            : c < 0xE0 ? 2
+            : c < 0xF0 ? 3
+            : c < 0xF5 ? 4
+                       : 0;
         if (!n) {
             n = 1;
             continue;
@@ -68,8 +67,7 @@ sanitize(char* dst, size_t dstsz, const char* src)
     dst[i] = '\0';
 }
 
-static void
-notify_closed(dbus_uint32_t id, dbus_uint32_t reason)
+static void notify_closed(dbus_uint32_t id, dbus_uint32_t reason)
 {
     DBusMessage* sig;
 
@@ -88,8 +86,7 @@ notify_closed(dbus_uint32_t id, dbus_uint32_t reason)
 
 /* Clears the current notification, if any, and tells the bar to redraw so
  * whatever the notification was covering (the window title) comes back. */
-static void
-notify_clear(dbus_uint32_t reason)
+static void notify_clear(dbus_uint32_t reason)
 {
     if (!notify.active)
         return;
@@ -101,16 +98,14 @@ notify_clear(dbus_uint32_t reason)
         notify.redraw();
 }
 
-static int
-notify_expire(void* data)
+static int notify_expire(void* data)
 {
     (void)data;
     notify_clear(ClosedExpired);
     return 0;
 }
 
-static int
-notify_arm(unsigned int ms)
+static int notify_arm(unsigned int ms)
 {
     if (!notify.timer)
         notify.timer =
@@ -123,8 +118,7 @@ notify_arm(unsigned int ms)
 
 /* expire_timeout is the 8th Notify argument, past the actions array and the
  * hints dict, so it can't be reached with dbus_message_get_args(). */
-static int
-expire_timeout(DBusMessage* msg)
+static int expire_timeout(DBusMessage* msg)
 {
     DBusMessageIter iter;
     dbus_int32_t ms;
@@ -141,8 +135,7 @@ expire_timeout(DBusMessage* msg)
     return ms;
 }
 
-static DBusHandlerResult
-reply_empty(DBusConnection* conn, DBusMessage* msg)
+static DBusHandlerResult reply_empty(DBusConnection* conn, DBusMessage* msg)
 {
     DBusMessage* reply = dbus_message_new_method_return(msg);
     DBusHandlerResult res = DBUS_HANDLER_RESULT_HANDLED;
@@ -154,8 +147,7 @@ reply_empty(DBusConnection* conn, DBusMessage* msg)
     return res;
 }
 
-static DBusHandlerResult
-handle_notify(DBusConnection* conn, DBusMessage* msg)
+static DBusHandlerResult handle_notify(DBusConnection* conn, DBusMessage* msg)
 {
     DBusError err = DBUS_ERROR_INIT;
     DBusMessage* reply;
@@ -246,8 +238,7 @@ send:
     return DBUS_HANDLER_RESULT_HANDLED;
 }
 
-static DBusHandlerResult
-handle_close(DBusConnection* conn, DBusMessage* msg)
+static DBusHandlerResult handle_close(DBusConnection* conn, DBusMessage* msg)
 {
     dbus_uint32_t id;
 
@@ -259,8 +250,8 @@ handle_close(DBusConnection* conn, DBusMessage* msg)
     return reply_empty(conn, msg);
 }
 
-static DBusHandlerResult
-handle_capabilities(DBusConnection* conn, DBusMessage* msg)
+static DBusHandlerResult handle_capabilities(DBusConnection* conn,
+                                             DBusMessage* msg)
 {
     DBusMessage* reply = dbus_message_new_method_return(msg);
     DBusMessageIter iter, arr;
@@ -271,8 +262,7 @@ handle_capabilities(DBusConnection* conn, DBusMessage* msg)
         return DBUS_HANDLER_RESULT_NEED_MEMORY;
 
     dbus_message_iter_init_append(reply, &iter);
-    if (!dbus_message_iter_open_container(
-            &iter, DBUS_TYPE_ARRAY, "s", &arr) ||
+    if (!dbus_message_iter_open_container(&iter, DBUS_TYPE_ARRAY, "s", &arr) ||
         !dbus_message_iter_append_basic(&arr, DBUS_TYPE_STRING, &cap) ||
         !dbus_message_iter_close_container(&iter, &arr) ||
         !dbus_connection_send(conn, reply, NULL))
@@ -282,12 +272,11 @@ handle_capabilities(DBusConnection* conn, DBusMessage* msg)
     return res;
 }
 
-static DBusHandlerResult
-handle_serverinfo(DBusConnection* conn, DBusMessage* msg)
+static DBusHandlerResult handle_serverinfo(DBusConnection* conn,
+                                           DBusMessage* msg)
 {
     DBusMessage* reply = dbus_message_new_method_return(msg);
-    const char *name = "dwl", *vendor = "dwl", *version = "1.0",
-               *spec = "1.2";
+    const char *name = "dwl", *vendor = "dwl", *version = "1.0", *spec = "1.2";
     DBusHandlerResult res = DBUS_HANDLER_RESULT_HANDLED;
 
     if (!reply)
@@ -310,34 +299,34 @@ handle_serverinfo(DBusConnection* conn, DBusMessage* msg)
     return res;
 }
 
-static DBusHandlerResult
-notify_message_handler(DBusConnection* conn, DBusMessage* msg, void* data)
+static DBusHandlerResult notify_message_handler(DBusConnection* conn,
+                                                DBusMessage* msg,
+                                                void* data)
 {
     (void)data;
 
     if (dbus_message_is_method_call(msg, NOTIFY_IFACE, "Notify"))
         return handle_notify(conn, msg);
-    else if (dbus_message_is_method_call(msg, NOTIFY_IFACE,
-                                         "CloseNotification"))
+    else if (dbus_message_is_method_call(
+                 msg, NOTIFY_IFACE, "CloseNotification"))
         return handle_close(conn, msg);
-    else if (dbus_message_is_method_call(msg, NOTIFY_IFACE,
-                                         "GetCapabilities"))
+    else if (dbus_message_is_method_call(msg, NOTIFY_IFACE, "GetCapabilities"))
         return handle_capabilities(conn, msg);
-    else if (dbus_message_is_method_call(msg, NOTIFY_IFACE,
-                                         "GetServerInformation"))
+    else if (dbus_message_is_method_call(
+                 msg, NOTIFY_IFACE, "GetServerInformation"))
         return handle_serverinfo(conn, msg);
 
     return DBUS_HANDLER_RESULT_NOT_YET_HANDLED;
 }
 
-static const DBusObjectPathVTable notify_vtable = { .message_function =
-                                                        notify_message_handler };
+static const DBusObjectPathVTable notify_vtable = {
+    .message_function = notify_message_handler
+};
 
-void
-notify_start(DBusConnection* conn,
-            struct wl_event_loop* loop,
-            unsigned int timeout_secs,
-            void (*redraw)(void))
+void notify_start(DBusConnection* conn,
+                  struct wl_event_loop* loop,
+                  unsigned int timeout_secs,
+                  void (*redraw)(void))
 {
     int r;
 
@@ -358,9 +347,9 @@ notify_start(DBusConnection* conn,
         conn, NOTIFY_NAME, DBUS_NAME_FLAG_DO_NOT_QUEUE, NULL);
     if (r != DBUS_REQUEST_NAME_REPLY_PRIMARY_OWNER) {
         fprintf(stderr,
-               "Couldn't own %s (another notification daemon is likely "
-               "running), bar notifications not available\n",
-               NOTIFY_NAME);
+                "Couldn't own %s (another notification daemon is likely "
+                "running), bar notifications not available\n",
+                NOTIFY_NAME);
         return;
     }
 
@@ -374,8 +363,7 @@ notify_start(DBusConnection* conn,
     notify.running = 1;
 }
 
-void
-notify_stop(void)
+void notify_stop(void)
 {
     if (!notify.running)
         return;
@@ -393,20 +381,17 @@ notify_stop(void)
     notify.running = 0;
 }
 
-void
-notify_dismiss(void)
+void notify_dismiss(void)
 {
     notify_clear(ClosedDismissed);
 }
 
-const char*
-notify_gettext(void)
+const char* notify_gettext(void)
 {
     return notify.active ? notify.text : NULL;
 }
 
-unsigned int
-notify_getid(void)
+unsigned int notify_getid(void)
 {
     return notify.active ? (unsigned int)notify.id : 0;
 }
