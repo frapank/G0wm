@@ -14,26 +14,12 @@ philosophy. Like [dwm], dwl is:
 - One C source file (or a very small number) configurable via `config.h`
 - Tied to as few external dependencies as possible
 
-## Getting Started:
+## Building dwl
 
-### Latest semi-stable [release]
-This is probably where you want to start. This builds against the [wlroots]
-versions currently shipping in major distributions. If your
-distribution's `wlroots` version is older, use an earlier dwl [release].
-The `wlroots` version against which a given `dwl` release builds is specified
-with each release on the [release] page
+This fork only has one branch (`main`) and tracks whatever released
+[wlroots] version `config.mk` points at (currently 0.20) — there's no
+`wlroots-next` tracking and no release page, unlike upstream dwl.
 
-### Development branch [main]
-Active development progresses on the `main` branch. The `main` branch is built
-against the latest release of [wlroots]. PRs should target this branch unless they
-depend on functionality that is not in the current release of `wlroots`.
-
-### Preview branch [wlroots-next]
-The `wlroots-next` branch is built against the git version of [wlroots], which
-is unstable and changes frequently. PRs requiring functionality from the git
-version of `wlroots` should target this branch.
-
-### Building dwl
 dwl has the following dependencies:
 - libinput
 - wayland
@@ -52,10 +38,7 @@ dwl has the following additional dependencies if XWayland support is enabled:
 - Xwayland (runtime only)
 
 Install these (and their `-devel` versions if your distro has separate
-development packages) and run `make`. If you wish to build against a released
-version of wlroots (*you probably do*), use a [release] or a [0.x branch]. If
-you want to use the unstable development `main` branch, you need to use the git
-version of [wlroots].
+development packages) and run `make`.
 
 To enable XWayland, you should uncomment its flags in `config.mk`.
 
@@ -137,6 +120,10 @@ resulting configuration knobs.
   soon as a key is pressed, restoring it on the next pointer motion or
   button press, like `xbanish`. Toggle with `hide_cursor_when_typing` in
   `config.h`.
+- **[warpcursor]** (by [Ben Collerson]) — warps the cursor to the center of
+  a newly focused client if the cursor isn't already over it, and to the
+  center of the monitor's usable area on `arrange()` when no client is
+  focused.
 
 ### Local additions
 
@@ -250,14 +237,7 @@ project goal of 2000 SLOC and have a reasonably complete compositor with
 features comparable to [dwm]. However, this does not mean that the code will grow
 indiscriminately. We will try to keep the code as small as possible.
 
-Features under consideration (possibly as patches) are:
-
-- Protocols made trivial by wlroots
-- Implement the text-input and input-method protocols to support IME once ibus
-  implements input-method v2 (see https://github.com/ibus/ibus/pull/2256 and
-  https://codeberg.org/dwl/dwl/pulls/235)
-
-Feature *non-goals* for the main codebase include:
+Feature *non-goals*, inherited from upstream, include:
 
 - Client-side decoration (any more than is necessary to tell the clients not to)
 - Client-initiated window management, such as move, resize, and close, which can
@@ -284,9 +264,6 @@ inspiration, and to the various contributors to the project, including:
 [wlroots]: https://gitlab.freedesktop.org/wlroots
 [dwm]: https://dwm.suckless.org/
 [`systemd --user`]: https://wiki.archlinux.org/title/Systemd/User
-[#dwl on Libera Chat]: https://web.libera.chat/?channels=#dwl
-[0.7-rc1]: https://codeberg.org/dwl/dwl/releases/tag/v0.7-rc1
-[0.x branch]: https://codeberg.org/dwl/dwl/branches
 [anopa]: https://jjacky.com/anopa/
 [attachbottom]: https://codeberg.org/dwl/dwl-patches/wiki/attachbottom
 [bar]: https://codeberg.org/dwl/dwl-patches/wiki/bar
@@ -295,19 +272,15 @@ inspiration, and to the various contributors to the project, including:
 [movestack]: https://codeberg.org/dwl/dwl-patches/src/branch/main/patches/movestack
 [bar-systray]: https://codeberg.org/dwl/dwl-patches/src/branch/main/patches/bar-systray
 [hide-cursor-when-typing]: https://codeberg.org/dwl/dwl-patches/src/branch/main/patches/hide-cursor-when-typing
+[warpcursor]: https://codeberg.org/dwl/dwl-patches/src/branch/main/patches/warpcursor
 [unixchad]: https://codeberg.org/unixchad
 [janetski]: https://codeberg.org/janetski
+[Ben Collerson]: https://codeberg.org/bencc
 [autostart]: https://codeberg.org/dwl/dwl-patches/wiki/autostart
 [dinit]: https://davmac.org/projects/dinit/
 [dwl-patches]: https://codeberg.org/dwl/dwl-patches
 [list of useful resources on our wiki]: https://codeberg.org/dwl/dwl/wiki/Home#migrating-from-x
-[main]: https://codeberg.org/dwl/dwl/src/branch/main
-[wlroots-next]: https://codeberg.org/dwl/dwl/src/branch/wlroots-next
-[release]: https://codeberg.org/dwl/dwl/releases
 [runit]: http://smarden.org/runit/faq.html#userservices
 [s6]: https://skarnet.org/software/s6/
-[wlroots]: https://gitlab.freedesktop.org/wlroots/wlroots/
 [wiki]: https://codeberg.org/dwl/dwl/wiki/Home#compatible-status-bars
-[Discord server]: https://discord.gg/jJxZnrGPWN
 [Wayland]: https://wayland.freedesktop.org/
-[#dwl-official:matrix.org]: https://matrix.to/#/#dwl-official:matrix.org

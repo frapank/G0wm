@@ -469,6 +469,7 @@ static void urgent(struct wl_listener* listener, void* data);
 static void view(const Arg* arg);
 static void virtualkeyboard(struct wl_listener* listener, void* data);
 static void virtualpointer(struct wl_listener* listener, void* data);
+static void warpcursor(const Client* c);
 static Monitor* xytomon(double x, double y);
 static void xytonode(double x,
                      double y,
@@ -698,6 +699,7 @@ void arrange(Monitor* m)
         m->lt[m->sellt]->arrange(m);
     motionnotify(0, NULL, 0, 0, 0, 0);
     checkidleinhibitor(NULL);
+    warpcursor(focustop(selmon));
 }
 
 void arrangelayer(Monitor* m,
@@ -908,7 +910,9 @@ void buttonpress(struct wl_listener* listener, void* data)
     struct wlr_scene_node* node;
     struct wlr_scene_buffer* buffer;
     uint32_t mods;
-    Arg arg = { .v = NULL }; /* .v is the widest member: zeroes the whole union */
+    Arg arg = {
+        .v = NULL
+    }; /* .v is the widest member: zeroes the whole union */
     Client* c;
     const Button* b;
 
@@ -1460,18 +1464,21 @@ void createmon(struct wl_listener* listener, void* data)
             if (r->width && r->height) {
                 struct wlr_output_mode* m2;
                 int32_t want = r->refresh * 1000, best_diff = INT32_MAX;
-                wl_list_for_each(m2, &wlr_output->modes, link) {
+                wl_list_for_each(m2, &wlr_output->modes, link)
+                {
                     int32_t diff = abs(m2->refresh - want);
-                    if (m2->width == r->width && m2->height == r->height
-                        && diff < best_diff) {
+                    if (m2->width == r->width && m2->height == r->height &&
+                        diff < best_diff) {
                         mode = m2;
                         best_diff = diff;
                     }
                 }
                 if (!mode)
                     wlr_log(WLR_ERROR,
-                        "no %dx%d mode found on %s, using preferred mode",
-                        r->width, r->height, wlr_output->name);
+                            "no %dx%d mode found on %s, using preferred mode",
+                            r->width,
+                            r->height,
+                            wlr_output->name);
             }
             break;
         }
@@ -1998,6 +2005,10 @@ void focusclient(Client* c, int lift)
     if (locked)
         return;
 
+    /* Warp cursor to center of client if it is outside */
+    if (lift)
+        warpcursor(c);
+
     /* Raise client in stacking order if requested */
     if (c && lift)
         wlr_scene_node_raise_to_top(&c->scene->node);
@@ -2187,8 +2198,10 @@ void handlecursoractivity(void)
         /* surface may be NULL here: the client explicitly hid its cursor
          * (e.g. a game with pointer lock), which must be honored rather
          * than falling back to the default arrow below. */
-        wlr_cursor_set_surface(
-            cursor, last_cursor.surface, last_cursor.hotspot_x, last_cursor.hotspot_y);
+        wlr_cursor_set_surface(cursor,
+                               last_cursor.surface,
+                               last_cursor.hotspot_x,
+                               last_cursor.hotspot_y);
     } else {
         wlr_cursor_set_xcursor(cursor, cursor_mgr, "default");
     }
@@ -2925,9 +2938,8 @@ void resize(Client* c, struct wlr_box geo, int interact)
         &c->border[3]->node, c->geom.width - c->bw, c->bw);
 
     /* this is a no-op if size hasn't changed */
-    c->resize = client_set_size(c,
-                                 c->geom.width - 2 * c->bw,
-                                 MAX(1, c->geom.height - 2 * c->bw - th));
+    c->resize = client_set_size(
+        c, c->geom.width - 2 * c->bw, MAX(1, c->geom.height - 2 * c->bw - th));
     client_get_clip(c, &clip);
     clip.height -= th;
     wlr_scene_subsurface_tree_set_clip(&c->scene_surface->node, &clip);
@@ -3057,7 +3069,8 @@ void setcursor(struct wl_listener* listener, void* data)
         wl_list_init(&last_cursor.destroy.link);
         if (event->surface) {
             last_cursor.destroy.notify = unlastcursor;
-            wl_signal_add(&event->surface->events.destroy, &last_cursor.destroy);
+            wl_signal_add(&event->surface->events.destroy,
+                          &last_cursor.destroy);
         }
 
         if (!cursor_hidden)
@@ -3400,7 +3413,8 @@ void setup(void)
     cursor = wlr_cursor_create();
     wlr_cursor_attach_output_layout(cursor, output_layout);
 
-    /* Initialize the last_cursor destroy listener link so it's safe to remove later */
+    /* Initialize the last_cursor destroy listener link so it's safe to remove
+     * later */
     wl_list_init(&last_cursor.destroy.link);
 
     /* Creates an xcursor manager, another wlroots utility which loads up
@@ -3660,8 +3674,7 @@ void tile(Monitor* m)
             continue;
         if (i < m->nmaster) {
             r = MIN(n, m->nmaster) - i;
-            h = MAX(
-                1, ((int)m->w.height - my - (int)(gappx * e * r)) / (int)r);
+            h = MAX(1, ((int)m->w.height - my - (int)(gappx * e * r)) / (int)r);
             resize(c,
                    (struct wlr_box){ .x = m->w.x + gappx * e,
                                      .y = m->w.y + my,
@@ -3671,8 +3684,7 @@ void tile(Monitor* m)
             my += c->geom.height + gappx * e;
         } else {
             r = n - i;
-            h = MAX(
-                1, ((int)m->w.height - ty - (int)(gappx * e * r)) / (int)r);
+            h = MAX(1, ((int)m->w.height - ty - (int)(gappx * e * r)) / (int)r);
             resize(c,
                    (struct wlr_box){ .x = m->w.x + mw,
                                      .y = m->w.y + ty,
@@ -4048,6 +4060,27 @@ void virtualpointer(struct wl_listener* listener, void* data)
     wlr_cursor_attach_input_device(cursor, device);
     if (event->suggested_output)
         wlr_cursor_map_input_to_output(cursor, device, event->suggested_output);
+}
+
+void warpcursor(const Client* c)
+{
+    if (cursor_mode != CurNormal)
+        return;
+
+    if (!c && selmon) {
+        wlr_cursor_warp_closest(cursor,
+                                NULL,
+                                selmon->w.x + selmon->w.width / 2.0,
+                                selmon->w.y + selmon->w.height / 2.0);
+    } else if (c && (cursor->x < c->geom.x ||
+                     cursor->x > c->geom.x + c->geom.width ||
+                     cursor->y < c->geom.y ||
+                     cursor->y > c->geom.y + c->geom.height)) {
+        wlr_cursor_warp_closest(cursor,
+                                NULL,
+                                c->geom.x + c->geom.width / 2.0,
+                                c->geom.y + c->geom.height / 2.0);
+    }
 }
 
 Monitor* xytomon(double x, double y)
