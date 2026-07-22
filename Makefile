@@ -93,7 +93,14 @@ config.h:
 
 # Formatting, per .clang-format. external/ is vendored and config*.h are
 # alignment-sensitive tables, so neither is reformatted.
-FMT_SRC = $(SRCDIR)/dwl.c $(SRCDIR)/util.c $(INCDIR)/client.h $(INCDIR)/util.h
+FMT_SRC = $(SRCDIR)/dwl.c $(SRCDIR)/util.c $(SRCDIR)/dbus.c $(SRCDIR)/notify.c \
+	$(SRCDIR)/systray/watcher.c $(SRCDIR)/systray/tray.c \
+	$(SRCDIR)/systray/item.c $(SRCDIR)/systray/icon.c \
+	$(SRCDIR)/systray/menu.c $(SRCDIR)/systray/helpers.c \
+	$(INCDIR)/client.h $(INCDIR)/util.h $(INCDIR)/dbus.h $(INCDIR)/notify.h \
+	$(INCDIR)/systray/watcher.h $(INCDIR)/systray/tray.h \
+	$(INCDIR)/systray/item.h $(INCDIR)/systray/icon.h \
+	$(INCDIR)/systray/menu.h $(INCDIR)/systray/helpers.h
 
 format:
 	clang-format -i $(FMT_SRC)
