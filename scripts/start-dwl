@@ -6,6 +6,11 @@ if [ -n "${WAYLAND_DISPLAY:-}" ]; then
     exit 1
 fi
 
+if ! command -v dwl >/dev/null 2>&1; then
+    echo "start-dwl: dwl not found in PATH, cannot start" >&2
+    exit 1
+fi
+
 export XDG_CURRENT_DESKTOP=dwl
 export XDG_SESSION_TYPE=wayland
 export XDG_SESSION_DESKTOP=dwl
@@ -23,10 +28,35 @@ log_dir="${XDG_STATE_HOME:-$HOME/.local/state}/dwl"
 mkdir -p "$log_dir"
 
 cleanup() {
-    pkill -u "$(id -u)" -x 'dwl-status.sh|swaybg|pipewire|wireplumber' 2>/dev/null || true
+    if command -v pkill >/dev/null 2>&1; then
+        pkill -u "$(id -u)" -x 'dwl-status.sh|swaybg|pipewire|wireplumber' 2>/dev/null || true
+    fi
 }
 trap cleanup EXIT
 
-dwl-status.sh | dbus-run-session -- sh -c \
-    'pipewire >/dev/null 2>&1 & wireplumber >/dev/null 2>&1 & exec dwl' \
-    >>"$log_dir/dwl.log" 2>&1
+inner_cmd=
+if command -v pipewire >/dev/null 2>&1; then
+    inner_cmd="${inner_cmd}pipewire >/dev/null 2>&1 & "
+else
+    echo "start-dwl: pipewire not found, starting without an audio server" >&2
+fi
+if command -v wireplumber >/dev/null 2>&1; then
+    inner_cmd="${inner_cmd}wireplumber >/dev/null 2>&1 & "
+else
+    echo "start-dwl: wireplumber not found, no session/policy management for audio" >&2
+fi
+inner_cmd="${inner_cmd}exec dwl"
+
+session_launcher=
+if command -v dbus-run-session >/dev/null 2>&1 && command -v dbus-daemon >/dev/null 2>&1; then
+    session_launcher="dbus-run-session --"
+else
+    echo "start-dwl: dbus-run-session/dbus-daemon not found, running without a private D-Bus session (systray will be unavailable)" >&2
+fi
+
+if command -v dwl-status.sh >/dev/null 2>&1; then
+    dwl-status.sh | $session_launcher sh -c "$inner_cmd" >>"$log_dir/dwl.log" 2>&1
+else
+    echo "start-dwl: dwl-status.sh not found, starting without bar status text" >&2
+    $session_launcher sh -c "$inner_cmd" >>"$log_dir/dwl.log" 2>&1
+fi
