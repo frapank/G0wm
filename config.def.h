@@ -164,10 +164,10 @@ static const int hide_cursor_when_typing = 1;
 
 /* commands: replace with whatever terminal/launcher/file manager/browser you
  * have installed */
-static const char* dmenucmd[]       = { "wmenu", NULL };
+static const char* dmenucmd[]       = { "wmenu", "-f", "monospace 10", "-N", "000000ff", "-n", "ffffffff", "-M", "000000ff", "-m", "ffffffff", "-S", "000000ff", "-s", "ffffffff", NULL };
 static const char* termcmd[]        = { "foot", NULL };
-static const char* menucmd[]        = { "wmenu-run", NULL };
-static const char* filemanagercmd[] = { "xterm", "-e", "ranger", NULL };
+static const char* menucmd[]        = { "wmenu-run", "-f", "monospace 10", "-N", "000000ff", "-n", "ffffffff", "-M", "000000ff", "-m", "ffffffff", "-S", "000000ff", "-s", "ffffffff", NULL };
+static const char* filemanagercmd[] = { "thunar", NULL };
 static const char* browsercmd[]     = { "firefox", NULL };
 
 static const Key keys[] = {
