@@ -58,6 +58,7 @@
 #include <wlr/types/wlr_session_lock_v1.h>
 #include <wlr/types/wlr_single_pixel_buffer_v1.h>
 #include <wlr/types/wlr_subcompositor.h>
+#include <wlr/types/wlr_tablet_tool.h>
 #include <wlr/types/wlr_viewporter.h>
 #include <wlr/types/wlr_virtual_keyboard_v1.h>
 #include <wlr/types/wlr_virtual_pointer_v1.h>
@@ -404,6 +405,8 @@ static void maximizenotify(struct wl_listener* listener, void* data);
 static void monocle(Monitor* m);
 static void movestack(const Arg* arg);
 static void motionabsolute(struct wl_listener* listener, void* data);
+static void tabletaxis(struct wl_listener* listener, void* data);
+static void tablettip(struct wl_listener* listener, void* data);
 static void motionnotify(uint32_t time,
                          struct wlr_input_device* device,
                          double sx,
@@ -572,6 +575,8 @@ static struct wl_listener cursor_button = { .notify = buttonpress };
 static struct wl_listener cursor_frame = { .notify = cursorframe };
 static struct wl_listener cursor_motion = { .notify = motionrelative };
 static struct wl_listener cursor_motion_absolute = { .notify = motionabsolute };
+static struct wl_listener cursor_tablet_axis = { .notify = tabletaxis };
+static struct wl_listener cursor_tablet_tip = { .notify = tablettip };
 static struct wl_listener gpu_reset = { .notify = gpureset };
 static struct wl_listener layout_change = { .notify = updatemons };
 static struct wl_listener new_idle_inhibitor = { .notify =
@@ -1137,6 +1142,8 @@ void cleanuplisteners(void)
     wl_list_remove(&cursor_frame.link);
     wl_list_remove(&cursor_motion.link);
     wl_list_remove(&cursor_motion_absolute.link);
+    wl_list_remove(&cursor_tablet_axis.link);
+    wl_list_remove(&cursor_tablet_tip.link);
     wl_list_remove(&gpu_reset.link);
     wl_list_remove(&new_idle_inhibitor.link);
     wl_list_remove(&layout_change.link);
@@ -2269,6 +2276,9 @@ void inputdevice(struct wl_listener* listener, void* data)
         case WLR_INPUT_DEVICE_POINTER:
             createpointer(wlr_pointer_from_input_device(device));
             break;
+        case WLR_INPUT_DEVICE_TABLET:
+            wlr_cursor_attach_input_device(cursor, device);
+            break;
         default:
             /* TODO handle other input device types */
             break;
@@ -2587,6 +2597,42 @@ void motionabsolute(struct wl_listener* listener, void* data)
     dx = lx - cursor->x;
     dy = ly - cursor->y;
     motionnotify(event->time_msec, &event->pointer->base, dx, dy, dx, dy);
+}
+
+void tabletaxis(struct wl_listener* listener, void* data)
+{
+    struct wlr_tablet_tool_axis_event* event = data;
+    double lx, ly, dx, dy, x, y;
+
+    /* An axis event only carries the axes it actually updated; NAN tells
+     * wlroots to keep the current coordinate for the others. */
+    x = event->updated_axes & WLR_TABLET_TOOL_AXIS_X ? event->x : NAN;
+    y = event->updated_axes & WLR_TABLET_TOOL_AXIS_Y ? event->y : NAN;
+    if (isnan(x) && isnan(y))
+        return;
+
+    wlr_cursor_absolute_to_layout_coords(
+        cursor, &event->tablet->base, x, y, &lx, &ly);
+    dx = lx - cursor->x;
+    dy = ly - cursor->y;
+    motionnotify(event->time_msec, &event->tablet->base, dx, dy, dx, dy);
+    /* Tablets emit no frame event of their own, and clients hold pointer
+     * events back until one arrives. */
+    wlr_seat_pointer_notify_frame(seat);
+}
+
+void tablettip(struct wl_listener* listener, void* data)
+{
+    struct wlr_tablet_tool_tip_event* event = data;
+    struct wlr_pointer_button_event synth = {
+        .time_msec = event->time_msec,
+        .button = BTN_LEFT,
+        .state = event->state == WLR_TABLET_TOOL_TIP_DOWN
+                     ? WL_POINTER_BUTTON_STATE_PRESSED
+                     : WL_POINTER_BUTTON_STATE_RELEASED,
+    };
+    buttonpress(NULL, &synth);
+    wlr_seat_pointer_notify_frame(seat);
 }
 
 void motionnotify(uint32_t time,
@@ -3543,6 +3589,8 @@ void setup(void)
      */
     wl_signal_add(&cursor->events.motion, &cursor_motion);
     wl_signal_add(&cursor->events.motion_absolute, &cursor_motion_absolute);
+    wl_signal_add(&cursor->events.tablet_tool_axis, &cursor_tablet_axis);
+    wl_signal_add(&cursor->events.tablet_tool_tip, &cursor_tablet_tip);
     wl_signal_add(&cursor->events.button, &cursor_button);
     wl_signal_add(&cursor->events.axis, &cursor_axis);
     wl_signal_add(&cursor->events.frame, &cursor_frame);
