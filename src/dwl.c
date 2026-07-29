@@ -452,6 +452,7 @@ static void setup(void);
 static void spawn(const Arg* arg);
 static void startdrag(struct wl_listener* listener, void* data);
 static int statusin(int fd, unsigned int mask, void* data);
+static void stopstatus(void);
 static void swapclients(Client* a, Client* b);
 static void tag(const Arg* arg);
 static void tabbed(Monitor* m);
@@ -3711,12 +3712,24 @@ int statusin(int fd, unsigned int mask, void* data)
 
     if (mask & WL_EVENT_ERROR)
         die("status in event error");
-    if (mask & WL_EVENT_HANGUP)
-        wl_event_source_remove(status_event_source);
+    if (mask & WL_EVENT_HANGUP) {
+        stopstatus();
+        return 0;
+    }
 
     n = read(fd, status, sizeof(status) - 1);
-    if (n < 0 && errno != EWOULDBLOCK)
+    if (n < 0) {
+        if (errno == EWOULDBLOCK || errno == EAGAIN || errno == EINTR)
+            return 0;
         die("read:");
+    }
+    /* EOF: the status process is gone. The fd stays readable forever, so
+     * keeping the source alive would spin the event loop at full speed and
+     * starve rendering and input. */
+    if (n == 0) {
+        stopstatus();
+        return 0;
+    }
 
     status[n] = '\0';
     status[strcspn(status, "\n")] = '\0';
@@ -3725,6 +3738,16 @@ int statusin(int fd, unsigned int mask, void* data)
     drawbars();
 
     return 0;
+}
+
+/* Detach the bar status text from stdin, for good. */
+void stopstatus(void)
+{
+    if (!status_event_source)
+        return;
+
+    wl_event_source_remove(status_event_source);
+    status_event_source = NULL;
 }
 
 /* Exchanges two clients in the tiling order, which is all a layout looks at. */
