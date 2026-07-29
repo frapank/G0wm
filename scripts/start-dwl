@@ -27,25 +27,69 @@ export CLUTTER_BACKEND=wayland
 log_dir="${XDG_STATE_HOME:-$HOME/.local/state}/dwl"
 mkdir -p "$log_dir"
 
-cleanup() {
-    if command -v pkill >/dev/null 2>&1; then
-        pkill -u "$(id -u)" -x 'dwl-status.sh|swaybg|pipewire|wireplumber' 2>/dev/null || true
-    fi
-}
-trap cleanup EXIT
+cd "$HOME"
 
-inner_cmd=
+ulimit -c unlimited 2>/dev/null || true
+
+audio_procs='pipewire|pipewire-pulse|wireplumber'
+
+stop_audio() {
+    pkill -u "$(id -u)" -x "$audio_procs" 2>/dev/null || true
+
+    i=0
+    while pgrep -u "$(id -u)" -x "$audio_procs" >/dev/null 2>&1; do
+        i=$((i + 1))
+        if [ "$i" -ge 30 ]; then
+            pkill -KILL -u "$(id -u)" -x "$audio_procs" 2>/dev/null || true
+            sleep 0.5
+            break
+        fi
+        sleep 0.1
+    done
+}
+
+stop_audio
+
+cleanup() {
+    stop_audio
+    pkill -u "$(id -u)" -x 'dwl-status.sh|swaybg|swayidle' 2>/dev/null || true
+
+    for core in "$HOME"/core "$HOME"/core.*; do
+        [ -f "$core" ] || continue
+        mv "$core" "$log_dir/$(basename "$core").$(date +%Y%m%d-%H%M%S)" 2>/dev/null || true
+    done
+}
+
+trap cleanup EXIT
+trap 'exit 143' HUP INT TERM
+
+audio_cmd=
 if command -v pipewire >/dev/null 2>&1; then
-    inner_cmd="${inner_cmd}pipewire >/dev/null 2>&1 & "
+    audio_cmd='pipewire >/dev/null 2>&1 &
+n=0
+while [ ! -S "${XDG_RUNTIME_DIR:-/run/user/$(id -u)}/pipewire-0" ] && [ "$n" -lt 50 ]; do
+    sleep 0.1
+    n=$((n + 1))
+done
+'
+    if command -v wireplumber >/dev/null 2>&1; then
+        audio_cmd="${audio_cmd}sleep 1
+pgrep -u \"\$(id -u)\" -x wireplumber >/dev/null 2>&1 || wireplumber >/dev/null 2>&1 &
+"
+    else
+        echo "start-dwl: wireplumber not found, no session/policy management for audio" >&2
+    fi
+
+    if command -v pipewire-pulse >/dev/null 2>&1; then
+        audio_cmd="${audio_cmd}[ -S \"\${XDG_RUNTIME_DIR:-/run/user/\$(id -u)}/pulse/native\" ] || pipewire-pulse >/dev/null 2>&1 &"
+    else
+        echo "start-dwl: pipewire-pulse not found, PulseAudio clients will have no server" >&2
+    fi
 else
     echo "start-dwl: pipewire not found, starting without an audio server" >&2
 fi
-if command -v wireplumber >/dev/null 2>&1; then
-    inner_cmd="${inner_cmd}wireplumber >/dev/null 2>&1 & "
-else
-    echo "start-dwl: wireplumber not found, no session/policy management for audio" >&2
-fi
-inner_cmd="${inner_cmd}exec dwl"
+
+inner_cmd="${audio_cmd}exec dwl"
 
 session_launcher=
 if command -v dbus-run-session >/dev/null 2>&1 && command -v dbus-daemon >/dev/null 2>&1; then
