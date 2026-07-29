@@ -175,6 +175,42 @@ Not from [dwl-patches] — written for this tree:
   until one arrives. Pressure, tilt, the pad buttons, and the eraser end are
   not forwarded — only cursor motion and the tip-as-click.
 
+Fixes carried on top of upstream, one commit each:
+
+- **Output power state desync** (`0427aff`) — `powermgrsetmode()` ignored the
+  result of `wlr_output_commit_state()`, so a refused commit (the DRM driver
+  answering `Failed to disable CRTC` on eDP-1, which this panel does) left
+  `m->asleep` set on an output that was still live. Waking it then committed
+  `enabled` on an already enabled output, wlroots treated it as a no-op, and
+  no further `frame` event was ever emitted: the screen kept its last image
+  while input, clients, and audio carried on. `m->asleep` now follows
+  `m->wlr_output->enabled` rather than what was asked for, and a frame is
+  scheduled explicitly whenever the output is enabled.
+- **Status text underflow and EOF busy loop** (`a66ad4b`) — `statusin()` fell
+  through to `status[n] = '\0'` when `read()` returned `-1`, writing at
+  `status[-1]`. A return of `0` was worse: the fd stays readable forever at
+  EOF, and since the event loop is level-triggered the source kept firing and
+  spun at full speed calling `drawbars()`. Both cases now return early, and
+  `stopstatus()` detaches the source for good on EOF or hangup.
+- **NULL monitor dereference in the XWayland configure handler** (`3f37447`) —
+  `configurex11()` read `c->mon->lt[c->mon->sellt]` without checking `c->mon`,
+  which `closemon()` sets to NULL on mapped clients when the last output goes
+  away. An X11 client sending a configure request in that window crashed dwl.
+- **Fullscreen clients overriding their own geometry** (`f79028f`) — the same
+  handler honoured whatever geometry an X11 client asked for, with no test for
+  `c->isfullscreen`. Games under XWayland re-assert their internal resolution
+  on focus changes, so returning to the tag of a fullscreen game shrank its
+  toplevel to a box in the corner of the black fullscreen backdrop. The
+  request is now denied and the real geometry restated, which is also the
+  correct X11 answer to a rejected `ConfigureRequest`.
+- **Blocking D-Bus self-pipe** (`5797b4d`) — the pipe `startbus()` uses to
+  defer `dbus_connection_dispatch()` was blocking, and the writer runs on the
+  main thread from `dwl_dbus_dispatch_status()`. The reader only drains it
+  when the dispatch status changes, so writes can outpace reads until the pipe
+  fills and the compositor wedges on `write()`. Both ends are now
+  `O_NONBLOCK`; a full pipe already holds more wakeups than there are messages
+  to dispatch, so `EAGAIN` is ignored instead of fatal.
+
 ## Running dwl
 
 dwl can be run on any of the backends supported by wlroots. This means you can

@@ -452,6 +452,7 @@ static void setup(void);
 static void spawn(const Arg* arg);
 static void startdrag(struct wl_listener* listener, void* data);
 static int statusin(int fd, unsigned int mask, void* data);
+static void stopstatus(void);
 static void swapclients(Client* a, Client* b);
 static void tag(const Arg* arg);
 static void tabbed(Monitor* m);
@@ -2990,9 +2991,18 @@ void powermgrsetmode(struct wl_listener* listener, void* data)
     m->gamma_lut_changed =
         1; /* Reapply gamma LUT when re-enabling the output */
     wlr_output_state_set_enabled(&state, event->mode);
-    wlr_output_commit_state(m->wlr_output, &state);
+    if (!wlr_output_commit_state(m->wlr_output, &state))
+        fprintf(stderr,
+                "dwl: failed to %s output %s\n",
+                event->mode ? "enable" : "disable",
+                m->wlr_output->name);
 
-    m->asleep = !event->mode;
+    /* Track what the output actually is rather than what we asked for: a
+     * refused commit would otherwise leave us believing a live output is
+     * asleep, and nothing would ever schedule a frame for it again. */
+    m->asleep = !m->wlr_output->enabled;
+    if (m->wlr_output->enabled)
+        wlr_output_schedule_frame(m->wlr_output);
     updatemons(NULL, NULL);
 }
 
@@ -3702,12 +3712,24 @@ int statusin(int fd, unsigned int mask, void* data)
 
     if (mask & WL_EVENT_ERROR)
         die("status in event error");
-    if (mask & WL_EVENT_HANGUP)
-        wl_event_source_remove(status_event_source);
+    if (mask & WL_EVENT_HANGUP) {
+        stopstatus();
+        return 0;
+    }
 
     n = read(fd, status, sizeof(status) - 1);
-    if (n < 0 && errno != EWOULDBLOCK)
+    if (n < 0) {
+        if (errno == EWOULDBLOCK || errno == EAGAIN || errno == EINTR)
+            return 0;
         die("read:");
+    }
+    /* EOF: the status process is gone. The fd stays readable forever, so
+     * keeping the source alive would spin the event loop at full speed and
+     * starve rendering and input. */
+    if (n == 0) {
+        stopstatus();
+        return 0;
+    }
 
     status[n] = '\0';
     status[strcspn(status, "\n")] = '\0';
@@ -3716,6 +3738,16 @@ int statusin(int fd, unsigned int mask, void* data)
     drawbars();
 
     return 0;
+}
+
+/* Detach the bar status text from stdin, for good. */
+void stopstatus(void)
+{
+    if (!status_event_source)
+        return;
+
+    wl_event_source_remove(status_event_source);
+    status_event_source = NULL;
 }
 
 /* Exchanges two clients in the tiling order, which is all a layout looks at. */
@@ -4356,6 +4388,8 @@ void configurex11(struct wl_listener* listener, void* data)
                                        event->height);
         return;
     }
+    /* Unmanaged clients never get a monitor, so this precedes the c->mon
+     * check below. */
     if (client_is_unmanaged(c)) {
         wlr_scene_node_set_position(&c->scene->node, event->x, event->y);
         wlr_xwayland_surface_configure(c->surface.xwayland,
@@ -4365,6 +4399,26 @@ void configurex11(struct wl_listener* listener, void* data)
                                        event->height);
         return;
     }
+    /* c->mon is dereferenced below: closemon() leaves mapped clients without a
+     * monitor whenever the last output goes away. */
+    if (!c->mon) {
+        wlr_xwayland_surface_configure(c->surface.xwayland,
+                                       event->x,
+                                       event->y,
+                                       event->width,
+                                       event->height);
+        return;
+    }
+    /* A fullscreen client does not get to pick its own geometry. Games under
+     * XWayland keep re-asserting their internal resolution, and honouring that
+     * would shrink the window to a box in the corner of the black fullscreen
+     * backdrop while the game happily keeps rendering. Restate the size it
+     * actually has instead. */
+    if (c->isfullscreen) {
+        resize(c, c->mon->m, 0);
+        return;
+    }
+
     if ((c->isfloating && c != grabc) || !c->mon->lt[c->mon->sellt]->arrange) {
         resize(c,
                (struct wlr_box){ .x = event->x - c->bw,
