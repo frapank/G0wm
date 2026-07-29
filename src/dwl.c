@@ -4380,7 +4380,10 @@ void configurex11(struct wl_listener* listener, void* data)
 {
     Client* c = wl_container_of(listener, c, configure);
     struct wlr_xwayland_surface_configure_event* event = data;
-    if (!client_surface(c) || !client_surface(c)->mapped) {
+    /* Without a monitor there is no layout to place the client in, and
+     * c->mon is dereferenced below: closemon() leaves mapped clients with a
+     * NULL monitor whenever the last output goes away. */
+    if (!client_surface(c) || !client_surface(c)->mapped || !c->mon) {
         wlr_xwayland_surface_configure(c->surface.xwayland,
                                        event->x,
                                        event->y,
