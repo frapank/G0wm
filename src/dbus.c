@@ -6,6 +6,7 @@
 #include <stdlib.h>
 #include <wayland-server-core.h>
 
+#include <errno.h>
 #include <fcntl.h>
 #include <stddef.h>
 #include <stdint.h>
@@ -35,7 +36,8 @@ static int dwl_dbus_dispatch(int fd, unsigned int mask, void* data)
     if (oldstatus == newstatus)
         return 0;
 
-    if (read(fd, &pending, sizeof(int)) < 0) {
+    if (read(fd, &pending, sizeof(int)) < 0 && errno != EAGAIN &&
+        errno != EWOULDBLOCK && errno != EINTR) {
         perror("read");
         die("Error in dbus dispatch");
     }
@@ -156,7 +158,11 @@ static void dwl_dbus_dispatch_status(DBusConnection* conn,
 
     if (status != DBUS_DISPATCH_COMPLETE) {
         int pending = 1;
-        if (write(pipefd[1], &pending, sizeof(int)) < 0) {
+        /* A full pipe already holds more wakeups than we have messages to
+         * dispatch, so dropping this one loses nothing. Blocking here would
+         * instead stop the whole compositor: this runs on the main thread. */
+        if (write(pipefd[1], &pending, sizeof(int)) < 0 && errno != EAGAIN &&
+            errno != EWOULDBLOCK && errno != EINTR) {
             perror("write");
             die("Error in dispatch status");
         }
@@ -185,6 +191,9 @@ struct wl_event_source* startbus(DBusConnection* conn,
         fcntl(pipefd[1], F_SETFD, flags | FD_CLOEXEC) < 0) {
         goto fail;
     }
+    /* Neither end may ever block the event loop it is meant to drive. */
+    if (fd_set_nonblock(pipefd[0]) < 0 || fd_set_nonblock(pipefd[1]) < 0)
+        goto fail;
 
     dbus_connection_set_exit_on_disconnect(conn, FALSE);
 
