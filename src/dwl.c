@@ -2990,9 +2990,18 @@ void powermgrsetmode(struct wl_listener* listener, void* data)
     m->gamma_lut_changed =
         1; /* Reapply gamma LUT when re-enabling the output */
     wlr_output_state_set_enabled(&state, event->mode);
-    wlr_output_commit_state(m->wlr_output, &state);
+    if (!wlr_output_commit_state(m->wlr_output, &state))
+        fprintf(stderr,
+                "dwl: failed to %s output %s\n",
+                event->mode ? "enable" : "disable",
+                m->wlr_output->name);
 
-    m->asleep = !event->mode;
+    /* Track what the output actually is rather than what we asked for: a
+     * refused commit would otherwise leave us believing a live output is
+     * asleep, and nothing would ever schedule a frame for it again. */
+    m->asleep = !m->wlr_output->enabled;
+    if (m->wlr_output->enabled)
+        wlr_output_schedule_frame(m->wlr_output);
     updatemons(NULL, NULL);
 }
 
