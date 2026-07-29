@@ -4400,6 +4400,16 @@ void configurex11(struct wl_listener* listener, void* data)
                                        event->height);
         return;
     }
+    /* A fullscreen client does not get to pick its own geometry. Games under
+     * XWayland keep re-asserting their internal resolution, and honouring that
+     * would shrink the window to a box in the corner of the black fullscreen
+     * backdrop while the game happily keeps rendering. Restate the size it
+     * actually has instead. */
+    if (c->isfullscreen) {
+        resize(c, c->mon->m, 0);
+        return;
+    }
+
     if ((c->isfloating && c != grabc) || !c->mon->lt[c->mon->sellt]->arrange) {
         resize(c,
                (struct wlr_box){ .x = event->x - c->bw,
