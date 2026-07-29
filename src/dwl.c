@@ -4380,10 +4380,7 @@ void configurex11(struct wl_listener* listener, void* data)
 {
     Client* c = wl_container_of(listener, c, configure);
     struct wlr_xwayland_surface_configure_event* event = data;
-    /* Without a monitor there is no layout to place the client in, and
-     * c->mon is dereferenced below: closemon() leaves mapped clients with a
-     * NULL monitor whenever the last output goes away. */
-    if (!client_surface(c) || !client_surface(c)->mapped || !c->mon) {
+    if (!client_surface(c) || !client_surface(c)->mapped) {
         wlr_xwayland_surface_configure(c->surface.xwayland,
                                        event->x,
                                        event->y,
@@ -4391,8 +4388,20 @@ void configurex11(struct wl_listener* listener, void* data)
                                        event->height);
         return;
     }
+    /* Unmanaged clients never get a monitor, so this precedes the c->mon
+     * check below. */
     if (client_is_unmanaged(c)) {
         wlr_scene_node_set_position(&c->scene->node, event->x, event->y);
+        wlr_xwayland_surface_configure(c->surface.xwayland,
+                                       event->x,
+                                       event->y,
+                                       event->width,
+                                       event->height);
+        return;
+    }
+    /* c->mon is dereferenced below: closemon() leaves mapped clients without a
+     * monitor whenever the last output goes away. */
+    if (!c->mon) {
         wlr_xwayland_surface_configure(c->surface.xwayland,
                                        event->x,
                                        event->y,
