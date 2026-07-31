@@ -1,0 +1,204 @@
+#!/usr/bin/env bash
+# Generates config.mk for the Makefile. See ./configure --help.
+set -u
+
+cmdline=
+[ $# -gt 0 ] && cmdline=$(printf ' %q' "$@")
+srcdir=$(cd -- "$(dirname -- "$0")" && pwd)
+
+_version=0.8-dev
+cc=cc
+linker=
+pkg_config=pkg-config
+prefix=/usr/local
+bindir='$(HOME)/.local/bin'
+mandir='$(PREFIX)/share/man'
+datadir='$(PREFIX)/share'
+wlroots=0.20
+wlroots_prefix=
+xwayland=yes
+opt_cflags='-O2'
+extra_cflags=
+extra_ldflags=
+extra_libs=
+sanitize=no
+lto=no
+checks=yes
+
+die() { printf 'configure: %s\n' "$*" >&2; exit 1; }
+say() { [ "$quiet" = yes ] || printf '%s\n' "$*"; }
+quiet=no
+
+usage() {
+	cat <<EOF
+Usage: ./configure [OPTION]... [VAR=VALUE]...
+
+Paths:
+  --prefix=DIR            installation prefix [$prefix]
+  --bindir=DIR            where install(1) puts the binaries [$bindir]
+  --mandir=DIR            man pages [$mandir]
+  --datadir=DIR           architecture-independent data [$datadir]
+
+Toolchain:
+  --compiler=CC           C compiler, also used to drive the link [$cc]
+  --linker=NAME           linker for the final link: bfd, gold, lld, mold [cc default]
+  --pkg-config=PATH       pkg-config program [$pkg_config]
+  --cflags=FLAGS          extra compiler flags
+  --ldflags=FLAGS         extra linker flags
+  --libs=LIBS             extra libraries
+
+Features:
+  --wlroots=VERSION       wlroots pkg-config series [$wlroots]
+  --wlroots-prefix=DIR    use a wlroots installed outside the system paths
+  --enable-xwayland       build X11 support (default)
+  --disable-xwayland      build without X11 support
+  --debug                 -O0 -g3, no frame pointer omission
+  --release               -O2 (default)
+  --enable-sanitizers     build with ASan and UBSan
+  --enable-lto            build with link time optimization
+
+Other:
+  --no-checks             skip the dependency probes
+  -q, --quiet             only report errors
+  -h, --help              this message
+  -V, --version           print the dwl version
+
+VAR=VALUE accepts CC, PKG_CONFIG, PREFIX, CFLAGS, LDFLAGS and LIBS.
+EOF
+}
+
+while [ $# -gt 0 ]; do
+	opt=${1%%=*}
+	case $1 in
+	*=*) val=${1#*=} ;;
+	*)
+		case $opt in
+		--prefix|--bindir|--mandir|--datadir|--compiler|--cc|--linker|--ld| \
+		--pkg-config|--cflags|--ldflags|--libs|--wlroots|--wlroots-prefix)
+			shift; [ $# -gt 0 ] || die "$opt requires an argument"; val=$1 ;;
+		*) val= ;;
+		esac ;;
+	esac
+
+	case $opt in
+	--prefix) prefix=$val ;;
+	--bindir) bindir=$val ;;
+	--mandir) mandir=$val ;;
+	--datadir) datadir=$val ;;
+	--compiler|--cc|CC) cc=$val ;;
+	--linker|--ld) linker=$val ;;
+	--pkg-config|PKG_CONFIG) pkg_config=$val ;;
+	--cflags|CFLAGS) extra_cflags="$extra_cflags $val" ;;
+	--ldflags|LDFLAGS) extra_ldflags="$extra_ldflags $val" ;;
+	--libs|LIBS) extra_libs="$extra_libs $val" ;;
+	PREFIX) prefix=$val ;;
+	--wlroots) wlroots=$val ;;
+	--wlroots-prefix) wlroots_prefix=$val ;;
+	--enable-xwayland) xwayland=yes ;;
+	--disable-xwayland) xwayland=no ;;
+	--debug) opt_cflags='-O0 -g3 -fno-omit-frame-pointer' ;;
+	--release) opt_cflags='-O2' ;;
+	--enable-sanitizers) sanitize=yes ;;
+	--enable-lto) lto=yes ;;
+	--no-checks) checks=no ;;
+	-q|--quiet) quiet=yes ;;
+	-h|--help) usage; exit 0 ;;
+	-V|--version) printf '%s\n' "$_version"; exit 0 ;;
+	*) die "unknown option '$opt', try --help" ;;
+	esac
+	shift
+done
+
+wlr_pkg=wlroots-$wlroots
+pkgs="wayland-server xkbcommon libinput pixman-1 fcft dbus-1"
+[ "$xwayland" = yes ] && pkgs="$pkgs xcb xcb-icccm"
+
+[ "$sanitize" = yes ] && {
+	extra_cflags="$extra_cflags -fsanitize=address,undefined"
+	extra_ldflags="$extra_ldflags -fsanitize=address,undefined"
+}
+[ "$lto" = yes ] && {
+	extra_cflags="$extra_cflags -flto"
+	extra_ldflags="$extra_ldflags -flto"
+}
+[ -n "$linker" ] && extra_ldflags="$extra_ldflags -fuse-ld=$linker"
+
+# wlroots outside the system paths: resolve it here so make does not need the
+# search path, and pin it with an rpath to keep the loader off the system copy.
+pkg_config_env=
+if [ -n "$wlroots_prefix" ]; then
+	for d in "$wlroots_prefix/lib/pkgconfig" "$wlroots_prefix/lib64/pkgconfig" \
+		"$wlroots_prefix/share/pkgconfig"; do
+		[ -d "$d" ] && pkg_config_env="$pkg_config_env${pkg_config_env:+:}$d"
+	done
+	[ -n "$pkg_config_env" ] || die "no pkgconfig directory under $wlroots_prefix"
+	export PKG_CONFIG_PATH="$pkg_config_env${PKG_CONFIG_PATH:+:$PKG_CONFIG_PATH}"
+fi
+
+failed=no
+probe() { # description, then the command that must succeed
+	desc=$1; shift
+	if "$@" >/dev/null 2>&1; then
+		say "checking $desc... yes"
+	else
+		printf 'checking %s... no\n' "$desc" >&2
+		failed=yes
+	fi
+}
+
+if [ "$checks" = yes ]; then
+	tmp=$(mktemp -d) || die 'cannot create a temporary directory'
+	trap 'rm -rf "$tmp"' EXIT
+	printf 'int main(void) { return 0; }\n' >"$tmp/t.c"
+
+	probe "for $cc" "$cc" -o "$tmp/t" "$tmp/t.c"
+	[ -n "$linker" ] && probe "for the $linker linker" \
+		"$cc" -fuse-ld="$linker" -o "$tmp/t" "$tmp/t.c"
+	probe "for $pkg_config" "$pkg_config" --version
+	for p in $pkgs $wlr_pkg wayland-scanner wayland-protocols; do
+		probe "for $p" "$pkg_config" --exists "$p"
+	done
+	[ "$failed" = no ] || die 'missing dependencies, see above'
+fi
+
+if [ -n "$wlroots_prefix" ]; then
+	wlr_incs=$($pkg_config --cflags "$wlr_pkg") || die "cannot query $wlr_pkg"
+	wlr_libs=$($pkg_config --libs "$wlr_pkg") || die "cannot query $wlr_pkg"
+	wlr_libdir=$($pkg_config --variable=libdir "$wlr_pkg")
+	wlr_libs="-Wl,-rpath,${wlr_libdir:-$wlroots_prefix/lib} $wlr_libs"
+else
+	wlr_incs="\`\$(PKG_CONFIG) --cflags $wlr_pkg\`"
+	wlr_libs="\`\$(PKG_CONFIG) --libs $wlr_pkg\`"
+fi
+
+trim() { printf '%s' "${1#"${1%%[![:space:]]*}"}"; }
+
+cat >"$srcdir/config.mk" <<EOF
+# Generated by ./configure$cmdline
+# Edit configure or re-run it; this file is overwritten.
+
+_VERSION = $_version
+VERSION  = \`git describe --tags --dirty 2>/dev/null || echo \$(_VERSION)\`
+
+CC = $cc
+PKG_CONFIG = $pkg_config
+
+# paths
+PREFIX = $prefix
+BINDIR = $bindir
+MANDIR = $mandir
+DATADIR = $datadir
+
+WLR_INCS = $wlr_incs
+WLR_LIBS = $wlr_libs
+
+XWAYLAND = $([ "$xwayland" = yes ] && echo -DXWAYLAND)
+XLIBS = $([ "$xwayland" = yes ] && echo xcb xcb-icccm)
+
+CFLAGS = $(trim "$opt_cflags$extra_cflags")
+LDFLAGS = $(trim "$extra_ldflags")
+LIBS = $(trim "$extra_libs")
+EOF
+
+say "wrote config.mk: $cc, $wlr_pkg, xwayland $xwayland, install to $bindir"
+say "run 'make' to build"

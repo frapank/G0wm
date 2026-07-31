@@ -2,3 +2,5 @@ dwl
 build/
 .ccls-cache
 config.h
+config.mk
+config.h.*.bak

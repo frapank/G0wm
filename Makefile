@@ -91,6 +91,10 @@ $(GENDIR)/xdg-shell-protocol.h:
 config.h:
 	cp config.def.h $@
 
+# ./configure writes this file; without it the defaults are used as-is.
+config.mk:
+	cp config.def.mk $@
+
 # Formatting, per .clang-format. external/ is vendored and config*.h are
 # alignment-sensitive tables, so neither is reformatted.
 FMT_SRC = $(SRCDIR)/dwl.c $(SRCDIR)/util.c $(SRCDIR)/dbus.c $(SRCDIR)/notify.c \
@@ -116,13 +120,11 @@ clean:
 
 dist: clean
 	mkdir -p dwl-$(VERSION)
-	cp -R LICENSE* Makefile CHANGELOG.md README.md config.def.h config.mk \
-		.clang-format src include external protocols docs scripts share \
-		dwl-$(VERSION)
+	cp -R LICENSE* Makefile configure config_gen CHANGELOG.md README.md config.def.h \
+		config.def.mk .clang-format src include external protocols docs \
+		scripts share dwl-$(VERSION)
 	tar -caf dwl-$(VERSION).tar.gz dwl-$(VERSION)
 	rm -rf dwl-$(VERSION)
-
-BINDIR = $(HOME)/.local/bin
 
 install: dwl
 	mkdir -p $(BINDIR)
