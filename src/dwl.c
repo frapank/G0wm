@@ -694,7 +694,7 @@ void arrange(Monitor* m)
     wlr_scene_node_set_enabled(&m->fullscreen_bg->node,
                                (c = focustop(m)) && c->isfullscreen);
 
-    strncpy(m->ltsymbol, m->lt[m->sellt]->symbol, sizeof(m->ltsymbol));
+    snprintf(m->ltsymbol, LENGTH(m->ltsymbol), "%s", m->lt[m->sellt]->symbol);
 
     /* We move all clients (except fullscreen and unmanaged) to LyrTile while
      * in floating layout to avoid "real" floating clients be always on top */
@@ -1470,7 +1470,8 @@ void createmon(struct wl_listener* listener, void* data)
             m->nmaster = r->nmaster;
             m->lt[0] = r->lt;
             m->lt[1] = &layouts[LENGTH(layouts) > 1 && r->lt != &layouts[1]];
-            strncpy(m->ltsymbol, m->lt[m->sellt]->symbol, sizeof(m->ltsymbol));
+            snprintf(m->ltsymbol, LENGTH(m->ltsymbol), "%s",
+                     m->lt[m->sellt]->symbol);
             for (i = 0; i < LENGTH(m->taglt); i++) {
                 m->taglt[i][0] = m->lt[0];
                 m->taglt[i][1] = m->lt[1];
@@ -3302,9 +3303,8 @@ void setlayout(const Arg* arg)
         selmon->sellt ^= 1;
     if (arg && arg->v)
         selmon->lt[selmon->sellt] = (Layout*)arg->v;
-    strncpy(selmon->ltsymbol,
-            selmon->lt[selmon->sellt]->symbol,
-            sizeof(selmon->ltsymbol));
+    snprintf(selmon->ltsymbol, LENGTH(selmon->ltsymbol), "%s",
+             selmon->lt[selmon->sellt]->symbol);
     arrange(selmon);
     drawbar(selmon);
 }
