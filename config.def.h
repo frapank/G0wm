@@ -264,6 +264,7 @@ static const Button buttons[] = {
 	{ ClkLtSymbol, 0,      BTN_RIGHT,  setlayout,      {.v = &layouts[2]} },
 	{ ClkTitle,    0,      BTN_MIDDLE, zoom,           {0} },
 	{ ClkTitle,    0,      BTN_LEFT,   notifyclick,    {0} },
+	{ ClkTitle,    0,      BTN_RIGHT,  notifydismiss,  {0} },
 	{ ClkStatus,   0,      BTN_MIDDLE, spawn,          {.v = termcmd} },
 	{ ClkClient,   MODKEY, BTN_LEFT,   moveresize,     {.ui = CurMove} },
 	{ ClkClient,   MODKEY, BTN_MIDDLE, togglefloating, {0} },
