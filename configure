@@ -17,6 +17,7 @@ datadir='$(PREFIX)/share'
 wlroots=0.20
 wlroots_prefix=
 xwayland=yes
+integrated_background=yes
 opt_cflags='-O2'
 extra_cflags=
 extra_ldflags=
@@ -52,6 +53,10 @@ Features:
   --wlroots-prefix=DIR    use a wlroots installed outside the system paths
   --enable-xwayland       build X11 support (default)
   --disable-xwayland      build without X11 support
+  --no-integrated-background
+                          build without the built-in wallpaper renderer
+                          (drops the gdk-pixbuf/glib dependency; the
+                          wallpaper setting in config.h is ignored)
   --debug                 -O0 -g3, no frame pointer omission
   --release               -O2 (default)
   --enable-sanitizers     build with ASan and UBSan
@@ -96,6 +101,7 @@ while [ $# -gt 0 ]; do
 	--wlroots-prefix) wlroots_prefix=$val ;;
 	--enable-xwayland) xwayland=yes ;;
 	--disable-xwayland) xwayland=no ;;
+	--no-integrated-background) integrated_background=no ;;
 	--debug) opt_cflags='-O0 -g3 -fno-omit-frame-pointer' ;;
 	--release) opt_cflags='-O2' ;;
 	--enable-sanitizers) sanitize=yes ;;
@@ -112,6 +118,7 @@ done
 wlr_pkg=wlroots-$wlroots
 pkgs="wayland-server xkbcommon libinput pixman-1 fcft dbus-1"
 [ "$xwayland" = yes ] && pkgs="$pkgs xcb xcb-icccm"
+[ "$integrated_background" = yes ] && pkgs="$pkgs gdk-pixbuf-2.0"
 
 [ "$sanitize" = yes ] && {
 	extra_cflags="$extra_cflags -fsanitize=address,undefined"
@@ -195,10 +202,13 @@ WLR_LIBS = $wlr_libs
 XWAYLAND = $([ "$xwayland" = yes ] && echo -DXWAYLAND)
 XLIBS = $([ "$xwayland" = yes ] && echo xcb xcb-icccm)
 
+BACKGROUND = $([ "$integrated_background" = yes ] && echo -DINTEGRATED_BACKGROUND)
+BGLIBS = $([ "$integrated_background" = yes ] && echo gdk-pixbuf-2.0)
+
 CFLAGS = $(trim "$opt_cflags$extra_cflags")
 LDFLAGS = $(trim "$extra_ldflags")
 LIBS = $(trim "$extra_libs")
 EOF
 
-say "wrote config.mk: $cc, $wlr_pkg, xwayland $xwayland, install to $bindir"
+say "wrote config.mk: $cc, $wlr_pkg, xwayland $xwayland, integrated background $integrated_background, install to $bindir"
 say "run 'make' to build"
