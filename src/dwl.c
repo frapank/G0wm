@@ -3086,12 +3086,13 @@ void rendermon(struct wl_listener* listener, void* data)
      * this monitor. */
     wl_list_for_each(c, &clients, link)
     {
+        if (!client_is_rendered_on_mon(c, m))
+            continue;
         /* done here rather than on focus changes so that buffers a client
          * adds later (subsurfaces, videos) are covered too */
         wlr_scene_node_for_each_buffer(
             &c->scene_surface->node, scenebuffersetopacity, c);
-        if (c->resize && !c->isfloating && client_is_rendered_on_mon(c, m) &&
-            !client_is_stopped(c))
+        if (c->resize && !c->isfloating && !client_is_stopped(c))
             goto skip;
     }
 
