@@ -45,8 +45,10 @@ static const int titlebar                      = 1;  // 0 means no per-window ti
 
 static const int barwintitle                   = 0;  // Show focused window
 static const unsigned int titlepadding         = 6;  // title bar height on top of the font height
+#ifdef NOTIFICATIONS
 static const int shownotifications             = 1;  // 0 means no bar notifications (see README)
 static const unsigned int notification_timeout = 5;  // seconds a notification stays in the bar
+#endif
 
 static uint32_t colors[][3] = {
     /*                   fg          bg        border   */
@@ -289,8 +291,10 @@ static const Button buttons[] = {
 	{ ClkLtSymbol, 0,      BTN_LEFT,   setlayout,      {.v = &layouts[0]} },
 	{ ClkLtSymbol, 0,      BTN_RIGHT,  setlayout,      {.v = &layouts[2]} },
 	{ ClkTitle,    0,      BTN_MIDDLE, zoom,           {0} },
+#ifdef NOTIFICATIONS
 	{ ClkTitle,    0,      BTN_LEFT,   notifyclick,    {0} },
 	{ ClkTitle,    0,      BTN_RIGHT,  notifydismiss,  {0} },
+#endif
 	{ ClkStatus,   0,      BTN_MIDDLE, spawn,          {.v = termcmd} },
 	{ ClkClient,   MODKEY, BTN_LEFT,   moveresize,     {.ui = CurMove} },
 	{ ClkClient,   MODKEY, BTN_MIDDLE, togglefloating, {0} },

@@ -18,12 +18,14 @@ wlroots=0.20
 wlroots_prefix=
 xwayland=yes
 integrated_background=yes
+notify=yes
 opt_cflags='-O2'
 extra_cflags=
 extra_ldflags=
 extra_libs=
 sanitize=no
 lto=no
+native=no
 checks=yes
 
 die() { printf 'configure: %s\n' "$*" >&2; exit 1; }
@@ -57,10 +59,19 @@ Features:
                           build without the built-in wallpaper renderer
                           (drops the gdk-pixbuf/glib dependency; the
                           wallpaper setting in config.h is ignored)
+  --no-notify             build without the notification daemon (org.
+                          freedesktop.Notifications); shownotifications
+                          and notification_timeout in config.h are ignored
   --debug                 -O0 -g3, no frame pointer omission
   --release               -O2 (default)
   --enable-sanitizers     build with ASan and UBSan
   --enable-lto            build with link time optimization
+  --native                tune for this machine and harden the binary:
+                          -O3 -march=native -mtune=native, LTO,
+                          _FORTIFY_SOURCE=2, stack protector, stack
+                          clash protection, PIE, full RELRO, CET/PAC
+                          where applicable. The result is not portable
+                          to other machines.
 
 Other:
   --no-checks             skip the dependency probes
@@ -102,10 +113,12 @@ while [ $# -gt 0 ]; do
 	--enable-xwayland) xwayland=yes ;;
 	--disable-xwayland) xwayland=no ;;
 	--no-integrated-background) integrated_background=no ;;
+	--no-notify) notify=no ;;
 	--debug) opt_cflags='-O0 -g3 -fno-omit-frame-pointer' ;;
 	--release) opt_cflags='-O2' ;;
 	--enable-sanitizers) sanitize=yes ;;
 	--enable-lto) lto=yes ;;
+	--native) native=yes ;;
 	--no-checks) checks=no ;;
 	-q|--quiet) quiet=yes ;;
 	-h|--help) usage; exit 0 ;;
@@ -124,9 +137,20 @@ pkgs="wayland-server xkbcommon libinput pixman-1 fcft dbus-1"
 	extra_cflags="$extra_cflags -fsanitize=address,undefined"
 	extra_ldflags="$extra_ldflags -fsanitize=address,undefined"
 }
+[ "$native" = yes ] && lto=yes
 [ "$lto" = yes ] && {
 	extra_cflags="$extra_cflags -flto"
 	extra_ldflags="$extra_ldflags -flto"
+}
+[ "$native" = yes ] && {
+	opt_cflags='-O3'
+	extra_cflags="$extra_cflags -march=native -mtune=native \
+-D_FORTIFY_SOURCE=2 -fstack-protector-strong -fstack-clash-protection -fPIE"
+	extra_ldflags="$extra_ldflags -pie -Wl,-z,relro -Wl,-z,now -Wl,-z,noexecstack"
+	case $(uname -m) in
+	x86_64 | i?86) extra_cflags="$extra_cflags -fcf-protection=full" ;;
+	aarch64 | arm*) extra_cflags="$extra_cflags -mbranch-protection=standard" ;;
+	esac
 }
 [ -n "$linker" ] && extra_ldflags="$extra_ldflags -fuse-ld=$linker"
 
@@ -205,10 +229,12 @@ XLIBS = $([ "$xwayland" = yes ] && echo xcb xcb-icccm)
 BACKGROUND = $([ "$integrated_background" = yes ] && echo -DINTEGRATED_BACKGROUND)
 BGLIBS = $([ "$integrated_background" = yes ] && echo gdk-pixbuf-2.0)
 
+NOTIFY = $([ "$notify" = yes ] && echo -DNOTIFICATIONS)
+
 CFLAGS = $(trim "$opt_cflags$extra_cflags")
 LDFLAGS = $(trim "$extra_ldflags")
 LIBS = $(trim "$extra_libs")
 EOF
 
-say "wrote config.mk: $cc, $wlr_pkg, xwayland $xwayland, integrated background $integrated_background, install to $bindir"
+say "wrote config.mk: $cc, $wlr_pkg, xwayland $xwayland, integrated background $integrated_background, notify $notify, native $native, install to $bindir"
 say "run 'make' to build"
