@@ -4266,7 +4266,7 @@ void updatebar(Monitor* m)
     m->t.height = m->drw->font->height + (int)titlepadding;
     m->t.real_height = (int)((float)m->t.height / m->wlr_output->scale);
 
-    if (showbar && showsystray) {
+    if (showbar && showsystray && watcher.running) {
         if (m->tray)
             destroytray(m->tray);
         /* systrayiconsize is unscaled, like cursor_size; 0 fills the bar */
