@@ -15,6 +15,18 @@ static const unsigned int borderpx         = 1; // border pixel of windows
 static const int showbar                   = 1; // 0 means no bar
 static const int topbar                    = 1; // 0 means bottom bar
 
+/* window opacity, 1.0 means fully opaque (off) */
+static int opacity_enabled                 = 1;     // 0 starts with it off
+static const float opacity_focus           = 1.00f; // focused window
+static const float opacity_unfocus         = 1.00f; // every other window
+
+/* 0 means the list holds the only apps with opacity, 1 the ones without it */
+static const int opacity_exclusion_type    = 0;
+/* app ids, matched like the rules below; an empty list means every app */
+static const char* const opacity_apps[]    = {
+    NULL // Terminator
+};
+
 static const char* cursor_theme = NULL;         // required for cursor_size
 static const int cursor_size    = 24;           // xcursor base size, default is 24
 
@@ -57,8 +69,9 @@ static const char* const autostart[] = {
 };
 
 static const Rule rules[] = {
-    /* app_id             title       tags mask     isfloating   monitor */
-    { "Placeholder", NULL, 0, 1, -1 },
+    /* app_id  title  tags mask  isfloating  opacity focus  opacity unfocus  monitor */
+    /* a 0 opacity keeps the default above */
+    { "Placeholder", NULL, 0, 1, 0, 0, -1 },
 };
 
 /* layout(s) */
@@ -212,6 +225,15 @@ static const Key keys[] = {
 
 	{ MODKEY|WLR_MODIFIER_CTRL,  XKB_KEY_h,           setmfact,         {.f = -0.05f} },
 	{ MODKEY|WLR_MODIFIER_CTRL,  XKB_KEY_l,           setmfact,         {.f = +0.05f} },
+
+	/* --- OPACITY --- */
+	/* opacity of the focused window, and of the same window once unfocused */
+	{ MODKEY,                    XKB_KEY_o,           setopacityfocus,   {.f = +0.05f} },
+	{ MODKEY|WLR_MODIFIER_SHIFT, XKB_KEY_O,           setopacityfocus,   {.f = -0.05f} },
+	{ MODKEY|WLR_MODIFIER_CTRL,  XKB_KEY_o,           setopacityunfocus, {.f = +0.05f} },
+	{ MODKEY|WLR_MODIFIER_CTRL|WLR_MODIFIER_SHIFT, XKB_KEY_O, setopacityunfocus, {.f = -0.05f} },
+	/* turns opacity off everywhere, and back on */
+	{ MODKEY|WLR_MODIFIER_ALT,   XKB_KEY_o,           toggleopacity,     {0} },
 
 	/* --- MEDIA CONTROLS --- */
 	{ 0, XKB_KEY_XF86AudioRaiseVolume,  spawn, SHCMD("wpctl set-volume @DEFAULT_AUDIO_SINK@ 5%+") },
