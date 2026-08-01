@@ -57,6 +57,7 @@ build/           objects and generated headers (gitignored, `make clean`)
 docs/            man page, features.md
 scripts/         start-dwl, dwl-status.sh
 share/           dwl.desktop
+license/         upstream license notices (see License below)
 ```
 
 `config.def.h` and `config.h` deliberately stay at the root, since they are
@@ -256,9 +257,24 @@ inspiration, and to the various contributors to the project, including:
   and for helping to keep the project running
 - Stivvo for output management and fullscreen support, and patch maintenance
 
+## License
+
+dwl is licensed under the GNU General Public License v3.0 or later; the full
+text is in [`LICENSE`](LICENSE), and it covers this tree as a whole.
+
+It incorporates code from three other projects, whose notices are kept in
+`license/`:
+
+| File | Project | License | What it covers |
+| --- | --- | --- | --- |
+| [`license/dwm.txt`](license/dwm.txt) | [dwm] | MIT/X Consortium | `src/util.c`, `include/util.h`, and the tags/layout model |
+| [`license/sway.txt`](license/sway.txt) | [sway] | MIT | portions of the wlroots plumbing |
+| [`license/tinywl.txt`](license/tinywl.txt) | tinywl | CC0 | the original compositor skeleton dwl grew from |
+
 
 [wlroots]: https://gitlab.freedesktop.org/wlroots
 [dwm]: https://dwm.suckless.org/
+[sway]: https://github.com/swaywm/sway
 [`systemd --user`]: https://wiki.archlinux.org/title/Systemd/User
 [anopa]: https://jjacky.com/anopa/
 [attachbottom]: https://codeberg.org/dwl/dwl-patches/wiki/attachbottom
