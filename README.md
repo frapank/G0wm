@@ -54,7 +54,7 @@ include/         client.h, util.h, dbus.h, systray/*.h
 external/        drwl.h, vendored from the drwl project
 protocols/       wlr protocol XML fed to wayland-scanner
 build/           objects and generated headers (gitignored, `make clean`)
-docs/            man page
+docs/            man page, features.md
 scripts/         start-dwl, dwl-status.sh
 share/           dwl.desktop
 ```
@@ -87,168 +87,53 @@ created. Check out the [dwl-patches] repository!
 
 ### Used patches
 
-This checkout has the following [dwl-patches] applied on top of upstream dwl,
-adapted to this tree where needed. See `config.h`/`config.def.h` for the
-resulting configuration knobs.
+These [dwl-patches] are applied on top of upstream dwl, adapted to this tree
+where needed. See [docs/features.md](docs/features.md) for what each one does
+here and the knobs it adds.
 
-- **[bar]** — internal i3-like status bar (tags, layout symbol, focused
-  client title, external status text), rendered with `fcft`/`pixman`.
-  Configured for an always-black bar with white text and black window
-  borders (`colors[]` in `config.h`).
-- **[gaps]** — gaps between tiled clients, toggled at runtime with
-  `MODKEY+g`. Configured to a 3px gap (`gappx` in `config.h`).
-- **[autostart]** — runs commands listed in the `autostart[]` array in
-  `config.h` at startup and terminates them on exit, instead of relying on
-  the `-s` flag. Used here to start `swaybg` for the wallpaper.
-- **[cursortheme]** — makes the xcursor theme and size configurable via
-  `cursor_theme`/`cursor_size` in `config.h` (and exports `XCURSOR_THEME`/
-  `XCURSOR_SIZE` so clients match). Naming a theme is required on systems
-  with no `default` cursor theme installed: otherwise wlroots falls back to
-  a 10x16px built-in cursor that ignores `cursor_size`. Set to `"Adwaita"`
-  at size 48 here, which the monitor scale in `monrules` multiplies.
-- **[attachbottom]** — newly opened windows are appended to the bottom of
-  the stack instead of becoming the new master. This keeps whichever window
-  is master in place, so the 2nd window you open lands in the stack (right
-  side) rather than displacing the 1st one out of master (left side).
-- **[movestack]** (by Nikita Ivanov) — moves the focused client up or down
-  the stack, bound to `MODKEY+Shift+h/j/k/l` here.
+- **[bar]** — internal i3-like status bar, rendered with `fcft`/`pixman`.
+- **[gaps]** — 3px gaps between tiled clients, toggled with `MODKEY+g`.
+- **[autostart]** — runs the commands in `autostart[]` at startup and kills
+  them on exit, instead of relying on the `-s` flag.
+- **[cursortheme]** — configurable xcursor theme and size, also exported to
+  clients.
+- **[attachbottom]** — new windows go to the bottom of the stack instead of
+  becoming the new master.
+- **[movestack]** (by Nikita Ivanov) — moves the focused client up or down the
+  stack, bound to `MODKEY+Shift+h/j/k/l`.
 - **[bar-systray]** (by [janetski]) — a StatusNotifierItem tray at the right
-  end of the bar, adding a `libdbus` dependency. Left click activates an item,
-  right click opens its menu through `dmenucmd`. Size and spacing come from
-  `systrayiconsize`/`systrayspacing`, and `showsystray` turns it off.
-  Ported from 0.7 to this tree, with three changes: icons are drawn at a
-  configurable size centered in the bar instead of always filling its height;
-  `destroytray()` unlinks the tray before freeing it (it was left on the
-  watcher's list, so re-creating a monitor's tray left a dangling pointer);
-  and the watcher accepts registrations under a well-known bus name, which is
-  what KStatusNotifierItem (so every Qt/KDE app) sends and which was
-  previously rejected as a bad argument. A missing session bus now logs a
-  warning instead of aborting startup.
-
-  Note that it does not read icons from the filesystem, by design: apps that
-  publish an icon *name* rather than pixel data show the first letter of
-  their name instead of an icon.
-- **[hide-cursor-when-typing]** (by [unixchad]) — hides the mouse cursor as
-  soon as a key is pressed, restoring it on the next pointer motion or
-  button press, like `xbanish`. Toggle with `hide_cursor_when_typing` in
-  `config.h`.
-- **[warpcursor]** (by [Ben Collerson]) — warps the cursor to the center of
-  a newly focused client if the cursor isn't already over it, and to the
-  center of the monitor's usable area on `arrange()` when no client is
-  focused.
-- **[client-opacity-focus]** (by [Hansvon], on top of [client-opacity]) — one
-  opacity for the focused window and another for every unfocused one, set by
-  `opacity_focus`/`opacity_unfocus` in `config.h` and overridable per client
-  through the two opacity columns of `rules[]` (a `0` there keeps the
-  default). `MODKEY+o` and `MODKEY+Shift+O` step the focused window's opacity
-  up and down, `MODKEY+Ctrl+o`/`MODKEY+Ctrl+Shift+O` do the same for what it
-  fades to once it loses focus, both clamped to 10-100%. Both defaults are
-  `1.00f`, so nothing is transparent until you ask for it. Fullscreen clients
-  are always drawn opaque, and the opacity is applied to the client's own
-  buffers only, so borders, title bars and popups keep their own colors.
-  Merged into this tree with the X11 client initialisation the focus variant
-  is missing, and with the rule fields treated as an override rather than an
-  overwrite. The app filter and the global toggle below are not part of it.
+  end of the bar, adding a `libdbus` dependency. Ported from 0.7, with fixes
+  for icon sizing, tray destruction, and Qt/KDE registrations.
+- **[hide-cursor-when-typing]** (by [unixchad]) — hides the cursor while you
+  type, like `xbanish`.
+- **[warpcursor]** (by [Ben Collerson]) — warps the cursor to the center of a
+  newly focused client.
+- **[client-opacity-focus]** (by [Hansvon], on top of [client-opacity]) —
+  separate opacity for the focused and unfocused windows, per-client
+  overridable through `rules[]` and adjustable at runtime with `MODKEY+o` and
+  friends.
 
 ### Local additions
 
-Not from [dwl-patches] — written for this tree:
+Not from [dwl-patches] — written for this tree, and covered in detail in
+[docs/features.md](docs/features.md):
 
-- **Title bars** — every window gets a title bar showing its title, drawn
-  with the same `drwl` code as the bar. Height and colors come from
-  `titlebar`/`titlepadding` and the `SchemeTitle`/`SchemeTitleSel` entries
-  of `colors[]`; clicking a title bar focuses its window.
-- **Tabbed layout** — an i3/sway-style `tabbed` layout toggled with
-  `MODKEY+t`. The group is laid out as a single window and the members'
-  title bars are packed into its one title row as tabs, so `MODKEY+h/l`
-  cycles between them. Pressing `MODKEY+t` again restores the previous
-  layout.
+- **Title bars** — every window gets a title bar with its title, drawn with
+  the same `drwl` code as the bar; clicking one focuses its window.
+- **Tabbed layout** — an i3/sway-style `tabbed` layout on `MODKEY+t`: the
+  group is laid out as a single window and the members' title bars become tabs
+  in its one title row, cycled with `MODKEY+h/l`.
 - **Bar notifications** (`src/notify.c`) — a minimal
-  `org.freedesktop.Notifications` server on the session bus that renders the
-  most recent notification (`app: summary - body`) centered in the same bar
-  space used for the title/blank area, computed so it never overlaps the
-  tags, layout symbol, status text, or systray. Long text is truncated with
-  an ellipsis (the same way titles already are); left-clicking it scrolls to
-  whatever didn't fit, wrapping back to the start once you reach the end.
-  Right-clicking dismisses it early. Only one notification is tracked at a
-  time — a new one always replaces whatever is showing — and it auto-hides
-  after `notification_timeout` seconds, or after the `expire_timeout` the
-  client asked for when that is shorter (a request to never expire is not
-  honoured: the bar has a single slot, capped at 60s either way). Clients are
-  told what happened through the usual `NotificationClosed` signal, and
-  `replaces_id` updates a notification in place.
-
-  That bar space is shared with `barwintitle`: while a notification is up it
-  takes the box over, drawn in `SchemeNotify` so it doesn't read as a window
-  title, and the title comes back as soon as it expires or is dismissed.
-
-  Toggle with `shownotifications` in `config.h`; when off (or if another
-  notification daemon like mako/dunst/swaync already owns the bus name), dwl
-  doesn't touch the bus name and nothing changes.
+  `org.freedesktop.Notifications` server that shows the most recent
+  notification in the bar, click to scroll or dismiss. Toggled with
+  `shownotifications`, and it stays out of the way of any other notification
+  daemon.
 - **Graphics tablet support** — pen tablets (tested on a Wacom Intuos S) move
-  the cursor and click like a pointer. `inputdevice()` attaches
-  `WLR_INPUT_DEVICE_TABLET` devices to the cursor the same way pointers are,
-  but wlroots reports tablet tool motion and clicks on separate
-  `tablet_tool_axis`/`tablet_tool_tip` signals instead of the generic pointer
-  ones, so two listeners translate them: `tabletaxis()` turns an axis event
-  into the same absolute-to-relative motion `motionabsolute()` does for
-  pointers (skipping events that update neither X nor Y, e.g. pressure-only
-  samples), and `tablettip()` maps the tool tip touching down/up to a
-  synthetic `BTN_LEFT` press/release through the existing `buttonpress()`.
-  Both send a `wlr_seat_pointer_notify_frame()` afterwards, since tablets
-  don't emit a frame event of their own and clients hold pointer events back
-  until one arrives. Pressure, tilt, the pad buttons, and the eraser end are
-  not forwarded — only cursor motion and the tip-as-click.
-- **Opacity filter and global toggle** — written on top of
-  [client-opacity-focus]. `opacity_apps[]` lists the app ids opacity applies
-  to, matched against the app id the way the window rules are;
-  `opacity_exclusion_type` flips what the list means — `0`, the default,
-  makes it an include list, `1` a skip list — and an empty list covers every
-  app. The filter is evaluated once per client in `mapnotify()` rather than
-  in `applyrules()`, so the clients that have a parent, which skip the rules
-  entirely, are covered too. `MODKEY+Alt+o` (`toggleopacity()`) turns opacity
-  off for every window at once and back on, and `opacity_enabled` picks the
-  state it starts in, so a config can carry its opacity settings switched
-  off. Since neither changing the opacity nor toggling it damages anything on
-  its own, and the values are applied while rendering, both ask every enabled
-  output for a frame. `./config_gen` prompts for all of it, the key included,
-  along with the two percentages of the patch.
-
-Fixes carried on top of upstream, one commit each:
-
-- **Output power state desync** (`0427aff`) — `powermgrsetmode()` ignored the
-  result of `wlr_output_commit_state()`, so a refused commit (the DRM driver
-  answering `Failed to disable CRTC` on eDP-1, which this panel does) left
-  `m->asleep` set on an output that was still live. Waking it then committed
-  `enabled` on an already enabled output, wlroots treated it as a no-op, and
-  no further `frame` event was ever emitted: the screen kept its last image
-  while input, clients, and audio carried on. `m->asleep` now follows
-  `m->wlr_output->enabled` rather than what was asked for, and a frame is
-  scheduled explicitly whenever the output is enabled.
-- **Status text underflow and EOF busy loop** (`a66ad4b`) — `statusin()` fell
-  through to `status[n] = '\0'` when `read()` returned `-1`, writing at
-  `status[-1]`. A return of `0` was worse: the fd stays readable forever at
-  EOF, and since the event loop is level-triggered the source kept firing and
-  spun at full speed calling `drawbars()`. Both cases now return early, and
-  `stopstatus()` detaches the source for good on EOF or hangup.
-- **NULL monitor dereference in the XWayland configure handler** (`3f37447`) —
-  `configurex11()` read `c->mon->lt[c->mon->sellt]` without checking `c->mon`,
-  which `closemon()` sets to NULL on mapped clients when the last output goes
-  away. An X11 client sending a configure request in that window crashed dwl.
-- **Fullscreen clients overriding their own geometry** (`f79028f`) — the same
-  handler honoured whatever geometry an X11 client asked for, with no test for
-  `c->isfullscreen`. Games under XWayland re-assert their internal resolution
-  on focus changes, so returning to the tag of a fullscreen game shrank its
-  toplevel to a box in the corner of the black fullscreen backdrop. The
-  request is now denied and the real geometry restated, which is also the
-  correct X11 answer to a rejected `ConfigureRequest`.
-- **Blocking D-Bus self-pipe** (`5797b4d`) — the pipe `startbus()` uses to
-  defer `dbus_connection_dispatch()` was blocking, and the writer runs on the
-  main thread from `dwl_dbus_dispatch_status()`. The reader only drains it
-  when the dispatch status changes, so writes can outpace reads until the pipe
-  fills and the compositor wedges on `write()`. Both ends are now
-  `O_NONBLOCK`; a full pipe already holds more wakeups than there are messages
-  to dispatch, so `EAGAIN` is ignored instead of fatal.
+  the cursor and click like a pointer. Pressure, tilt, pad buttons and the
+  eraser end are not forwarded.
+- **Opacity filter and global toggle** — on top of [client-opacity-focus]:
+  `opacity_apps[]` limits (or excludes) the apps opacity applies to, and
+  `MODKEY+Alt+o` turns it off for every window at once.
 
 ## Running dwl
 
