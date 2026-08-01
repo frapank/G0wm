@@ -81,7 +81,9 @@
 
 #include "dbus.h"
 #include "drwl.h"
+#ifdef NOTIFICATIONS
 #include "notify.h"
+#endif
 #include "systray/tray.h"
 #include "systray/watcher.h"
 #include "util.h"
@@ -436,9 +438,11 @@ static void motionnotify(uint32_t time,
                          double sy_unaccel);
 static void motionrelative(struct wl_listener* listener, void* data);
 static void moveresize(const Arg* arg);
+#ifdef NOTIFICATIONS
 static void notifyclick(const Arg* arg);
 static void notifydismiss(const Arg* arg);
 static void notifysync(void);
+#endif
 static int opacityallowed(const char* appid);
 static void opacityrefresh(void);
 static void outputmgrapply(struct wl_listener* listener, void* data);
@@ -598,8 +602,10 @@ static struct wl_event_source* status_event_source;
 static DBusConnection* bus_conn;
 static struct wl_event_source* bus_source;
 static Watcher watcher = { .running = 0 };
+#ifdef NOTIFICATIONS
 static unsigned int notifyshownid;
 static size_t notifyoff;
+#endif
 
 static const struct wlr_buffer_impl buffer_impl = {
     .destroy = bufdestroy,
@@ -1123,8 +1129,10 @@ void cleanup(void)
 
     if (watcher.running)
         watcher_stop(&watcher);
+#ifdef NOTIFICATIONS
     if (shownotifications)
         notify_stop();
+#endif
     if (bus_conn) {
         stopbus(bus_conn, bus_source);
         dbus_connection_unref(bus_conn);
@@ -1970,6 +1978,7 @@ void drawbar(Monitor* m)
     m->b.titlew = w > m->b.height ? w : 0;
 
     if (m->b.titlew) {
+#ifdef NOTIFICATIONS
         /* A notification takes the box over for as long as it lasts, so the
          * window title (if barwintitle is on) steps aside and comes back
          * once the notification expires or is dismissed. */
@@ -1986,7 +1995,9 @@ void drawbar(Monitor* m)
                       m->lrpad / 2,
                       text + (notifyoff < strlen(text) ? notifyoff : 0),
                       0);
-        } else if (barwintitle && c) {
+        } else
+#endif
+        if (barwintitle && c) {
             drwl_setscheme(m->drw,
                            colors[m == selmon ? SchemeSel : SchemeNorm]);
             drwl_text(m->drw,
@@ -2949,6 +2960,7 @@ void moveresize(const Arg* arg)
     }
 }
 
+#ifdef NOTIFICATIONS
 /* Scrolls the notification on by one screenful, wrapping to the start once
  * the tail has been shown. Bound to a click on the box the notification and
  * the window title share (ClkTitle). */
@@ -3015,6 +3027,7 @@ void notifysync(void)
         notifyoff = 0;
     }
 }
+#endif /* NOTIFICATIONS */
 
 /* opacity_apps lists either the apps that get opacity or the ones that do not,
  * depending on opacity_exclusion_type; an empty list covers every app. */
@@ -3865,14 +3878,21 @@ void setup(void)
 
     /* Missing the session bus is not fatal: dwl comes up without a tray
      * and/or bar notifications. */
-    if (showbar && (showsystray || shownotifications)) {
+    if (showbar &&
+        (showsystray
+#ifdef NOTIFICATIONS
+         || shownotifications
+#endif
+         )) {
         if ((bus_conn = dbus_bus_get(DBUS_BUS_SESSION, NULL)) &&
             (bus_source = startbus(bus_conn, event_loop))) {
             if (showsystray)
                 watcher_start(&watcher, bus_conn, event_loop);
+#ifdef NOTIFICATIONS
             if (shownotifications)
                 notify_start(
                     bus_conn, event_loop, notification_timeout, drawbars);
+#endif
         } else
             fprintf(stderr,
                     "Couldn't connect to the session bus, "
