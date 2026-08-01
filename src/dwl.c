@@ -91,6 +91,7 @@
 #define VISIBLEON(C, M)                                                        \
     ((M) && (C)->mon == (M) && ((C)->tags & (M)->tagset[(M)->seltags]))
 #define LENGTH(X) (sizeof X / sizeof X[0])
+#define OPACITY_MIN 0.1f /* floor for the opacity keybindings */
 #define END(A) ((A) + LENGTH(A))
 #define TAGMASK ((1u << LENGTH(tags)) - 1)
 #define LISTEN(E, L, H) wl_signal_add((E), ((L)->notify = (H), (L)))
@@ -199,7 +200,11 @@ typedef struct {
     unsigned int bw;
     uint32_t tags;
     int isfloating, isurgent, isfullscreen;
-    uint32_t resize; /* configure serial of a pending resize */
+    float opacity;         /* the one in effect, focused or not */
+    float opacity_focus;   /* used while the client holds focus */
+    float opacity_unfocus; /* used while it does not */
+    int hasopacity;        /* the app passed the opacity_apps filter */
+    uint32_t resize;       /* configure serial of a pending resize */
 } Client;
 
 typedef struct {
@@ -309,6 +314,8 @@ typedef struct {
     const char* title;
     uint32_t tags;
     int isfloating;
+    float opacity_focus;   /* 0 keeps the default from config.h */
+    float opacity_unfocus; /* 0 keeps the default from config.h */
     int monitor;
 } Rule;
 
@@ -418,6 +425,8 @@ static void moveresize(const Arg* arg);
 static void notifyclick(const Arg* arg);
 static void notifydismiss(const Arg* arg);
 static void notifysync(void);
+static int opacityallowed(const char* appid);
+static void opacityrefresh(void);
 static void outputmgrapply(struct wl_listener* listener, void* data);
 static void outputmgrapplyortest(struct wlr_output_configuration_v1* config,
                                  int test);
@@ -437,6 +446,10 @@ static void resize(Client* c, struct wlr_box geo, int interact);
 static void resizeheight(const Arg* arg);
 static void resizewidth(const Arg* arg);
 static void run(char* startup_cmd);
+static void scenebuffersetopacity(struct wlr_scene_buffer* buffer,
+                                  int sx,
+                                  int sy,
+                                  void* data);
 static void setcursor(struct wl_listener* listener, void* data);
 static void setcursorshape(struct wl_listener* listener, void* data);
 static void setfloating(Client* c, int floating);
@@ -446,6 +459,8 @@ static void setmfact(const Arg* arg);
 static void settitle(Client* c);
 static int titleheight(Client* c);
 static void setmon(Client* c, Monitor* m, uint32_t newtags);
+static void setopacityfocus(const Arg* arg);
+static void setopacityunfocus(const Arg* arg);
 static void setpsel(struct wl_listener* listener, void* data);
 static void setsel(struct wl_listener* listener, void* data);
 static void setup(void);
@@ -464,6 +479,7 @@ static void togglebar(const Arg* arg);
 static void togglefloating(const Arg* arg);
 static void togglefullscreen(const Arg* arg);
 static void togglegaps(const Arg* arg);
+static void toggleopacity(const Arg* arg);
 static void toggletabbed(const Arg* arg);
 static void toggletag(const Arg* arg);
 static void toggleview(const Arg* arg);
@@ -662,6 +678,10 @@ void applyrules(Client* c)
         if ((!r->title || strstr(title, r->title)) &&
             (!r->id || strstr(appid, r->id))) {
             c->isfloating = r->isfloating;
+            if (r->opacity_focus > 0)
+                c->opacity_focus = r->opacity_focus;
+            if (r->opacity_unfocus > 0)
+                c->opacity = c->opacity_unfocus = r->opacity_unfocus;
             newtags |= r->tags;
             i = 0;
             wl_list_for_each(m, &mons, link)
@@ -1470,7 +1490,9 @@ void createmon(struct wl_listener* listener, void* data)
             m->nmaster = r->nmaster;
             m->lt[0] = r->lt;
             m->lt[1] = &layouts[LENGTH(layouts) > 1 && r->lt != &layouts[1]];
-            snprintf(m->ltsymbol, LENGTH(m->ltsymbol), "%s",
+            snprintf(m->ltsymbol,
+                     LENGTH(m->ltsymbol),
+                     "%s",
                      m->lt[m->sellt]->symbol);
             for (i = 0; i < LENGTH(m->taglt); i++) {
                 m->taglt[i][0] = m->lt[0];
@@ -1569,6 +1591,8 @@ void createnotify(struct wl_listener* listener, void* data)
     c = toplevel->base->data = ecalloc(1, sizeof(*c));
     c->surface.xdg = toplevel->base;
     c->bw = borderpx;
+    c->opacity = c->opacity_unfocus = opacity_unfocus;
+    c->opacity_focus = opacity_focus;
 
     LISTEN(&toplevel->base->surface->events.commit, &c->commit, commitnotify);
     LISTEN(&toplevel->base->surface->events.map, &c->map, mapnotify);
@@ -2071,6 +2095,7 @@ void focusclient(Client* c, int lift)
         wl_list_insert(&fstack, &c->flink);
         selmon = c->mon;
         c->isurgent = 0;
+        c->opacity = c->opacity_focus;
 
         /* Don't change border color if there is an exclusive focus or we are
          * handling a drag operation */
@@ -2100,6 +2125,7 @@ void focusclient(Client* c, int lift)
             client_set_border_color(
                 old_c, (float[])COLOR(colors[SchemeNorm][ColBorder]));
             client_activate_surface(old, 0);
+            old_c->opacity = old_c->opacity_unfocus;
         }
     }
     drawbars();
@@ -2486,6 +2512,9 @@ void mapnotify(struct wl_listener* listener, void* data)
                    &c->link); /* attach at the bottom of the stack */
     wl_list_insert(&fstack, &c->flink);
 
+    /* done here rather than in applyrules(): clients with a parent skip it */
+    c->hasopacity = opacityallowed(client_get_appid(c));
+
     /* Set initial monitor, tags, floating status, and focus:
      * we always consider floating, clients that have parent and thus
      * we set the same tags and monitor as its parent.
@@ -2869,6 +2898,31 @@ void notifysync(void)
     }
 }
 
+/* opacity_apps lists either the apps that get opacity or the ones that do not,
+ * depending on opacity_exclusion_type; an empty list covers every app. */
+int opacityallowed(const char* appid)
+{
+    const char* const* a;
+
+    for (a = opacity_apps; *a; a++)
+        if (strstr(appid, *a))
+            return !opacity_exclusion_type;
+    return opacity_exclusion_type || !*opacity_apps;
+}
+
+/* opacity is (re)applied while rendering, and changing it damages nothing by
+ * itself, so a frame has to be asked for everywhere */
+void opacityrefresh(void)
+{
+    Monitor* m;
+
+    wl_list_for_each(m, &mons, link)
+    {
+        if (m->wlr_output->enabled)
+            wlr_output_schedule_frame(m->wlr_output);
+    }
+}
+
 void outputmgrapply(struct wl_listener* listener, void* data)
 {
     struct wlr_output_configuration_v1* config = data;
@@ -3025,6 +3079,10 @@ void rendermon(struct wl_listener* listener, void* data)
      * this monitor. */
     wl_list_for_each(c, &clients, link)
     {
+        /* done here rather than on focus changes so that buffers a client
+         * adds later (subsurfaces, videos) are covered too */
+        wlr_scene_node_for_each_buffer(
+            &c->scene_surface->node, scenebuffersetopacity, c);
         if (c->resize && !c->isfloating && client_is_rendered_on_mon(c, m) &&
             !client_is_stopped(c))
             goto skip;
@@ -3200,6 +3258,20 @@ void unlastcursor(struct wl_listener* listener, void* data)
     wl_list_init(&last_cursor.destroy.link);
 }
 
+void scenebuffersetopacity(struct wlr_scene_buffer* buffer,
+                           int sx,
+                           int sy,
+                           void* data)
+{
+    Client* c = data;
+    /* xdg-popups hang off Client.scene, not Client.scene_surface, so this
+     * never touches them */
+    wlr_scene_buffer_set_opacity(
+        buffer,
+        c->isfullscreen || !opacity_enabled || !c->hasopacity ? 1.0f
+                                                              : c->opacity);
+}
+
 void setcursor(struct wl_listener* listener, void* data)
 {
     /* This event is raised by the seat when a client provides a cursor image */
@@ -3303,7 +3375,9 @@ void setlayout(const Arg* arg)
         selmon->sellt ^= 1;
     if (arg && arg->v)
         selmon->lt[selmon->sellt] = (Layout*)arg->v;
-    snprintf(selmon->ltsymbol, LENGTH(selmon->ltsymbol), "%s",
+    snprintf(selmon->ltsymbol,
+             LENGTH(selmon->ltsymbol),
+             "%s",
              selmon->lt[selmon->sellt]->symbol);
     arrange(selmon);
     drawbar(selmon);
@@ -3387,6 +3461,30 @@ void setmon(Client* c, Monitor* m, uint32_t newtags)
         setfloating(c, c->isfloating);
     }
     focusclient(focustop(selmon), 1);
+}
+
+/* arg->f is added to the opacity the focused client uses while focused */
+void setopacityfocus(const Arg* arg)
+{
+    Client* sel = focustop(selmon);
+
+    if (!sel)
+        return;
+    sel->opacity_focus =
+        MIN(MAX(sel->opacity_focus + arg->f, OPACITY_MIN), 1.0f);
+    sel->opacity = sel->opacity_focus;
+    opacityrefresh();
+}
+
+/* the same for the opacity it falls back to once it loses focus */
+void setopacityunfocus(const Arg* arg)
+{
+    Client* sel = focustop(selmon);
+
+    if (!sel)
+        return;
+    sel->opacity_unfocus =
+        MIN(MAX(sel->opacity_unfocus + arg->f, OPACITY_MIN), 1.0f);
 }
 
 void setpsel(struct wl_listener* listener, void* data)
@@ -3908,6 +4006,12 @@ void togglegaps(const Arg* arg)
 {
     selmon->gaps = !selmon->gaps;
     arrange(selmon);
+}
+
+void toggleopacity(const Arg* arg)
+{
+    opacity_enabled = !opacity_enabled;
+    opacityrefresh();
 }
 
 /* Switches to the tabbed layout passed in arg, or back to the layout that was
@@ -4441,6 +4545,8 @@ void createnotifyx11(struct wl_listener* listener, void* data)
     c->surface.xwayland = xsurface;
     c->type = X11;
     c->bw = client_is_unmanaged(c) ? 0 : borderpx;
+    c->opacity = c->opacity_unfocus = opacity_unfocus;
+    c->opacity_focus = opacity_focus;
 
     /* Listen to the various events it can emit */
     LISTEN(&xsurface->events.associate, &c->associate, associatex11);
