@@ -70,6 +70,18 @@ manner as [dwm]. There is no way to separately restart the window manager in
 Wayland without restarting the entire display server, so any changes will take
 effect the next time dwl is executed.
 
+`./config_gen` writes that `config.h` for you: it walks through the settings
+and takes every default from `config.def.h`, so pressing Enter at each prompt
+reproduces the shipped configuration. `./config_gen -c` (or the fourth entry
+of the menu it shows when a `config.h` is already there) edits the current
+`config.h` instead — it becomes both the template and the source of every
+default, so the values you already picked, and anything you hand-edited, are
+kept. Either way the previous file is backed up next to it.
+
+It asks in both modes for the scale of every monitor — `1` keeps the native
+resolution, a higher factor makes everything bigger on a proportionally
+smaller desktop — and for the opacity settings below.
+
 As in the [dwm] community, we encourage users to share patches they have
 created. Check out the [dwl-patches] repository!
 
@@ -124,6 +136,19 @@ resulting configuration knobs.
   a newly focused client if the cursor isn't already over it, and to the
   center of the monitor's usable area on `arrange()` when no client is
   focused.
+- **[client-opacity-focus]** (by [Hansvon], on top of [client-opacity]) — one
+  opacity for the focused window and another for every unfocused one, set by
+  `opacity_focus`/`opacity_unfocus` in `config.h` and overridable per client
+  through the two opacity columns of `rules[]` (a `0` there keeps the
+  default). `MODKEY+o` and `MODKEY+Shift+O` step the focused window's opacity
+  up and down, `MODKEY+Ctrl+o`/`MODKEY+Ctrl+Shift+O` do the same for what it
+  fades to once it loses focus, both clamped to 10-100%. Both defaults are
+  `1.00f`, so nothing is transparent until you ask for it. Fullscreen clients
+  are always drawn opaque, and the opacity is applied to the client's own
+  buffers only, so borders, title bars and popups keep their own colors.
+  Merged into this tree with the X11 client initialisation the focus variant
+  is missing, and with the rule fields treated as an override rather than an
+  overwrite. The app filter and the global toggle below are not part of it.
 
 ### Local additions
 
@@ -174,6 +199,20 @@ Not from [dwl-patches] — written for this tree:
   don't emit a frame event of their own and clients hold pointer events back
   until one arrives. Pressure, tilt, the pad buttons, and the eraser end are
   not forwarded — only cursor motion and the tip-as-click.
+- **Opacity filter and global toggle** — written on top of
+  [client-opacity-focus]. `opacity_apps[]` lists the app ids opacity applies
+  to, matched against the app id the way the window rules are;
+  `opacity_exclusion_type` flips what the list means — `0`, the default,
+  makes it an include list, `1` a skip list — and an empty list covers every
+  app. The filter is evaluated once per client in `mapnotify()` rather than
+  in `applyrules()`, so the clients that have a parent, which skip the rules
+  entirely, are covered too. `MODKEY+Alt+o` (`toggleopacity()`) turns opacity
+  off for every window at once and back on, and `opacity_enabled` picks the
+  state it starts in, so a config can carry its opacity settings switched
+  off. Since neither changing the opacity nor toggling it damages anything on
+  its own, and the values are applied while rendering, both ask every enabled
+  output for a frame. `./config_gen` prompts for all of it, the key included,
+  along with the two percentages of the patch.
 
 Fixes carried on top of upstream, one commit each:
 
@@ -345,6 +384,9 @@ inspiration, and to the various contributors to the project, including:
 [bar-systray]: https://codeberg.org/dwl/dwl-patches/src/branch/main/patches/bar-systray
 [hide-cursor-when-typing]: https://codeberg.org/dwl/dwl-patches/src/branch/main/patches/hide-cursor-when-typing
 [warpcursor]: https://codeberg.org/dwl/dwl-patches/src/branch/main/patches/warpcursor
+[client-opacity-focus]: https://codeberg.org/dwl/dwl-patches/src/branch/main/patches/client-opacity-focus
+[client-opacity]: https://codeberg.org/dwl/dwl-patches/src/branch/main/patches/client-opacity
+[Hansvon]: https://codeberg.org/Hansvon
 [unixchad]: https://codeberg.org/unixchad
 [janetski]: https://codeberg.org/janetski
 [Ben Collerson]: https://codeberg.org/bencc

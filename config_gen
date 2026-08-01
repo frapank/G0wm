@@ -7,18 +7,25 @@ srcdir=$(CDPATH= cd -- "$(dirname -- "$0")" && pwd)
 def=$srcdir/config.def.h
 out=$srcdir/config.h
 mode=normal
+edit=
 
 while [ $# -gt 0 ]; do
 	case $1 in
 	-o|--output)
 		shift; [ $# -gt 0 ] || { echo "config_gen: -o needs a file" >&2; exit 1; }
 		out=$1 ;;
+	-c|--current)
+		edit=1 ;;
 	-h|--help)
 		cat <<EOF
-Usage: ./config_gen [-o FILE]
+Usage: ./config_gen [-c] [-o FILE]
 
 Walks through the dwl settings and writes config.h. Every default comes from
 config.def.h, so pressing Enter at each prompt reproduces it.
+
+  -c, --current   edit the existing config.h instead: it becomes both the
+                  template and the source of every default
+  -o, --output    write somewhere else than config.h
 EOF
 		exit 0 ;;
 	*) echo "config_gen: unknown option '$1'" >&2; exit 1 ;;
@@ -26,6 +33,7 @@ EOF
 	shift
 done
 
+[ -n "$edit" ] && def=$out
 [ -f "$def" ] || { echo "config_gen: $def not found" >&2; exit 1; }
 tmp=$(mktemp -d "${TMPDIR:-/tmp}/config_gen.XXXXXX") || exit 1
 trap 'rm -rf "$tmp"' EXIT
@@ -92,6 +100,19 @@ askfloat() { # prompt default -> ans
 	done
 }
 
+askpct() { # prompt default(0-100) -> ans as a float like 0.85f
+	while :; do
+		ask "$1" "$2"
+		case $ans in
+		''|*[!0-9]*) ;;
+		*) if [ "$ans" -le 100 ]; then
+			ans=$(awk -v p="$ans" 'BEGIN { printf "%.2ff", p / 100 }'); return
+		fi ;;
+		esac
+		note 'enter a percentage, 0 to 100'
+	done
+}
+
 askhex() { # prompt default -> ans as rrggbbaa
 	while :; do
 		ask "$1" "$2"
@@ -148,6 +169,12 @@ defval() { # initializer of a static variable in config.def.h
 
 defbin() { defval "$1" | sed 's/[{}",]/ /g; s/^ *//; s/ .*//'; }
 
+# float initializer as a percentage, 100 when the config predates the setting
+defpct() {
+	defval "$1" | awk '{ sub(/f$/, ""); p = $0 * 100 + 0.5 }
+		END { printf "%d", p ? p : 100 }'
+}
+
 defcmd() { # command array as a command line, quoting the arguments that need it
 	defval "$1" | awk '{
 		n = split($0, p, /"/)
@@ -155,6 +182,18 @@ defcmd() { # command array as a command line, quoting the arguments that need it
 			printf "%s%s", (i > 2 ? " " : ""), (p[i] ~ /[ \t]/ ? "\"" p[i] "\"" : p[i])
 		print ""
 	}'
+}
+
+defapps() { # quoted entries of a string array, which may span several lines
+	awk -v want="$1" '
+	!seen && index($0, want "[]") { seen = 1 }
+	seen {
+		s = $0; gsub(/\/\*.*\*\//, "", s); sub(/\/\/.*/, "", s)
+		n = split(s, p, /"/)
+		for (i = 2; i <= n; i += 2) printf "%s%s", (o++ ? " " : ""), p[i]
+		if (index(s, ";")) exit
+	}
+	END { if (o) print "" }' "$def"
 }
 
 # Splits a command line into arguments the way a shell would: quoted runs stay
@@ -252,6 +291,39 @@ appearance() {
 	askyn 'focus follows the mouse' "$(yn "$(defval sloppyfocus)")" &&
 		setval sloppyfocus 1 || setval sloppyfocus 0
 	asknum 'cursor size' "$(defval cursor_size)"; setval cursor_size "$ans"
+}
+
+opacity() {
+	title 'Window opacity'
+	note '100% is fully opaque, which is the default and disables the feature'
+	askpct 'opacity of the focused window' "$(defpct opacity_focus)"
+	setval opacity_focus "$ans"
+	askpct 'opacity of the unfocused windows' "$(defpct opacity_unfocus)"
+	setval opacity_unfocus "$ans"
+
+	note 'the app list is matched against app ids, as the window rules are'
+	menu 'the apps in the list are' \
+		"$(($(defval opacity_exclusion_type) + 1))" \
+		'the only ones with opacity' 'the only ones without it'
+	setval opacity_exclusion_type "$([ "$choice" = 1 ] && echo 0 || echo 1)"
+	ask 'apps, space separated (none means every app)' "$(defapps opacity_apps)"
+	case $ans in none) ans= ;; esac
+	set -f; op_ifs=$IFS; IFS='
+'
+	set -- $(split_cmd "$ans")
+	IFS=$op_ifs; set +f
+	setval opacity_apps "$(carray "$@")"
+
+	note 'opacity can be turned off and on while dwl runs, with the key below'
+	op_en=$(defval opacity_enabled)
+	if askyn 'start with opacity on' "$(yn "${op_en:-1}")"; then
+		setval opacity_enabled 1
+	else
+		setval opacity_enabled 0
+	fi
+	note 'xkb key names: q, Return, F1, space'
+	askkey 'MOD + Alt + ? to turn opacity off and on' "$(defkey toggleopacity)"
+	setval 'bind:toggleopacity' "XKB_KEY_$ans"
 }
 
 bar() {
@@ -427,6 +499,19 @@ manual_outputs() {
 	done
 }
 
+# A scale above 1 makes everything bigger, at the cost of a smaller desktop:
+# the logical size becomes the resolution divided by the scale.
+ask_scale() { # output -> mo_sc
+	menu "  scale of $1" 1 'normal (1)' '1.25' '1.5' '2' 'another factor'
+	case $choice in
+	1) mo_sc=1 ;;
+	2) mo_sc=1.25 ;;
+	3) mo_sc=1.5 ;;
+	4) mo_sc=2 ;;
+	*) askfloat "  scale factor of $1" 1; mo_sc=$ans ;;
+	esac
+}
+
 pick_mode() { # output -> mode_w mode_h mode_hz (0: dwl picks) and log_w log_h
 	pm_out=$1 pm_i=1 pm_def=1 pm_best=0
 	: >"$tmp/list"
@@ -524,9 +609,9 @@ monitors() {
 	: >"$tmp/mons.raw"
 	while IFS= read -r mo; do
 		pick_mode "$mo"
-		mo_sc=1 mo_rot=WL_OUTPUT_TRANSFORM_NORMAL mo_mf=$(defmfact) mo_nm=1
+		mo_rot=WL_OUTPUT_TRANSFORM_NORMAL mo_mf=$(defmfact) mo_nm=1
+		ask_scale "$mo"
 		if [ "$mode" = advanced ]; then
-			askfloat "  scale of $mo" 1; mo_sc=$ans
 			menu "  rotation of $mo" 1 normal 90 180 270 flipped
 			case $choice in
 			2) mo_rot=WL_OUTPUT_TRANSFORM_90 ;;
@@ -631,17 +716,21 @@ generate() { # config.def.h rewritten with the collected values
 
 # ---------------------------------------------------------------------- main
 printf '%sdwl config generator%s\n' "$B" "$R"
-note "defaults from ${def##*/}, writing ${out##*/}"
 
 keep=
-if [ -f "$out" ]; then
+if [ -f "$out" ] && [ -z "$edit" ]; then
 	title 'A config.h is already there'
-	menu 'what should happen to it' 2 'cancel' 'keep a backup, then generate' 'overwrite it'
+	menu 'what should happen to it' 4 'cancel' 'keep a backup, then generate' \
+		'overwrite it' 'edit it: its own settings become the defaults'
 	case $choice in
 	1) note 'nothing written'; exit 0 ;;
 	2) keep=$out.$(date +%Y%m%d-%H%M%S).bak ;;
+	4) def=$out keep=$out.$(date +%Y%m%d-%H%M%S).bak ;;
 	esac
+elif [ -n "$edit" ]; then
+	keep=$out.$(date +%Y%m%d-%H%M%S).bak
 fi
+note "defaults from ${def##*/}, writing ${out##*/}"
 
 title 'Mode'
 menu 'how much do you want to configure' 1 \
@@ -651,6 +740,7 @@ menu 'how much do you want to configure' 1 \
 
 if [ "$mode" = advanced ]; then
 	appearance
+	opacity
 	bar
 	fontsel
 	colors
@@ -659,6 +749,7 @@ if [ "$mode" = advanced ]; then
 	keybinds
 	input
 else
+	opacity
 	programs
 	autostart
 fi
