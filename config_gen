@@ -291,6 +291,11 @@ appearance() {
 	askyn 'focus follows the mouse' "$(yn "$(defval sloppyfocus)")" &&
 		setval sloppyfocus 1 || setval sloppyfocus 0
 	asknum 'cursor size' "$(defval cursor_size)"; setval cursor_size "$ans"
+	if grep -q '^static const char\* wallpaper' "$def"; then
+		wp_def=$(defval wallpaper); wp_def=${wp_def#\"} wp_def=${wp_def%\"}
+		ask 'wallpaper image path (empty for none)' "$wp_def"
+		setval wallpaper "\"$ans\""
+	fi
 }
 
 opacity() {

@@ -2,6 +2,9 @@
  * See LICENSE file for copyright and license details.
  */
 #include <fcntl.h>
+#ifdef INTEGRATED_BACKGROUND
+#include <gdk-pixbuf/gdk-pixbuf.h>
+#endif
 #include <getopt.h>
 #include <libdrm/drm_fourcc.h>
 #include <libinput.h>
@@ -78,15 +81,21 @@
 
 #include "dbus.h"
 #include "drwl.h"
+#ifdef NOTIFICATIONS
 #include "notify.h"
+#endif
 #include "systray/tray.h"
 #include "systray/watcher.h"
 #include "util.h"
 #include "xdg-shell-protocol.h"
 
 /* macros */
+#ifndef MAX
 #define MAX(A, B) ((A) > (B) ? (A) : (B))
+#endif
+#ifndef MIN
 #define MIN(A, B) ((A) < (B) ? (A) : (B))
+#endif
 #define CLEANMASK(mask) (mask & ~WLR_MODIFIER_CAPS)
 #define VISIBLEON(C, M)                                                        \
     ((M) && (C)->mon == (M) && ((C)->tags & (M)->tagset[(M)->seltags]))
@@ -254,7 +263,10 @@ struct Monitor {
     struct wlr_output* wlr_output;
     struct wlr_scene_output* scene_output;
     struct wlr_scene_buffer* scene_buffer; /* bar buffer */
-    struct wlr_scene_rect* fullscreen_bg;  /* See createmon() for info */
+#ifdef INTEGRATED_BACKGROUND
+    struct wlr_scene_buffer* wallpaper; /* wallpaper buffer */
+#endif
+    struct wlr_scene_rect* fullscreen_bg; /* See createmon() for info */
     struct wl_listener frame;
     struct wl_listener destroy;
     struct wl_listener request_state;
@@ -289,6 +301,10 @@ struct Monitor {
     int asleep;
     Drwl* drw;
     Buffer* pool[2];
+#ifdef INTEGRATED_BACKGROUND
+    Buffer* wallpaperpool[1];
+    int wallpaperw, wallpaperh; /* size wallpaperpool was rendered at */
+#endif
     int lrpad;
 };
 
@@ -422,9 +438,11 @@ static void motionnotify(uint32_t time,
                          double sy_unaccel);
 static void motionrelative(struct wl_listener* listener, void* data);
 static void moveresize(const Arg* arg);
+#ifdef NOTIFICATIONS
 static void notifyclick(const Arg* arg);
 static void notifydismiss(const Arg* arg);
 static void notifysync(void);
+#endif
 static int opacityallowed(const char* appid);
 static void opacityrefresh(void);
 static void outputmgrapply(struct wl_listener* listener, void* data);
@@ -464,6 +482,9 @@ static void setopacityunfocus(const Arg* arg);
 static void setpsel(struct wl_listener* listener, void* data);
 static void setsel(struct wl_listener* listener, void* data);
 static void setup(void);
+#ifdef INTEGRATED_BACKGROUND
+static void setwallpaper(Monitor* m);
+#endif
 static void spawn(const Arg* arg);
 static void startdrag(struct wl_listener* listener, void* data);
 static int statusin(int fd, unsigned int mask, void* data);
@@ -556,6 +577,10 @@ static struct {
 } last_cursor;
 
 static struct wlr_scene_rect* root_bg;
+#ifdef INTEGRATED_BACKGROUND
+static GdkPixbuf* wallpaper_src; /* full-res decode, cached across resizes */
+static int wallpaper_load_failed;
+#endif
 static struct wlr_session_lock_manager_v1* session_lock_mgr;
 static struct wlr_scene_rect* locked_bg;
 static struct wlr_session_lock_v1* cur_lock;
@@ -577,8 +602,10 @@ static struct wl_event_source* status_event_source;
 static DBusConnection* bus_conn;
 static struct wl_event_source* bus_source;
 static Watcher watcher = { .running = 0 };
+#ifdef NOTIFICATIONS
 static unsigned int notifyshownid;
 static size_t notifyoff;
+#endif
 
 static const struct wlr_buffer_impl buffer_impl = {
     .destroy = bufdestroy,
@@ -1102,8 +1129,10 @@ void cleanup(void)
 
     if (watcher.running)
         watcher_stop(&watcher);
+#ifdef NOTIFICATIONS
     if (shownotifications)
         notify_stop();
+#endif
     if (bus_conn) {
         stopbus(bus_conn, bus_source);
         dbus_connection_unref(bus_conn);
@@ -1117,6 +1146,11 @@ void cleanup(void)
     /* Destroy after the wayland display (when the monitors are already
        destroyed) to avoid destroying them with an invalid scene output. */
     wlr_scene_node_destroy(&scene->tree.node);
+
+#ifdef INTEGRATED_BACKGROUND
+    if (wallpaper_src)
+        g_object_unref(wallpaper_src);
+#endif
 
     drwl_fini();
 }
@@ -1135,6 +1169,9 @@ void cleanupmon(struct wl_listener* listener, void* data)
 
     for (i = 0; i < LENGTH(m->pool); i++)
         wlr_buffer_drop(&m->pool[i]->base);
+#ifdef INTEGRATED_BACKGROUND
+    bufpooldrop(m->wallpaperpool, LENGTH(m->wallpaperpool));
+#endif
 
     if (m->tray)
         destroytray(m->tray);
@@ -1155,6 +1192,9 @@ void cleanupmon(struct wl_listener* listener, void* data)
     closemon(m);
     wlr_scene_node_destroy(&m->fullscreen_bg->node);
     wlr_scene_node_destroy(&m->scene_buffer->node);
+#ifdef INTEGRATED_BACKGROUND
+    wlr_scene_node_destroy(&m->wallpaper->node);
+#endif
     free(m);
 }
 
@@ -1551,6 +1591,9 @@ void createmon(struct wl_listener* listener, void* data)
 
     m->scene_buffer = wlr_scene_buffer_create(layers[LyrBottom], NULL);
     m->scene_buffer->point_accepts_input = baracceptsinput;
+#ifdef INTEGRATED_BACKGROUND
+    m->wallpaper = wlr_scene_buffer_create(layers[LyrBg], NULL);
+#endif
     updatebar(m);
 
     wl_list_insert(&mons, &m->link);
@@ -1935,6 +1978,7 @@ void drawbar(Monitor* m)
     m->b.titlew = w > m->b.height ? w : 0;
 
     if (m->b.titlew) {
+#ifdef NOTIFICATIONS
         /* A notification takes the box over for as long as it lasts, so the
          * window title (if barwintitle is on) steps aside and comes back
          * once the notification expires or is dismissed. */
@@ -1951,7 +1995,9 @@ void drawbar(Monitor* m)
                       m->lrpad / 2,
                       text + (notifyoff < strlen(text) ? notifyoff : 0),
                       0);
-        } else if (barwintitle && c) {
+        } else
+#endif
+        if (barwintitle && c) {
             drwl_setscheme(m->drw,
                            colors[m == selmon ? SchemeSel : SchemeNorm]);
             drwl_text(m->drw,
@@ -2000,6 +2046,82 @@ void drawbars(void)
 
     wl_list_for_each(m, &mons, link) drawbar(m);
 }
+
+#ifdef INTEGRATED_BACKGROUND
+void setwallpaper(Monitor* m)
+{
+    GdkPixbuf* scaled;
+    GError* error = NULL;
+    Buffer* buf;
+    int mw = m->m.width, mh = m->m.height;
+    int pw, ph, sw, sh, ox, oy, x, y, rowstride, nch;
+    double scalefactor;
+    guchar* src;
+    uint32_t* dst;
+
+    if (!wallpaper || !*wallpaper || mw <= 0 || mh <= 0) {
+        wlr_scene_buffer_set_buffer(m->wallpaper, NULL);
+        bufpooldrop(m->wallpaperpool, LENGTH(m->wallpaperpool));
+        return;
+    }
+
+    if (m->wallpaperpool[0] && mw == m->wallpaperw && mh == m->wallpaperh) {
+        wlr_scene_buffer_set_dest_size(m->wallpaper, mw, mh);
+        wlr_scene_node_set_position(&m->wallpaper->node, m->m.x, m->m.y);
+        wlr_scene_buffer_set_buffer(m->wallpaper, &m->wallpaperpool[0]->base);
+        return;
+    }
+
+    if (!wallpaper_src && !wallpaper_load_failed &&
+        !(wallpaper_src = gdk_pixbuf_new_from_file(wallpaper, &error))) {
+        wlr_log(WLR_ERROR, "wallpaper: %s", error->message);
+        g_error_free(error);
+        wallpaper_load_failed = 1;
+    }
+    if (!wallpaper_src)
+        return;
+
+    pw = gdk_pixbuf_get_width(wallpaper_src);
+    ph = gdk_pixbuf_get_height(wallpaper_src);
+    scalefactor = MAX((double)mw / pw, (double)mh / ph);
+    sw = MAX(1, (int)lround(pw * scalefactor));
+    sh = MAX(1, (int)lround(ph * scalefactor));
+    scaled = gdk_pixbuf_scale_simple(wallpaper_src, sw, sh, GDK_INTERP_BILINEAR);
+    if (!scaled) {
+        wlr_log(WLR_ERROR, "wallpaper: failed to scale %s", wallpaper);
+        return;
+    }
+
+    ox = MIN(sw - mw, (sw - mw) / 2);
+    oy = MIN(sh - mh, (sh - mh) / 2);
+
+    bufpooldrop(m->wallpaperpool, LENGTH(m->wallpaperpool));
+    if (!(buf =
+              bufget(m->wallpaperpool, LENGTH(m->wallpaperpool), mw, mh))) {
+        g_object_unref(scaled);
+        return;
+    }
+
+    src = gdk_pixbuf_get_pixels(scaled);
+    rowstride = gdk_pixbuf_get_rowstride(scaled);
+    nch = gdk_pixbuf_get_n_channels(scaled);
+    dst = buf->data;
+    for (y = 0; y < mh; y++) {
+        guchar* srow = src + (size_t)(y + oy) * rowstride + (size_t)ox * nch;
+        for (x = 0; x < mw; x++, srow += nch, dst++)
+            *dst = (0xffu << 24) | ((uint32_t)srow[0] << 16) |
+                   ((uint32_t)srow[1] << 8) | (uint32_t)srow[2];
+    }
+    g_object_unref(scaled);
+    m->wallpaperw = mw;
+    m->wallpaperh = mh;
+
+    wlr_scene_buffer_set_dest_size(m->wallpaper, mw, mh);
+    wlr_scene_node_set_position(&m->wallpaper->node, m->m.x, m->m.y);
+    wlr_scene_buffer_set_buffer(m->wallpaper, &buf->base);
+    wlr_buffer_unlock(&buf->base);
+}
+#endif /* INTEGRATED_BACKGROUND */
 
 void traynotify(void* data)
 {
@@ -2838,6 +2960,7 @@ void moveresize(const Arg* arg)
     }
 }
 
+#ifdef NOTIFICATIONS
 /* Scrolls the notification on by one screenful, wrapping to the start once
  * the tail has been shown. Bound to a click on the box the notification and
  * the window title share (ClkTitle). */
@@ -2904,6 +3027,7 @@ void notifysync(void)
         notifyoff = 0;
     }
 }
+#endif /* NOTIFICATIONS */
 
 /* opacity_apps lists either the apps that get opacity or the ones that do not,
  * depending on opacity_exclusion_type; an empty list covers every app. */
@@ -3754,14 +3878,21 @@ void setup(void)
 
     /* Missing the session bus is not fatal: dwl comes up without a tray
      * and/or bar notifications. */
-    if (showbar && (showsystray || shownotifications)) {
+    if (showbar &&
+        (showsystray
+#ifdef NOTIFICATIONS
+         || shownotifications
+#endif
+         )) {
         if ((bus_conn = dbus_bus_get(DBUS_BUS_SESSION, NULL)) &&
             (bus_source = startbus(bus_conn, event_loop))) {
             if (showsystray)
                 watcher_start(&watcher, bus_conn, event_loop);
+#ifdef NOTIFICATIONS
             if (shownotifications)
                 notify_start(
                     bus_conn, event_loop, notification_timeout, drawbars);
+#endif
         } else
             fprintf(stderr,
                     "Couldn't connect to the session bus, "
@@ -4173,6 +4304,9 @@ void updatemons(struct wl_listener* listener, void* data)
         wlr_output_layout_get_box(output_layout, m->wlr_output, &m->m);
         m->w = m->m;
         wlr_scene_output_set_position(m->scene_output, m->m.x, m->m.y);
+#ifdef INTEGRATED_BACKGROUND
+        setwallpaper(m);
+#endif
 
         wlr_scene_node_set_position(&m->fullscreen_bg->node, m->m.x, m->m.y);
         wlr_scene_rect_set_size(m->fullscreen_bg, m->m.width, m->m.height);

@@ -14,28 +14,32 @@ GENDIR   = $(BUILDDIR)/protocols
 # flags for compiling
 DWLCPPFLAGS = -I. -I$(INCDIR) -I$(INCDIR)/systray -I$(EXTDIR) -I$(GENDIR) \
 	-DWLR_USE_UNSTABLE -D_POSIX_C_SOURCE=200809L \
-	-DVERSION=\"$(VERSION)\" $(XWAYLAND)
+	-DVERSION=\"$(VERSION)\" $(XWAYLAND) $(BACKGROUND) $(NOTIFY)
 DWLDEVCFLAGS = -g -Wpedantic -Wall -Wextra -Wdeclaration-after-statement \
 	-Wno-unused-parameter -Wshadow -Wunused-macros -Werror=strict-prototypes \
 	-Werror=implicit -Werror=return-type -Werror=incompatible-pointer-types \
 	-Wfloat-conversion
 
 # CFLAGS / LDFLAGS
-PKGS      = wayland-server xkbcommon libinput pixman-1 fcft dbus-1 $(XLIBS)
+PKGS      = wayland-server xkbcommon libinput pixman-1 fcft dbus-1 $(XLIBS) $(BGLIBS)
 DWLCFLAGS = `$(PKG_CONFIG) --cflags $(PKGS)` $(WLR_INCS) $(DWLCPPFLAGS) $(DWLDEVCFLAGS) $(CFLAGS)
 LDLIBS    = `$(PKG_CONFIG) --libs $(PKGS)` $(WLR_LIBS) -lm $(LIBS)
 
 # Sources. The systray and its dbus glue come from the bar-systray patch.
-SRC = $(SRCDIR)/dwl.c $(SRCDIR)/util.c $(SRCDIR)/dbus.c $(SRCDIR)/notify.c \
+SRC = $(SRCDIR)/dwl.c $(SRCDIR)/util.c $(SRCDIR)/dbus.c \
 	$(SRCDIR)/systray/watcher.c $(SRCDIR)/systray/tray.c \
 	$(SRCDIR)/systray/item.c $(SRCDIR)/systray/icon.c \
 	$(SRCDIR)/systray/menu.c $(SRCDIR)/systray/helpers.c
-OBJ = $(SRC:$(SRCDIR)/%.c=$(BUILDDIR)/%.o)
-HDR = $(INCDIR)/client.h $(INCDIR)/util.h $(INCDIR)/dbus.h $(INCDIR)/notify.h \
+HDR = $(INCDIR)/client.h $(INCDIR)/util.h $(INCDIR)/dbus.h \
 	$(INCDIR)/systray/watcher.h $(INCDIR)/systray/tray.h \
 	$(INCDIR)/systray/item.h $(INCDIR)/systray/icon.h \
 	$(INCDIR)/systray/menu.h $(INCDIR)/systray/helpers.h \
 	$(EXTDIR)/drwl.h
+ifneq ($(NOTIFY),)
+SRC += $(SRCDIR)/notify.c
+HDR += $(INCDIR)/notify.h
+endif
+OBJ = $(SRC:$(SRCDIR)/%.c=$(BUILDDIR)/%.o)
 
 # wayland-scanner is a tool which generates C headers and rigging for Wayland
 # protocols, which are specified in XML. wlroots requires you to rig these up
