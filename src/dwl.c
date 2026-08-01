@@ -707,6 +707,8 @@ void arrange(Monitor* m)
     {
         if (c->mon == m) {
             wlr_scene_node_set_enabled(&c->scene->node, VISIBLEON(c, m));
+            /* re-enable content tabbed() may have hidden for a non-top tab */
+            wlr_scene_node_set_enabled(&c->scene_surface->node, 1);
             client_set_suspended(c, !VISIBLEON(c, m));
         }
     }
@@ -2102,6 +2104,11 @@ void focusclient(Client* c, int lift)
         if (!exclusive_focus && !seat->drag)
             client_set_border_color(
                 c, (float[])COLOR(colors[SchemeSel][ColBorder]));
+
+        /* tabbed() otherwise only reruns on arrange() */
+        if (c->mon && c->mon->lt[c->mon->sellt]->arrange == tabbed &&
+            !c->isfloating && !c->isfullscreen)
+            tabbed(c->mon);
     }
 
     /* Deactivate old client if focus is changing */
@@ -3885,7 +3892,7 @@ void tabbed(Monitor* m)
 {
     unsigned int e = m->gaps;
     struct wlr_box b;
-    Client* c;
+    Client *c, *top;
     int n = 0;
 
     wl_list_for_each(c, &clients, link) if (VISIBLEON(c, m) && !c->isfloating &&
@@ -3900,15 +3907,19 @@ void tabbed(Monitor* m)
     b.width = m->w.width - 2 * (int)(gappx * e);
     b.height = m->w.height - 2 * (int)(gappx * e);
 
+    top = tabtop(m);
     wl_list_for_each(c, &clients, link)
     {
         if (!VISIBLEON(c, m) || c->isfloating || c->isfullscreen)
             continue;
         resize(c, b, 0);
+        /* only the top tab's contents are drawn; scene_surface rather than
+         * scene, since the title bars (the tabs) hang off the latter */
+        wlr_scene_node_set_enabled(&c->scene_surface->node, c == top);
     }
     snprintf(m->ltsymbol, LENGTH(m->ltsymbol), "|%d|", n);
-    if ((c = tabtop(m)))
-        wlr_scene_node_raise_to_top(&c->scene->node);
+    if (top)
+        wlr_scene_node_raise_to_top(&top->scene->node);
 }
 
 Client* tabtop(Monitor* m)
