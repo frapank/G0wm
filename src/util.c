@@ -1,4 +1,4 @@
-/* See LICENSE.dwm file for copyright and license details. */
+/* See license/dwm.txt for copyright and license details. */
 #include <fcntl.h>
 #include <stdarg.h>
 #include <stdio.h>
