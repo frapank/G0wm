@@ -33,6 +33,10 @@ static const int cursor_size    = 24;           // xcursor base size, default is
 static const char* fonts[] = { "monospace:size=10" };
 static const float rootcolor[] = COLOR(0x000000ff);
 
+#ifdef INTEGRATED_BACKGROUND
+static const char* wallpaper = ""; // path to an image, empty for just rootcolor
+#endif
+
 static const float fullscreen_bg[] = { 0.0f, 0.0f, 0.0f, 1.0f };
 static const int showsystray                   = 1;  // 0 means no systray
 static const unsigned int systrayspacing       = 2;  // systray icon spacing
