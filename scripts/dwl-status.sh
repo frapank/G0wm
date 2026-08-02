@@ -4,20 +4,17 @@
 # Plain POSIX shell: runs on Linux, the BSDs and anything else with a /bin/sh.
 set -u
 
-conf=${DWL_STATUS_CONF:-${XDG_CONFIG_HOME:-$HOME/.config}/dwl/status.conf}
-once=0
-arg_battery_interval=
-
 warn() { printf 'dwl-status.sh: %s\n' "$*" >&2; }
 
-while [ $# -gt 0 ]; do
-	case $1 in
-	-c|--config)
-		shift; [ $# -gt 0 ] || { warn '-c needs a file'; exit 1; }
-		conf=$1 ;;
-	-1|--once) once=1 ;;
-	-h|--help)
-		cat <<EOF
+options() { # "$@" -> conf, once, arg_battery_interval; -h exits on its own
+	while [ $# -gt 0 ]; do
+		case $1 in
+		-c|--config)
+			shift; [ $# -gt 0 ] || { warn '-c needs a file'; exit 1; }
+			conf=$1 ;;
+		-1|--once) once=1 ;;
+		-h|--help)
+			cat <<EOF
 Usage: dwl-status.sh [-1] [-c FILE] [SECONDS]
 
 Prints the bar status line once per interval. The modules shown and their
@@ -30,42 +27,43 @@ write it.
   -c, --config    read another config file
   SECONDS         seconds between battery reads (same as battery_interval)
 EOF
-		exit 0 ;;
-	-*) warn "unknown option '$1'"; exit 1 ;;
-	*)
-		case $1 in
-		''|*[!0-9]*) warn "unknown argument '$1'"; exit 1 ;;
+			exit 0 ;;
+		-*) warn "unknown option '$1'"; exit 1 ;;
+		*)
+			case $1 in
+			''|*[!0-9]*) warn "unknown argument '$1'"; exit 1 ;;
+			esac
+			arg_battery_interval=$1 ;;
 		esac
-		arg_battery_interval=$1 ;;
-	esac
-	shift
-done
+		shift
+	done
+}
 
-# ------------------------------------------------------------------ defaults
-all_modules='date time battery cpu ram netdown netup'
-modules='date time battery'
-interval=1
-battery_interval=30
-prefix=' '
-separator=' '
-suffix=' '
-date_format='%a %d %b'
-time_format='%H:%M:%S'
-battery_format='%v%'
-cpu_format='cpu %v%'
-ram_format='ram %v%'
-netdown_format='down %v'
-netup_format='up %v'
-net_interface=
-icon_date=
-icon_time=
-icon_battery=
-icon_cpu=
-icon_ram=
-icon_netdown=
-icon_netup=
+defaults() {
+	all_modules='date time battery cpu ram netdown netup'
+	modules='date time battery'
+	interval=1
+	battery_interval=30
+	prefix=' '
+	separator=' '
+	suffix=' '
+	date_format='%a %d %b'
+	time_format='%H:%M:%S'
+	battery_format='%v%'
+	cpu_format='cpu %v%'
+	ram_format='ram %v%'
+	netdown_format='down %v'
+	netup_format='up %v'
+	net_interface=
+	icon_date=
+	icon_time=
+	icon_battery=
+	icon_cpu=
+	icon_ram=
+	icon_netdown=
+	icon_netup=
+}
 
-# --------------------------------------------------------------- config file
 trim() { # -> tr_s, the argument without leading and trailing blanks
 	tr_s=$1
 	while :; do
@@ -76,133 +74,137 @@ trim() { # -> tr_s, the argument without leading and trailing blanks
 	done
 }
 
-if [ -f "$conf" ]; then
-	lineno=0
-	while IFS= read -r line || [ -n "$line" ]; do
-		lineno=$((lineno + 1))
-		trim "$line"; line=$tr_s
-		case $line in
-		''|'#'*) continue ;;
-		*=*) ;;
-		*) warn "$conf:$lineno: not a key=value line"; continue ;;
-		esac
-		trim "${line%%=*}"; key=$tr_s
-		# quotes keep the spaces around a value, which the separator needs
-		trim "${line#*=}"; val=$tr_s
-		case $val in
-		'"'*'"') val=${val#\"} val=${val%\"} ;;
-		esac
-		case $key in
-		modules|interval|battery_interval|prefix|separator|suffix|\
-		date_format|time_format|battery_format|cpu_format|ram_format|\
-		netdown_format|netup_format|net_interface|icon_date|icon_time|\
-		icon_battery|icon_cpu|icon_ram|icon_netdown|icon_netup)
-			# the name is one of the above, and the value is never re-parsed
-			eval "$key=\$val" ;;
-		*) warn "$conf:$lineno: unknown setting '$key'" ;;
-		esac
-	done <"$conf"
-fi
-
-[ -n "$arg_battery_interval" ] && battery_interval=$arg_battery_interval
-case $interval in
-''|*[!0-9]*|0) warn "interval '$interval' is not a positive number, using 1"
-	interval=1 ;;
-esac
-case $battery_interval in
-''|*[!0-9]*|0) warn "battery_interval '$battery_interval' is not a positive number, using 30"
-	battery_interval=30 ;;
-esac
-
-# ------------------------------------------------------------ what is around
-have_date=0
-command -v date >/dev/null 2>&1 && have_date=1
-
-battery_method=none
-bats=
-case $(uname -s 2>/dev/null) in
-Linux)
-	for bat in /sys/class/power_supply/BAT*; do
-		[ -d "$bat" ] && bats="$bats $bat/capacity"
-	done
-	[ -n "$bats" ] && battery_method=linux
-	;;
-FreeBSD)
-	command -v sysctl >/dev/null 2>&1 && battery_method=freebsd
-	;;
-OpenBSD)
-	if command -v apm >/dev/null 2>&1; then
-		battery_method=openbsd
-	else
-		warn 'apm not found, battery status unavailable'
+read_config() { # reads $conf if present, then finalizes the timing settings
+	if [ -f "$conf" ]; then
+		lineno=0
+		while IFS= read -r line || [ -n "$line" ]; do
+			lineno=$((lineno + 1))
+			trim "$line"; line=$tr_s
+			case $line in
+			''|'#'*) continue ;;
+			*=*) ;;
+			*) warn "$conf:$lineno: not a key=value line"; continue ;;
+			esac
+			trim "${line%%=*}"; key=$tr_s
+			# quotes keep the spaces around a value, which the separator needs
+			trim "${line#*=}"; val=$tr_s
+			case $val in
+			'"'*'"') val=${val#\"} val=${val%\"} ;;
+			esac
+			case $key in
+			modules|interval|battery_interval|prefix|separator|suffix|\
+			date_format|time_format|battery_format|cpu_format|ram_format|\
+			netdown_format|netup_format|net_interface|icon_date|icon_time|\
+			icon_battery|icon_cpu|icon_ram|icon_netdown|icon_netup)
+				# the name is one of the above, and the value is never re-parsed
+				eval "$key=\$val" ;;
+			*) warn "$conf:$lineno: unknown setting '$key'" ;;
+			esac
+		done <"$conf"
 	fi
-	;;
-esac
 
-cpu_method=none
-if [ -r /proc/stat ]; then
-	cpu_method=linux
-elif command -v sysctl >/dev/null 2>&1 &&
-	[ -n "$(sysctl -n kern.cp_time 2>/dev/null)" ]; then
-	cpu_method=sysctl
-fi
+	[ -n "$arg_battery_interval" ] && battery_interval=$arg_battery_interval
+	case $interval in
+	''|*[!0-9]*|0) warn "interval '$interval' is not a positive number, using 1"
+		interval=1 ;;
+	esac
+	case $battery_interval in
+	''|*[!0-9]*|0) warn "battery_interval '$battery_interval' is not a positive number, using 30"
+		battery_interval=30 ;;
+	esac
+}
 
-ram_method=none
-[ -r /proc/meminfo ] && ram_method=linux
+detect() { # have_date, battery_method, cpu_method, ram_method, net_method
+	have_date=0
+	command -v date >/dev/null 2>&1 && have_date=1
 
-net_method=none
-for f in /sys/class/net/*/statistics/rx_bytes; do
-	[ -r "$f" ] && net_method=linux
-	break
-done
-if [ "$net_method" = none ] && command -v netstat >/dev/null 2>&1; then
-	# FreeBSD reports byte counters here, OpenBSD lists packets only
-	netstat -ibn 2>/dev/null | awk 'NR == 1 {
-		for (i = 1; i <= NF; i++) {
-			if ($i == "Ibytes") ib = i
-			if ($i == "Obytes") ob = i
-		}
-		exit !(ib && ob)
-	}' && net_method=netstat
-fi
+	battery_method=none
+	bats=
+	case $(uname -s 2>/dev/null) in
+	Linux)
+		for bat in /sys/class/power_supply/BAT*; do
+			[ -d "$bat" ] && bats="$bats $bat/capacity"
+		done
+		[ -n "$bats" ] && battery_method=linux
+		;;
+	FreeBSD)
+		command -v sysctl >/dev/null 2>&1 && battery_method=freebsd
+		;;
+	OpenBSD)
+		if command -v apm >/dev/null 2>&1; then
+			battery_method=openbsd
+		else
+			warn 'apm not found, battery status unavailable'
+		fi
+		;;
+	esac
+
+	cpu_method=none
+	if [ -r /proc/stat ]; then
+		cpu_method=linux
+	elif command -v sysctl >/dev/null 2>&1 &&
+		[ -n "$(sysctl -n kern.cp_time 2>/dev/null)" ]; then
+		cpu_method=sysctl
+	fi
+
+	ram_method=none
+	[ -r /proc/meminfo ] && ram_method=linux
+
+	net_method=none
+	for f in /sys/class/net/*/statistics/rx_bytes; do
+		[ -r "$f" ] && net_method=linux
+		break
+	done
+	if [ "$net_method" = none ] && command -v netstat >/dev/null 2>&1; then
+		# FreeBSD reports byte counters here, OpenBSD lists packets only
+		netstat -ibn 2>/dev/null | awk 'NR == 1 {
+			for (i = 1; i <= NF; i++) {
+				if ($i == "Ibytes") ib = i
+				if ($i == "Obytes") ob = i
+			}
+			exit !(ib && ob)
+		}' && net_method=netstat
+	fi
+}
 
 # a module whose source is missing is dropped, so no field goes stale or empty
-kept=
-for m in $modules; do
-	case $m in
-	date|time)
-		[ "$have_date" = 1 ] ||
-			{ warn "'date' not found, $m disabled"; continue; } ;;
-	battery)
-		[ "$battery_method" != none ] ||
-			{ warn 'no battery found, battery disabled'; continue; } ;;
-	cpu)
-		[ "$cpu_method" != none ] ||
-			{ warn 'no cpu usage counter on this system, cpu disabled'; continue; } ;;
-	ram)
-		[ "$ram_method" != none ] ||
-			{ warn 'no memory counter on this system, ram disabled'; continue; } ;;
-	netdown|netup)
-		[ "$net_method" != none ] ||
-			{ warn "no network counters on this system, $m disabled"; continue; } ;;
-	*) warn "unknown module '$m', known ones are: $all_modules"; continue ;;
-	esac
-	kept="$kept $m"
-done
-modules=${kept# }
-[ -n "$modules" ] || warn 'no module left to show'
+filter_modules() { # -> modules trimmed to what is available, and want_*
+	kept=
+	for m in $modules; do
+		case $m in
+		date|time)
+			[ "$have_date" = 1 ] ||
+				{ warn "'date' not found, $m disabled"; continue; } ;;
+		battery)
+			[ "$battery_method" != none ] ||
+				{ warn 'no battery found, battery disabled'; continue; } ;;
+		cpu)
+			[ "$cpu_method" != none ] ||
+				{ warn 'no cpu usage counter on this system, cpu disabled'; continue; } ;;
+		ram)
+			[ "$ram_method" != none ] ||
+				{ warn 'no memory counter on this system, ram disabled'; continue; } ;;
+		netdown|netup)
+			[ "$net_method" != none ] ||
+				{ warn "no network counters on this system, $m disabled"; continue; } ;;
+		*) warn "unknown module '$m', known ones are: $all_modules"; continue ;;
+		esac
+		kept="$kept $m"
+	done
+	modules=${kept# }
+	[ -n "$modules" ] || warn 'no module left to show'
 
-want_battery=0 want_cpu=0 want_ram=0 want_net=0
-for m in $modules; do
-	case $m in
-	battery) want_battery=1 ;;
-	cpu) want_cpu=1 ;;
-	ram) want_ram=1 ;;
-	netdown|netup) want_net=1 ;;
-	esac
-done
+	want_battery=0 want_cpu=0 want_ram=0 want_net=0
+	for m in $modules; do
+		case $m in
+		battery) want_battery=1 ;;
+		cpu) want_cpu=1 ;;
+		ram) want_ram=1 ;;
+		netdown|netup) want_net=1 ;;
+		esac
+	done
+}
 
-# -------------------------------------------------------------------- values
 subst() { # string token replacement -> sb
 	sb= sb_rest=$1
 	while :; do
@@ -374,7 +376,6 @@ read_net() {
 	human $((ns_dtx / interval)); net_up=$hu
 }
 
-# ----------------------------------------------------------------- rendering
 fmt() { # format value icon -> r
 	subst "$1" '%v' "$2"; r=$sb
 	subst "$r" '%i' "$3"; r=$sb
@@ -406,32 +407,45 @@ render() { # module -> r, empty when there is nothing to show
 	esac
 }
 
-# --------------------------------------------------------------------- loop
-[ "$want_cpu" = 1 ] && cpu_sample && { cpu_tot_prev=$cpu_tot cpu_idl_prev=$cpu_idl; }
-[ "$want_net" = 1 ] && { net_sample; net_rx_prev=$net_rx net_tx_prev=$net_tx; }
-# a rate needs two samples, so a one-shot run waits for the second one
-[ "$once" = 1 ] && { [ "$want_cpu" = 1 ] || [ "$want_net" = 1 ]; } &&
-	sleep "$interval"
+main() {
+	conf=${DWL_STATUS_CONF:-${XDG_CONFIG_HOME:-$HOME/.config}/dwl/status.conf}
+	once=0
+	arg_battery_interval=
 
-tick=0
-while :; do
-	if [ "$tick" -le 0 ]; then
-		[ "$want_battery" = 1 ] && read_battery
-		tick=$battery_interval
-	fi
-	[ "$want_cpu" = 1 ] && read_cpu
-	[ "$want_ram" = 1 ] && read_ram
-	[ "$want_net" = 1 ] && read_net
+	options "$@"
+	defaults
+	read_config
+	detect
+	filter_modules
 
-	line=
-	for m in $modules; do
-		render "$m"
-		[ -n "$r" ] || continue
-		line=${line:+$line$separator}$r
+	[ "$want_cpu" = 1 ] && cpu_sample && { cpu_tot_prev=$cpu_tot cpu_idl_prev=$cpu_idl; }
+	[ "$want_net" = 1 ] && { net_sample; net_rx_prev=$net_rx net_tx_prev=$net_tx; }
+	# a rate needs two samples, so a one-shot run waits for the second one
+	[ "$once" = 1 ] && { [ "$want_cpu" = 1 ] || [ "$want_net" = 1 ]; } &&
+		sleep "$interval"
+
+	tick=0
+	while :; do
+		if [ "$tick" -le 0 ]; then
+			[ "$want_battery" = 1 ] && read_battery
+			tick=$battery_interval
+		fi
+		[ "$want_cpu" = 1 ] && read_cpu
+		[ "$want_ram" = 1 ] && read_ram
+		[ "$want_net" = 1 ] && read_net
+
+		line=
+		for m in $modules; do
+			render "$m"
+			[ -n "$r" ] || continue
+			line=${line:+$line$separator}$r
+		done
+		printf '%s%s%s\n' "$prefix" "$line" "$suffix"
+
+		[ "$once" = 1 ] && break
+		tick=$((tick - interval))
+		sleep "$interval"
 	done
-	printf '%s%s%s\n' "$prefix" "$line" "$suffix"
+}
 
-	[ "$once" = 1 ] && break
-	tick=$((tick - interval))
-	sleep "$interval"
-done
+main "$@"
