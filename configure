@@ -19,6 +19,7 @@ wlroots_prefix=
 xwayland=yes
 integrated_background=yes
 notify=yes
+runner=yes
 opt_cflags='-O2'
 extra_cflags=
 extra_ldflags=
@@ -62,6 +63,8 @@ Features:
   --no-notify             build without the notification daemon (org.
                           freedesktop.Notifications); shownotifications
                           and notification_timeout in config.h are ignored
+  --no-runner             build without the integrated app runner;
+                          MODKEY+r spawns menucmd instead
   --debug                 -O0 -g3, no frame pointer omission
   --release               -O2 (default)
   --enable-sanitizers     build with ASan and UBSan
@@ -114,6 +117,7 @@ while [ $# -gt 0 ]; do
 	--disable-xwayland) xwayland=no ;;
 	--no-integrated-background) integrated_background=no ;;
 	--no-notify) notify=no ;;
+	--no-runner) runner=no ;;
 	--debug) opt_cflags='-O0 -g3 -fno-omit-frame-pointer' ;;
 	--release) opt_cflags='-O2' ;;
 	--enable-sanitizers) sanitize=yes ;;
@@ -231,10 +235,12 @@ BGLIBS = $([ "$integrated_background" = yes ] && echo gdk-pixbuf-2.0)
 
 NOTIFY = $([ "$notify" = yes ] && echo -DNOTIFICATIONS)
 
+RUNNER = $([ "$runner" = yes ] && echo -DRUNNER)
+
 CFLAGS = $(trim "$opt_cflags$extra_cflags")
 LDFLAGS = $(trim "$extra_ldflags")
 LIBS = $(trim "$extra_libs")
 EOF
 
-say "wrote config.mk: $cc, $wlr_pkg, xwayland $xwayland, integrated background $integrated_background, notify $notify, native $native, install to $bindir"
+say "wrote config.mk: $cc, $wlr_pkg, xwayland $xwayland, integrated background $integrated_background, notify $notify, runner $runner, native $native, install to $bindir"
 say "run 'make' to build"
