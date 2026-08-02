@@ -61,8 +61,9 @@ license/         upstream license notices (see License below)
 ```
 
 `config.def.h` and `config.h` deliberately stay at the root, since they are
-the files you actually edit. Note that the Makefile uses GNU make pattern
-rules and is no longer `.POSIX:`.
+the files you actually edit, next to the `config_gen` and `status_gen`
+generators that write them. Note that the Makefile uses GNU make pattern rules
+and is no longer `.POSIX:`.
 
 ## Configuration
 
@@ -82,6 +83,37 @@ kept. Either way the previous file is backed up next to it.
 It asks in both modes for the scale of every monitor — `1` keeps the native
 resolution, a higher factor makes everything bigger on a proportionally
 smaller desktop — and for the opacity settings below.
+
+### Status text
+
+The text at the right end of the bar comes from `scripts/dwl-status.sh`, which
+`start-dwl` pipes into dwl. It prints a line per second made of the modules
+listed in `status.conf`, in the order they are listed there: `date`, `time`,
+`battery`, `cpu`, `ram`, `netdown` and `netup`. With no config file it prints
+the date, the clock and the battery, as it always did.
+
+`./status_gen` writes that file, the way `./config_gen` writes `config.h`, to
+`$XDG_CONFIG_HOME/dwl/status.conf` (`~/.config/dwl/status.conf`). It asks
+which modules to show and in which order, then the format of each one — a
+strftime string for the clock and the date, a template where `%v` is the value
+for the others (`ram` also has `%u` for what is in use and `%t` for the total)
+— showing the line the bar would draw next to every choice. `./status_gen -c`
+edits the existing file, keeping its settings as the defaults, and backs up
+the previous one.
+
+It also offers Nerd Font icons in place of the `cpu`/`ram`/`down`/`up`
+labels. It looks for a Nerd Font with `fc-list` first and skips them with a
+warning when none is installed, since the glyphs would otherwise draw as
+boxes; the advanced mode lets you replace each glyph, and the battery takes a
+list of them, drawn from empty to full according to the charge.
+
+Every module needs a source of readings the system may not have: the battery
+is read from sysfs on Linux, from `sysctl` on FreeBSD and from `apm` on
+OpenBSD; the cpu from `/proc/stat` or `kern.cp_time`; memory from
+`/proc/meminfo` only; the network counters from sysfs, or from `netstat -ibn`
+where it reports bytes. A module whose source is missing is dropped with a
+warning on stderr rather than printing an empty field, and `status_gen` marks
+it as unavailable while you pick.
 
 As in the [dwm] community, we encourage users to share patches they have
 created. Check out the [dwl-patches] repository!

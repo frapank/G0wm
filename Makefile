@@ -124,7 +124,7 @@ clean:
 
 dist: clean
 	mkdir -p dwl-$(VERSION)
-	cp -R LICENSE license Makefile configure config_gen CHANGELOG.md README.md config.def.h \
+	cp -R LICENSE license Makefile configure config_gen status_gen CHANGELOG.md README.md config.def.h \
 		config.def.mk .clang-format src include external protocols docs \
 		scripts share dwl-$(VERSION)
 	tar -caf dwl-$(VERSION).tar.gz dwl-$(VERSION)
