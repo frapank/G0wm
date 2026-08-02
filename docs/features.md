@@ -125,6 +125,30 @@ fixes carried on top of upstream. Every configuration knob named here lives in
   Since neither changing the opacity nor toggling it damages anything on its
   own, and the values are applied while rendering, both ask every enabled
   output for a frame.
+- **Bar runner** (`src/dwl.c`, `RUNNER`) — `MODKEY+r` turns the same shared
+  box the title/notification use into a prompt: a caret marks the insertion
+  point (it is what tells an empty prompt apart from an empty title area, and
+  its size is derived from the font height so it holds up on every monitor
+  scale), type a prefix and the first match among every executable name in
+  `$PATH` is drawn after it in `SchemeRunnerSuggest`, `Tab` accepts it,
+  `Return` runs the suggestion (or
+  whatever was typed if there is none) through `/bin/sh -c`, `Ctrl+C` empties
+  the prompt without closing it, `Escape` cancels. While it's open every key
+  belongs to it — no keybinding fires and nothing reaches the focused client —
+  and held keys repeat into it at the keyboard's own rate, so backspace clears
+  by holding it. Colors come from `SchemeRunner`/`SchemeRunnerSuggest`.
+
+  The `$PATH` scan is cached, and each open first compares the mtime of the
+  `$PATH` directories against the ones the cache was built from: a directory's
+  mtime moves whenever an entry is added or removed, so one `stat()` per entry
+  (~0.04ms in total, no `readdir`) is enough to tell whether a rescan would
+  turn anything up. A program installed while dwl runs therefore shows up at
+  the next prompt, and only that prompt pays for the rescan. Making an
+  *existing* file executable is the one change this misses, since it leaves
+  the directory's mtime alone.
+
+  Disable at build time with `./configure --no-runner`, which reverts
+  `MODKEY+r` to spawning `menucmd` (`wmenu-run`) instead.
 
 [dwl-patches]: https://codeberg.org/dwl/dwl-patches
 [attachbottom]: https://codeberg.org/dwl/dwl-patches/wiki/attachbottom

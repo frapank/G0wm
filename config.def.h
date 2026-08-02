@@ -60,6 +60,10 @@ static uint32_t colors[][3] = {
     [SchemeTitleSel] = { 0xffffffff, 0x000000ff, 0x000000ff },
 
     [SchemeNotify] = { 0x000000ff, 0xffffffff, 0xffffffff },
+
+    /* MODKEY+r bar prompt (see RUNNER); bg must match between the two */
+    [SchemeRunner]        = { 0xffffffff, 0x000000ff, 0x000000ff }, // text, background
+    [SchemeRunnerSuggest] = { 0xaaaaaaff, 0x000000ff, 0x000000ff }, // suggestion text
 };
 
 /* tagging */
@@ -196,7 +200,11 @@ static const Key keys[] = {
 	/* --- APPLICATIONS AND SYSTEM --- */
 	{ MODKEY,                    XKB_KEY_q,           spawn,            {.v = termcmd} },
 	{ MODKEY,                    XKB_KEY_f,           spawn,            {.v = filemanagercmd} },
+#ifdef RUNNER
+	{ MODKEY,                    XKB_KEY_r,           runnertoggle,     {0} },
+#else
 	{ MODKEY,                    XKB_KEY_r,           spawn,            {.v = menucmd} },
+#endif
 	{ MODKEY,                    XKB_KEY_b,           spawn,            {.v = browsercmd} },
 	{ MODKEY,                    XKB_KEY_c,           killclient,       {0} },
 	{ MODKEY|WLR_MODIFIER_SHIFT, XKB_KEY_f,           togglefullscreen, {0} },
