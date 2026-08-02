@@ -3,21 +3,16 @@
 # Plain POSIX shell: runs on Linux, the BSDs and anything else with a /bin/sh.
 set -u
 
-srcdir=$(CDPATH= cd -- "$(dirname -- "$0")" && pwd)
-def=$srcdir/config.def.h
-out=$srcdir/config.h
-mode=normal
-edit=
-
-while [ $# -gt 0 ]; do
-	case $1 in
-	-o|--output)
-		shift; [ $# -gt 0 ] || { echo "config_gen: -o needs a file" >&2; exit 1; }
-		out=$1 ;;
-	-c|--current)
-		edit=1 ;;
-	-h|--help)
-		cat <<EOF
+options() { # "$@" -> out, edit set from the command line; -h exits on its own
+	while [ $# -gt 0 ]; do
+		case $1 in
+		-o|--output)
+			shift; [ $# -gt 0 ] || { echo "config_gen: -o needs a file" >&2; exit 1; }
+			out=$1 ;;
+		-c|--current)
+			edit=1 ;;
+		-h|--help)
+			cat <<EOF
 Usage: ./config_gen [-c] [-o FILE]
 
 Walks through the dwl settings and writes config.h. Every default comes from
@@ -27,32 +22,36 @@ config.def.h, so pressing Enter at each prompt reproduces it.
                   template and the source of every default
   -o, --output    write somewhere else than config.h
 EOF
-		exit 0 ;;
-	*) echo "config_gen: unknown option '$1'" >&2; exit 1 ;;
+			exit 0 ;;
+		*) echo "config_gen: unknown option '$1'" >&2; exit 1 ;;
+		esac
+		shift
+	done
+}
+
+workspace() { # validates the template, then scratch dir, cleanup trap and fds
+	[ -n "$edit" ] && def=$out
+	[ -f "$def" ] || die "$def not found"
+	tmp=$(mktemp -d "${TMPDIR:-/tmp}/config_gen.XXXXXX") || exit 1
+	trap 'rm -rf "$tmp"' EXIT
+	trap 'rm -rf "$tmp"; exit 130' HUP INT TERM
+	vals=$tmp/vals
+	mons=$tmp/mons
+	auto= # set once the autostart list has entries
+	: >"$vals"
+	exec 3<&0 # answers always come from here, loops are free to redirect stdin
+}
+
+interface() { # B D A R (bold/dim/accent/reset) and dash, used by rule()/title()
+	B= D= A= R= dash=-
+	if [ -t 1 ] && [ -z "${NO_COLOR:-}" ] && [ "${TERM:-dumb}" != dumb ]; then
+		B=$(printf '\033[1m') D=$(printf '\033[2m')
+		A=$(printf '\033[36m') R=$(printf '\033[0m')
+	fi
+	case ${LC_ALL:-${LC_CTYPE:-${LANG:-C}}} in
+	*[Uu][Tt][Ff]*) dash=$(printf '\342\224\200') ;;
 	esac
-	shift
-done
-
-[ -n "$edit" ] && def=$out
-[ -f "$def" ] || { echo "config_gen: $def not found" >&2; exit 1; }
-tmp=$(mktemp -d "${TMPDIR:-/tmp}/config_gen.XXXXXX") || exit 1
-trap 'rm -rf "$tmp"' EXIT
-trap 'rm -rf "$tmp"; exit 130' HUP INT TERM
-vals=$tmp/vals
-mons=$tmp/mons
-auto= # set once the autostart list has entries
-: >"$vals"
-exec 3<&0 # answers always come from here, loops are free to redirect stdin
-
-# ---------------------------------------------------------------- interface
-B= D= A= R= dash=-
-if [ -t 1 ] && [ -z "${NO_COLOR:-}" ] && [ "${TERM:-dumb}" != dumb ]; then
-	B=$(printf '\033[1m') D=$(printf '\033[2m')
-	A=$(printf '\033[36m') R=$(printf '\033[0m')
-fi
-case ${LC_ALL:-${LC_CTYPE:-${LANG:-C}}} in
-*[Uu][Tt][Ff]*) dash=$(printf '\342\224\200') ;;
-esac
+}
 
 rule() {
 	rl_s= rl_i=0
@@ -153,7 +152,6 @@ menu() { # prompt default-index item... -> choice
 	done
 }
 
-# ------------------------------------------------------- defaults and values
 setval() { printf '%s\t%s\n' "$1" "$2" >>"$vals"; }
 
 defval() { # initializer of a static variable in config.def.h
@@ -269,14 +267,15 @@ askcmd() { # variable prompt default-command
 }
 
 # Colors and fonts are also used to theme the launchers, so resolve them early.
-font_name=$(defval fonts | sed 's/[{}"]//g; s/:.*//; s/^ *//; s/ *$//')
-font_size=$(defval fonts | sed 's/.*size=//; s/[^0-9].*//')
-[ -n "$font_size" ] || font_size=10
-c_normfg=$(defscheme SchemeNorm 1) c_normbg=$(defscheme SchemeNorm 2)
-c_selfg=$(defscheme SchemeSel 1) c_selbg=$(defscheme SchemeSel 3)
-c_urg=$(defscheme SchemeUrg 3) c_dimfg=$(defscheme SchemeTitle 1)
+theme_defaults() {
+	font_name=$(defval fonts | sed 's/[{}"]//g; s/:.*//; s/^ *//; s/ *$//')
+	font_size=$(defval fonts | sed 's/.*size=//; s/[^0-9].*//')
+	[ -n "$font_size" ] || font_size=10
+	c_normfg=$(defscheme SchemeNorm 1) c_normbg=$(defscheme SchemeNorm 2)
+	c_selfg=$(defscheme SchemeSel 1) c_selbg=$(defscheme SchemeSel 3)
+	c_urg=$(defscheme SchemeUrg 3) c_dimfg=$(defscheme SchemeTitle 1)
+}
 
-# ------------------------------------------------------------- config blocks
 appearance() {
 	title 'Appearance'
 	if askyn 'gaps between windows' "$(yn "$(defval gaps)")"; then
@@ -464,7 +463,6 @@ input() {
 		setval hide_cursor_when_typing 1 || setval hide_cursor_when_typing 0
 }
 
-# ------------------------------------------------------------------ monitors
 # wlr-randr talks to the running compositor, the only place the real mode list
 # lives; without it the monitors have to be described by hand.
 probe_outputs() {
@@ -648,7 +646,6 @@ monitors() {
 		>>"$mons"
 }
 
-# ----------------------------------------------------------------- rendering
 generate() { # config.def.h rewritten with the collected values
 	awk -v mons="$mons" -v auto="$auto" '
 	# keeps the column layout when a replacement is wider or narrower
@@ -719,55 +716,69 @@ generate() { # config.def.h rewritten with the collected values
 	' "$vals" "$def"
 }
 
-# ---------------------------------------------------------------------- main
-printf '%sdwl config generator%s\n' "$B" "$R"
+main() {
+	srcdir=$(CDPATH= cd -- "$(dirname -- "$0")" && pwd)
+	def=$srcdir/config.def.h
+	out=$srcdir/config.h
+	mode=normal
+	edit=
 
-keep=
-if [ -f "$out" ] && [ -z "$edit" ]; then
-	title 'A config.h is already there'
-	menu 'what should happen to it' 4 'cancel' 'keep a backup, then generate' \
-		'overwrite it' 'edit it: its own settings become the defaults'
-	case $choice in
-	1) note 'nothing written'; exit 0 ;;
-	2) keep=$out.$(date +%Y%m%d-%H%M%S).bak ;;
-	4) def=$out keep=$out.$(date +%Y%m%d-%H%M%S).bak ;;
-	esac
-elif [ -n "$edit" ]; then
-	keep=$out.$(date +%Y%m%d-%H%M%S).bak
-fi
-note "defaults from ${def##*/}, writing ${out##*/}"
+	options "$@"
+	workspace
+	interface
+	theme_defaults
 
-title 'Mode'
-menu 'how much do you want to configure' 1 \
-	'normal: programs and monitors, the rest stays default' \
-	'advanced: every main setting'
-[ "$choice" = 2 ] && mode=advanced
+	printf '%sdwl config generator%s\n' "$B" "$R"
 
-if [ "$mode" = advanced ]; then
-	appearance
-	opacity
-	bar
-	fontsel
-	colors
-	programs
-	autostart
-	keybinds
-	input
-else
-	opacity
-	programs
-	autostart
-fi
-monitors
+	keep=
+	if [ -f "$out" ] && [ -z "$edit" ]; then
+		title 'A config.h is already there'
+		menu 'what should happen to it' 4 'cancel' 'keep a backup, then generate' \
+			'overwrite it' 'edit it: its own settings become the defaults'
+		case $choice in
+		1) note 'nothing written'; exit 0 ;;
+		2) keep=$out.$(date +%Y%m%d-%H%M%S).bak ;;
+		4) def=$out keep=$out.$(date +%Y%m%d-%H%M%S).bak ;;
+		esac
+	elif [ -n "$edit" ]; then
+		keep=$out.$(date +%Y%m%d-%H%M%S).bak
+	fi
+	note "defaults from ${def##*/}, writing ${out##*/}"
 
-generate >"$tmp/config.h"
-grep -q 'static const Key keys' "$tmp/config.h" || die 'generated file looks wrong, nothing written'
-if [ -n "$keep" ]; then
-	cp "$out" "$keep" || die "cannot back up $out"
-fi
-cp "$tmp/config.h" "$out" || die "cannot write $out"
+	title 'Mode'
+	menu 'how much do you want to configure' 1 \
+		'normal: programs and monitors, the rest stays default' \
+		'advanced: every main setting'
+	[ "$choice" = 2 ] && mode=advanced
 
-title 'Done'
-[ -n "$keep" ] && note "previous config kept as ${keep##*/}"
-printf 'wrote %s\n' "$out"
-note "check it over, then run './configure && make'"
+	if [ "$mode" = advanced ]; then
+		appearance
+		opacity
+		bar
+		fontsel
+		colors
+		programs
+		autostart
+		keybinds
+		input
+	else
+		opacity
+		programs
+		autostart
+	fi
+	monitors
+
+	generate >"$tmp/config.h"
+	grep -q 'static const Key keys' "$tmp/config.h" || die 'generated file looks wrong, nothing written'
+	if [ -n "$keep" ]; then
+		cp "$out" "$keep" || die "cannot back up $out"
+	fi
+	cp "$tmp/config.h" "$out" || die "cannot write $out"
+
+	title 'Done'
+	[ -n "$keep" ] && note "previous config kept as ${keep##*/}"
+	printf 'wrote %s\n' "$out"
+	note "check it over, then run './configure && make'"
+}
+
+main "$@"
