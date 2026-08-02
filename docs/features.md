@@ -149,6 +149,33 @@ fixes carried on top of upstream. Every configuration knob named here lives in
 
   Disable at build time with `./configure --no-runner`, which reverts
   `MODKEY+r` to spawning `menucmd` (`wmenu-run`) instead.
+- **Status text modules** (`scripts/dwl-status.sh`, `./status_gen`) — the
+  script `start-dwl` pipes into dwl builds its line out of modules named in
+  `$XDG_CONFIG_HOME/dwl/status.conf`: `date`, `time`, `battery`, `cpu`, `ram`,
+  `netdown`, `netup`, printed in the order they are listed there. Each one has
+  a format of its own — a strftime string for `date` and `time`, a template
+  with `%v` for the value, `%i` for the icon, and `%u`/`%t` for the memory in
+  use and the total — and there is a `prefix`, a `separator` and a `suffix`
+  around them. Without a config file the output is the date, clock and battery
+  the script printed before it was made configurable, byte for byte.
+
+  `./status_gen` writes that file the way `config_gen` writes `config.h`, with
+  the same prompts, the same `-c` to edit the current one and the same backup.
+  Each format is picked from a menu that shows the line the bar would draw,
+  not the template, and the last thing it does is run `dwl-status.sh --once`
+  on what it wrote.
+
+  Icons are Nerd Font glyphs substituted into `%i`, offered only after
+  `fc-list` reports a Nerd Font family: without one they would draw as boxes,
+  so they are skipped with a warning unless asked for anyway. `icon_battery`
+  holds a list, drawn from empty to full according to the charge.
+
+  A module whose readings the system cannot provide — no battery, no
+  `/proc/meminfo`, `netstat` without byte counters — is dropped at startup
+  with a warning on stderr instead of printing an empty field. The loop runs
+  once a second, so it reads `/proc` and `/sys` with the shell's own `read`
+  and does its arithmetic in the shell: `date` stays the only command it forks
+  per tick.
 
 [dwl-patches]: https://codeberg.org/dwl/dwl-patches
 [attachbottom]: https://codeberg.org/dwl/dwl-patches/wiki/attachbottom

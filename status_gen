@@ -1,0 +1,538 @@
+#!/bin/sh
+# Interactive generator for status.conf, the config of scripts/dwl-status.sh,
+# driven by the defaults that script falls back to on its own.
+# Plain POSIX shell: runs on Linux, the BSDs and anything else with a /bin/sh.
+
+set -u
+
+options() { # "$@" -> out, edit set from the command line; -h exits on its own
+	while [ $# -gt 0 ]; do
+		case $1 in
+		-o|--output)
+			shift; [ $# -gt 0 ] || { echo "status_gen: -o needs a file" >&2; exit 1; }
+			out=$1 ;;
+		-c|--current)
+			edit=1 ;;
+		-h|--help)
+			cat <<EOF
+Usage: ./status_gen [-c] [-o FILE]
+
+Walks through the bar status settings and writes
+\${XDG_CONFIG_HOME:-\$HOME/.config}/dwl/status.conf, which scripts/dwl-status.sh
+reads. Every default is dwl-status.sh's own, so pressing Enter at each prompt
+keeps the clock and battery it shows without a config file.
+
+  -c, --current   edit the existing status.conf instead: it becomes the source
+                  of every default
+  -o, --output    write somewhere else than the default path
+EOF
+			exit 0 ;;
+		*) echo "status_gen: unknown option '$1'" >&2; exit 1 ;;
+		esac
+		shift
+	done
+}
+
+workspace() { # scratch dir, cleanup trap, the vals file, and the answers fd
+	tmp=$(mktemp -d "${TMPDIR:-/tmp}/status_gen.XXXXXX") || exit 1
+	trap 'rm -rf "$tmp"' EXIT
+	trap 'rm -rf "$tmp"; exit 130' HUP INT TERM
+	vals=$tmp/vals
+	: >"$vals"
+	exec 3<&0 # answers always come from here, loops are free to redirect stdin
+}
+
+interface() { # B D A R (bold/dim/accent/reset) and dash, used by rule()/title()
+	B= D= A= R= dash=-
+	if [ -t 1 ] && [ -z "${NO_COLOR:-}" ] && [ "${TERM:-dumb}" != dumb ]; then
+		B=$(printf '\033[1m') D=$(printf '\033[2m')
+		A=$(printf '\033[36m') R=$(printf '\033[0m')
+	fi
+	case ${LC_ALL:-${LC_CTYPE:-${LANG:-C}}} in
+	*[Uu][Tt][Ff]*) dash=$(printf '\342\224\200') ;;
+	esac
+}
+
+rule() {
+	rl_s= rl_i=0
+	while [ $rl_i -lt 58 ]; do rl_s=$rl_s$dash rl_i=$((rl_i + 1)); done
+	printf '%s%s%s\n' "$D" "$rl_s" "$R"
+}
+title() { printf '\n%s%s%s\n' "$B" "$1" "$R"; rule; }
+note() { printf '%s%s%s\n' "$D" "$1" "$R"; }
+die() { printf 'status_gen: %s\n' "$*" >&2; exit 1; }
+
+ask() { # prompt default -> ans
+	if [ -n "$2" ]; then
+		printf '%s %s[%s]%s ' "$1" "$A" "$2" "$R"
+	else
+		printf '%s ' "$1"
+	fi
+	IFS= read -r ans <&3 || { printf '\n'; die 'aborted'; }
+	[ -n "$ans" ] || ans=$2
+}
+
+askyn() { # prompt default(y|n); true when yes
+	while :; do
+		ask "$1 (y/n)" "$2"
+		case $ans in [Yy]*) return 0 ;; [Nn]*) return 1 ;; esac
+		note 'answer y or n'
+	done
+}
+
+asknum() { # prompt default -> ans
+	while :; do
+		ask "$1" "$2"
+		case $ans in ''|*[!0-9]*) note 'enter a whole number' ;; *) return ;; esac
+	done
+}
+
+menu() { # prompt default-index item... -> choice
+	mn_prompt=$1 mn_def=$2 mn_i=1
+	shift 2
+	for mn_it in "$@"; do
+		printf '  %s%d%s) %s\n' "$A" "$mn_i" "$R" "$mn_it"
+		mn_i=$((mn_i + 1))
+	done
+	while :; do
+		ask "$mn_prompt" "$mn_def"
+		case $ans in
+		''|*[!0-9]*) ;;
+		*) [ "$ans" -ge 1 ] && [ "$ans" -lt "$mn_i" ] && { choice=$ans; return; } ;;
+		esac
+		note "enter 1-$((mn_i - 1))"
+	done
+}
+
+setval() { printf '%s\t%s\n' "$1" "$2" >>"$vals"; }
+
+dflt() { # built-in default of a setting, as dwl-status.sh has it
+	case $1 in
+	modules) echo 'date time battery' ;;
+	interval) echo 1 ;;
+	battery_interval) echo 30 ;;
+	prefix|separator|suffix) echo ' ' ;;
+	date_format) echo '%a %d %b' ;;
+	time_format) echo '%H:%M:%S' ;;
+	battery_format) echo '%v%' ;;
+	cpu_format) echo 'cpu %v%' ;;
+	ram_format) echo 'ram %v%' ;;
+	netdown_format) echo 'down %v' ;;
+	netup_format) echo 'up %v' ;;
+	*) echo '' ;;
+	esac
+}
+
+getval() { # setting -> gv, from the template being edited or the built-in
+	gv=
+	if [ -n "$def" ] && [ -f "$def" ]; then
+		gv=$(sed -n "s/^[[:space:]]*$1[[:space:]]*=[[:space:]]*//p" "$def" |
+			sed -n '$p')
+		gv=${gv%"${gv##*[! ]}"}
+		case $gv in '"'*'"') gv=${gv#\"} gv=${gv%\"} ;; esac
+	fi
+	[ -n "$gv" ] || gv=$(dflt "$1")
+}
+
+# octal escapes, so this file stays ASCII
+icon_of() { # module -> ic, the default Nerd Font glyph
+	case $1 in
+	date) ic=$(printf '\357\201\263') ;;                  # U+F073 calendar
+	time) ic=$(printf '\357\200\227') ;;                  # U+F017 clock
+	battery) ic=$(printf '\357\211\204 \357\211\203 \357\211\202 \357\211\201 \357\211\200') ;;
+	cpu) ic=$(printf '\357\213\233') ;;                   # U+F2DB microchip
+	ram) ic=$(printf '\357\224\270') ;;                   # U+F538 memory
+	netdown) ic=$(printf '\357\201\243') ;;               # U+F063 arrow-down
+	netup) ic=$(printf '\357\201\242') ;;                 # U+F062 arrow-up
+	*) ic= ;;
+	esac
+}
+
+icon_for() { # module -> ic, empty when icons are off
+	ic=
+	[ "$use_icons" = 1 ] || return 0
+	getval "icon_$1"
+	if [ -n "$gv" ]; then ic=$gv; else icon_of "$1"; fi
+}
+
+subst() { # string token replacement -> sb (same rule dwl-status.sh applies)
+	sb= sb_rest=$1
+	while :; do
+		case $sb_rest in
+		*"$2"*) sb=$sb${sb_rest%%"$2"*}$3; sb_rest=${sb_rest#*"$2"} ;;
+		*) sb=$sb$sb_rest; return ;;
+		esac
+	done
+}
+
+render_tpl() { # template module -> rt, as dwl-status.sh would fill it in
+	rt_ic=
+	case $2 in
+	battery) rt_v=87 ;;
+	cpu) rt_v=13 ;;
+	ram) rt_v=42 ;;
+	netdown|netup) rt_v=1.2M ;;
+	*) rt_v= ;;
+	esac
+	if [ "$use_icons" = 1 ]; then
+		icon_for "$2"; rt_ic=$ic
+		# the battery icon is a list, the sample takes the full one
+		[ "$2" = battery ] && for rt_g in $rt_ic; do rt_ic=$rt_g; done
+	fi
+	case $2 in
+	date|time)
+		subst "$1" '%i' "$rt_ic"
+		rt=$(date "+$sb" 2>/dev/null) || rt="(bad format)"
+		;;
+	*)
+		subst "$1" '%v' "$rt_v"; rt=$sb
+		subst "$rt" '%i' "$rt_ic"; rt=$sb
+		subst "$rt" '%u' 6.1G; rt=$sb
+		subst "$rt" '%t' 15.5G; rt=$sb
+		;;
+	esac
+}
+
+askfmt() { # setting module prompt hint preset...
+	af_var=$1 af_mod=$2 af_prompt=$3 af_hint=$4
+	shift 4
+	getval "$af_var"; af_cur=$gv
+	# a format that matches no preset goes first, so Enter keeps it
+	af_keep=1
+	for af_p in "$@"; do
+		[ "$af_p" = "$af_cur" ] && af_keep=0
+	done
+	[ "$af_keep" = 1 ] && set -- "$af_cur" "$@"
+	: >"$tmp/tpls"; : >"$tmp/items"
+	af_i=1 af_def=0
+	for af_p in "$@"; do
+		printf '%s\n' "$af_p" >>"$tmp/tpls"
+		render_tpl "$af_p" "$af_mod"
+		printf '%s   %s(%s)%s\n' "$rt" "$D" "$af_p" "$R" >>"$tmp/items"
+		[ "$af_p" = "$af_cur" ] && [ "$af_def" = 0 ] && af_def=$af_i
+		af_i=$((af_i + 1))
+	done
+	[ "$af_def" = 0 ] && af_def=$af_i
+	set -f; af_ifs=$IFS; IFS='
+'
+	set -- $(cat "$tmp/items")
+	IFS=$af_ifs; set +f
+	menu "$af_prompt" "$af_def" "$@" 'something else'
+	if [ "$choice" -lt "$af_i" ]; then
+		setval "$af_var" "$(sed -n "${choice}p" "$tmp/tpls")"
+		return
+	fi
+	note "$af_hint"
+	while :; do
+		ask "  $af_prompt" "$af_cur"
+		render_tpl "$ans" "$af_mod"
+		note "  shown as: $rt"
+		askyn '  keep it' y && break
+	done
+	setval "$af_var" "$ans"
+}
+
+have() { # module -> true when this system can feed it
+	case $1 in
+	date|time) command -v date >/dev/null 2>&1 ;;
+	battery)
+		case $(uname -s 2>/dev/null) in
+		Linux) set -- /sys/class/power_supply/BAT*; [ -d "$1" ] ;;
+		FreeBSD) command -v sysctl >/dev/null 2>&1 ;;
+		OpenBSD) command -v apm >/dev/null 2>&1 ;;
+		*) false ;;
+		esac ;;
+	cpu) [ -r /proc/stat ] ||
+		{ command -v sysctl >/dev/null 2>&1 &&
+			[ -n "$(sysctl -n kern.cp_time 2>/dev/null)" ]; } ;;
+	ram) [ -r /proc/meminfo ] ;;
+	netdown|netup)
+		set -- /sys/class/net/*/statistics/rx_bytes; [ -r "$1" ] ||
+			{ command -v netstat >/dev/null 2>&1 &&
+				netstat -ibn 2>/dev/null | awk 'NR == 1 {
+					for (i = 1; i <= NF; i++) {
+						if ($i == "Ibytes") ib = i
+						if ($i == "Obytes") ob = i
+					}
+					exit !(ib && ob)
+				}'; } ;;
+	esac
+}
+
+describe() { # module -> ds
+	case $1 in
+	date) ds='the date, in any strftime format' ;;
+	time) ds='the clock, in any strftime format' ;;
+	battery) ds='charge of every battery' ;;
+	cpu) ds='cpu usage since the last update' ;;
+	ram) ds='memory in use' ;;
+	netdown) ds='download rate' ;;
+	netup) ds='upload rate' ;;
+	esac
+}
+
+icons() {
+	title 'Nerd Font icons'
+	note 'icons replace the labels: cpu 13% becomes the chip glyph and 13%'
+	ic_found=
+	if command -v fc-list >/dev/null 2>&1; then
+		ic_found=$(fc-list : family 2>/dev/null | tr ',' '\n' |
+			grep -i 'nerd font' | sed 's/^[[:space:]]*//' | sort -u | head -1)
+		if [ -n "$ic_found" ]; then
+			note "found $ic_found"
+			askyn 'use Nerd Font icons' y && use_icons=1
+		else
+			note 'no Nerd Font installed, so the glyphs would draw as boxes'
+			note 'install one (Symbols Nerd Font is enough) and run this again'
+			askyn 'enable them anyway' n && use_icons=1
+		fi
+	else
+		note 'fc-list not found, cannot tell whether a Nerd Font is installed'
+		askyn 'enable Nerd Font icons anyway' n && use_icons=1
+	fi
+	if [ "$use_icons" = 1 ]; then
+		ip='%i '
+		note 'the bar font in config.h needs the glyphs, or fontconfig has'
+		note 'to be able to fall back to the Nerd Font for them'
+	fi
+	return 0
+}
+
+modules() {
+	title 'Modules'
+	for md_m in $all_modules; do
+		describe "$md_m"
+		if have "$md_m"; then
+			printf '  %s%-8s%s %s%s%s\n' "$A" "$md_m" "$R" "$D" "$ds" "$R"
+		else
+			printf '  %s%-8s%s %s%s (not available on this system)%s\n' \
+				"$A" "$md_m" "$R" "$D" "$ds" "$R"
+		fi
+	done
+	note 'they are drawn left to right in the order you list them'
+	getval modules
+	while :; do
+		ask 'modules, in order (none for an empty bar)' "$gv"
+		case $ans in none) ans= ;; esac
+		md_bad=
+		for md_m in $ans; do
+			case " $all_modules " in
+			*" $md_m "*) ;;
+			*) md_bad="$md_bad $md_m" ;;
+			esac
+		done
+		[ -n "$md_bad" ] || break
+		note "unknown module:$md_bad"
+	done
+	sel=$ans
+	setval modules "$sel"
+	for md_m in $sel; do
+		have "$md_m" ||
+			note "$md_m has no source here, it will be skipped at runtime"
+	done
+}
+
+formats() {
+	[ -n "$sel" ] || return 0
+	title 'Formats'
+	for fm_m in $sel; do
+		printf '\n%s%s%s\n' "$B" "$fm_m" "$R"
+		case $fm_m in
+		date)
+			askfmt date_format date '  date format' \
+				'  a strftime format, see date(1); %i is the icon' \
+				"$ip%a %d %b" "$ip%d/%m" "$ip%Y-%m-%d" "$ip%a %d %B" ;;
+		time)
+			askfmt time_format time '  time format' \
+				'  a strftime format, see date(1); %i is the icon' \
+				"$ip%H:%M:%S" "$ip%H:%M" "$ip%I:%M %p" ;;
+		battery)
+			askfmt battery_format battery '  battery format' \
+				'  %v is the charge, %i the icon for its level' \
+				"$ip%v%" "$ip%v" 'bat %v%' ;;
+		cpu)
+			askfmt cpu_format cpu '  cpu format' \
+				'  %v is the usage in percent, %i the icon' \
+				"$ip%v%" 'cpu %v%' ;;
+		ram)
+			askfmt ram_format ram '  ram format' \
+				'  %v is the percent in use, %u what it is, %t the total, %i the icon' \
+				"$ip%v%" "$ip%u" 'ram %v%' '%u/%t' ;;
+		netdown)
+			askfmt netdown_format netdown '  download format' \
+				'  %v is the rate, %i the icon' \
+				"$ip%v" 'down %v' '%v/s' ;;
+		netup)
+			askfmt netup_format netup '  upload format' \
+				'  %v is the rate, %i the icon' \
+				"$ip%v" 'up %v' '%v/s' ;;
+		esac
+	done
+}
+
+timing() {
+	title 'Timing'
+	if [ "$mode" = advanced ]; then
+		getval interval
+		asknum 'seconds between updates' "$gv"; setval interval "$ans"
+	fi
+	case " $sel " in
+	*' battery '*)
+		note 'a battery moves slowly and reading it is not free, so it has an'
+		note 'interval of its own'
+		getval battery_interval
+		asknum 'seconds between battery reads' "$gv"
+		setval battery_interval "$ans" ;;
+	esac
+}
+
+layout() {
+	title 'Layout'
+	note 'the spaces you type are kept: they are what holds the status text'
+	note 'apart from the systray and the edge of the bar'
+	getval separator; ask 'between two modules' "$gv"; setval separator "$ans"
+	getval prefix; ask 'before the first one' "$gv"; setval prefix "$ans"
+	getval suffix; ask 'after the last one' "$gv"; setval suffix "$ans"
+}
+
+network() {
+	case " $sel " in *' netdown '*|*' netup '*) ;; *) return 0 ;; esac
+	title 'Network'
+	getval net_interface
+	ask 'interfaces to count, space separated (all but loopback)' "${gv:-all}"
+	case $ans in all) ans= ;; esac
+	setval net_interface "$ans"
+}
+
+glyphs() {
+	[ "$use_icons" = 1 ] || return 0
+	[ -n "$sel" ] || return 0
+	title 'Glyphs'
+	note 'paste another character to change one'
+	for gl_m in $sel; do
+		icon_for "$gl_m"
+		case $gl_m in
+		battery) ask '  battery, from empty to full' "$ic" ;;
+		*) ask "  $gl_m" "$ic" ;;
+		esac
+		setval "icon_$gl_m" "$ans"
+	done
+}
+
+final() { # setting -> the value that was collected, or the current default
+	# what decides is whether it was asked, not whether it has a value
+	if fn=$(awk -F'\t' -v k="$1" '$1 == k { v = $2; f = 1 }
+		END { if (!f) exit 1; print v }' "$vals"); then
+		printf '%s' "$fn"
+	else
+		# a shown module gets its glyph, the others keep the old one
+		case $1 in
+		icon_*)
+			if [ "$use_icons" = 1 ]; then
+				case " $sel " in
+				*" ${1#icon_} "*)
+					icon_for "${1#icon_}"; printf '%s' "$ic"; return 0 ;;
+				esac
+			fi ;;
+		esac
+		getval "$1"; printf '%s' "$gv"
+	fi
+}
+
+generate() { # the config file, every value quoted so spaces survive
+	printf '# Status text of dwl'\''s bar, read by dwl-status.sh.\n'
+	printf '# Written by ./status_gen on %s.\n' "$(date '+%Y-%m-%d %H:%M')"
+	printf '# Quotes keep the spaces. In a format %%v is the value and %%i the\n'
+	printf '# icon; ram has %%u and %%t too, date and time are strftime formats.\n\n'
+	printf 'modules = "%s"\n\n' "$(final modules)"
+	printf 'interval = "%s"\n' "$(final interval)"
+	printf 'battery_interval = "%s"\n\n' "$(final battery_interval)"
+	printf 'prefix = "%s"\n' "$(final prefix)"
+	printf 'separator = "%s"\n' "$(final separator)"
+	printf 'suffix = "%s"\n\n' "$(final suffix)"
+	for gn_m in date time battery cpu ram netdown netup; do
+		printf '%s_format = "%s"\n' "$gn_m" "$(final "${gn_m}_format")"
+	done
+	printf '\nnet_interface = "%s"\n\n' "$(final net_interface)"
+	for gn_m in date time battery cpu ram netdown netup; do
+		printf 'icon_%s = "%s"\n' "$gn_m" "$(final "icon_$gn_m")"
+	done
+}
+
+preview() { # one line, drawn by dwl-status.sh itself from the new file
+	pv=$srcdir/scripts/dwl-status.sh
+	[ -x "$pv" ] || pv=$(command -v dwl-status.sh 2>/dev/null)
+	[ -n "$pv" ] && [ -x "$pv" ] || { note 'dwl-status.sh not found, no preview'; return; }
+	note 'one line, as the bar would draw it:'
+	DWL_STATUS_CONF=$1 "$pv" --once
+}
+
+main() {
+	srcdir=$(CDPATH= cd -- "$(dirname -- "$0")" && pwd)
+	out=${DWL_STATUS_CONF:-${XDG_CONFIG_HOME:-$HOME/.config}/dwl/status.conf}
+	def= # set once an existing file becomes the template
+	mode=normal
+	edit=
+
+	options "$@"
+	workspace
+
+	all_modules='date time battery cpu ram netdown netup'
+	use_icons=0
+	ip= # '%i ' once icons are on
+	sel= # the modules that were picked, in order
+
+	interface
+
+	printf '%sdwl status bar generator%s\n' "$B" "$R"
+
+	keep=
+	if [ -f "$out" ] && [ -z "$edit" ]; then
+		title 'A status.conf is already there'
+		menu 'what should happen to it' 4 'cancel' 'keep a backup, then generate' \
+			'overwrite it' 'edit it: its own settings become the defaults'
+		case $choice in
+		1) note 'nothing written'; exit 0 ;;
+		2) keep=$out.$(date +%Y%m%d-%H%M%S).bak ;;
+		4) def=$out keep=$out.$(date +%Y%m%d-%H%M%S).bak ;;
+		esac
+	elif [ -n "$edit" ]; then
+		[ -f "$out" ] || die "$out not found"
+		def=$out keep=$out.$(date +%Y%m%d-%H%M%S).bak
+	fi
+	if [ -n "$def" ]; then
+		note "defaults from ${def##*/}, writing ${out##*/}"
+	else
+		note "defaults from dwl-status.sh, writing $out"
+	fi
+
+	title 'Mode'
+	menu 'how much do you want to configure' 1 \
+		'normal: modules and their format' \
+		'advanced: also the glyphs, the spacing and the update interval'
+	[ "$choice" = 2 ] && mode=advanced
+
+	icons
+	modules
+	formats
+	network
+	[ "$mode" = advanced ] && glyphs
+	timing
+	[ "$mode" = advanced ] && layout
+
+	generate >"$tmp/status.conf"
+	grep -q '^modules' "$tmp/status.conf" || die 'generated file looks wrong, nothing written'
+	if [ -n "$keep" ]; then
+		cp "$out" "$keep" || die "cannot back up $out"
+	fi
+	mkdir -p "$(dirname "$out")" || die "cannot create $(dirname "$out")"
+	cp "$tmp/status.conf" "$out" || die "cannot write $out"
+
+	title 'Done'
+	[ -n "$keep" ] && note "previous config kept as ${keep##*/}"
+	printf 'wrote %s\n' "$out"
+	preview "$out"
+	note 'it is read when dwl-status.sh starts, so log out and back in to apply it'
+}
+
+main "$@"
