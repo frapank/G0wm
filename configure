@@ -2,36 +2,8 @@
 # Generates config.mk for the Makefile. See ./configure --help.
 set -u
 
-cmdline=
-[ $# -gt 0 ] && cmdline=$(printf ' %q' "$@")
-srcdir=$(cd -- "$(dirname -- "$0")" && pwd)
-
-_version=0.8-dev
-cc=cc
-linker=
-pkg_config=pkg-config
-prefix=/usr/local
-bindir='$(HOME)/.local/bin'
-mandir='$(PREFIX)/share/man'
-datadir='$(PREFIX)/share'
-wlroots=0.20
-wlroots_prefix=
-xwayland=yes
-integrated_background=yes
-notify=yes
-runner=yes
-opt_cflags='-O2'
-extra_cflags=
-extra_ldflags=
-extra_libs=
-sanitize=no
-lto=no
-native=no
-checks=yes
-
 die() { printf 'configure: %s\n' "$*" >&2; exit 1; }
 say() { [ "$quiet" = yes ] || printf '%s\n' "$*"; }
-quiet=no
 
 usage() {
 	cat <<EOF
@@ -86,91 +58,123 @@ VAR=VALUE accepts CC, PKG_CONFIG, PREFIX, CFLAGS, LDFLAGS and LIBS.
 EOF
 }
 
-while [ $# -gt 0 ]; do
-	opt=${1%%=*}
-	case $1 in
-	*=*) val=${1#*=} ;;
-	*)
+defaults() {
+	_version=0.8-dev
+	cc=cc
+	linker=
+	pkg_config=pkg-config
+	prefix=/usr/local
+	bindir='$(HOME)/.local/bin'
+	mandir='$(PREFIX)/share/man'
+	datadir='$(PREFIX)/share'
+	wlroots=0.20
+	wlroots_prefix=
+	xwayland=yes
+	integrated_background=yes
+	notify=yes
+	runner=yes
+	opt_cflags='-O2'
+	extra_cflags=
+	extra_ldflags=
+	extra_libs=
+	sanitize=no
+	lto=no
+	native=no
+	checks=yes
+	quiet=no
+	failed=no
+}
+
+options() { # "$@" -> every setting above, overridden from the command line
+	while [ $# -gt 0 ]; do
+		opt=${1%%=*}
+		case $1 in
+		*=*) val=${1#*=} ;;
+		*)
+			case $opt in
+			--prefix|--bindir|--mandir|--datadir|--compiler|--cc|--linker|--ld| \
+			--pkg-config|--cflags|--ldflags|--libs|--wlroots|--wlroots-prefix)
+				shift; [ $# -gt 0 ] || die "$opt requires an argument"; val=$1 ;;
+			*) val= ;;
+			esac ;;
+		esac
+
 		case $opt in
-		--prefix|--bindir|--mandir|--datadir|--compiler|--cc|--linker|--ld| \
-		--pkg-config|--cflags|--ldflags|--libs|--wlroots|--wlroots-prefix)
-			shift; [ $# -gt 0 ] || die "$opt requires an argument"; val=$1 ;;
-		*) val= ;;
-		esac ;;
-	esac
-
-	case $opt in
-	--prefix) prefix=$val ;;
-	--bindir) bindir=$val ;;
-	--mandir) mandir=$val ;;
-	--datadir) datadir=$val ;;
-	--compiler|--cc|CC) cc=$val ;;
-	--linker|--ld) linker=$val ;;
-	--pkg-config|PKG_CONFIG) pkg_config=$val ;;
-	--cflags|CFLAGS) extra_cflags="$extra_cflags $val" ;;
-	--ldflags|LDFLAGS) extra_ldflags="$extra_ldflags $val" ;;
-	--libs|LIBS) extra_libs="$extra_libs $val" ;;
-	PREFIX) prefix=$val ;;
-	--wlroots) wlroots=$val ;;
-	--wlroots-prefix) wlroots_prefix=$val ;;
-	--enable-xwayland) xwayland=yes ;;
-	--disable-xwayland) xwayland=no ;;
-	--no-integrated-background) integrated_background=no ;;
-	--no-notify) notify=no ;;
-	--no-runner) runner=no ;;
-	--debug) opt_cflags='-O0 -g3 -fno-omit-frame-pointer' ;;
-	--release) opt_cflags='-O2' ;;
-	--enable-sanitizers) sanitize=yes ;;
-	--enable-lto) lto=yes ;;
-	--native) native=yes ;;
-	--no-checks) checks=no ;;
-	-q|--quiet) quiet=yes ;;
-	-h|--help) usage; exit 0 ;;
-	-V|--version) printf '%s\n' "$_version"; exit 0 ;;
-	*) die "unknown option '$opt', try --help" ;;
-	esac
-	shift
-done
-
-wlr_pkg=wlroots-$wlroots
-pkgs="wayland-server xkbcommon libinput pixman-1 fcft dbus-1"
-[ "$xwayland" = yes ] && pkgs="$pkgs xcb xcb-icccm"
-[ "$integrated_background" = yes ] && pkgs="$pkgs gdk-pixbuf-2.0"
-
-[ "$sanitize" = yes ] && {
-	extra_cflags="$extra_cflags -fsanitize=address,undefined"
-	extra_ldflags="$extra_ldflags -fsanitize=address,undefined"
+		--prefix) prefix=$val ;;
+		--bindir) bindir=$val ;;
+		--mandir) mandir=$val ;;
+		--datadir) datadir=$val ;;
+		--compiler|--cc|CC) cc=$val ;;
+		--linker|--ld) linker=$val ;;
+		--pkg-config|PKG_CONFIG) pkg_config=$val ;;
+		--cflags|CFLAGS) extra_cflags="$extra_cflags $val" ;;
+		--ldflags|LDFLAGS) extra_ldflags="$extra_ldflags $val" ;;
+		--libs|LIBS) extra_libs="$extra_libs $val" ;;
+		PREFIX) prefix=$val ;;
+		--wlroots) wlroots=$val ;;
+		--wlroots-prefix) wlroots_prefix=$val ;;
+		--enable-xwayland) xwayland=yes ;;
+		--disable-xwayland) xwayland=no ;;
+		--no-integrated-background) integrated_background=no ;;
+		--no-notify) notify=no ;;
+		--no-runner) runner=no ;;
+		--debug) opt_cflags='-O0 -g3 -fno-omit-frame-pointer' ;;
+		--release) opt_cflags='-O2' ;;
+		--enable-sanitizers) sanitize=yes ;;
+		--enable-lto) lto=yes ;;
+		--native) native=yes ;;
+		--no-checks) checks=no ;;
+		-q|--quiet) quiet=yes ;;
+		-h|--help) usage; exit 0 ;;
+		-V|--version) printf '%s\n' "$_version"; exit 0 ;;
+		*) die "unknown option '$opt', try --help" ;;
+		esac
+		shift
+	done
 }
-[ "$native" = yes ] && lto=yes
-[ "$lto" = yes ] && {
-	extra_cflags="$extra_cflags -flto"
-	extra_ldflags="$extra_ldflags -flto"
-}
-[ "$native" = yes ] && {
-	opt_cflags='-O3'
-	extra_cflags="$extra_cflags -march=native -mtune=native \
+
+configure_flags() { # package list and compiler/linker flags from the options
+	wlr_pkg=wlroots-$wlroots
+	pkgs="wayland-server xkbcommon libinput pixman-1 fcft dbus-1"
+	[ "$xwayland" = yes ] && pkgs="$pkgs xcb xcb-icccm"
+	[ "$integrated_background" = yes ] && pkgs="$pkgs gdk-pixbuf-2.0"
+
+	[ "$sanitize" = yes ] && {
+		extra_cflags="$extra_cflags -fsanitize=address,undefined"
+		extra_ldflags="$extra_ldflags -fsanitize=address,undefined"
+	}
+	[ "$native" = yes ] && lto=yes
+	[ "$lto" = yes ] && {
+		extra_cflags="$extra_cflags -flto"
+		extra_ldflags="$extra_ldflags -flto"
+	}
+	[ "$native" = yes ] && {
+		opt_cflags='-O3'
+		extra_cflags="$extra_cflags -march=native -mtune=native \
 -D_FORTIFY_SOURCE=2 -fstack-protector-strong -fstack-clash-protection -fPIE"
-	extra_ldflags="$extra_ldflags -pie -Wl,-z,relro -Wl,-z,now -Wl,-z,noexecstack"
-	case $(uname -m) in
-	x86_64 | i?86) extra_cflags="$extra_cflags -fcf-protection=full" ;;
-	aarch64 | arm*) extra_cflags="$extra_cflags -mbranch-protection=standard" ;;
-	esac
+		extra_ldflags="$extra_ldflags -pie -Wl,-z,relro -Wl,-z,now -Wl,-z,noexecstack"
+		case $(uname -m) in
+		x86_64 | i?86) extra_cflags="$extra_cflags -fcf-protection=full" ;;
+		aarch64 | arm*) extra_cflags="$extra_cflags -mbranch-protection=standard" ;;
+		esac
+	}
+	[ -n "$linker" ] && extra_ldflags="$extra_ldflags -fuse-ld=$linker"
 }
-[ -n "$linker" ] && extra_ldflags="$extra_ldflags -fuse-ld=$linker"
 
 # wlroots outside the system paths: resolve it here so make does not need the
 # search path, and pin it with an rpath to keep the loader off the system copy.
-pkg_config_env=
-if [ -n "$wlroots_prefix" ]; then
-	for d in "$wlroots_prefix/lib/pkgconfig" "$wlroots_prefix/lib64/pkgconfig" \
-		"$wlroots_prefix/share/pkgconfig"; do
-		[ -d "$d" ] && pkg_config_env="$pkg_config_env${pkg_config_env:+:}$d"
-	done
-	[ -n "$pkg_config_env" ] || die "no pkgconfig directory under $wlroots_prefix"
-	export PKG_CONFIG_PATH="$pkg_config_env${PKG_CONFIG_PATH:+:$PKG_CONFIG_PATH}"
-fi
+resolve_wlroots_prefix() {
+	pkg_config_env=
+	if [ -n "$wlroots_prefix" ]; then
+		for d in "$wlroots_prefix/lib/pkgconfig" "$wlroots_prefix/lib64/pkgconfig" \
+			"$wlroots_prefix/share/pkgconfig"; do
+			[ -d "$d" ] && pkg_config_env="$pkg_config_env${pkg_config_env:+:}$d"
+		done
+		[ -n "$pkg_config_env" ] || die "no pkgconfig directory under $wlroots_prefix"
+		export PKG_CONFIG_PATH="$pkg_config_env${PKG_CONFIG_PATH:+:$PKG_CONFIG_PATH}"
+	fi
+}
 
-failed=no
 probe() { # description, then the command that must succeed
 	desc=$1; shift
 	if "$@" >/dev/null 2>&1; then
@@ -181,34 +185,39 @@ probe() { # description, then the command that must succeed
 	fi
 }
 
-if [ "$checks" = yes ]; then
-	tmp=$(mktemp -d) || die 'cannot create a temporary directory'
-	trap 'rm -rf "$tmp"' EXIT
-	printf 'int main(void) { return 0; }\n' >"$tmp/t.c"
+run_checks() {
+	if [ "$checks" = yes ]; then
+		tmp=$(mktemp -d) || die 'cannot create a temporary directory'
+		trap 'rm -rf "$tmp"' EXIT
+		printf 'int main(void) { return 0; }\n' >"$tmp/t.c"
 
-	probe "for $cc" "$cc" -o "$tmp/t" "$tmp/t.c"
-	[ -n "$linker" ] && probe "for the $linker linker" \
-		"$cc" -fuse-ld="$linker" -o "$tmp/t" "$tmp/t.c"
-	probe "for $pkg_config" "$pkg_config" --version
-	for p in $pkgs $wlr_pkg wayland-scanner wayland-protocols; do
-		probe "for $p" "$pkg_config" --exists "$p"
-	done
-	[ "$failed" = no ] || die 'missing dependencies, see above'
-fi
+		probe "for $cc" "$cc" -o "$tmp/t" "$tmp/t.c"
+		[ -n "$linker" ] && probe "for the $linker linker" \
+			"$cc" -fuse-ld="$linker" -o "$tmp/t" "$tmp/t.c"
+		probe "for $pkg_config" "$pkg_config" --version
+		for p in $pkgs $wlr_pkg wayland-scanner wayland-protocols; do
+			probe "for $p" "$pkg_config" --exists "$p"
+		done
+		[ "$failed" = no ] || die 'missing dependencies, see above'
+	fi
+}
 
-if [ -n "$wlroots_prefix" ]; then
-	wlr_incs=$($pkg_config --cflags "$wlr_pkg") || die "cannot query $wlr_pkg"
-	wlr_libs=$($pkg_config --libs "$wlr_pkg") || die "cannot query $wlr_pkg"
-	wlr_libdir=$($pkg_config --variable=libdir "$wlr_pkg")
-	wlr_libs="-Wl,-rpath,${wlr_libdir:-$wlroots_prefix/lib} $wlr_libs"
-else
-	wlr_incs="\`\$(PKG_CONFIG) --cflags $wlr_pkg\`"
-	wlr_libs="\`\$(PKG_CONFIG) --libs $wlr_pkg\`"
-fi
+resolve_wlroots_flags() {
+	if [ -n "$wlroots_prefix" ]; then
+		wlr_incs=$($pkg_config --cflags "$wlr_pkg") || die "cannot query $wlr_pkg"
+		wlr_libs=$($pkg_config --libs "$wlr_pkg") || die "cannot query $wlr_pkg"
+		wlr_libdir=$($pkg_config --variable=libdir "$wlr_pkg")
+		wlr_libs="-Wl,-rpath,${wlr_libdir:-$wlroots_prefix/lib} $wlr_libs"
+	else
+		wlr_incs="\`\$(PKG_CONFIG) --cflags $wlr_pkg\`"
+		wlr_libs="\`\$(PKG_CONFIG) --libs $wlr_pkg\`"
+	fi
+}
 
 trim() { printf '%s' "${1#"${1%%[![:space:]]*}"}"; }
 
-cat >"$srcdir/config.mk" <<EOF
+write_config() {
+	cat >"$srcdir/config.mk" <<EOF
 # Generated by ./configure$cmdline
 # Edit configure or re-run it; this file is overwritten.
 
@@ -242,5 +251,23 @@ LDFLAGS = $(trim "$extra_ldflags")
 LIBS = $(trim "$extra_libs")
 EOF
 
-say "wrote config.mk: $cc, $wlr_pkg, xwayland $xwayland, integrated background $integrated_background, notify $notify, runner $runner, native $native, install to $bindir"
-say "run 'make' to build"
+	say "wrote config.mk: $cc, $wlr_pkg, xwayland $xwayland, integrated background $integrated_background, notify $notify, runner $runner, native $native, install to $bindir"
+	say "run 'make' to build"
+}
+
+main() {
+	cmdline=
+	[ $# -gt 0 ] && cmdline=$(printf ' %q' "$@")
+	srcdir=$(cd -- "$(dirname -- "$0")" && pwd)
+
+	defaults
+	options "$@"
+
+	configure_flags
+	resolve_wlroots_prefix
+	run_checks
+	resolve_wlroots_flags
+	write_config
+}
+
+main "$@"
