@@ -5,6 +5,10 @@
 #ifdef INTEGRATED_BACKGROUND
 #include <gdk-pixbuf/gdk-pixbuf.h>
 #endif
+#ifdef RUNNER
+#include <dirent.h>
+#include <sys/stat.h>
+#endif
 #include <getopt.h>
 #include <libdrm/drm_fourcc.h>
 #include <libinput.h>
@@ -119,7 +123,9 @@ enum {
     SchemeUrg,
     SchemeTitle,
     SchemeTitleSel,
-    SchemeNotify
+    SchemeNotify,
+    SchemeRunner,
+    SchemeRunnerSuggest
 }; /* color schemes */
 enum { CurNormal, CurPressed, CurMove, CurResize }; /* cursor */
 enum { XDGShell, LayerShell, X11 };                 /* client types */
@@ -464,6 +470,14 @@ static void resize(Client* c, struct wlr_box geo, int interact);
 static void resizeheight(const Arg* arg);
 static void resizewidth(const Arg* arg);
 static void run(char* startup_cmd);
+#ifdef RUNNER
+static void runnerbuildcache(void);
+static void runnerfreecache(void);
+static void runnerkey(xkb_keysym_t sym, uint32_t mods, uint32_t codepoint);
+static int runnerpathstale(void);
+static const char* runnersuggest(void);
+static void runnertoggle(const Arg* arg);
+#endif
 static void scenebuffersetopacity(struct wlr_scene_buffer* buffer,
                                   int sx,
                                   int sy,
@@ -605,6 +619,17 @@ static Watcher watcher = { .running = 0 };
 #ifdef NOTIFICATIONS
 static unsigned int notifyshownid;
 static size_t notifyoff;
+#endif
+#ifdef RUNNER
+static int runner_active;
+static char runner_buf[256];
+static int runner_len;
+static char** runner_cmds;
+static int runner_ncmds;
+static struct timespec runner_stamp; /* newest PATH mtime the cache was built
+                                        from */
+static uint32_t runner_repeatcp; /* codepoint the armed key repeat types */
+static int runner_repeating;     /* the armed repeat belongs to the prompt */
 #endif
 
 static const struct wlr_buffer_impl buffer_impl = {
@@ -1978,41 +2003,77 @@ void drawbar(Monitor* m)
     m->b.titlew = w > m->b.height ? w : 0;
 
     if (m->b.titlew) {
-#ifdef NOTIFICATIONS
-        /* A notification takes the box over for as long as it lasts, so the
-         * window title (if barwintitle is on) steps aside and comes back
-         * once the notification expires or is dismissed. */
-        const char* text =
-            shownotifications && m == selmon ? notify_gettext() : NULL;
-        if (text) {
-            notifysync();
-            drwl_setscheme(m->drw, colors[SchemeNotify]);
-            drwl_text(m->drw,
-                      x,
-                      0,
-                      w,
-                      m->b.height,
-                      m->lrpad / 2,
-                      text + (notifyoff < strlen(text) ? notifyoff : 0),
-                      0);
+#ifdef RUNNER
+        /* The prompt takes the box over the same way a notification does,
+         * and outranks one if both would want it at once. */
+        if (runner_active && m == selmon) {
+            const char* sug = runnersuggest();
+            /* the caret scales with the font, which is loaded at the output's
+             * dpi, so it keeps its proportions on every monitor */
+            int tx, cw = m->drw->font->height / 10 + 1;
+
+            drwl_setscheme(m->drw, colors[SchemeRunner]);
+            drwl_text(
+                m->drw, x, 0, w, m->b.height, m->lrpad / 2, runner_buf, 0);
+            tx = x + m->lrpad / 2 + drwl_font_getwidth(m->drw, runner_buf);
+
+            /* Drawn before the suggestion so it keeps the prompt's own color,
+             * and unconditionally: with nothing typed yet it is the only thing
+             * telling the box apart from an empty title area. */
+            if (tx + cw <= x + w)
+                drwl_rect(m->drw, tx, boxs, cw, m->b.height - 2 * boxs, 1, 0);
+            tx += cw;
+
+            if (sug && (size_t)runner_len < strlen(sug) && tx < x + w) {
+                drwl_setscheme(m->drw, colors[SchemeRunnerSuggest]);
+                drwl_text(m->drw,
+                          tx,
+                          0,
+                          x + w - tx,
+                          m->b.height,
+                          0,
+                          sug + runner_len,
+                          0);
+            }
         } else
 #endif
-        if (barwintitle && c) {
-            drwl_setscheme(m->drw,
-                           colors[m == selmon ? SchemeSel : SchemeNorm]);
-            drwl_text(m->drw,
-                      x,
-                      0,
-                      w,
-                      m->b.height,
-                      m->lrpad / 2,
-                      client_get_title(c),
-                      0);
-            if (c && c->isfloating)
-                drwl_rect(m->drw, x + boxs, boxs, boxw, boxw, 0, 0);
-        } else {
-            drwl_setscheme(m->drw, colors[SchemeNorm]);
-            drwl_rect(m->drw, x, 0, w, m->b.height, 1, 1);
+        {
+#ifdef NOTIFICATIONS
+            /* A notification takes the box over for as long as it lasts, so the
+             * window title (if barwintitle is on) steps aside and comes back
+             * once the notification expires or is dismissed. */
+            const char* text =
+                shownotifications && m == selmon ? notify_gettext() : NULL;
+            if (text) {
+                notifysync();
+                drwl_setscheme(m->drw, colors[SchemeNotify]);
+                drwl_text(m->drw,
+                          x,
+                          0,
+                          w,
+                          m->b.height,
+                          m->lrpad / 2,
+                          text + (notifyoff < strlen(text) ? notifyoff : 0),
+                          0);
+            } else
+#endif
+                if (barwintitle && c) {
+                drwl_setscheme(m->drw,
+                               colors[m == selmon ? SchemeSel : SchemeNorm]);
+                drwl_text(m->drw,
+                          x,
+                          0,
+                          w,
+                          m->b.height,
+                          m->lrpad / 2,
+                          client_get_title(c),
+                          0);
+                if (c && c->isfloating)
+                    drwl_rect(m->drw, x + boxs, boxs, boxw, boxw, 0, 0);
+            } else {
+                drwl_setscheme(m->drw, colors[SchemeNorm]);
+                drwl_rect(m->drw, x, 0, w, m->b.height, 1, 1);
+            }
         }
     }
 
@@ -2451,6 +2512,195 @@ void inputdevice(struct wl_listener* listener, void* data)
     wlr_seat_set_capabilities(seat, caps);
 }
 
+#ifdef RUNNER
+static int runnercmp(const void* a, const void* b)
+{
+    return strcmp(*(char* const*)a, *(char* const*)b);
+}
+
+static void runnerbuildcache(void)
+{
+    /* Same idea as dmenu_path: list every executable name under $PATH once,
+     * so each keystroke only has to filter an already-built array. */
+    const char* path = getenv("PATH");
+    char *p, *dir, *saveptr;
+    char full[1024];
+    struct stat st;
+    DIR* d;
+    struct dirent* e;
+    int i, w;
+    size_t cap = 0;
+
+    if (!path)
+        return;
+    if (!(p = strdup(path)))
+        die("strdup:");
+    for (dir = strtok_r(p, ":", &saveptr); dir;
+         dir = strtok_r(NULL, ":", &saveptr)) {
+        if (!(d = opendir(dir)))
+            continue;
+        while ((e = readdir(d))) {
+            if (e->d_name[0] == '.')
+                continue;
+            if (snprintf(full, sizeof full, "%s/%s", dir, e->d_name) >=
+                (int)sizeof full)
+                continue;
+            /* Regular files only: +x on a directory just means it can be
+             * traversed, so access() alone would list the subdirectories a
+             * PATH entry happens to carry as if they were commands. */
+            if (stat(full, &st) != 0 || !S_ISREG(st.st_mode) ||
+                access(full, X_OK) != 0)
+                continue;
+            if ((size_t)runner_ncmds == cap) {
+                cap = cap ? cap * 2 : 256;
+                if (!(runner_cmds = realloc(runner_cmds, cap * sizeof(char*))))
+                    die("realloc:");
+            }
+            if (!(runner_cmds[runner_ncmds++] = strdup(e->d_name)))
+                die("strdup:");
+        }
+        closedir(d);
+    }
+    free(p);
+
+    qsort(runner_cmds, runner_ncmds, sizeof(char*), runnercmp);
+    for (i = 0, w = 0; i < runner_ncmds; i++) {
+        if (w && !strcmp(runner_cmds[w - 1], runner_cmds[i]))
+            free(runner_cmds[i]);
+        else
+            runner_cmds[w++] = runner_cmds[i];
+    }
+    runner_ncmds = w;
+}
+
+static void runnerfreecache(void)
+{
+    while (runner_ncmds)
+        free(runner_cmds[--runner_ncmds]);
+    free(runner_cmds);
+    runner_cmds = NULL;
+}
+
+static int runnerpathstale(void)
+{
+    /* A directory's mtime moves whenever an entry is added or removed, so
+     * stat()ing the PATH entries - a syscall each, no readdir - answers
+     * whether a rescan would turn anything up. That keeps the cost of
+     * noticing a newly installed program off every prompt but the one that
+     * follows the install. */
+    const char* path = getenv("PATH");
+    char *p, *dir, *saveptr;
+    struct stat st;
+    struct timespec newest = { 0, 0 };
+
+    if (!path)
+        return 0;
+    if (!(p = strdup(path)))
+        die("strdup:");
+    for (dir = strtok_r(p, ":", &saveptr); dir;
+         dir = strtok_r(NULL, ":", &saveptr))
+        /* to the nanosecond: at second granularity an install and the removal
+         * that follows it within the same second cancel out */
+        if (stat(dir, &st) == 0 && (st.st_mtim.tv_sec > newest.tv_sec ||
+                                    (st.st_mtim.tv_sec == newest.tv_sec &&
+                                     st.st_mtim.tv_nsec > newest.tv_nsec)))
+            newest = st.st_mtim;
+    free(p);
+
+    if (newest.tv_sec == runner_stamp.tv_sec &&
+        newest.tv_nsec == runner_stamp.tv_nsec)
+        return 0;
+    runner_stamp = newest;
+    return 1;
+}
+
+static const char* runnersuggest(void)
+{
+    int i;
+
+    if (!runner_len)
+        return NULL;
+    for (i = 0; i < runner_ncmds; i++)
+        if (!strncmp(runner_cmds[i], runner_buf, runner_len))
+            return runner_cmds[i];
+    return NULL;
+}
+
+static void runnertoggle(const Arg* arg)
+{
+    if (!selmon)
+        return;
+    if (!runner_active) {
+        if (runnerpathstale() || !runner_cmds) {
+            runnerfreecache();
+            runnerbuildcache();
+        }
+        runner_len = 0;
+        runner_buf[0] = '\0';
+        /* the repeat this very binding is arming must not reach the prompt */
+        runner_repeating = 0;
+    }
+    runner_active = !runner_active;
+    drawbar(selmon);
+}
+
+static void runnerkey(xkb_keysym_t sym, uint32_t mods, uint32_t codepoint)
+{
+    const char* sug;
+    const char* cmd;
+    char* argv[4];
+    Arg a;
+
+    /* Ctrl+C empties the prompt without closing it. Every other Ctrl
+     * combination falls through untouched: the codepoint one produces is a
+     * control character, which the text case below already rejects. */
+    if ((mods & WLR_MODIFIER_CTRL) && xkb_keysym_to_lower(sym) == XKB_KEY_c) {
+        runner_len = 0;
+        runner_buf[0] = '\0';
+    } else
+        switch (sym) {
+            case XKB_KEY_Escape:
+                runner_active = 0;
+                break;
+            case XKB_KEY_Return:
+            case XKB_KEY_KP_Enter:
+                sug = runnersuggest();
+                cmd = sug ? sug : runner_buf;
+                if (*cmd) {
+                    argv[0] = "/bin/sh";
+                    argv[1] = "-c";
+                    argv[2] = (char*)cmd;
+                    argv[3] = NULL;
+                    a.v = argv;
+                    spawn(&a);
+                }
+                runner_active = 0;
+                break;
+            case XKB_KEY_BackSpace:
+                if (runner_len)
+                    runner_buf[--runner_len] = '\0';
+                break;
+            case XKB_KEY_Tab:
+                sug = runnersuggest();
+                if (sug && strlen(sug) < sizeof(runner_buf)) {
+                    runner_len = (int)strlen(sug);
+                    memcpy(runner_buf, sug, runner_len + 1);
+                }
+                break;
+            default:
+                if (codepoint >= 0x20 && codepoint < 0x7f &&
+                    runner_len < (int)sizeof(runner_buf) - 1) {
+                    runner_buf[runner_len++] = (char)codepoint;
+                    runner_buf[runner_len] = '\0';
+                }
+                break;
+        }
+    /* the last monitor can go away while the prompt is up */
+    if (selmon)
+        drawbar(selmon);
+}
+#endif /* RUNNER */
+
 int keybinding(uint32_t mods, xkb_keysym_t sym)
 {
     /*
@@ -2493,6 +2743,46 @@ void keypress(struct wl_listener* listener, void* data)
     if (hide_cursor_when_typing && !cursor_hidden &&
         event->state == WL_KEYBOARD_KEY_STATE_PRESSED)
         hidecursor(NULL);
+
+#ifdef RUNNER
+    /* While the prompt is open, every key belongs to it: swallow press and
+     * release instead of matching keybindings or forwarding to the client.
+     * Returning early skips the repeat bookkeeping below, so disarm here what
+     * that would have disarmed: the keystroke that opened the prompt counted
+     * as handled and left a repeat armed, which would replay the binding and
+     * toggle the prompt straight back off. */
+    if (runner_active) {
+        if (!locked && nsyms > 0 &&
+            event->state == WL_KEYBOARD_KEY_STATE_PRESSED) {
+            /* only the primary keysym: the codepoint belongs to the key, not
+             * to each of the syms it can produce, so looping would type it
+             * once per sym */
+            uint32_t codepoint = xkb_state_key_get_utf32(
+                group->wlr_group->keyboard.xkb_state, keycode);
+            runnerkey(syms[0], mods, codepoint);
+            /* Arm the repeat for the prompt the way a handled binding does,
+             * so a held key (backspace above all) repeats into it. Return and
+             * Escape close the prompt from inside runnerkey(), and there is
+             * nothing left to repeat into once they have. */
+            if (runner_active &&
+                group->wlr_group->keyboard.repeat_info.delay > 0) {
+                group->mods = mods;
+                group->keysyms = syms;
+                group->nsyms = nsyms;
+                runner_repeatcp = codepoint;
+                runner_repeating = 1;
+                wl_event_source_timer_update(
+                    group->key_repeat_source,
+                    group->wlr_group->keyboard.repeat_info.delay);
+                return;
+            }
+        }
+        group->nsyms = 0;
+        runner_repeating = 0;
+        wl_event_source_timer_update(group->key_repeat_source, 0);
+        return;
+    }
+#endif
 
     /* On _press_ if there is no active screen locker,
      * attempt to process a compositor keybinding. */
@@ -2540,6 +2830,24 @@ int keyrepeat(void* data)
     int i;
     if (!group->nsyms || group->wlr_group->keyboard.repeat_info.rate <= 0)
         return 0;
+#ifdef RUNNER
+    if (runner_active) {
+        /* Holding the binding down past the repeat delay would replay it
+         * while the prompt it just opened is up, closing it again: only a
+         * repeat the prompt armed itself may run. Rearming after the fact
+         * keeps a key that closed the prompt from repeating into nothing. */
+        if (!runner_repeating)
+            return 0;
+        runnerkey(group->keysyms[0], group->mods, runner_repeatcp);
+        if (runner_active)
+            wl_event_source_timer_update(
+                group->key_repeat_source,
+                1000 / group->wlr_group->keyboard.repeat_info.rate);
+        else
+            group->nsyms = 0;
+        return 0;
+    }
+#endif
 
     wl_event_source_timer_update(
         group->key_repeat_source,
