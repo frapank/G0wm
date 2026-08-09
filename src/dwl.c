@@ -1113,10 +1113,14 @@ void checkidleinhibitor(struct wlr_surface* exclude)
         struct wlr_surface* surface =
             wlr_surface_get_root_surface(inhibitor->surface);
         struct wlr_scene_tree* tree = surface->data;
+        /* An unmapped surface owns no scene tree (unmapnotify() clears
+         * surface->data), so it cannot be visible and must not keep the
+         * session awake. */
         if (exclude != surface &&
             (bypass_surface_visibility ||
-             (!tree ||
-              wlr_scene_node_coords(&tree->node, &unused_lx, &unused_ly)))) {
+             (surface->mapped &&
+              (!tree ||
+               wlr_scene_node_coords(&tree->node, &unused_lx, &unused_ly))))) {
             inhibited = 1;
             break;
         }
@@ -1381,6 +1385,12 @@ void commitpopup(struct wl_listener* listener, void* data)
     type = toplevel_from_wlr_surface(popup->base->surface, &c, &l);
     if (!popup->parent || type < 0)
         return;
+    /* The parent may have been unmapped in the meantime, dropping its scene
+     * tree; there is nothing to parent the popup to. */
+    if (!popup->parent->data) {
+        wlr_xdg_popup_destroy(popup);
+        return;
+    }
     popup->base->surface->data =
         wlr_scene_xdg_surface_create(popup->parent->data, popup->base);
     if ((l && !l->mon) || (c && !c->mon)) {
@@ -1811,6 +1821,10 @@ void destroylayersurfacenotify(struct wl_listener* listener, void* data)
     wl_list_remove(&l->destroy.link);
     wl_list_remove(&l->unmap.link);
     wl_list_remove(&l->surface_commit.link);
+    /* Same as in unmapnotify(): the wl_surface may outlive the layer surface,
+     * don't leave it pointing at the freed popup tree. */
+    if (l->layer_surface->surface)
+        l->layer_surface->surface->data = NULL;
     wlr_scene_node_destroy(&l->scene->node);
     wlr_scene_node_destroy(&l->popups->node);
     free(l);
@@ -4547,6 +4561,12 @@ void unmapnotify(struct wl_listener* listener, void* data)
         wl_list_remove(&c->flink);
     }
 
+    /* The wl_surface can outlive the mapping (e.g. a client holding an idle
+     * inhibitor on it), so drop the back-pointer to the scene tree we are
+     * about to free instead of leaving it dangling. mapnotify() sets it again
+     * on the next map. */
+    if (client_surface(c))
+        client_surface(c)->data = NULL;
     wlr_scene_node_destroy(&c->scene->node);
     c->title = NULL;
     bufpooldrop(c->titlepool, LENGTH(c->titlepool));
