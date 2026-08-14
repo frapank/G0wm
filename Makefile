@@ -14,7 +14,8 @@ GENDIR   = $(BUILDDIR)/protocols
 # flags for compiling
 DWLCPPFLAGS = -I. -I$(INCDIR) -I$(INCDIR)/systray -I$(EXTDIR) -I$(GENDIR) \
 	-DWLR_USE_UNSTABLE -D_POSIX_C_SOURCE=200809L \
-	-DVERSION=\"$(VERSION)\" $(XWAYLAND) $(BACKGROUND) $(NOTIFY) $(RUNNER)
+	-DVERSION=\"$(VERSION)\" $(XWAYLAND) $(BACKGROUND) $(NOTIFY) $(SYSTRAY) \
+	$(RUNNER)
 DWLDEVCFLAGS = -g -Wpedantic -Wall -Wextra -Wdeclaration-after-statement \
 	-Wno-unused-parameter -Wshadow -Wunused-macros -Werror=strict-prototypes \
 	-Werror=implicit -Werror=return-type -Werror=incompatible-pointer-types \
@@ -26,18 +27,19 @@ DWLCFLAGS = `$(PKG_CONFIG) --cflags $(PKGS)` $(WLR_INCS) $(DWLCPPFLAGS) $(DWLDEV
 LDLIBS    = `$(PKG_CONFIG) --libs $(PKGS)` $(WLR_LIBS) -lm $(LIBS)
 
 # Sources. The systray and its dbus glue come from the bar-systray patch.
-SRC = $(SRCDIR)/dwl.c $(SRCDIR)/util.c $(SRCDIR)/dbus.c \
-	$(SRCDIR)/systray/watcher.c $(SRCDIR)/systray/tray.c \
-	$(SRCDIR)/systray/item.c $(SRCDIR)/systray/icon.c \
-	$(SRCDIR)/systray/menu.c $(SRCDIR)/systray/helpers.c
-HDR = $(INCDIR)/client.h $(INCDIR)/util.h $(INCDIR)/dbus.h \
-	$(INCDIR)/systray/watcher.h $(INCDIR)/systray/tray.h \
-	$(INCDIR)/systray/item.h $(INCDIR)/systray/icon.h \
-	$(INCDIR)/systray/menu.h $(INCDIR)/systray/helpers.h \
-	$(EXTDIR)/drwl.h
+SRC = $(SRCDIR)/dwl.c $(SRCDIR)/util.c $(SRCDIR)/dbus.c
+HDR = $(INCDIR)/client.h $(INCDIR)/util.h $(INCDIR)/dbus.h $(EXTDIR)/drwl.h
 ifneq ($(NOTIFY),)
 SRC += $(SRCDIR)/notify.c
 HDR += $(INCDIR)/notify.h
+endif
+ifneq ($(SYSTRAY),)
+SRC += $(SRCDIR)/systray/watcher.c $(SRCDIR)/systray/tray.c \
+	$(SRCDIR)/systray/item.c $(SRCDIR)/systray/icon.c \
+	$(SRCDIR)/systray/menu.c $(SRCDIR)/systray/helpers.c
+HDR += $(INCDIR)/systray/watcher.h $(INCDIR)/systray/tray.h \
+	$(INCDIR)/systray/item.h $(INCDIR)/systray/icon.h \
+	$(INCDIR)/systray/menu.h $(INCDIR)/systray/helpers.h
 endif
 OBJ = $(SRC:$(SRCDIR)/%.c=$(BUILDDIR)/%.o)
 
