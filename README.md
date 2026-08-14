@@ -26,8 +26,9 @@ dwl has the following dependencies:
 - wlroots (compiled with the libinput backend)
 - xkbcommon
 - fcft (bar and title bar text)
-- libdbus (systray; set `showsystray = 0` to leave it unused, but it is still
-  linked in)
+- libdbus (systray and bar notifications; set `showsystray = 0` to leave it
+  unused, but it is still linked in. `./configure --no-systray` drops the tray
+  sources from the build entirely)
 - wayland-protocols (compile-time only)
 - pkg-config (compile-time only)
 

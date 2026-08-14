@@ -31,6 +31,10 @@ fixes carried on top of upstream. Every configuration knob named here lives in
   right click opens its menu through `dmenucmd`. Size and spacing come from
   `systrayiconsize`/`systrayspacing`, and `showsystray` turns it off.
 
+  Disable at build time with `./configure --no-systray` (`--no-tray` is
+  accepted too), which leaves `src/systray/` out of the build and drops the
+  tray settings and the `ClkTray` bindings from `config.h`.
+
   Ported from 0.7 to this tree, with three changes: icons are drawn at a
   configurable size centered in the bar instead of always filling its height;
   `destroytray()` unlinks the tray before freeing it (it was left on the
