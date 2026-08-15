@@ -223,6 +223,7 @@ typedef struct {
     float opacity_focus;   /* used while the client holds focus */
     float opacity_unfocus; /* used while it does not */
     int hasopacity;        /* the app passed the opacity_apps filter */
+    int borderscheme;      /* scheme its border is drawn in, to redo it */
     uint32_t resize;       /* configure serial of a pending resize */
 } Client;
 
@@ -404,6 +405,7 @@ static void createpopup(struct wl_listener* listener, void* data);
 static void cursorconstrain(struct wlr_pointer_constraint_v1* constraint);
 static void cursorframe(struct wl_listener* listener, void* data);
 static void cursorwarptohint(void);
+static float decoopacity(void);
 static void destroydecoration(struct wl_listener* listener, void* data);
 static void destroydragicon(struct wl_listener* listener, void* data);
 static void destroyidleinhibitor(struct wl_listener* listener, void* data);
@@ -489,6 +491,7 @@ static void scenebuffersetopacity(struct wlr_scene_buffer* buffer,
                                   int sx,
                                   int sy,
                                   void* data);
+static void setbordercolor(Client* c, int scheme);
 static void setcursor(struct wl_listener* listener, void* data);
 static void setcursorshape(struct wl_listener* listener, void* data);
 static void setfloating(Client* c, int floating);
@@ -1812,6 +1815,13 @@ void cursorwarptohint(void)
     }
 }
 
+/* The opacity dwl's own drawing runs at. It rides on opacity_enabled, so the
+ * one key turns the windows and the decorations off and on together. */
+float decoopacity(void)
+{
+    return opacity_enabled ? opacity_deco : 1.0f;
+}
+
 void destroydecoration(struct wl_listener* listener, void* data)
 {
     Client* c = wl_container_of(listener, c, destroy_decoration);
@@ -2126,6 +2136,7 @@ void drawbar(Monitor* m)
                                  m->b.height);
 #endif
 
+    wlr_scene_buffer_set_opacity(m->scene_buffer, decoopacity());
     wlr_scene_buffer_set_dest_size(
         m->scene_buffer, m->b.real_width, m->b.real_height);
     wlr_scene_node_set_position(
@@ -2369,6 +2380,7 @@ void drawtitle(Client* c)
               0);
 
     wlr_scene_node_set_enabled(&c->title->node, 1);
+    wlr_scene_buffer_set_opacity(c->title, decoopacity());
     wlr_scene_buffer_set_buffer(c->title, &buf->base);
     wlr_buffer_unlock(&buf->base);
 }
@@ -2412,8 +2424,7 @@ void focusclient(Client* c, int lift)
         /* Don't change border color if there is an exclusive focus or we are
          * handling a drag operation */
         if (!exclusive_focus && !seat->drag)
-            client_set_border_color(
-                c, (float[])COLOR(colors[SchemeSel][ColBorder]));
+            setbordercolor(c, SchemeSel);
 
         /* tabbed() otherwise only reruns on arrange() */
         if (c->mon && c->mon->lt[c->mon->sellt]->arrange == tabbed &&
@@ -2439,8 +2450,7 @@ void focusclient(Client* c, int lift)
              * causes issues with winecfg and probably other clients */
         } else if (old_c && !client_is_unmanaged(old_c) &&
                    (!c || !client_wants_focus(c))) {
-            client_set_border_color(
-                old_c, (float[])COLOR(colors[SchemeNorm][ColBorder]));
+            setbordercolor(old_c, SchemeNorm);
             client_activate_surface(old, 0);
             old_c->opacity = old_c->opacity_unfocus;
         }
@@ -3053,13 +3063,11 @@ void mapnotify(struct wl_listener* listener, void* data)
 
     for (i = 0; i < 4; i++) {
         c->border[i] = wlr_scene_rect_create(
-            c->scene,
-            0,
-            0,
-            (float[])COLOR(
-                colors[c->isurgent ? SchemeUrg : SchemeNorm][ColBorder]));
+            c->scene, 0, 0, (float[]){ 0.0f, 0.0f, 0.0f, 0.0f });
         c->border[i]->node.data = c;
     }
+    /* the colour comes from here, once all four exist */
+    setbordercolor(c, c->isurgent ? SchemeUrg : SchemeNorm);
 
     c->title = wlr_scene_buffer_create(c->scene, NULL);
     c->title->node.data = c;
@@ -3481,6 +3489,12 @@ int opacityallowed(const char* appid)
 void opacityrefresh(void)
 {
     Monitor* m;
+    Client* c;
+
+    /* a decoration is drawn by dwl, not by a client, so nothing would come
+     * back to redraw it: the bar and the title bars follow drawbars() */
+    wl_list_for_each(c, &clients, link) setbordercolor(c, c->borderscheme);
+    drawbars();
 
     wl_list_for_each(m, &mons, link)
     {
@@ -3837,6 +3851,22 @@ void scenebuffersetopacity(struct wlr_scene_buffer* buffer,
         buffer,
         c->isfullscreen || !opacity_enabled || !c->hasopacity ? 1.0f
                                                               : c->opacity);
+}
+
+/* Colours a client's border, remembering the scheme so the opacity toggle can
+ * put it back on. wlroots wants a premultiplied colour, so the alpha scales
+ * the other three channels with it. */
+void setbordercolor(Client* c, int scheme)
+{
+    float color[4] = COLOR(colors[scheme][ColBorder]);
+    float a = color[3] * decoopacity();
+
+    c->borderscheme = scheme;
+    color[0] *= a;
+    color[1] *= a;
+    color[2] *= a;
+    color[3] = a;
+    client_set_border_color(c, color);
 }
 
 void setcursor(struct wl_listener* listener, void* data)
@@ -4892,8 +4922,7 @@ void urgent(struct wl_listener* listener, void* data)
     drawbars();
 
     if (client_surface(c)->mapped)
-        client_set_border_color(c,
-                                (float[])COLOR(colors[SchemeUrg][ColBorder]));
+        setbordercolor(c, SchemeUrg);
 }
 
 void view(const Arg* arg)
@@ -5175,8 +5204,7 @@ void sethints(struct wl_listener* listener, void* data)
     drawbars();
 
     if (c->isurgent && surface && surface->mapped)
-        client_set_border_color(c,
-                                (float[])COLOR(colors[SchemeUrg][ColBorder]));
+        setbordercolor(c, SchemeUrg);
 }
 
 void xwaylandready(struct wl_listener* listener, void* data)
