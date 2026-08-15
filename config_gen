@@ -305,6 +305,11 @@ opacity() {
 	askpct 'opacity of the unfocused windows' "$(defpct opacity_unfocus)"
 	setval opacity_unfocus "$ans"
 
+	note 'what dwl draws itself takes one value for the lot: the bar, with'
+	note 'its systray and notifications, the title bars and the borders'
+	askpct 'opacity of the bar, title bars and borders' "$(defpct opacity_deco)"
+	setval opacity_deco "$ans"
+
 	note 'the app list is matched against app ids, as the window rules are'
 	menu 'the apps in the list are' \
 		"$(($(defval opacity_exclusion_type) + 1))" \

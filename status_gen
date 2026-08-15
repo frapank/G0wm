@@ -112,6 +112,7 @@ dflt() { # built-in default of a setting, as dwl-status.sh has it
 	interval) echo 1 ;;
 	battery_interval) echo 30 ;;
 	prefix|separator|suffix) echo ' ' ;;
+	battery_low) echo 20 ;;
 	date_format) echo '%a %d %b' ;;
 	time_format) echo '%H:%M:%S' ;;
 	battery_format) echo '%v%' ;;
@@ -146,6 +147,73 @@ icon_of() { # module -> ic, the default Nerd Font glyph
 	netup) ic=$(printf '\357\201\242') ;;                 # U+F062 arrow-up
 	*) ic= ;;
 	esac
+}
+
+is_color() { # true when the value is #RRGGBB or #RRGGBBAA
+	case $1 in
+	'#'[0-9a-fA-F][0-9a-fA-F][0-9a-fA-F]\
+[0-9a-fA-F][0-9a-fA-F][0-9a-fA-F]) return 0 ;;
+	'#'[0-9a-fA-F][0-9a-fA-F][0-9a-fA-F][0-9a-fA-F]\
+[0-9a-fA-F][0-9a-fA-F][0-9a-fA-F][0-9a-fA-F]) return 0 ;;
+	esac
+	return 1
+}
+
+hexval() { # one hex digit -> hv
+	case $1 in
+	[0-9]) hv=$1 ;;
+	a|A) hv=10 ;; b|B) hv=11 ;; c|C) hv=12 ;;
+	d|D) hv=13 ;; e|E) hv=14 ;; f|F) hv=15 ;;
+	*) hv=0 ;;
+	esac
+}
+
+byte() { # two hex digits -> bt
+	hexval "${1%?}"; bt=$((hv * 16))
+	hexval "${1#?}"; bt=$((bt + hv))
+}
+
+swatch() { # #RRGGBB[AA] -> sw_s, the escape that paints the terminal with it
+	sw_s=
+	[ -n "$A" ] || return 0 # this terminal is not taking colours
+	sw_h=${1#\#}
+	case $sw_h in ????????) sw_h=${sw_h%??} ;; esac # ANSI has no alpha
+	byte "${sw_h%????}"; sw_r=$bt
+	sw_h=${sw_h#??}
+	byte "${sw_h%??}"; sw_g=$bt
+	byte "${sw_h#??}"; sw_b=$bt
+	sw_s=$(printf '\033[38;2;%d;%d;%dm' "$sw_r" "$sw_g" "$sw_b")
+}
+
+color_dflt() { # setting -> cd, a suggestion that reads on a dark bar
+	case $1 in
+	color_date) cd='#928374' ;;
+	color_time) cd='#ebdbb2' ;;
+	color_battery) cd='#8ec07c' ;;
+	color_cpu) cd='#83a598' ;;
+	color_ram) cd='#d3869b' ;;
+	color_netdown) cd='#b8bb26' ;;
+	color_netup) cd='#fabd2f' ;;
+	color_battery_low) cd='#fb4934' ;;
+	color_battery_charging) cd='#fabd2f' ;;
+	*) cd= ;;
+	esac
+}
+
+askcolor() { # setting prompt default
+	ac_var=$1
+	while :; do
+		ask "$2" "${3:-none}"
+		case $ans in none|None|NONE|off) ans= ;; esac
+		[ -z "$ans" ] && break
+		is_color "$ans" && break
+		note '  #RRGGBB or #RRGGBBAA, or none for the bar foreground'
+	done
+	setval "$ac_var" "$ans"
+	if [ -n "$ans" ]; then
+		swatch "$ans"
+		printf '  %sthe module is drawn in this colour%s\n' "$sw_s" "$R"
+	fi
 }
 
 icon_for() { # module -> ic, empty when icons are off
@@ -370,6 +438,41 @@ formats() {
 	done
 }
 
+colors() {
+	[ -n "$sel" ] || return 0
+	title 'Colours'
+	note 'the bar reads colour escapes in the status text, so every module can'
+	note 'have one of its own; none leaves it in the bar foreground'
+	note 'upstream dwl would draw the escapes as text, this fork paints them'
+	cl_on=n
+	for cl_k in $all_colors; do
+		getval "$cl_k"; [ -n "$gv" ] && cl_on=y
+	done
+	if ! askyn 'colour the status text' "$cl_on"; then
+		# an explicit no clears whatever the template had
+		for cl_k in $all_colors; do setval "$cl_k" ''; done
+		return 0
+	fi
+	for cl_m in $sel; do
+		getval "color_$cl_m"
+		[ -n "$gv" ] || { color_dflt "color_$cl_m"; gv=$cd; }
+		askcolor "color_$cl_m" "  $cl_m" "$gv"
+	done
+	case " $sel " in
+	*' battery '*)
+		note 'the battery takes two colours more: one under a level you pick,'
+		note 'one while it charges, which outranks the low one'
+		getval battery_low
+		asknum '  low below (percent)' "$gv"; setval battery_low "$ans"
+		getval color_battery_low
+		[ -n "$gv" ] || { color_dflt color_battery_low; gv=$cd; }
+		askcolor color_battery_low '  low' "$gv"
+		getval color_battery_charging
+		[ -n "$gv" ] || { color_dflt color_battery_charging; gv=$cd; }
+		askcolor color_battery_charging '  charging' "$gv" ;;
+	esac
+}
+
 timing() {
 	title 'Timing'
 	if [ "$mode" = advanced ]; then
@@ -443,7 +546,8 @@ generate() { # the config file, every value quoted so spaces survive
 	printf '# Status text of dwl'\''s bar, read by dwl-status.sh.\n'
 	printf '# Written by ./status_gen on %s.\n' "$(date '+%Y-%m-%d %H:%M')"
 	printf '# Quotes keep the spaces. In a format %%v is the value and %%i the\n'
-	printf '# icon; ram has %%u and %%t too, date and time are strftime formats.\n\n'
+	printf '# icon; ram has %%u and %%t too, date and time are strftime formats.\n'
+	printf '# A colour is #RRGGBB or #RRGGBBAA, empty for the bar foreground.\n\n'
 	printf 'modules = "%s"\n\n' "$(final modules)"
 	printf 'interval = "%s"\n' "$(final interval)"
 	printf 'battery_interval = "%s"\n\n' "$(final battery_interval)"
@@ -457,6 +561,54 @@ generate() { # the config file, every value quoted so spaces survive
 	for gn_m in date time battery cpu ram netdown netup; do
 		printf 'icon_%s = "%s"\n' "$gn_m" "$(final "icon_$gn_m")"
 	done
+	printf '\n'
+	for gn_m in date time battery cpu ram netdown netup; do
+		printf 'color_%s = "%s"\n' "$gn_m" "$(final "color_$gn_m")"
+	done
+	printf '\nbattery_low = "%s"\n' "$(final battery_low)"
+	printf 'color_battery_low = "%s"\n' "$(final color_battery_low)"
+	printf 'color_battery_charging = "%s"\n' "$(final color_battery_charging)"
+}
+
+# the bar's own parser, in awk: a preview that printed the escapes instead of
+# the colours they stand for would be worth nothing
+ansify() {
+	[ -n "$A" ] || { cat; return; }
+	awk '
+	function val(s,   i, v) {
+		v = 0
+		for (i = 1; i <= length(s); i++)
+			v = v * 16 + index("0123456789abcdef",
+				tolower(substr(s, i, 1))) - 1
+		return v
+	}
+	function rgb(h) {
+		return val(substr(h, 1, 2)) ";" val(substr(h, 3, 2)) ";" \
+			val(substr(h, 5, 2))
+	}
+	BEGIN { ESC = sprintf("%c", 27) }
+	{
+		out = ""; rest = $0
+		while (match(rest, /\^(\^|d\^|[cb]#[0-9a-fA-F]*\^)/)) {
+			out = out substr(rest, 1, RSTART - 1)
+			tok = substr(rest, RSTART, RLENGTH)
+			rest = substr(rest, RSTART + RLENGTH)
+			if (tok == "^^")
+				out = out "^"
+			else if (tok == "^d^")
+				out = out ESC "[0m"
+			else {
+				h = substr(tok, 4, length(tok) - 4)
+				if (length(h) == 6 || length(h) == 8)
+					out = out ESC "[" \
+						(substr(tok, 2, 1) == "c" ? "38" : "48") \
+						";2;" rgb(h) "m"
+				else
+					out = out tok
+			}
+		}
+		print out rest ESC "[0m"
+	}'
 }
 
 preview() { # one line, drawn by dwl-status.sh itself from the new file
@@ -464,7 +616,7 @@ preview() { # one line, drawn by dwl-status.sh itself from the new file
 	[ -x "$pv" ] || pv=$(command -v dwl-status.sh 2>/dev/null)
 	[ -n "$pv" ] && [ -x "$pv" ] || { note 'dwl-status.sh not found, no preview'; return; }
 	note 'one line, as the bar would draw it:'
-	DWL_STATUS_CONF=$1 "$pv" --once
+	DWL_STATUS_CONF=$1 "$pv" --once | ansify
 }
 
 main() {
@@ -478,6 +630,8 @@ main() {
 	workspace
 
 	all_modules='date time battery cpu ram netdown netup'
+	all_colors='color_date color_time color_battery color_cpu color_ram
+color_netdown color_netup color_battery_low color_battery_charging'
 	use_icons=0
 	ip= # '%i ' once icons are on
 	sel= # the modules that were picked, in order
@@ -515,6 +669,7 @@ main() {
 	icons
 	modules
 	formats
+	colors
 	network
 	[ "$mode" = advanced ] && glyphs
 	timing

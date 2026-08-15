@@ -62,6 +62,29 @@ defaults() {
 	icon_ram=
 	icon_netdown=
 	icon_netup=
+	# every colour is off by default, so an unconfigured line stays plain
+	all_colors='color_date color_time color_battery color_cpu color_ram
+color_netdown color_netup color_battery_low color_battery_charging'
+	color_date=
+	color_time=
+	color_battery=
+	color_cpu=
+	color_ram=
+	color_netdown=
+	color_netup=
+	battery_low=20
+	color_battery_low=
+	color_battery_charging=
+}
+
+is_color() { # true when the value is #RRGGBB or #RRGGBBAA
+	case $1 in
+	'#'[0-9a-fA-F][0-9a-fA-F][0-9a-fA-F]\
+[0-9a-fA-F][0-9a-fA-F][0-9a-fA-F]) return 0 ;;
+	'#'[0-9a-fA-F][0-9a-fA-F][0-9a-fA-F][0-9a-fA-F]\
+[0-9a-fA-F][0-9a-fA-F][0-9a-fA-F][0-9a-fA-F]) return 0 ;;
+	esac
+	return 1
 }
 
 trim() { # -> tr_s, the argument without leading and trailing blanks
@@ -95,7 +118,10 @@ read_config() { # reads $conf if present, then finalizes the timing settings
 			modules|interval|battery_interval|prefix|separator|suffix|\
 			date_format|time_format|battery_format|cpu_format|ram_format|\
 			netdown_format|netup_format|net_interface|icon_date|icon_time|\
-			icon_battery|icon_cpu|icon_ram|icon_netdown|icon_netup)
+			icon_battery|icon_cpu|icon_ram|icon_netdown|icon_netup|\
+			color_date|color_time|color_battery|color_cpu|color_ram|\
+			color_netdown|color_netup|battery_low|color_battery_low|\
+			color_battery_charging)
 				# the name is one of the above, and the value is never re-parsed
 				eval "$key=\$val" ;;
 			*) warn "$conf:$lineno: unknown setting '$key'" ;;
@@ -112,6 +138,36 @@ read_config() { # reads $conf if present, then finalizes the timing settings
 	''|*[!0-9]*|0) warn "battery_interval '$battery_interval' is not a positive number, using 30"
 		battery_interval=30 ;;
 	esac
+	case $battery_low in
+	''|*[!0-9]*) warn "battery_low '$battery_low' is not a number, using 20"
+		battery_low=20 ;;
+	esac
+
+	# a colour the bar would not parse would be drawn as the literal ^c...^
+	for rc_k in $all_colors; do
+		eval "rc_v=\$$rc_k"
+		[ -n "$rc_v" ] || continue
+		is_color "$rc_v" ||
+			{ warn "$rc_k: '$rc_v' is not #RRGGBB or #RRGGBBAA"
+			  eval "$rc_k="; }
+	done
+
+	# these are the user's own text, escaped here and not on every tick
+	esc "$prefix"; prefix=$ec
+	esc "$separator"; separator=$ec
+	esc "$suffix"; suffix=$ec
+}
+
+esc() { # text -> ec, with every caret doubled so the bar draws it as one
+	subst "$1" '^' '^^'; ec=$sb
+}
+
+paint() { # text colour -> r, the text wrapped in a colour escape
+	if [ -n "$2" ]; then
+		r="^c$2^$1^d^"
+	else
+		r=$1
+	fi
 }
 
 detect() { # have_date, battery_method, cpu_method, ram_method, net_method
@@ -231,26 +287,48 @@ human() { # bytes -> hu, as 1.2M with the unit appended
 	hu=${hu%?}.${hu#"${hu%?}"}$hu_u
 }
 
-bat_caps=
+bat_caps= bat_charging=0
 read_battery() {
-	bat_caps=
+	bat_caps= bat_charging=0
 	case $battery_method in
 	linux)
 		for cap_file in $bats; do
 			read -r cap <"$cap_file" 2>/dev/null &&
 				bat_caps="$bat_caps $cap"
+			read -r state <"${cap_file%capacity}status" 2>/dev/null &&
+				[ "$state" = Charging ] && bat_charging=1
 		done
 		;;
 	freebsd)
 		cap=$(sysctl -n hw.acpi.battery.life 2>/dev/null)
 		[ -n "$cap" ] && [ "$cap" -ge 0 ] 2>/dev/null && bat_caps=$cap
+		# bit 1 of the ACPI state word is the one set while it charges
+		state=$(sysctl -n hw.acpi.battery.state 2>/dev/null)
+		case ${state:-x} in
+		''|*[!0-9]*) ;;
+		*) [ $((state & 2)) -ne 0 ] && bat_charging=1 ;;
+		esac
 		;;
 	openbsd)
 		cap=$(apm -l 2>/dev/null)
 		[ -n "$cap" ] && bat_caps=$cap
+		# apm -a is 1 while the machine runs on mains
+		[ "$(apm -a 2>/dev/null)" = 1 ] && bat_charging=1
 		;;
 	esac
 	bat_caps=${bat_caps# }
+	return 0
+}
+
+bat_color() { # capacity -> bc, the colour its level and its state ask for
+	bc=$color_battery
+	if [ "$bat_charging" = 1 ]; then
+		# charging outranks low: the level is on its way back up
+		[ -n "$color_battery_charging" ] && bc=$color_battery_charging
+	elif [ "$1" -le "$battery_low" ] 2>/dev/null; then
+		[ -n "$color_battery_low" ] && bc=$color_battery_low
+	fi
+	return 0
 }
 
 bat_icon() { # capacity -> bi, picked out of icon_battery by level
@@ -392,9 +470,11 @@ render() { # module -> r, empty when there is nothing to show
 		for rn_c in $bat_caps; do
 			bat_icon "$rn_c"
 			fmt "$battery_format" "$rn_c" "$bi"
+			esc "$r"; bat_color "$rn_c"; paint "$ec" "$bc"
 			rn_all=${rn_all:+$rn_all }$r
 		done
 		r=$rn_all
+		return 0
 		;;
 	cpu) fmt "$cpu_format" "$cpu_pct" "$icon_cpu" ;;
 	ram)
@@ -405,6 +485,9 @@ render() { # module -> r, empty when there is nothing to show
 	netdown) fmt "$netdown_format" "$net_down" "$icon_netdown" ;;
 	netup) fmt "$netup_format" "$net_up" "$icon_netup" ;;
 	esac
+	[ -n "$r" ] || return 0
+	eval "rn_col=\$color_$1" # the module name got checked at startup
+	esc "$r"; paint "$ec" "$rn_col"
 }
 
 main() {
