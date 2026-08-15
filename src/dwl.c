@@ -117,6 +117,8 @@
         wl_signal_add((E), _l);                                                \
     } while (0)
 #define TEXTW(mon, text) (drwl_font_getwidth(mon->drw, text) + mon->lrpad)
+/* the status box: drawbar() and buttonpress() agree on it to the pixel */
+#define STATUSW(mon) (drawstatus((mon), stext, 0, 0, 0) + 2)
 
 /* enums */
 enum {
@@ -221,6 +223,7 @@ typedef struct {
     float opacity_focus;   /* used while the client holds focus */
     float opacity_unfocus; /* used while it does not */
     int hasopacity;        /* the app passed the opacity_apps filter */
+    int borderscheme;      /* scheme its border is drawn in, to redo it */
     uint32_t resize;       /* configure serial of a pending resize */
 } Client;
 
@@ -402,6 +405,7 @@ static void createpopup(struct wl_listener* listener, void* data);
 static void cursorconstrain(struct wlr_pointer_constraint_v1* constraint);
 static void cursorframe(struct wl_listener* listener, void* data);
 static void cursorwarptohint(void);
+static float decoopacity(void);
 static void destroydecoration(struct wl_listener* listener, void* data);
 static void destroydragicon(struct wl_listener* listener, void* data);
 static void destroyidleinhibitor(struct wl_listener* listener, void* data);
@@ -415,6 +419,7 @@ static void destroykeyboardgroup(struct wl_listener* listener, void* data);
 static Monitor* dirtomon(enum wlr_direction dir);
 static void drawbar(Monitor* m);
 static void drawbars(void);
+static int drawstatus(Monitor* m, const char* text, int x, int w, int render);
 static void drawtitle(Client* c);
 static void focusclient(Client* c, int lift);
 static void focusmon(const Arg* arg);
@@ -486,6 +491,7 @@ static void scenebuffersetopacity(struct wlr_scene_buffer* buffer,
                                   int sx,
                                   int sy,
                                   void* data);
+static void setbordercolor(Client* c, int scheme);
 static void setcursor(struct wl_listener* listener, void* data);
 static void setcursorshape(struct wl_listener* listener, void* data);
 static void setfloating(Client* c, int floating);
@@ -505,6 +511,7 @@ static void setwallpaper(Monitor* m);
 #endif
 static void spawn(const Arg* arg);
 static void startdrag(struct wl_listener* listener, void* data);
+static int statusescape(const char* p, uint32_t* scm);
 static int statusin(int fd, unsigned int mask, void* data);
 static void stopstatus(void);
 static void swapclients(Client* a, Client* b);
@@ -1045,7 +1052,7 @@ void buttonpress(struct wl_listener* listener, void* data)
 #ifdef SYSTRAY
                 traywidth = tray_get_width(selmon->tray);
 #endif
-                statusw = TEXTW(selmon, stext) - selmon->lrpad + 2;
+                statusw = STATUSW(selmon);
                 do
                     x += TEXTW(selmon, tags[i]);
                 while (cx >= x && ++i < LENGTH(tags));
@@ -1808,6 +1815,13 @@ void cursorwarptohint(void)
     }
 }
 
+/* The opacity dwl's own drawing runs at. It rides on opacity_enabled, so the
+ * one key turns the windows and the decorations off and on together. */
+float decoopacity(void)
+{
+    return opacity_enabled ? opacity_deco : 1.0f;
+}
+
 void destroydecoration(struct wl_listener* listener, void* data)
 {
     Client* c = wl_container_of(listener, c, destroy_decoration);
@@ -1991,16 +2005,8 @@ void drawbar(Monitor* m)
 
     /* draw status first so it can be overdrawn by tags later */
     if (m == selmon) { /* status is only drawn on selected monitor */
-        drwl_setscheme(m->drw, colors[SchemeNorm]);
-        tw = TEXTW(m, stext) - m->lrpad + 2; /* 2px right padding */
-        drwl_text(m->drw,
-                  m->b.width - (tw + traywidth),
-                  0,
-                  tw,
-                  m->b.height,
-                  0,
-                  stext,
-                  0);
+        tw = STATUSW(m);
+        drawstatus(m, stext, m->b.width - (tw + traywidth), tw, 1);
     }
 
     wl_list_for_each(c, &clients, link)
@@ -2130,6 +2136,7 @@ void drawbar(Monitor* m)
                                  m->b.height);
 #endif
 
+    wlr_scene_buffer_set_opacity(m->scene_buffer, decoopacity());
     wlr_scene_buffer_set_dest_size(
         m->scene_buffer, m->b.real_width, m->b.real_height);
     wlr_scene_node_set_position(
@@ -2145,6 +2152,96 @@ void drawbars(void)
     Monitor* m = NULL;
 
     wl_list_for_each(m, &mons, link) drawbar(m);
+}
+
+/* One colour escape at p: ^c#RRGGBB^ and ^b#RRGGBB^ set the foreground and
+ * the background of what follows (an eight digit form carries alpha too), ^d^
+ * goes back to SchemeNorm. Returns the bytes it takes, and applies it to scm
+ * when that is given; zero means p does not start one. */
+int statusescape(const char* p, uint32_t* scm)
+{
+    static const char hex[] = "0123456789abcdef";
+    const char* d;
+    uint32_t clr = 0;
+    int i;
+
+    if (p[0] != '^')
+        return 0;
+    if (p[1] == 'd' && p[2] == '^') {
+        if (scm) {
+            scm[ColFg] = colors[SchemeNorm][ColFg];
+            scm[ColBg] = colors[SchemeNorm][ColBg];
+        }
+        return 3;
+    }
+    if ((p[1] != 'c' && p[1] != 'b') || p[2] != '#')
+        return 0;
+
+    /* | 0x20 lowercases a letter and leaves a digit alone */
+    for (i = 0; i < 8 && p[3 + i] && (d = strchr(hex, p[3 + i] | 0x20)); i++)
+        clr = clr << 4 | (uint32_t)(d - hex);
+    if ((i != 6 && i != 8) || p[3 + i] != '^')
+        return 0;
+    if (i == 6)
+        clr = clr << 8 | 0xff; /* the short form is opaque */
+
+    if (scm)
+        scm[p[1] == 'c' ? ColFg : ColBg] = clr;
+    return i + 4;
+}
+
+/* Draws the status text one colour run at a time, and returns its width
+ * without the escapes. With render off it only measures, which is what
+ * places the box before there is anything to draw in it. */
+int drawstatus(Monitor* m, const char* text, int x, int w, int render)
+{
+    uint32_t scm[3];
+    char seg[sizeof(stext)];
+    const char* p = text;
+    int total = 0, sw, len, xend = x + w;
+    size_t n;
+
+    if (!m || !text)
+        return 0;
+    memcpy(scm, colors[SchemeNorm], sizeof(scm));
+
+    /* the runs cover the glyphs only, so the padding around them would keep
+     * whatever the buffer held */
+    if (render) {
+        drwl_setscheme(m->drw, colors[SchemeNorm]);
+        drwl_rect(m->drw, x, 0, w, m->b.height, 1, 1);
+    }
+
+    while (*p) {
+        for (n = 0; *p && n + 1 < sizeof(seg);) {
+            if (*p == '^') {
+                if (p[1] == '^') {
+                    seg[n++] = *p;
+                    p += 2;
+                    continue;
+                }
+                if (statusescape(p, NULL))
+                    break;
+            }
+            seg[n++] = *p++;
+        }
+        seg[n] = '\0';
+
+        sw = (int)drwl_font_getwidth(m->drw, seg);
+        total += sw;
+        if (render && sw > 0 && x < xend) {
+            if (x + sw > xend) /* drwl_text() ellipsizes what it cannot fit */
+                sw = xend - x;
+            drwl_setscheme(m->drw, scm);
+            drwl_text(m->drw, x, 0, sw, m->b.height, 0, seg, 0);
+            x += sw;
+        }
+
+        if ((len = statusescape(p, scm)))
+            p += len;
+    }
+
+    return total;
 }
 
 #ifdef INTEGRATED_BACKGROUND
@@ -2283,6 +2380,7 @@ void drawtitle(Client* c)
               0);
 
     wlr_scene_node_set_enabled(&c->title->node, 1);
+    wlr_scene_buffer_set_opacity(c->title, decoopacity());
     wlr_scene_buffer_set_buffer(c->title, &buf->base);
     wlr_buffer_unlock(&buf->base);
 }
@@ -2326,8 +2424,7 @@ void focusclient(Client* c, int lift)
         /* Don't change border color if there is an exclusive focus or we are
          * handling a drag operation */
         if (!exclusive_focus && !seat->drag)
-            client_set_border_color(
-                c, (float[])COLOR(colors[SchemeSel][ColBorder]));
+            setbordercolor(c, SchemeSel);
 
         /* tabbed() otherwise only reruns on arrange() */
         if (c->mon && c->mon->lt[c->mon->sellt]->arrange == tabbed &&
@@ -2353,8 +2450,7 @@ void focusclient(Client* c, int lift)
              * causes issues with winecfg and probably other clients */
         } else if (old_c && !client_is_unmanaged(old_c) &&
                    (!c || !client_wants_focus(c))) {
-            client_set_border_color(
-                old_c, (float[])COLOR(colors[SchemeNorm][ColBorder]));
+            setbordercolor(old_c, SchemeNorm);
             client_activate_surface(old, 0);
             old_c->opacity = old_c->opacity_unfocus;
         }
@@ -2967,13 +3063,11 @@ void mapnotify(struct wl_listener* listener, void* data)
 
     for (i = 0; i < 4; i++) {
         c->border[i] = wlr_scene_rect_create(
-            c->scene,
-            0,
-            0,
-            (float[])COLOR(
-                colors[c->isurgent ? SchemeUrg : SchemeNorm][ColBorder]));
+            c->scene, 0, 0, (float[]){ 0.0f, 0.0f, 0.0f, 0.0f });
         c->border[i]->node.data = c;
     }
+    /* the colour comes from here, once all four exist */
+    setbordercolor(c, c->isurgent ? SchemeUrg : SchemeNorm);
 
     c->title = wlr_scene_buffer_create(c->scene, NULL);
     c->title->node.data = c;
@@ -3395,6 +3489,12 @@ int opacityallowed(const char* appid)
 void opacityrefresh(void)
 {
     Monitor* m;
+    Client* c;
+
+    /* a decoration is drawn by dwl, not by a client, so nothing would come
+     * back to redraw it: the bar and the title bars follow drawbars() */
+    wl_list_for_each(c, &clients, link) setbordercolor(c, c->borderscheme);
+    drawbars();
 
     wl_list_for_each(m, &mons, link)
     {
@@ -3751,6 +3851,22 @@ void scenebuffersetopacity(struct wlr_scene_buffer* buffer,
         buffer,
         c->isfullscreen || !opacity_enabled || !c->hasopacity ? 1.0f
                                                               : c->opacity);
+}
+
+/* Colours a client's border, remembering the scheme so the opacity toggle can
+ * put it back on. wlroots wants a premultiplied colour, so the alpha scales
+ * the other three channels with it. */
+void setbordercolor(Client* c, int scheme)
+{
+    float color[4] = COLOR(colors[scheme][ColBorder]);
+    float a = color[3] * decoopacity();
+
+    c->borderscheme = scheme;
+    color[0] *= a;
+    color[1] *= a;
+    color[2] *= a;
+    color[3] = a;
+    client_set_border_color(c, color);
 }
 
 void setcursor(struct wl_listener* listener, void* data)
@@ -4806,8 +4922,7 @@ void urgent(struct wl_listener* listener, void* data)
     drawbars();
 
     if (client_surface(c)->mapped)
-        client_set_border_color(c,
-                                (float[])COLOR(colors[SchemeUrg][ColBorder]));
+        setbordercolor(c, SchemeUrg);
 }
 
 void view(const Arg* arg)
@@ -5089,8 +5204,7 @@ void sethints(struct wl_listener* listener, void* data)
     drawbars();
 
     if (c->isurgent && surface && surface->mapped)
-        client_set_border_color(c,
-                                (float[])COLOR(colors[SchemeUrg][ColBorder]));
+        setbordercolor(c, SchemeUrg);
 }
 
 void xwaylandready(struct wl_listener* listener, void* data)

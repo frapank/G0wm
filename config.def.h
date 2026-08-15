@@ -20,6 +20,11 @@ static int opacity_enabled                 = 1;     // 0 starts with it off
 static const float opacity_focus           = 1.00f; // focused window
 static const float opacity_unfocus         = 1.00f; // every other window
 
+/* opacity of what dwl draws itself: the bar (systray, notifications and the
+ * runner prompt included), the window title bars and the window borders.
+ * Turned off and on by the same key as the windows above. */
+static const float opacity_deco            = 1.00f;
+
 /* 0 means the list holds the only apps with opacity, 1 the ones without it */
 static const int opacity_exclusion_type    = 0;
 /* app ids, matched like the rules below; an empty list means every app */
