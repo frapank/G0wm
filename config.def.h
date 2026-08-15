@@ -38,9 +38,11 @@ static const char* wallpaper = ""; // path to an image, empty for just rootcolor
 #endif
 
 static const float fullscreen_bg[] = { 0.0f, 0.0f, 0.0f, 1.0f };
+#ifdef SYSTRAY
 static const int showsystray                   = 1;  // 0 means no systray
 static const unsigned int systrayspacing       = 2;  // systray icon spacing
 static const unsigned int systrayiconsize      = 16; // icon size, 0 fills the bar
+#endif
 static const int titlebar                      = 1;  // 0 means no per-window title bar
 
 static const int barwintitle                   = 0;  // Show focused window
@@ -187,7 +189,9 @@ static const int hide_cursor_when_typing = 1;
 
 /* commands: replace with whatever terminal/launcher/file manager/browser you
  * have installed */
-static const char* dmenucmd[]       = { "wmenu", "-f", "monospace 10", "-N", "000000ff", "-n", "ffffffff", "-M", "000000ff", "-m", "ffffffff", "-S", "000000ff", "-s", "ffffffff", NULL };
+#ifdef SYSTRAY
+static const char* dmenucmd[]       = { "wmenu", "-f", "monospace 10", "-N", "000000ff", "-n", "ffffffff", "-M", "000000ff", "-m", "ffffffff", "-S", "000000ff", "-s", "ffffffff", NULL }; // tray right-click menu
+#endif
 static const char* termcmd[]        = { "foot", NULL };
 static const char* menucmd[]        = { "wmenu-run", "-f", "monospace 10", "-N", "000000ff", "-n", "ffffffff", "-M", "000000ff", "-m", "ffffffff", "-S", "000000ff", "-s", "ffffffff", NULL };
 static const char* filemanagercmd[] = { "thunar", NULL };
@@ -207,7 +211,6 @@ static const Key keys[] = {
 #endif
 	{ MODKEY,                    XKB_KEY_b,           spawn,            {.v = browsercmd} },
 	{ MODKEY,                    XKB_KEY_c,           killclient,       {0} },
-	{ MODKEY|WLR_MODIFIER_SHIFT, XKB_KEY_f,           togglefullscreen, {0} },
 	{ MODKEY,                    XKB_KEY_v,           togglefloating,   {0} },
 	{ MODKEY,                    XKB_KEY_g,           togglegaps,       {0} },
 	{ MODKEY|WLR_MODIFIER_SHIFT, XKB_KEY_b,           togglebar,        {0} },
@@ -246,7 +249,6 @@ static const Key keys[] = {
 	{ MODKEY|WLR_MODIFIER_SHIFT, XKB_KEY_O,           setopacityfocus,   {.f = -0.05f} },
 	{ MODKEY|WLR_MODIFIER_CTRL,  XKB_KEY_o,           setopacityunfocus, {.f = +0.05f} },
 	{ MODKEY|WLR_MODIFIER_CTRL|WLR_MODIFIER_SHIFT, XKB_KEY_O, setopacityunfocus, {.f = -0.05f} },
-	/* turns opacity off everywhere, and back on */
 	{ MODKEY|WLR_MODIFIER_ALT,   XKB_KEY_o,           toggleopacity,     {0} },
 
 	/* --- MEDIA CONTROLS --- */
@@ -307,8 +309,10 @@ static const Button buttons[] = {
 	{ ClkClient,   MODKEY, BTN_LEFT,   moveresize,     {.ui = CurMove} },
 	{ ClkClient,   MODKEY, BTN_MIDDLE, togglefloating, {0} },
 	{ ClkClient,   MODKEY, BTN_RIGHT,  moveresize,     {.ui = CurResize} },
+#ifdef SYSTRAY
 	{ ClkTray,     0,      BTN_LEFT,   trayactivate,   {0} },
 	{ ClkTray,     0,      BTN_RIGHT,  traymenu,       {0} },
+#endif
 	{ ClkTagBar,   0,      BTN_LEFT,   view,           {0} },
 	{ ClkTagBar,   0,      BTN_RIGHT,  toggleview,     {0} },
 	{ ClkTagBar,   MODKEY, BTN_LEFT,   tag,            {0} },
