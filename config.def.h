@@ -211,7 +211,6 @@ static const Key keys[] = {
 #endif
 	{ MODKEY,                    XKB_KEY_b,           spawn,            {.v = browsercmd} },
 	{ MODKEY,                    XKB_KEY_c,           killclient,       {0} },
-	{ MODKEY|WLR_MODIFIER_SHIFT, XKB_KEY_f,           togglefullscreen, {0} },
 	{ MODKEY,                    XKB_KEY_v,           togglefloating,   {0} },
 	{ MODKEY,                    XKB_KEY_g,           togglegaps,       {0} },
 	{ MODKEY|WLR_MODIFIER_SHIFT, XKB_KEY_b,           togglebar,        {0} },
@@ -250,7 +249,6 @@ static const Key keys[] = {
 	{ MODKEY|WLR_MODIFIER_SHIFT, XKB_KEY_O,           setopacityfocus,   {.f = -0.05f} },
 	{ MODKEY|WLR_MODIFIER_CTRL,  XKB_KEY_o,           setopacityunfocus, {.f = +0.05f} },
 	{ MODKEY|WLR_MODIFIER_CTRL|WLR_MODIFIER_SHIFT, XKB_KEY_O, setopacityunfocus, {.f = -0.05f} },
-	/* turns opacity off everywhere, and back on */
 	{ MODKEY|WLR_MODIFIER_ALT,   XKB_KEY_o,           toggleopacity,     {0} },
 
 	/* --- MEDIA CONTROLS --- */
