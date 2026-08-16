@@ -142,6 +142,16 @@ fixes carried on top of upstream. Every configuration knob named here lives in
   and held keys repeat into it at the keyboard's own rate, so backspace clears
   by holding it. Colors come from `SchemeRunner`/`SchemeRunnerSuggest`.
 
+  When there's no `$PATH` match, a buffer made only of digits, `+ - * / % ( )`,
+  a decimal point and whitespace (with at least one digit and one operator)
+  is instead evaluated as arithmetic by a small hand-rolled recursive-descent
+  parser and its result drawn the same way, e.g. `2+2` shows `= 4`. It never
+  shells out or touches the filesystem, so a malformed expression just fails
+  to parse; division by zero, unmatched parens and non-finite results are all
+  rejected rather than shown. `Tab` replaces the buffer with the bare result
+  (so it can feed into a further expression), and `Return` on a bare
+  expression is a no-op instead of handing `2+2` to `/bin/sh` as a command.
+
   The `$PATH` scan is cached, and each open first compares the mtime of the
   `$PATH` directories against the ones the cache was built from: a directory's
   mtime moves whenever an entry is added or removed, so one `stat()` per entry
