@@ -1,6 +1,6 @@
 <div align="center">
 
-# PersonalDWL
+# G0wn
 
 **A personal desktop environment designed to my liking**
 
@@ -19,8 +19,8 @@ project.
 
 The original dwl is a minimal Wayland compositor that relies on external
 programs for things like the bar, notifications and the application launcher.
-PersonalDWL handles all of these directly, which makes it closer to a small
-desktop environment than to a plain compositor.
+g0wn handles all of these directly, which makes it closer to a small desktop
+environment than to a plain compositor.
 
 It currently includes:
 
@@ -33,7 +33,7 @@ It currently includes:
 
 More details about the features and their settings can be found in
 [docs/features.md](docs/features.md). The man page is available at
-[`docs/dwl.1`](docs/dwl.1).
+[`docs/g0wn.1`](docs/g0wn.1).
 
 Screen locking, idle handling, portals and a polkit agent are not included.
 If you need them, you can start programs such as `swayidle` and `swaylock`
@@ -41,7 +41,7 @@ from `autostart[]`.
 
 ## Status
 
-PersonalDWL is still in early development and things are likely to change.
+g0wn is still in early development and things are likely to change.
 
 There is currently one branch called `main` and there are no releases yet.
 The project follows the [wlroots] version selected in `config.mk`, which is
@@ -62,7 +62,7 @@ X11 support also requires `libxcb`, `libxcb-icccm` and `Xwayland`.
 
 ```sh
 ./configure && make
-make install      # dwl, start-dwl and dwl-status.sh into ~/.local/bin
+make install      # g0wn, start-g0wn and g0wn-status.sh into ~/.local/bin
 ```
 
 You can also just run `make`. It will use `config.def.mk` and `config.def.h`
@@ -99,8 +99,8 @@ You can generate a new configuration with:
 
 The second command keeps your current values as the default answers.
 
-The status text shown in the bar comes from `scripts/dwl-status.sh`. Its
-configuration is stored in `~/.config/dwl/status.conf`.
+The status text shown in the bar comes from `scripts/g0wn-status.sh`. Its
+configuration is stored in `~/.config/g0wn/status.conf`.
 
 You can generate it with:
 
@@ -115,15 +115,15 @@ and their formats.
 
 ## Run
 
-Run `start-dwl` from a VT.
+Run `start-g0wn` from a VT.
 
 It sets up the session environment, starts PipeWire, runs the status script
-and stores logs in `~/.local/state/dwl/`.
+and stores logs in `~/.local/state/g0wn/`.
 
-The file `share/dwl.desktop` can be used as a session entry for display
+The file `share/g0wn.desktop` can be used as a session entry for display
 managers. It is not installed automatically by `make install`.
 
-The desktop entry starts dwl directly instead of using `start-dwl`. If you
+The desktop entry starts g0wn directly instead of using `start-g0wn`. If you
 want to use it, copy it to `/usr/share/wayland-sessions/` and set `Exec` to
 whichever startup method you prefer.
 
@@ -135,17 +135,17 @@ configure       writes config.mk
 config_gen      writes config.h
 status_gen      writes status.conf
 
-src/            dwl.c, util.c, notify.c, dbus.c, systray/
+src/            g0wn.c, util.c, notify.c, dbus.c, systray/
 include/        headers
 external/       drwl.h, vendored from the drwl project
 protocols/      wlr protocol XML for wayland-scanner
-scripts/        start-dwl, dwl-status.sh
+scripts/        start-g0wn, g0wn-status.sh
 docs/           man page and features.md
 ```
 
 ## License
 
-PersonalDWL is licensed under **GPL-3.0-or-later**.
+g0wn is licensed under **GPL-3.0-or-later**.
 
 The full license text is available in [`LICENSE`](LICENSE).
 

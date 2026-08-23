@@ -15,7 +15,7 @@ options() { # "$@" -> out, edit set from the command line; -h exits on its own
 			cat <<EOF
 Usage: ./config_gen [-c] [-o FILE]
 
-Walks through the dwl settings and writes config.h. Every default comes from
+Walks through the g0wn settings and writes config.h. Every default comes from
 config.def.h, so pressing Enter at each prompt reproduces it.
 
   -c, --current   edit the existing config.h instead: it becomes both the
@@ -310,7 +310,7 @@ opacity() {
 	askpct 'opacity of the unfocused windows' "$(defpct opacity_unfocus)"
 	setval opacity_unfocus "$ans"
 
-	note 'what dwl draws itself takes one value for the lot: the bar, with'
+	note 'what g0wn draws itself takes one value for the lot: the bar, with'
 	note 'its systray and notifications, the title bars and the borders'
 	askpct 'opacity of the bar, title bars and borders' "$(defpct opacity_deco)"
 	setval opacity_deco "$ans"
@@ -328,7 +328,7 @@ opacity() {
 	IFS=$op_ifs; set +f
 	setval opacity_apps "$(carray "$@")"
 
-	note 'opacity can be turned off and on while dwl runs, with the key below'
+	note 'opacity can be turned off and on while g0wn runs, with the key below'
 	op_en=$(defval opacity_enabled)
 	if askyn 'start with opacity on' "$(yn "${op_en:-1}")"; then
 		setval opacity_enabled 1
@@ -417,11 +417,11 @@ programs() {
 	askcmd browsercmd 'browser' "$(defcmd browsercmd)"
 }
 
-# dwl runs these through execvp, so each one is stored as its own argument list
+# g0wn runs these through execvp, so each one is stored as its own argument list
 # terminated by NULL, and no shell expands anything.
 autostart() {
 	title 'Autostart'
-	note 'started with dwl, one command per line, e.g. swaybg -i ~/wall.png -m fill'
+	note 'started with g0wn, one command per line, e.g. swaybg -i ~/wall.png -m fill'
 	: >"$tmp/auto"
 	while :; do
 		ask 'command to autostart (Enter when done)' ''
@@ -525,7 +525,7 @@ ask_scale() { # output -> mo_sc
 	esac
 }
 
-pick_mode() { # output -> mode_w mode_h mode_hz (0: dwl picks) and log_w log_h
+pick_mode() { # output -> mode_w mode_h mode_hz (0: g0wn picks) and log_w log_h
 	pm_out=$1 pm_i=1 pm_def=1 pm_best=0
 	: >"$tmp/list"
 	# the mode in use wins, then the first one the display calls preferred
@@ -546,7 +546,7 @@ pick_mode() { # output -> mode_w mode_h mode_hz (0: dwl picks) and log_w log_h
 	set -- $(cat "$tmp/list")
 	IFS=$pm_ifs; set +f
 	printf '\n%smonitor %s%s\n' "$B" "$pm_out" "$R"
-	menu '  mode' "$pm_def" "$@" 'let dwl pick the preferred mode'
+	menu '  mode' "$pm_def" "$@" 'let g0wn pick the preferred mode'
 	if [ "$choice" -le $# ]; then
 		pm_line=$(sed -n "${choice}p" "$tmp/list")
 		mode_hz=$(printf '%s' "$pm_line" | awk '{ print $2 }')
@@ -746,7 +746,7 @@ main() {
 	interface
 	theme_defaults
 
-	printf '%sdwl config generator%s\n' "$B" "$R"
+	printf '%sg0wn config generator%s\n' "$B" "$R"
 
 	keep=
 	if [ -f "$out" ] && [ -z "$edit" ]; then
