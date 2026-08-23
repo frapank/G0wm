@@ -2355,7 +2355,7 @@ void trayactivate(const Arg* arg)
 
 void traymenu(const Arg* arg)
 {
-    tray_rightclicked(selmon->tray, arg->ui, dmenucmd);
+    tray_rightclicked(selmon->tray, arg->ui, traymenucmd);
 }
 #endif /* SYSTRAY */
 

@@ -231,7 +231,12 @@ defkey() { # key bound to an action or command
 	}' "$def"
 }
 
-defmfact() { awk -F, '/&layouts\[0\]/ { gsub(/[ \tf]/, "", $2); print $2; exit }' "$def"; }
+# monrules[] uses designated initializers, so read the field by name
+defmfact() {
+	awk '/\.mfact[ \t]*=/ {
+		sub(/.*\.mfact[ \t]*=[ \t]*/, ""); sub(/[ \t,f].*/, ""); print; exit
+	}' "$def"
+}
 
 cargs() { # words -> "a", "b", with C escapes and ~ expanded (there is no shell)
 	ca_out=
@@ -407,7 +412,7 @@ programs() {
 	note 'arguments with spaces go in quotes, e.g. foot -e "tmux new"'
 	askcmd termcmd 'terminal' "$(defcmd termcmd)"
 	askcmd menucmd 'application launcher' "$(defbin menucmd)"
-	askcmd dmenucmd 'menu used by scripts' "$(defbin dmenucmd)"
+	askcmd traymenucmd 'systray right-click menu' "$(defbin traymenucmd)"
 	askcmd filemanagercmd 'file manager' "$(defcmd filemanagercmd)"
 	askcmd browsercmd 'browser' "$(defcmd browsercmd)"
 }
@@ -641,14 +646,22 @@ monitors() {
 	done <"$tmp/outs"
 
 	place_monitors
-	grep -F 'rotate/reflect' "$def" >"$mons" || : >"$mons"
+	# designated initializers, so a new MonitorRule field cannot silently
+	# shift the meaning of the rows written here
+	: >"$mons"
 	awk -F'|' '{
-		printf "    { \"%s\", %sf, %s, %s, &layouts[0], %s, %s, %s, %s, %s, %s },\n",
-			$1, $7, $8, $5, $6, $11, $12, $2, $3, $4
+		printf "    { .name = \"%s\",\n", $1
+		printf "      .mfact = %sf, .nmaster = %s, .scale = %s,\n", $7, $8, $5
+		printf "      .lt = &layouts[0], .rr = %s,\n", $6
+		printf "      .x = %s, .y = %s, .width = %s, .height = %s, .refresh = %s },\n",
+			$11, $12, $2, $3, $4
 	}' "$tmp/mons.pos" >>"$mons"
-	printf '    /* catch-all for monitors not listed above */\n' >>"$mons"
-	printf '    { NULL, 0.55f, 1, 1, &layouts[0], WL_OUTPUT_TRANSFORM_NORMAL, -1, -1, 0, 0, 0 },\n' \
-		>>"$mons"
+	cat >>"$mons" <<'EOF'
+    { .name = NULL, // catch-all for monitors not listed above
+      .mfact = 0.55f, .nmaster = 1, .scale = 1,
+      .lt = &layouts[0], .rr = WL_OUTPUT_TRANSFORM_NORMAL,
+      .x = -1, .y = -1, .width = 0, .height = 0, .refresh = 0 },
+EOF
 }
 
 generate() { # config.def.h rewritten with the collected values
