@@ -28,7 +28,7 @@ fixes carried on top of upstream. Every configuration knob named here lives in
   stack, bound to `MODKEY+Shift+h/j/k/l`.
 - **[bar-systray]** (by [janetski]) — a StatusNotifierItem tray at the right
   end of the bar, adding a `libdbus` dependency. Left click activates an item,
-  right click opens its menu through `dmenucmd`. Size and spacing come from
+  right click opens its menu through `traymenucmd`. Size and spacing come from
   `systrayiconsize`/`systrayspacing`, and `showsystray` turns it off.
 
   Disable at build time with `./configure --no-systray` (`--no-tray` is
