@@ -55,7 +55,7 @@ Other:
   --no-checks             skip the dependency probes
   -q, --quiet             only report errors
   -h, --help              this message
-  -V, --version           print the dwl version
+  -V, --version           print the g0wn version
 
 VAR=VALUE accepts CC, PKG_CONFIG, PREFIX, CFLAGS, LDFLAGS and LIBS.
 EOF

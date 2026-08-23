@@ -1,10 +1,10 @@
 #!/bin/sh
-# Status text for dwl's bar: one line per tick on stdout, made of the modules
+# Status text for g0wn's bar: one line per tick on stdout, made of the modules
 # listed in status.conf, or of the built-in clock and battery without it.
 # Plain POSIX shell: runs on Linux, the BSDs and anything else with a /bin/sh.
 set -u
 
-warn() { printf 'dwl-status.sh: %s\n' "$*" >&2; }
+warn() { printf 'g0wn-status.sh: %s\n' "$*" >&2; }
 
 options() { # "$@" -> conf, once, arg_battery_interval; -h exits on its own
 	while [ $# -gt 0 ]; do
@@ -15,11 +15,11 @@ options() { # "$@" -> conf, once, arg_battery_interval; -h exits on its own
 		-1|--once) once=1 ;;
 		-h|--help)
 			cat <<EOF
-Usage: dwl-status.sh [-1] [-c FILE] [SECONDS]
+Usage: g0wn-status.sh [-1] [-c FILE] [SECONDS]
 
 Prints the bar status line once per interval. The modules shown and their
-format come from \$DWL_STATUS_CONF, or from
-\${XDG_CONFIG_HOME:-\$HOME/.config}/dwl/status.conf, and fall back to the
+format come from \$G0WN_STATUS_CONF, or from
+\${XDG_CONFIG_HOME:-\$HOME/.config}/g0wn/status.conf, and fall back to the
 built-in clock and battery when that file is missing. Run ./status_gen to
 write it.
 
@@ -491,7 +491,7 @@ render() { # module -> r, empty when there is nothing to show
 }
 
 main() {
-	conf=${DWL_STATUS_CONF:-${XDG_CONFIG_HOME:-$HOME/.config}/dwl/status.conf}
+	conf=${G0WN_STATUS_CONF:-${XDG_CONFIG_HOME:-$HOME/.config}/g0wn/status.conf}
 	once=0
 	arg_battery_interval=
 

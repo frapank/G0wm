@@ -896,7 +896,7 @@ void autostartexec(void)
         if ((autostart_pids[i] = fork()) == 0) {
             setsid();
             execvp(*p, (char* const*)p);
-            die("dwl: execvp %s:", *p);
+            die("g0wn: execvp %s:", *p);
         }
         /* skip arguments */
         while (*++p)
@@ -1817,7 +1817,7 @@ void cursorwarptohint(void)
     }
 }
 
-/* The opacity dwl's own drawing runs at. It rides on opacity_enabled, so the
+/* The opacity g0wn's own drawing runs at. It rides on opacity_enabled, so the
  * one key turns the windows and the decorations off and on together. */
 float decoopacity(void)
 {
@@ -2662,7 +2662,7 @@ void inputdevice(struct wl_listener* listener, void* data)
     }
 
     /* We need to let the wlr_seat know what our capabilities are, which is
-     * communiciated to the client. In dwl we always have a cursor, even if
+     * communiciated to the client. In g0wn we always have a cursor, even if
      * there are no pointer devices, so we always include that capability. */
     /* TODO do we actually require a cursor? */
     caps = WL_SEAT_CAPABILITY_POINTER;
@@ -3355,7 +3355,7 @@ void maximizenotify(struct wl_listener* listener, void* data)
 {
     /* This event is raised when a client would like to maximize itself,
      * typically because the user clicked on the maximize button on
-     * client-side decorations. dwl doesn't support maximization, but
+     * client-side decorations. g0wn doesn't support maximization, but
      * to conform to xdg-shell protocol we still must send a configure.
      * Since xdg-shell protocol v5 we should ignore request of unsupported
      * capabilities, just schedule a empty configure when the client uses <5
@@ -3733,7 +3733,7 @@ void opacityrefresh(void)
     Monitor* m;
     Client* c;
 
-    /* a decoration is drawn by dwl, not by a client, so nothing would come
+    /* a decoration is drawn by g0wn, not by a client, so nothing would come
      * back to redraw it: the bar and the title bars follow drawbars() */
     wl_list_for_each(c, &clients, link) setbordercolor(c, c->borderscheme);
     drawbars();
@@ -3870,7 +3870,7 @@ void powermgrsetmode(struct wl_listener* listener, void* data)
     wlr_output_state_set_enabled(&state, event->mode);
     if (!wlr_output_commit_state(m->wlr_output, &state))
         fprintf(stderr,
-                "dwl: failed to %s output %s\n",
+                "g0wn: failed to %s output %s\n",
                 event->mode ? "enable" : "disable",
                 m->wlr_output->name);
 
@@ -4007,7 +4007,7 @@ void resizewidth(const Arg* arg)
         return;
     if (!c->isfloating) {
         /* A tiled client has no free geometry, so widen/narrow the master
-         * area instead - dwl's equivalent of resizing a sway split. */
+         * area instead - g0wn's equivalent of resizing a sway split. */
         setmfact(&(Arg){ .f = arg->i > 0 ? +0.05f : -0.05f });
         return;
     }
@@ -4047,7 +4047,7 @@ void run(char* startup_cmd)
     }
 
     /* Mark stdout as non-blocking to avoid the startup script
-     * causing dwl to freeze when a user neither closes stdin
+     * causing g0wn to freeze when a user neither closes stdin
      * nor consumes standard input in his startup script */
 
     if (fd_set_nonblock(STDOUT_FILENO) < 0)
@@ -4330,7 +4330,7 @@ void setpsel(struct wl_listener* listener, void* data)
 {
     /* This event is raised by the seat when a client wants to set the
      * selection, usually when the user copies something. wlroots allows
-     * compositors to ignore such requests if they so choose, but in dwl we
+     * compositors to ignore such requests if they so choose, but in g0wn we
      * always honor them
      */
     struct wlr_seat_request_set_primary_selection_event* event = data;
@@ -4341,7 +4341,7 @@ void setsel(struct wl_listener* listener, void* data)
 {
     /* This event is raised by the seat when a client wants to set the
      * selection, usually when the user copies something. wlroots allows
-     * compositors to ignore such requests if they so choose, but in dwl we
+     * compositors to ignore such requests if they so choose, but in g0wn we
      * always honor them
      */
     struct wlr_seat_request_set_selection_event* event = data;
@@ -4583,7 +4583,7 @@ void setup(void)
                                                statusin,
                                                NULL);
 
-    /* Missing the session bus is not fatal: dwl comes up without a tray
+    /* Missing the session bus is not fatal: g0wn comes up without a tray
      * and/or bar notifications. */
     if (showbar &&
         (0
@@ -4640,7 +4640,7 @@ void spawn(const Arg* arg)
         dup2(STDERR_FILENO, STDOUT_FILENO);
         setsid();
         execvp(((char**)arg->v)[0], (char**)arg->v);
-        die("dwl: execvp %s failed:", ((char**)arg->v)[0]);
+        die("g0wn: execvp %s failed:", ((char**)arg->v)[0]);
     }
 }
 
@@ -5007,7 +5007,7 @@ void updatemons(struct wl_listener* listener, void* data)
     wlr_scene_node_set_position(&root_bg->node, sgeom.x, sgeom.y);
     wlr_scene_rect_set_size(root_bg, sgeom.width, sgeom.height);
 
-    /* Make sure the clients are hidden when dwl is locked */
+    /* Make sure the clients are hidden when g0wn is locked */
     wlr_scene_node_set_position(&locked_bg->node, sgeom.x, sgeom.y);
     wlr_scene_rect_set_size(locked_bg, sgeom.width, sgeom.height);
 
@@ -5071,7 +5071,7 @@ void updatemons(struct wl_listener* listener, void* data)
     }
 
     if (stext[0] == '\0')
-        strncpy(stext, "dwl-" VERSION, sizeof(stext));
+        strncpy(stext, "g0wn-" VERSION, sizeof(stext));
     wl_list_for_each(m, &mons, link)
     {
         updatebar(m);
@@ -5456,7 +5456,7 @@ void xwaylandready(struct wl_listener* listener, void* data)
     /* assign the one and only seat */
     wlr_xwayland_set_seat(xwayland, seat);
 
-    /* Set the default XWayland cursor to match the rest of dwl. */
+    /* Set the default XWayland cursor to match the rest of g0wn. */
     if ((xcursor = wlr_xcursor_manager_get_xcursor(cursor_mgr, "default", 1)))
         wlr_xwayland_set_cursor(
             xwayland,
@@ -5477,7 +5477,7 @@ int main(int argc, char* argv[])
         else if (c == 'd')
             log_level = WLR_DEBUG;
         else if (c == 'v')
-            die("dwl " VERSION);
+            die("g0wn " VERSION);
         else
             goto usage;
     }

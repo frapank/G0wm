@@ -1,5 +1,5 @@
 #!/bin/sh
-# Interactive generator for status.conf, the config of scripts/dwl-status.sh,
+# Interactive generator for status.conf, the config of scripts/g0wn-status.sh,
 # driven by the defaults that script falls back to on its own.
 # Plain POSIX shell: runs on Linux, the BSDs and anything else with a /bin/sh.
 
@@ -18,8 +18,8 @@ options() { # "$@" -> out, edit set from the command line; -h exits on its own
 Usage: ./status_gen [-c] [-o FILE]
 
 Walks through the bar status settings and writes
-\${XDG_CONFIG_HOME:-\$HOME/.config}/dwl/status.conf, which scripts/dwl-status.sh
-reads. Every default is dwl-status.sh's own, so pressing Enter at each prompt
+\${XDG_CONFIG_HOME:-\$HOME/.config}/g0wn/status.conf, which scripts/g0wn-status.sh
+reads. Every default is g0wn-status.sh's own, so pressing Enter at each prompt
 keeps the clock and battery it shows without a config file.
 
   -c, --current   edit the existing status.conf instead: it becomes the source
@@ -106,7 +106,7 @@ menu() { # prompt default-index item... -> choice
 
 setval() { printf '%s\t%s\n' "$1" "$2" >>"$vals"; }
 
-dflt() { # built-in default of a setting, as dwl-status.sh has it
+dflt() { # built-in default of a setting, as g0wn-status.sh has it
 	case $1 in
 	modules) echo 'date time battery' ;;
 	interval) echo 1 ;;
@@ -223,7 +223,7 @@ icon_for() { # module -> ic, empty when icons are off
 	if [ -n "$gv" ]; then ic=$gv; else icon_of "$1"; fi
 }
 
-subst() { # string token replacement -> sb (same rule dwl-status.sh applies)
+subst() { # string token replacement -> sb (same rule g0wn-status.sh applies)
 	sb= sb_rest=$1
 	while :; do
 		case $sb_rest in
@@ -233,7 +233,7 @@ subst() { # string token replacement -> sb (same rule dwl-status.sh applies)
 	done
 }
 
-render_tpl() { # template module -> rt, as dwl-status.sh would fill it in
+render_tpl() { # template module -> rt, as g0wn-status.sh would fill it in
 	rt_ic=
 	case $2 in
 	battery) rt_v=87 ;;
@@ -543,7 +543,7 @@ final() { # setting -> the value that was collected, or the current default
 }
 
 generate() { # the config file, every value quoted so spaces survive
-	printf '# Status text of dwl'\''s bar, read by dwl-status.sh.\n'
+	printf '# Status text of g0wn'\''s bar, read by g0wn-status.sh.\n'
 	printf '# Written by ./status_gen on %s.\n' "$(date '+%Y-%m-%d %H:%M')"
 	printf '# Quotes keep the spaces. In a format %%v is the value and %%i the\n'
 	printf '# icon; ram has %%u and %%t too, date and time are strftime formats.\n'
@@ -611,17 +611,17 @@ ansify() {
 	}'
 }
 
-preview() { # one line, drawn by dwl-status.sh itself from the new file
-	pv=$srcdir/scripts/dwl-status.sh
-	[ -x "$pv" ] || pv=$(command -v dwl-status.sh 2>/dev/null)
-	[ -n "$pv" ] && [ -x "$pv" ] || { note 'dwl-status.sh not found, no preview'; return; }
+preview() { # one line, drawn by g0wn-status.sh itself from the new file
+	pv=$srcdir/scripts/g0wn-status.sh
+	[ -x "$pv" ] || pv=$(command -v g0wn-status.sh 2>/dev/null)
+	[ -n "$pv" ] && [ -x "$pv" ] || { note 'g0wn-status.sh not found, no preview'; return; }
 	note 'one line, as the bar would draw it:'
-	DWL_STATUS_CONF=$1 "$pv" --once | ansify
+	G0WN_STATUS_CONF=$1 "$pv" --once | ansify
 }
 
 main() {
 	srcdir=$(CDPATH= cd -- "$(dirname -- "$0")" && pwd)
-	out=${DWL_STATUS_CONF:-${XDG_CONFIG_HOME:-$HOME/.config}/dwl/status.conf}
+	out=${G0WN_STATUS_CONF:-${XDG_CONFIG_HOME:-$HOME/.config}/g0wn/status.conf}
 	def= # set once an existing file becomes the template
 	mode=normal
 	edit=
@@ -638,7 +638,7 @@ color_netdown color_netup color_battery_low color_battery_charging'
 
 	interface
 
-	printf '%sdwl status bar generator%s\n' "$B" "$R"
+	printf '%sg0wn status bar generator%s\n' "$B" "$R"
 
 	keep=
 	if [ -f "$out" ] && [ -z "$edit" ]; then
@@ -657,7 +657,7 @@ color_netdown color_netup color_battery_low color_battery_charging'
 	if [ -n "$def" ]; then
 		note "defaults from ${def##*/}, writing ${out##*/}"
 	else
-		note "defaults from dwl-status.sh, writing $out"
+		note "defaults from g0wn-status.sh, writing $out"
 	fi
 
 	title 'Mode'
@@ -687,7 +687,7 @@ color_netdown color_netup color_battery_low color_battery_charging'
 	[ -n "$keep" ] && note "previous config kept as ${keep##*/}"
 	printf 'wrote %s\n' "$out"
 	preview "$out"
-	note 'it is read when dwl-status.sh starts, so log out and back in to apply it'
+	note 'it is read when g0wn-status.sh starts, so log out and back in to apply it'
 }
 
 main "$@"
