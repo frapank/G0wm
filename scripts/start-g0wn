@@ -5,20 +5,20 @@ audio_procs='pipewire|pipewire-pulse|wireplumber'
 
 guard() {
     if [ -n "${WAYLAND_DISPLAY:-}" ]; then
-        echo "start-dwl: already inside a Wayland session ($WAYLAND_DISPLAY), refusing to nest" >&2
+        echo "start-g0wn: already inside a Wayland session ($WAYLAND_DISPLAY), refusing to nest" >&2
         exit 1
     fi
 
-    if ! command -v dwl >/dev/null 2>&1; then
-        echo "start-dwl: dwl not found in PATH, cannot start" >&2
+    if ! command -v g0wn >/dev/null 2>&1; then
+        echo "start-g0wn: g0wn not found in PATH, cannot start" >&2
         exit 1
     fi
 }
 
 export_env() {
-    export XDG_CURRENT_DESKTOP=dwl
+    export XDG_CURRENT_DESKTOP=g0wn
     export XDG_SESSION_TYPE=wayland
-    export XDG_SESSION_DESKTOP=dwl
+    export XDG_SESSION_DESKTOP=g0wn
 
     export MOZ_ENABLE_WAYLAND=1
     export QT_QPA_PLATFORM=wayland
@@ -31,7 +31,7 @@ export_env() {
 }
 
 setup_log() {
-    log_dir="${XDG_STATE_HOME:-$HOME/.local/state}/dwl"
+    log_dir="${XDG_STATE_HOME:-$HOME/.local/state}/g0wn"
     mkdir -p "$log_dir"
 
     cd "$HOME"
@@ -56,7 +56,7 @@ stop_audio() {
 
 cleanup() {
     stop_audio
-    pkill -u "$(id -u)" -x 'dwl-status.sh|swaybg|swayidle' 2>/dev/null || true
+    pkill -u "$(id -u)" -x 'g0wn-status.sh|swaybg|swayidle' 2>/dev/null || true
 
     for core in "$HOME"/core "$HOME"/core.*; do
         [ -f "$core" ] || continue
@@ -64,7 +64,7 @@ cleanup() {
     done
 }
 
-start_audio() { # builds audio_cmd, run before dwl in the inner shell
+start_audio() { # builds audio_cmd, run before g0wn in the inner shell
     audio_cmd=
     if command -v pipewire >/dev/null 2>&1; then
         audio_cmd='pipewire >/dev/null 2>&1 &
@@ -79,34 +79,34 @@ done
 pgrep -u \"\$(id -u)\" -x wireplumber >/dev/null 2>&1 || wireplumber >/dev/null 2>&1 &
 "
         else
-            echo "start-dwl: wireplumber not found, no session/policy management for audio" >&2
+            echo "start-g0wn: wireplumber not found, no session/policy management for audio" >&2
         fi
 
         if command -v pipewire-pulse >/dev/null 2>&1; then
             audio_cmd="${audio_cmd}[ -S \"\${XDG_RUNTIME_DIR:-/run/user/\$(id -u)}/pulse/native\" ] || pipewire-pulse >/dev/null 2>&1 &"
         else
-            echo "start-dwl: pipewire-pulse not found, PulseAudio clients will have no server" >&2
+            echo "start-g0wn: pipewire-pulse not found, PulseAudio clients will have no server" >&2
         fi
     else
-        echo "start-dwl: pipewire not found, starting without an audio server" >&2
+        echo "start-g0wn: pipewire not found, starting without an audio server" >&2
     fi
 }
 
 run_session() {
-    inner_cmd="${audio_cmd}exec dwl"
+    inner_cmd="${audio_cmd}exec g0wn"
 
     session_launcher=
     if command -v dbus-run-session >/dev/null 2>&1 && command -v dbus-daemon >/dev/null 2>&1; then
         session_launcher="dbus-run-session --"
     else
-        echo "start-dwl: dbus-run-session/dbus-daemon not found, running without a private D-Bus session (systray will be unavailable)" >&2
+        echo "start-g0wn: dbus-run-session/dbus-daemon not found, running without a private D-Bus session (systray will be unavailable)" >&2
     fi
 
-    if command -v dwl-status.sh >/dev/null 2>&1; then
-        dwl-status.sh | $session_launcher sh -c "$inner_cmd" >>"$log_dir/dwl.log" 2>&1
+    if command -v g0wn-status.sh >/dev/null 2>&1; then
+        g0wn-status.sh | $session_launcher sh -c "$inner_cmd" >>"$log_dir/g0wn.log" 2>&1
     else
-        echo "start-dwl: dwl-status.sh not found, starting without bar status text" >&2
-        $session_launcher sh -c "$inner_cmd" >>"$log_dir/dwl.log" 2>&1
+        echo "start-g0wn: g0wn-status.sh not found, starting without bar status text" >&2
+        $session_launcher sh -c "$inner_cmd" >>"$log_dir/g0wn.log" 2>&1
     fi
 }
 
