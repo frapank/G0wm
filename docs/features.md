@@ -129,6 +129,45 @@ fixes carried on top of upstream. Every configuration knob named here lives in
   Since neither changing the opacity nor toggling it damages anything on its
   own, and the values are applied while rendering, both ask every enabled
   output for a frame.
+- **Frosted glass** (`INTEGRATED_BACKGROUND`) — `opacity_type` picks what a
+  transparent window shows through itself. `OpacityNormal`, the default, is
+  the plain behaviour above: whatever happens to be behind it. `OpacityBlur`
+  puts a frosted copy of the wallpaper there instead, the way macOS does.
+
+  It is the wallpaper that is blurred, not the screen: `blurwallpaper()` makes
+  one blurred copy when `setwallpaper()` loads it, and every window's backdrop
+  is a crop of that buffer, positioned by `blurclient()`. Nothing is blurred
+  per frame. The cheapness costs depth — a transparent window over another one
+  shows the wallpaper, not the window underneath; blurring what has already
+  been composited is what SceneFX exists for, and it does not follow wlroots
+  0.20 yet.
+
+  The copy is shrunk (`blurshrink()`), box blurred `blur_passes` times at
+  `blur_radius` along its rows and then, transposed, along its columns
+  (`blurrows()`, `blurtranspose()`), then recoloured by `blur_saturation` and
+  `blur_brightness` (`blurtint()`). It stays at the shrunk size and the GPU
+  scales it back up, `blursrcbox()` dividing each crop down into it: a backdrop
+  sits under every translucent window, so unlike the wallpaper it is never
+  occluded away, and a full-size copy in system memory would cross the bus on
+  every frame anything moved.
+
+  `blurclient()` runs from the render pass, so it must leave the scene alone on
+  frames where nothing changed — anything it touches is damage, and damage asks
+  for another frame. The wlroots setters return early when the value matches,
+  except `wlr_scene_buffer_set_buffer()`; the node's own `buffer` field is no
+  use as a guard either, as the scene nulls it once it holds a texture, so
+  `Client.blurbuf` remembers what it was last handed. Get this wrong and
+  everything still draws — the compositor just never idles.
+
+  The backdrop sits under a client's whole box, borders and title bar
+  included, and the bar gets one of its own (`blurbar()`). Whether either is
+  drawn is `decotranslucent()`'s call, which asks whether `opacity_deco` fades
+  the decorations and whether a colour in `colors[]` carries an alpha of its
+  own — that second half is how a bar stays see-through with `opacity_deco`
+  left at `1.00f`. Fullscreen clients are drawn opaque and get no backdrop,
+  `MODKEY+Alt+o` takes the glass away with the rest of the opacity, and with
+  no wallpaper the effect turns itself off.
+
 - **Bar runner** (`src/g0wn.c`, `RUNNER`) — `MODKEY+r` turns the same shared
   box the title/notification use into a prompt: a caret marks the insertion
   point (it is what tells an empty prompt apart from an empty title area, and

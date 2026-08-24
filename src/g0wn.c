@@ -132,6 +132,7 @@ enum {
     SchemeRunnerSuggest
 }; /* color schemes */
 enum { CurNormal, CurPressed, CurMove, CurResize }; /* cursor */
+enum { OpacityNormal, OpacityBlur };                /* opacity_type */
 enum { XDGShell, LayerShell, X11 };                 /* client types */
 enum {
     LyrBg,
@@ -213,6 +214,10 @@ typedef struct {
     struct wl_listener set_hints;
 #endif
     struct wlr_scene_buffer* title;
+#ifdef INTEGRATED_BACKGROUND
+    struct wlr_scene_buffer* blur; /* frosted wallpaper, below the whole box */
+    struct wlr_buffer* blurbuf;    /* what blur's node was last handed */
+#endif
     Buffer* titlepool[2];
     int titlex, titlew; /* title bar placement, relative to the border box */
     int titlebufw;      /* pixel width titlepool was allocated at */
@@ -276,6 +281,8 @@ struct Monitor {
     struct wlr_scene_buffer* scene_buffer; /* bar buffer */
 #ifdef INTEGRATED_BACKGROUND
     struct wlr_scene_buffer* wallpaper; /* wallpaper buffer */
+    struct wlr_buffer* wallpaperbuf;    /* what wallpaper's node was last handed */
+    struct wlr_scene_buffer* barblur;   /* the bar's own frosted backdrop */
 #endif
     struct wlr_scene_rect* fullscreen_bg; /* See createmon() for info */
     struct wl_listener frame;
@@ -316,6 +323,8 @@ struct Monitor {
     Buffer* pool[2];
 #ifdef INTEGRATED_BACKGROUND
     Buffer* wallpaperpool[1];
+    Buffer* blurpool[1];        /* wallpaperpool, blurred */
+    int blurw, blurh;           /* size blurpool was rendered at */
     int wallpaperw, wallpaperh; /* size wallpaperpool was rendered at */
 #endif
     int lrpad;
@@ -371,6 +380,21 @@ static void axisnotify(struct wl_listener* listener, void* data);
 static bool baracceptsinput(struct wlr_scene_buffer* buffer,
                             double* sx,
                             double* sy);
+#ifdef INTEGRATED_BACKGROUND
+static void blurbar(Monitor* m);
+static void blurclient(Client* c);
+static void blurrows(uint32_t* dst, const uint32_t* src, int w, int h, int r);
+static void blurshrink(uint32_t* dst, const uint32_t* src, int w, int h, int d);
+static void blursrcbox(Monitor* m,
+                       struct wlr_fbox* src,
+                       int x,
+                       int y,
+                       int w,
+                       int h);
+static void blurtint(uint32_t* px, size_t n);
+static void blurtranspose(uint32_t* dst, const uint32_t* src, int w, int h);
+static void blurwallpaper(Monitor* m);
+#endif
 static void bufdestroy(struct wlr_buffer* buffer);
 static bool bufdatabegin(struct wlr_buffer* buffer,
                          uint32_t flags,
@@ -406,6 +430,7 @@ static void cursorconstrain(struct wlr_pointer_constraint_v1* constraint);
 static void cursorframe(struct wl_listener* listener, void* data);
 static void cursorwarptohint(void);
 static float decoopacity(void);
+static int decotranslucent(void);
 static void destroydecoration(struct wl_listener* listener, void* data);
 static void destroydragicon(struct wl_listener* listener, void* data);
 static void destroyidleinhibitor(struct wl_listener* listener, void* data);
@@ -929,6 +954,264 @@ bool baracceptsinput(struct wlr_scene_buffer* buffer, double* sx, double* sy)
     return true;
 }
 
+#ifdef INTEGRATED_BACKGROUND
+/* Repoints the bar's backdrop at the strip of frosted wallpaper it sits on.
+ * The bar is drawn by g0wn, so decotranslucent() decides whether it shows. */
+void blurbar(Monitor* m)
+{
+    struct wlr_fbox src;
+    Buffer* buf;
+    int y, w, h;
+
+    if (!m->barblur)
+        return;
+
+    buf = m->blurpool[0];
+    y = topbar ? 0 : m->m.height - m->b.real_height;
+    w = MIN(m->b.real_width, m->wallpaperw);
+    h = MIN(m->b.real_height, m->wallpaperh - y);
+    if (!buf || !m->scene_buffer->node.enabled || !opacity_enabled ||
+        !decotranslucent() || y < 0 || w <= 0 || h <= 0) {
+        wlr_scene_node_set_enabled(&m->barblur->node, 0);
+        return;
+    }
+
+    blursrcbox(m, &src, 0, y, w, h);
+    wlr_scene_node_set_position(&m->barblur->node, m->m.x, m->m.y + y);
+    wlr_scene_buffer_set_dest_size(m->barblur, w, h);
+    wlr_scene_buffer_set_source_box(m->barblur, &src);
+    wlr_scene_node_set_enabled(&m->barblur->node, 1);
+}
+
+/* Points a client's backdrop at the frosted wallpaper it covers. Done while
+ * rendering, so nothing that moves a window has to keep the two in step. */
+void blurclient(Client* c)
+{
+    struct wlr_fbox src;
+    Monitor* m = c->mon;
+    Buffer* buf;
+    int x, y, w, h;
+
+    if (!c->blur)
+        return;
+
+    /* the box covers the decorations too, so either letting light through is
+     * enough; a fullscreen client is drawn opaque and never does */
+    buf = m ? m->blurpool[0] : NULL;
+    if (!buf || c->isfullscreen || !opacity_enabled ||
+        ((!c->hasopacity || c->opacity >= 1.0f) && !decotranslucent())) {
+        wlr_scene_node_set_enabled(&c->blur->node, 0);
+        return;
+    }
+
+    /* the wallpaper covers the monitor pixel for pixel, so the crop is just
+     * the client's box in monitor-local coordinates, clipped to it */
+    x = MAX(0, c->geom.x - m->m.x);
+    y = MAX(0, c->geom.y - m->m.y);
+    w = MIN(c->geom.x - m->m.x + c->geom.width, m->wallpaperw) - x;
+    h = MIN(c->geom.y - m->m.y + c->geom.height, m->wallpaperh) - y;
+    if (w <= 0 || h <= 0) {
+        wlr_scene_node_set_enabled(&c->blur->node, 0);
+        return;
+    }
+
+    blursrcbox(m, &src, x, y, w, h);
+    /* the node hangs off the client's tree, hence the offset back into it */
+    wlr_scene_node_set_position(
+        &c->blur->node, x - (c->geom.x - m->m.x), y - (c->geom.y - m->m.y));
+    wlr_scene_buffer_set_dest_size(c->blur, w, h);
+    wlr_scene_buffer_set_source_box(c->blur, &src);
+    /* set_buffer drops the texture and damages the node, which from here
+     * would ask for another frame forever; the node's own buffer field is no
+     * guard, as the scene nulls it once it holds a texture */
+    if (c->blurbuf != &buf->base) {
+        wlr_scene_buffer_set_buffer(c->blur, &buf->base);
+        c->blurbuf = &buf->base;
+    }
+    wlr_scene_node_set_enabled(&c->blur->node, 1);
+}
+
+/* One box blur along the rows: a 2r+1 window slides on a running sum, so a
+ * pass costs the same whatever the radius is, and three land near a Gaussian. */
+void blurrows(uint32_t* dst, const uint32_t* src, int w, int h, int r)
+{
+    int x, y, i;
+
+    for (y = 0; y < h; y++) {
+        const uint32_t* s = src + (size_t)y * (size_t)w;
+        uint32_t* d = dst + (size_t)y * (size_t)w;
+        uint32_t sr = 0, sg = 0, sb = 0, n = 0;
+
+        for (i = 0; i <= r && i < w; i++) {
+            sr += (s[i] >> 16) & 0xff;
+            sg += (s[i] >> 8) & 0xff;
+            sb += s[i] & 0xff;
+            n++;
+        }
+        for (x = 0; x < w; x++) {
+            d[x] = 0xff000000u | ((sr / n) << 16) | ((sg / n) << 8) | (sb / n);
+            if (x - r >= 0) {
+                sr -= (s[x - r] >> 16) & 0xff;
+                sg -= (s[x - r] >> 8) & 0xff;
+                sb -= s[x - r] & 0xff;
+                n--;
+            }
+            if (x + r + 1 < w) {
+                sr += (s[x + r + 1] >> 16) & 0xff;
+                sg += (s[x + r + 1] >> 8) & 0xff;
+                sb += s[x + r + 1] & 0xff;
+                n++;
+            }
+        }
+    }
+}
+
+/* Averages every d*d block down to one pixel; the blur then runs on the
+ * small image, which is what keeps a radius this wide affordable. */
+void blurshrink(uint32_t* dst, const uint32_t* src, int w, int h, int d)
+{
+    int sw = MAX(1, w / d), sh = MAX(1, h / d);
+    int x, y, i, j;
+
+    for (y = 0; y < sh; y++)
+        for (x = 0; x < sw; x++) {
+            uint32_t sr = 0, sg = 0, sb = 0, n = 0;
+
+            for (j = y * d; j < MIN(h, (y + 1) * d); j++)
+                for (i = x * d; i < MIN(w, (x + 1) * d); i++) {
+                    uint32_t px = src[(size_t)j * (size_t)w + (size_t)i];
+
+                    sr += (px >> 16) & 0xff;
+                    sg += (px >> 8) & 0xff;
+                    sb += px & 0xff;
+                    n++;
+                }
+            dst[(size_t)y * (size_t)sw + (size_t)x] =
+                n ? 0xff000000u | ((sr / n) << 16) | ((sg / n) << 8) | (sb / n)
+                  : 0xff000000u;
+        }
+}
+
+/* Maps a monitor-local rectangle onto the smaller frosted buffer. The crop
+ * stays in floating point so it does not snap to that buffer's grid. */
+void blursrcbox(Monitor* m, struct wlr_fbox* src, int x, int y, int w, int h)
+{
+    double sx = (double)m->blurw / (double)m->wallpaperw;
+    double sy = (double)m->blurh / (double)m->wallpaperh;
+
+    src->x = x * sx;
+    src->y = y * sy;
+    src->width = w * sx;
+    src->height = h * sy;
+}
+
+/* A blur this wide leaves grey mush, so the saturation is pushed back up:
+ * that is what makes it read as glass rather than as a smudge. */
+void blurtint(uint32_t* px, size_t n)
+{
+    size_t i;
+
+    if (blur_saturation == 1.0f && blur_brightness == 1.0f)
+        return;
+
+    for (i = 0; i < n; i++) {
+        float r = (float)((px[i] >> 16) & 0xff);
+        float g = (float)((px[i] >> 8) & 0xff);
+        float b = (float)(px[i] & 0xff);
+        float l = 0.2126f * r + 0.7152f * g + 0.0722f * b;
+
+        r = (l + (r - l) * blur_saturation) * blur_brightness;
+        g = (l + (g - l) * blur_saturation) * blur_brightness;
+        b = (l + (b - l) * blur_saturation) * blur_brightness;
+        px[i] = 0xff000000u |
+                ((uint32_t)(MAX(0.0f, MIN(255.0f, r)) + 0.5f) << 16) |
+                ((uint32_t)(MAX(0.0f, MIN(255.0f, g)) + 0.5f) << 8) |
+                (uint32_t)(MAX(0.0f, MIN(255.0f, b)) + 0.5f);
+    }
+}
+
+/* Turns a w*h image on its side, so that blurring its rows blurs the columns
+ * of the original and one row pass covers both directions. */
+void blurtranspose(uint32_t* dst, const uint32_t* src, int w, int h)
+{
+    int x, y;
+
+    for (y = 0; y < h; y++)
+        for (x = 0; x < w; x++)
+            dst[(size_t)x * (size_t)h + (size_t)y] =
+                src[(size_t)y * (size_t)w + (size_t)x];
+}
+
+/* Builds the frosted copy OpacityBlur shows through everything transparent,
+ * once per wallpaper rather than per frame. It stays at 1/d of the monitor
+ * and the GPU scales it back up: a backdrop is never occluded away, so a
+ * full-size copy would cross the bus on every frame anything moved. */
+void blurwallpaper(Monitor* m)
+{
+    Buffer* buf;
+    Client* c;
+    uint32_t *a, *b, *t;
+    unsigned int i;
+    int w = m->wallpaperw, h = m->wallpaperh;
+    int d, sw, sh, r;
+
+    /* the bar's node is what owns the buffer, so it lets go of it first */
+    if (m->barblur)
+        wlr_scene_buffer_set_buffer(m->barblur, NULL);
+    bufpooldrop(m->blurpool, LENGTH(m->blurpool));
+    m->blurw = m->blurh = 0;
+
+    /* the nodes pick the new buffer up next frame; the pointer they compare
+     * against has to go now, or a reused address would read as unchanged */
+    wl_list_for_each(c, &clients, link) if (c->mon == m) c->blurbuf = NULL;
+
+    if (opacity_type != OpacityBlur || !m->wallpaperpool[0] || w <= 0 || h <= 0)
+        return;
+
+    /* the shrink blurs by itself, so the radius shrinks with the image; never
+     * less than a quarter, as this size is what the effect costs per frame */
+    d = MAX(4, MIN(8, (int)blur_radius / 4));
+    sw = MAX(1, w / d);
+    sh = MAX(1, h / d);
+    r = MAX(1, (int)blur_radius / d);
+
+    if (!(buf = bufget(m->blurpool, LENGTH(m->blurpool), sw, sh)))
+        return;
+    a = ecalloc((size_t)sw * (size_t)sh, sizeof(*a));
+    b = ecalloc((size_t)sw * (size_t)sh, sizeof(*b));
+
+    blurshrink(a, m->wallpaperpool[0]->data, w, h, d);
+    for (i = 0; i < blur_passes; i++) {
+        blurrows(b, a, sw, sh, r);
+        t = a, a = b, b = t;
+    }
+    blurtranspose(b, a, sw, sh);
+    t = a, a = b, b = t;
+    for (i = 0; i < blur_passes; i++) {
+        blurrows(b, a, sh, sw, r);
+        t = a, a = b, b = t;
+    }
+    blurtranspose(b, a, sh, sw);
+    t = a, a = b, b = t;
+
+    blurtint(a, (size_t)sw * (size_t)sh);
+    memcpy(buf->data, a, (size_t)sw * (size_t)sh * sizeof(*a));
+    free(a);
+    free(b);
+
+    /* what blurbar() and blurclient() scale their crops by */
+    m->blurw = sw;
+    m->blurh = sh;
+
+    /* the pool keeps no reference of its own: the bar's node is what holds
+     * the buffer up, and the clients take their own lock as they pick it up */
+    if (m->barblur)
+        wlr_scene_buffer_set_buffer(m->barblur, &buf->base);
+    wlr_buffer_unlock(&buf->base);
+    blurbar(m);
+}
+#endif /* INTEGRATED_BACKGROUND */
+
 void bufdestroy(struct wlr_buffer* wlr_buffer)
 {
     Buffer* buf = wl_container_of(wlr_buffer, buf, base);
@@ -1228,6 +1511,7 @@ void cleanupmon(struct wl_listener* listener, void* data)
         wlr_buffer_drop(&m->pool[i]->base);
 #ifdef INTEGRATED_BACKGROUND
     bufpooldrop(m->wallpaperpool, LENGTH(m->wallpaperpool));
+    bufpooldrop(m->blurpool, LENGTH(m->blurpool));
 #endif
 
 #ifdef SYSTRAY
@@ -1253,6 +1537,7 @@ void cleanupmon(struct wl_listener* listener, void* data)
     wlr_scene_node_destroy(&m->scene_buffer->node);
 #ifdef INTEGRATED_BACKGROUND
     wlr_scene_node_destroy(&m->wallpaper->node);
+    wlr_scene_node_destroy(&m->barblur->node);
 #endif
     free(m);
 }
@@ -1654,6 +1939,11 @@ void createmon(struct wl_listener* listener, void* data)
     if (!(m->drw = drwl_create()))
         die("failed to create drwl context");
 
+#ifdef INTEGRATED_BACKGROUND
+    /* created before the bar so that it stays underneath it */
+    m->barblur = wlr_scene_buffer_create(layers[LyrBottom], NULL);
+    wlr_scene_node_set_enabled(&m->barblur->node, 0);
+#endif
     m->scene_buffer = wlr_scene_buffer_create(layers[LyrBottom], NULL);
     m->scene_buffer->point_accepts_input = baracceptsinput;
 #ifdef INTEGRATED_BACKGROUND
@@ -1822,6 +2112,22 @@ void cursorwarptohint(void)
 float decoopacity(void)
 {
     return opacity_enabled ? opacity_deco : 1.0f;
+}
+
+/* Whether light gets through what g0wn draws itself. opacity_deco fades the
+ * lot, and a colour in colors[] can carry an alpha of its own, which is how a
+ * bar stays see-through with opacity_deco left at 1. */
+int decotranslucent(void)
+{
+    size_t i, j;
+
+    if (decoopacity() < 1.0f)
+        return 1;
+    for (i = 0; i < LENGTH(colors); i++)
+        for (j = 1; j < LENGTH(colors[i]); j++) /* 0 is the foreground */
+            if ((colors[i][j] & 0xff) < 0xff)
+                return 1;
+    return 0;
 }
 
 void destroydecoration(struct wl_listener* listener, void* data)
@@ -1996,8 +2302,14 @@ void drawbar(Monitor* m)
     /* Title bars are refreshed on the same events as the bar */
     wl_list_for_each(c, &clients, link) if (c->mon == m) drawtitle(c);
 
-    if (!m->scene_buffer->node.enabled)
+    if (!m->scene_buffer->node.enabled) {
+#ifdef INTEGRATED_BACKGROUND
+        /* a hidden bar has no backdrop either, and togglebar() comes through
+         * here rather than through the tail of this function */
+        blurbar(m);
+#endif
         return;
+    }
     if (!(buf = bufget(m->pool, LENGTH(m->pool), m->b.width, m->b.height)))
         return;
     drwl_setimage(m->drw, buf->image);
@@ -2167,6 +2479,9 @@ void drawbar(Monitor* m)
         m->m.y + (topbar ? 0 : m->m.height - m->b.real_height));
     wlr_scene_buffer_set_buffer(m->scene_buffer, &buf->base);
     wlr_buffer_unlock(&buf->base);
+#ifdef INTEGRATED_BACKGROUND
+    blurbar(m);
+#endif
 }
 
 void drawbars(void)
@@ -2280,14 +2595,28 @@ void setwallpaper(Monitor* m)
 
     if (!wallpaper || !*wallpaper || mw <= 0 || mh <= 0) {
         wlr_scene_buffer_set_buffer(m->wallpaper, NULL);
+        m->wallpaperbuf = NULL;
         bufpooldrop(m->wallpaperpool, LENGTH(m->wallpaperpool));
+        m->wallpaperw = m->wallpaperh = 0;
+        blurwallpaper(m);
         return;
     }
 
     if (m->wallpaperpool[0] && mw == m->wallpaperw && mh == m->wallpaperh) {
         wlr_scene_buffer_set_dest_size(m->wallpaper, mw, mh);
         wlr_scene_node_set_position(&m->wallpaper->node, m->m.x, m->m.y);
-        wlr_scene_buffer_set_buffer(m->wallpaper, &m->wallpaperpool[0]->base);
+        /* guarded like blurclient()'s: set_buffer throws the texture away,
+         * and this path runs on every monitor layout change */
+        if (m->wallpaperbuf != &m->wallpaperpool[0]->base) {
+            wlr_scene_buffer_set_buffer(m->wallpaper, &m->wallpaperpool[0]->base);
+            m->wallpaperbuf = &m->wallpaperpool[0]->base;
+        }
+        /* the frosted copy is the same size and survives with it, unless the
+         * monitor went away and took it along */
+        if (!m->blurpool[0])
+            blurwallpaper(m);
+        else
+            blurbar(m);
         return;
     }
 
@@ -2338,7 +2667,9 @@ void setwallpaper(Monitor* m)
     wlr_scene_buffer_set_dest_size(m->wallpaper, mw, mh);
     wlr_scene_node_set_position(&m->wallpaper->node, m->m.x, m->m.y);
     wlr_scene_buffer_set_buffer(m->wallpaper, &buf->base);
+    m->wallpaperbuf = &buf->base;
     wlr_buffer_unlock(&buf->base);
+    blurwallpaper(m);
 }
 #endif /* INTEGRATED_BACKGROUND */
 
@@ -3315,6 +3646,15 @@ void mapnotify(struct wl_listener* listener, void* data)
     c->title->node.data = c;
     wlr_scene_node_set_enabled(&c->title->node, 0);
 
+#ifdef INTEGRATED_BACKGROUND
+    /* the frosted backdrop goes under the lot: the surface, which is what it
+     * shows through, and the decorations, which opacity_deco may fade too */
+    c->blur = wlr_scene_buffer_create(c->scene, NULL);
+    c->blur->node.data = c;
+    wlr_scene_node_set_enabled(&c->blur->node, 0);
+    wlr_scene_node_lower_to_bottom(&c->blur->node);
+#endif
+
     /* Initialize client geometry with room for border */
     client_set_tiled(
         c, WLR_EDGE_TOP | WLR_EDGE_BOTTOM | WLR_EDGE_LEFT | WLR_EDGE_RIGHT);
@@ -3907,6 +4247,9 @@ void rendermon(struct wl_listener* listener, void* data)
          * adds later (subsurfaces, videos) are covered too */
         wlr_scene_node_for_each_buffer(
             &c->scene_surface->node, scenebuffersetopacity, c);
+#ifdef INTEGRATED_BACKGROUND
+        blurclient(c);
+#endif
         if (c->resize && !c->isfloating && !client_is_stopped(c))
             goto skip;
     }
@@ -4959,6 +5302,10 @@ void unmapnotify(struct wl_listener* listener, void* data)
         client_surface(c)->data = NULL;
     wlr_scene_node_destroy(&c->scene->node);
     c->title = NULL;
+#ifdef INTEGRATED_BACKGROUND
+    c->blur = NULL;
+    c->blurbuf = NULL;
+#endif
     bufpooldrop(c->titlepool, LENGTH(c->titlepool));
     c->titlebufw = 0;
     drawbars();
