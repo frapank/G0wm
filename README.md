@@ -32,8 +32,9 @@ It currently includes:
   runtime, optionally as frosted glass over the wallpaper
 - **Graphics tablet support** and the usual [dwl-patches]
 
-More details about the features and their settings can be found in
-[docs/features.md](docs/features.md). The man page is available at
+A tour of what all of this looks like in use is in
+[docs/features.md](docs/features.md), the settings are documented in the
+comments of [`config.def.h`](config.def.h), and the man page is at
 [`docs/g0wn.1`](docs/g0wn.1).
 
 Screen locking, idle handling, portals and a polkit agent are not included.
@@ -111,8 +112,9 @@ You can generate it with:
 
 Both generators create a backup before replacing an existing file.
 
-See [docs/features.md](docs/features.md) for a list of the available modules
-and their formats.
+The available modules are listed in the status text section of
+[docs/features.md](docs/features.md), and `status.conf` documents its own
+formats in the comments `./status_gen` writes into it.
 
 ## Run
 
@@ -141,7 +143,7 @@ include/        headers
 external/       drwl.h, vendored from the drwl project
 protocols/      wlr protocol XML for wayland-scanner
 scripts/        start-g0wn, g0wn-status.sh
-docs/           man page and features.md
+docs/           man page, features.md and credits.md
 ```
 
 ## License
@@ -150,18 +152,11 @@ g0wn is licensed under **GPL-3.0-or-later**.
 
 The full license text is available in [`LICENSE`](LICENSE).
 
-Some parts of the project come from other projects and keep their original
-licenses. Their license files are stored in the `license/` directory.
+Some parts of the project come from dwl and from other projects and keep their
+original licenses. Their license files are stored in the `license/` directory.
 
-| File | Project | License | Covers |
-| --- | --- | --- | --- |
-| [`license/dwm.txt`](license/dwm.txt) | [dwm] | MIT/X Consortium | `src/util.c`, `include/util.h` and the tags/layout model |
-| [`license/sway.txt`](license/sway.txt) | [sway] | MIT | parts of the wlroots plumbing |
-| [`license/tinywl.txt`](license/tinywl.txt) | tinywl | CC0 | the compositor skeleton inherited from tinywl |
-
-Thanks to Devin J. Pohly and everyone who has contributed to dwl, the
-suckless.org and [dwm] communities, and the authors of the patches listed in
-[docs/features.md](docs/features.md).
+Where each part comes from, the patch authors and the great thanks they are
+owed are collected in [docs/credits.md](docs/credits.md).
 
 [dwl]: https://codeberg.org/dwl/dwl
 [dwl-patches]: https://codeberg.org/dwl/dwl-patches
