@@ -139,6 +139,19 @@ static const char* const opacity_apps[] = {
     NULL // Terminator
 };
 
+/* --- BLUR: the frosted glass is a copy of the wallpaper, so it needs one --- */
+#ifdef INTEGRATED_BACKGROUND
+/* what a transparent window shows through itself: whatever happens to be
+ * behind it, or a frosted copy of the wallpaper */
+static const int opacity_type = OpacityNormal; // OpacityNormal or OpacityBlur
+
+static const unsigned int blur_radius = 15; // how far the wallpaper smears
+static const unsigned int blur_passes = 1;  // more is rounder, 3 is plenty
+static const float blur_saturation    = 1.60f; // 1.0 leaves the colors alone
+static const float blur_brightness    = 1.00f; // below 1 for darker glass
+#endif
+/* --- end BLUR --- */
+
 /* == 5. MONITORS ==========================================================
  * First row whose name is a substring of the output wins, so keep the
  * .name = NULL catch-all last; wlr-randr lists the names. x/y are logical
