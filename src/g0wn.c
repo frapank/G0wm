@@ -217,6 +217,8 @@ typedef struct {
 #ifdef INTEGRATED_BACKGROUND
     struct wlr_scene_buffer* blur; /* frosted wallpaper, below the whole box */
     struct wlr_buffer* blurbuf;    /* what blur's node was last handed */
+    struct wlr_scene_buffer* titleblur; /* the same, for the title bar */
+    struct wlr_buffer* titleblurbuf;
 #endif
     Buffer* titlepool[2];
     int titlex, titlew; /* title bar placement, relative to the border box */
@@ -382,6 +384,13 @@ static bool baracceptsinput(struct wlr_scene_buffer* buffer,
                             double* sy);
 #ifdef INTEGRATED_BACKGROUND
 static void blurbar(Monitor* m);
+static void blurbox(Client* c,
+                    struct wlr_scene_buffer* node,
+                    struct wlr_buffer** last,
+                    int bx,
+                    int by,
+                    int bw,
+                    int bh);
 static void blurclient(Client* c);
 static void blurrows(uint32_t* dst, const uint32_t* src, int w, int h, int r);
 static void blurshrink(uint32_t* dst, const uint32_t* src, int w, int h, int d);
@@ -983,52 +992,103 @@ void blurbar(Monitor* m)
     wlr_scene_node_set_enabled(&m->barblur->node, 1);
 }
 
-/* Points a client's backdrop at the frosted wallpaper it covers. Done while
- * rendering, so nothing that moves a window has to keep the two in step. */
-void blurclient(Client* c)
+/* Points one of a client's backdrop nodes at the frosted wallpaper under the
+ * box it covers, in the coordinates of the client's own tree. last is what the
+ * node already holds: set_buffer drops the texture and damages the node, so
+ * handing it the same buffer every frame never stops asking for another. */
+void blurbox(Client* c,
+             struct wlr_scene_buffer* node,
+             struct wlr_buffer** last,
+             int bx,
+             int by,
+             int bw,
+             int bh)
 {
     struct wlr_fbox src;
     Monitor* m = c->mon;
-    Buffer* buf;
+    Buffer* buf = m ? m->blurpool[0] : NULL;
     int x, y, w, h;
 
-    if (!c->blur)
+    if (!node || !m)
         return;
-
-    /* the box covers the decorations too, so either letting light through is
-     * enough; a fullscreen client is drawn opaque and never does */
-    buf = m ? m->blurpool[0] : NULL;
-    if (!buf || c->isfullscreen || !opacity_enabled ||
-        ((!c->hasopacity || c->opacity >= 1.0f) && !decotranslucent())) {
-        wlr_scene_node_set_enabled(&c->blur->node, 0);
-        return;
-    }
 
     /* the wallpaper covers the monitor pixel for pixel, so the crop is just
-     * the client's box in monitor-local coordinates, clipped to it */
-    x = MAX(0, c->geom.x - m->m.x);
-    y = MAX(0, c->geom.y - m->m.y);
-    w = MIN(c->geom.x - m->m.x + c->geom.width, m->wallpaperw) - x;
-    h = MIN(c->geom.y - m->m.y + c->geom.height, m->wallpaperh) - y;
-    if (w <= 0 || h <= 0) {
-        wlr_scene_node_set_enabled(&c->blur->node, 0);
+     * the box in monitor-local coordinates, clipped to it */
+    x = MAX(0, c->geom.x - m->m.x + bx);
+    y = MAX(0, c->geom.y - m->m.y + by);
+    w = MIN(c->geom.x - m->m.x + bx + bw, m->wallpaperw) - x;
+    h = MIN(c->geom.y - m->m.y + by + bh, m->wallpaperh) - y;
+    if (!buf || w <= 0 || h <= 0) {
+        wlr_scene_node_set_enabled(&node->node, 0);
         return;
     }
 
     blursrcbox(m, &src, x, y, w, h);
     /* the node hangs off the client's tree, hence the offset back into it */
     wlr_scene_node_set_position(
-        &c->blur->node, x - (c->geom.x - m->m.x), y - (c->geom.y - m->m.y));
-    wlr_scene_buffer_set_dest_size(c->blur, w, h);
-    wlr_scene_buffer_set_source_box(c->blur, &src);
-    /* set_buffer drops the texture and damages the node, which from here
-     * would ask for another frame forever; the node's own buffer field is no
-     * guard, as the scene nulls it once it holds a texture */
-    if (c->blurbuf != &buf->base) {
-        wlr_scene_buffer_set_buffer(c->blur, &buf->base);
-        c->blurbuf = &buf->base;
+        &node->node, x - (c->geom.x - m->m.x), y - (c->geom.y - m->m.y));
+    wlr_scene_buffer_set_dest_size(node, w, h);
+    wlr_scene_buffer_set_source_box(node, &src);
+    if (*last != &buf->base) {
+        wlr_scene_buffer_set_buffer(node, &buf->base);
+        *last = &buf->base;
     }
-    wlr_scene_node_set_enabled(&c->blur->node, 1);
+    wlr_scene_node_set_enabled(&node->node, 1);
+}
+
+/* Points a client's backdrop at the frosted wallpaper it covers. Done while
+ * rendering, so nothing that moves a window has to keep the two in step. */
+void blurclient(Client* c)
+{
+    Monitor* m = c->mon;
+    int th, bw, x, w;
+
+    if (!c->blur)
+        return;
+
+    /* the box covers the decorations too, so either letting light through is
+     * enough; a fullscreen client is drawn opaque and never does */
+    if (!m || !m->blurpool[0] || c->isfullscreen || !opacity_enabled ||
+        ((!c->hasopacity || c->opacity >= 1.0f) && !decotranslucent())) {
+        wlr_scene_node_set_enabled(&c->blur->node, 0);
+        if (c->titleblur)
+            wlr_scene_node_set_enabled(&c->titleblur->node, 0);
+        return;
+    }
+
+    th = titleheight(c);
+    bw = (int)c->bw;
+
+    if (!th || m->lt[m->sellt]->arrange != tabbed || c->isfloating) {
+        blurbox(c, c->blur, &c->blurbuf, 0, 0, c->geom.width, c->geom.height);
+        if (c->titleblur)
+            wlr_scene_node_set_enabled(&c->titleblur->node, 0);
+        return;
+    }
+
+    /* Tabs share one box and the ones under the top are drawn in lower trees,
+     * so a backdrop over the whole box buries their title bars. Each tab backs
+     * its own slice of the row, the top one backs the body below it. */
+    x = bw + c->titlex;
+    w = c->titlew;
+    if (c->titlex == 0) { /* first tab, take the corner in */
+        x = 0;
+        w += bw;
+    }
+    if (c->titlex + c->titlew == c->geom.width - 2 * bw)
+        w += bw; /* last tab, same */
+    blurbox(c, c->titleblur, &c->titleblurbuf, x, 0, w, bw + th);
+
+    if (c == tabtop(m))
+        blurbox(c,
+                c->blur,
+                &c->blurbuf,
+                0,
+                bw + th,
+                c->geom.width,
+                c->geom.height - bw - th);
+    else
+        wlr_scene_node_set_enabled(&c->blur->node, 0);
 }
 
 /* One box blur along the rows: a 2r+1 window slides on a running sum, so a
@@ -1163,7 +1223,8 @@ void blurwallpaper(Monitor* m)
 
     /* the nodes pick the new buffer up next frame; the pointer they compare
      * against has to go now, or a reused address would read as unchanged */
-    wl_list_for_each(c, &clients, link) if (c->mon == m) c->blurbuf = NULL;
+    wl_list_for_each(c, &clients, link) if (c->mon == m) c->blurbuf =
+        c->titleblurbuf = NULL;
 
     if (opacity_type != OpacityBlur || !m->wallpaperpool[0] || w <= 0 || h <= 0)
         return;
@@ -3653,6 +3714,12 @@ void mapnotify(struct wl_listener* listener, void* data)
     c->blur->node.data = c;
     wlr_scene_node_set_enabled(&c->blur->node, 0);
     wlr_scene_node_lower_to_bottom(&c->blur->node);
+
+    /* backs the title bar alone, which is what tabs need */
+    c->titleblur = wlr_scene_buffer_create(c->scene, NULL);
+    c->titleblur->node.data = c;
+    wlr_scene_node_set_enabled(&c->titleblur->node, 0);
+    wlr_scene_node_lower_to_bottom(&c->titleblur->node);
 #endif
 
     /* Initialize client geometry with room for border */
@@ -5305,6 +5372,8 @@ void unmapnotify(struct wl_listener* listener, void* data)
 #ifdef INTEGRATED_BACKGROUND
     c->blur = NULL;
     c->blurbuf = NULL;
+    c->titleblur = NULL;
+    c->titleblurbuf = NULL;
 #endif
     bufpooldrop(c->titlepool, LENGTH(c->titlepool));
     c->titlebufw = 0;
