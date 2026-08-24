@@ -2,7 +2,6 @@
 # Interactive generator for status.conf, the config of scripts/g0wn-status.sh,
 # driven by the defaults that script falls back to on its own.
 # Plain POSIX shell: runs on Linux, the BSDs and anything else with a /bin/sh.
-
 set -u
 
 options() { # "$@" -> out, edit set from the command line; -h exits on its own
@@ -33,29 +32,93 @@ EOF
 	done
 }
 
-workspace() { # scratch dir, cleanup trap, the vals file, and the answers fd
+workspace() { # validates the paths, then scratch dir, cleanup trap and fds
+	[ -n "$edit" ] && def=$out
+	[ -z "$def" ] || [ -f "$def" ] || die "$def not found"
+	case $out in */*) mkdir -p "${out%/*}" || die "cannot create ${out%/*}" ;; esac
 	tmp=$(mktemp -d "${TMPDIR:-/tmp}/status_gen.XXXXXX") || exit 1
 	trap 'rm -rf "$tmp"' EXIT
 	trap 'rm -rf "$tmp"; exit 130' HUP INT TERM
 	vals=$tmp/vals
+	all_modules='date time battery cpu ram netdown netup'
+	all_colors='color_date color_time color_battery color_cpu color_ram
+color_netdown color_netup color_battery_low color_battery_charging'
+	use_icons=0
+	ip= # '%i ' once icons are on
+	sel= # picked modules, in order
+	nl=$(printf '\n_'); nl=${nl%_}
 	: >"$vals"
 	exec 3<&0 # answers always come from here, loops are free to redirect stdin
 }
 
-interface() { # B D A R (bold/dim/accent/reset) and dash, used by rule()/title()
-	B= D= A= R= dash=-
+interface() { # B D A R, dash, colour depth and terminal width
+	B= D= A= R= sg= dash=- depth=0 utf8=0
 	if [ -t 1 ] && [ -z "${NO_COLOR:-}" ] && [ "${TERM:-dumb}" != dumb ]; then
-		B=$(printf '\033[1m') D=$(printf '\033[2m')
-		A=$(printf '\033[36m') R=$(printf '\033[0m')
+		depth=8
+		case ${TERM:-} in *256color*) depth=256 ;; *direct*) depth=24 ;; esac
+		case ${COLORTERM:-} in truecolor|24bit) depth=24 ;; esac
+		B=$(printf '\033[1m') D=$(printf '\033[2m') R=$(printf '\033[0m')
+		sgr 124 58 237 93 35; A=$sg
 	fi
 	case ${LC_ALL:-${LC_CTYPE:-${LANG:-C}}} in
-	*[Uu][Tt][Ff]*) dash=$(printf '\342\224\200') ;;
+	*[Uu][Tt][Ff]*) dash=$(printf '\342\224\200') utf8=1 ;;
+	esac
+	cols=$(tput cols 2>/dev/null) || cols=80
+	case $cols in ''|*[!0-9]*|0) cols=80 ;; esac
+}
+
+sgr() { # r g b, 256 index, 8 code -> sg
+	case $depth in
+	24) sg=$(printf '\033[38;2;%d;%d;%dm' "$1" "$2" "$3") ;;
+	256) sg=$(printf '\033[38;5;%dm' "$4") ;;
+	8) sg=$(printf '\033[%sm' "$5") ;;
+	*) sg= ;;
 	esac
 }
 
+# f full block, u upper half, l lower half, so this file stays ASCII
+banner() { # subtitle
+	bn_f=$(printf '\342\226\210') bn_u=$(printf '\342\226\200')
+	bn_l=$(printf '\342\226\204')
+	[ "$utf8" = 1 ] || { bn_f='#' bn_u='"' bn_l=','; }
+	[ "$cols" -ge 36 ] || { printf '%sg0wm%s %s\n' "$B" "$R" "$1"; return; }
+	bn_i=0
+	for bn_row in '.l...llll...lll' '.uffffffu.lffuuu' \
+		'...ff...l.ff.lufl|...........l' \
+		'...ff..ff.ff...ff|.ufl.fl.ffuffflfffl' \
+		'...ff..ff.ff..lff|..fflfflff.ff.ff.ff' \
+		'...ufffff..ufffu.|...uffuffulff.ff.uf' \
+		'...l...ff' '...uffffu'; do
+		bn_i=$((bn_i + 1))
+		case $bn_i in
+		3) sgr 255 255 255 231 '1;37' ;;
+		4) sgr 216 216 216 252 '0;37' ;;
+		5) sgr 168 168 168 247 '0;37' ;;
+		6) sgr 120 120 120 243 '1;30' ;;
+		esac
+		draw "${bn_row%%|*}"; printf '%s%s' "$A" "$dw"
+		case $bn_row in
+		*'|'*) draw "${bn_row#*|}"; printf '%s%s' "$sg" "$dw" ;;
+		esac
+		printf '%s\n' "$R"
+	done
+	printf '%s   %s%s\n' "$D" "$1" "$R"
+}
+
+draw() { # tokens -> dw
+	dw= dw_r=$1
+	while [ -n "$dw_r" ]; do
+		case $dw_r in
+		f*) dw=$dw$bn_f ;; u*) dw=$dw$bn_u ;; l*) dw=$dw$bn_l ;; *) dw="$dw " ;;
+		esac
+		dw_r=${dw_r#?}
+	done
+}
+
 rule() {
-	rl_s= rl_i=0
-	while [ $rl_i -lt 58 ]; do rl_s=$rl_s$dash rl_i=$((rl_i + 1)); done
+	rl_w=58 rl_s= rl_i=0
+	[ "$cols" -lt "$rl_w" ] && rl_w=$cols
+	while [ $rl_i -lt $rl_w ]; do rl_s=$rl_s$dash rl_i=$((rl_i + 1)); done
 	printf '%s%s%s\n' "$D" "$rl_s" "$R"
 }
 title() { printf '\n%s%s%s\n' "$B" "$1" "$R"; rule; }
@@ -87,6 +150,22 @@ asknum() { # prompt default -> ans
 	done
 }
 
+askcolor() { # setting prompt default
+	ac_var=$1
+	while :; do
+		ask "$2" "${3:-none}"
+		case $ans in none|None|NONE|off) ans= ;; esac
+		[ -z "$ans" ] && break
+		is_color "$ans" && break
+		note '  #RRGGBB or #RRGGBBAA, or none for the bar foreground'
+	done
+	setval "$ac_var" "$ans"
+	if [ -n "$ans" ]; then
+		swatch "$ans"
+		printf '  %sthe module is drawn in this colour%s\n' "$sw_s" "$R"
+	fi
+}
+
 menu() { # prompt default-index item... -> choice
 	mn_prompt=$1 mn_def=$2 mn_i=1
 	shift 2
@@ -97,7 +176,7 @@ menu() { # prompt default-index item... -> choice
 	while :; do
 		ask "$mn_prompt" "$mn_def"
 		case $ans in
-		''|*[!0-9]*) ;;
+		''|*[!0-9]*|??????*) ;;
 		*) [ "$ans" -ge 1 ] && [ "$ans" -lt "$mn_i" ] && { choice=$ans; return; } ;;
 		esac
 		note "enter 1-$((mn_i - 1))"
@@ -124,15 +203,20 @@ dflt() { # built-in default of a setting, as g0wn-status.sh has it
 	esac
 }
 
-getval() { # setting -> gv, from the template being edited or the built-in
-	gv=
+# gvfile marks a value read from the template, not one nobody ever set
+getval() { # setting -> gv, gvfile
+	gv= gvfile=0
 	if [ -n "$def" ] && [ -f "$def" ]; then
-		gv=$(sed -n "s/^[[:space:]]*$1[[:space:]]*=[[:space:]]*//p" "$def" |
+		# a leading = marks a line present but empty
+		gv=$(sed -n "s/^[[:space:]]*$1[[:space:]]*=[[:space:]]*/=/p" "$def" |
 			sed -n '$p')
-		gv=${gv%"${gv##*[! ]}"}
-		case $gv in '"'*'"') gv=${gv#\"} gv=${gv%\"} ;; esac
+		case $gv in
+		=*) gvfile=1 gv=${gv#=}
+			gv=${gv%"${gv##*[! ]}"}
+			case $gv in '"'*'"') gv=${gv#\"} gv=${gv%\"} ;; esac ;;
+		esac
 	fi
-	[ -n "$gv" ] || gv=$(dflt "$1")
+	[ "$gvfile" = 1 ] || gv=$(dflt "$1")
 }
 
 # octal escapes, so this file stays ASCII
@@ -146,6 +230,28 @@ icon_of() { # module -> ic, the default Nerd Font glyph
 	netdown) ic=$(printf '\357\201\243') ;;               # U+F063 arrow-down
 	netup) ic=$(printf '\357\201\242') ;;                 # U+F062 arrow-up
 	*) ic= ;;
+	esac
+}
+
+icon_for() { # module -> ic, empty when icons are off
+	ic=
+	[ "$use_icons" = 1 ] || return 0
+	getval "icon_$1"
+	if [ -n "$gv" ]; then ic=$gv; else icon_of "$1"; fi
+}
+
+color_dflt() { # setting -> cd
+	case $1 in
+	color_date) cd='#928374' ;;
+	color_time) cd='#ebdbb2' ;;
+	color_battery) cd='#8ec07c' ;;
+	color_cpu) cd='#83a598' ;;
+	color_ram) cd='#d3869b' ;;
+	color_netdown) cd='#b8bb26' ;;
+	color_netup) cd='#fabd2f' ;;
+	color_battery_low) cd='#fb4934' ;;
+	color_battery_charging) cd='#fabd2f' ;;
+	*) cd= ;;
 	esac
 }
 
@@ -175,52 +281,17 @@ byte() { # two hex digits -> bt
 
 swatch() { # #RRGGBB[AA] -> sw_s, the escape that paints the terminal with it
 	sw_s=
-	[ -n "$A" ] || return 0 # this terminal is not taking colours
+	[ "$depth" = 0 ] && return 0 # this terminal is not taking colours
 	sw_h=${1#\#}
 	case $sw_h in ????????) sw_h=${sw_h%??} ;; esac # ANSI has no alpha
 	byte "${sw_h%????}"; sw_r=$bt
 	sw_h=${sw_h#??}
 	byte "${sw_h%??}"; sw_g=$bt
 	byte "${sw_h#??}"; sw_b=$bt
-	sw_s=$(printf '\033[38;2;%d;%d;%dm' "$sw_r" "$sw_g" "$sw_b")
-}
-
-color_dflt() { # setting -> cd, a suggestion that reads on a dark bar
-	case $1 in
-	color_date) cd='#928374' ;;
-	color_time) cd='#ebdbb2' ;;
-	color_battery) cd='#8ec07c' ;;
-	color_cpu) cd='#83a598' ;;
-	color_ram) cd='#d3869b' ;;
-	color_netdown) cd='#b8bb26' ;;
-	color_netup) cd='#fabd2f' ;;
-	color_battery_low) cd='#fb4934' ;;
-	color_battery_charging) cd='#fabd2f' ;;
-	*) cd= ;;
-	esac
-}
-
-askcolor() { # setting prompt default
-	ac_var=$1
-	while :; do
-		ask "$2" "${3:-none}"
-		case $ans in none|None|NONE|off) ans= ;; esac
-		[ -z "$ans" ] && break
-		is_color "$ans" && break
-		note '  #RRGGBB or #RRGGBBAA, or none for the bar foreground'
-	done
-	setval "$ac_var" "$ans"
-	if [ -n "$ans" ]; then
-		swatch "$ans"
-		printf '  %sthe module is drawn in this colour%s\n' "$sw_s" "$R"
-	fi
-}
-
-icon_for() { # module -> ic, empty when icons are off
-	ic=
-	[ "$use_icons" = 1 ] || return 0
-	getval "icon_$1"
-	if [ -n "$gv" ]; then ic=$gv; else icon_of "$1"; fi
+	# without true rgb the swatch takes the nearest colour the terminal has
+	sw_i=$((16 + 36 * (sw_r * 5 / 255) + 6 * (sw_g * 5 / 255) + sw_b * 5 / 255))
+	sw_8=$((30 + (sw_r > 127) + 2 * (sw_g > 127) + 4 * (sw_b > 127)))
+	sgr "$sw_r" "$sw_g" "$sw_b" "$sw_i" "0;$sw_8"; sw_s=$sg
 }
 
 subst() { # string token replacement -> sb (same rule g0wn-status.sh applies)
@@ -250,7 +321,8 @@ render_tpl() { # template module -> rt, as g0wn-status.sh would fill it in
 	case $2 in
 	date|time)
 		subst "$1" '%i' "$rt_ic"
-		rt=$(date "+$sb" 2>/dev/null) || rt="(bad format)"
+		rt=$(date "+$sb" 2>/dev/null) || rt='(bad format)'
+		subst "$rt" "$nl" ' '; rt=$sb # a %n would break the menu below
 		;;
 	*)
 		subst "$1" '%v' "$rt_v"; rt=$sb
@@ -265,6 +337,10 @@ askfmt() { # setting module prompt hint preset...
 	af_var=$1 af_mod=$2 af_prompt=$3 af_hint=$4
 	shift 4
 	getval "$af_var"; af_cur=$gv
+	# with icons on, a format nobody set yet gives way to the icon preset
+	if [ -z "$af_cur" ] || { [ "$gvfile" = 0 ] && [ "$use_icons" = 1 ]; }; then
+		af_cur=$1
+	fi
 	# a format that matches no preset goes first, so Enter keeps it
 	af_keep=1
 	for af_p in "$@"; do
@@ -281,8 +357,7 @@ askfmt() { # setting module prompt hint preset...
 		af_i=$((af_i + 1))
 	done
 	[ "$af_def" = 0 ] && af_def=$af_i
-	set -f; af_ifs=$IFS; IFS='
-'
+	set -f; af_ifs=$IFS; IFS=$nl
 	set -- $(cat "$tmp/items")
 	IFS=$af_ifs; set +f
 	menu "$af_prompt" "$af_def" "$@" 'something else'
@@ -293,11 +368,12 @@ askfmt() { # setting module prompt hint preset...
 	note "$af_hint"
 	while :; do
 		ask "  $af_prompt" "$af_cur"
-		render_tpl "$ans" "$af_mod"
+		af_cur=$ans # askyn below answers into ans, so keep it here
+		render_tpl "$af_cur" "$af_mod"
 		note "  shown as: $rt"
 		askyn '  keep it' y && break
 	done
-	setval "$af_var" "$ans"
+	setval "$af_var" "$af_cur"
 }
 
 have() { # module -> true when this system can feed it
@@ -324,6 +400,7 @@ have() { # module -> true when this system can feed it
 					}
 					exit !(ib && ob)
 				}'; } ;;
+	*) false ;;
 	esac
 }
 
@@ -336,13 +413,13 @@ describe() { # module -> ds
 	ram) ds='memory in use' ;;
 	netdown) ds='download rate' ;;
 	netup) ds='upload rate' ;;
+	*) ds= ;;
 	esac
 }
 
 icons() {
 	title 'Nerd Font icons'
 	note 'icons replace the labels: cpu 13% becomes the chip glyph and 13%'
-	ic_found=
 	if command -v fc-list >/dev/null 2>&1; then
 		ic_found=$(fc-list : family 2>/dev/null | tr ',' '\n' |
 			grep -i 'nerd font' | sed 's/^[[:space:]]*//' | sort -u | head -1)
@@ -363,7 +440,6 @@ icons() {
 		note 'the bar font in config.h needs the glyphs, or fontconfig has'
 		note 'to be able to fall back to the Nerd Font for them'
 	fi
-	return 0
 }
 
 modules() {
@@ -454,8 +530,9 @@ colors() {
 		return 0
 	fi
 	for cl_m in $sel; do
+		# a template value the bar would not parse is not worth suggesting
 		getval "color_$cl_m"
-		[ -n "$gv" ] || { color_dflt "color_$cl_m"; gv=$cd; }
+		is_color "$gv" || { color_dflt "color_$cl_m"; gv=$cd; }
 		askcolor "color_$cl_m" "  $cl_m" "$gv"
 	done
 	case " $sel " in
@@ -465,12 +542,36 @@ colors() {
 		getval battery_low
 		asknum '  low below (percent)' "$gv"; setval battery_low "$ans"
 		getval color_battery_low
-		[ -n "$gv" ] || { color_dflt color_battery_low; gv=$cd; }
+		is_color "$gv" || { color_dflt color_battery_low; gv=$cd; }
 		askcolor color_battery_low '  low' "$gv"
 		getval color_battery_charging
-		[ -n "$gv" ] || { color_dflt color_battery_charging; gv=$cd; }
+		is_color "$gv" || { color_dflt color_battery_charging; gv=$cd; }
 		askcolor color_battery_charging '  charging' "$gv" ;;
 	esac
+}
+
+network() {
+	case " $sel " in *' netdown '*|*' netup '*) ;; *) return 0 ;; esac
+	title 'Network'
+	getval net_interface
+	ask 'interfaces to count, space separated (all but loopback)' "${gv:-all}"
+	case $ans in all) ans= ;; esac
+	setval net_interface "$ans"
+}
+
+glyphs() {
+	[ "$use_icons" = 1 ] || return 0
+	[ -n "$sel" ] || return 0
+	title 'Glyphs'
+	note 'paste another character to change one'
+	for gl_m in $sel; do
+		icon_for "$gl_m"
+		case $gl_m in
+		battery) ask '  battery, from empty to full' "$ic" ;;
+		*) ask "  $gl_m" "$ic" ;;
+		esac
+		setval "icon_$gl_m" "$ans"
+	done
 }
 
 timing() {
@@ -498,33 +599,11 @@ layout() {
 	getval suffix; ask 'after the last one' "$gv"; setval suffix "$ans"
 }
 
-network() {
-	case " $sel " in *' netdown '*|*' netup '*) ;; *) return 0 ;; esac
-	title 'Network'
-	getval net_interface
-	ask 'interfaces to count, space separated (all but loopback)' "${gv:-all}"
-	case $ans in all) ans= ;; esac
-	setval net_interface "$ans"
-}
-
-glyphs() {
-	[ "$use_icons" = 1 ] || return 0
-	[ -n "$sel" ] || return 0
-	title 'Glyphs'
-	note 'paste another character to change one'
-	for gl_m in $sel; do
-		icon_for "$gl_m"
-		case $gl_m in
-		battery) ask '  battery, from empty to full' "$ic" ;;
-		*) ask "  $gl_m" "$ic" ;;
-		esac
-		setval "icon_$gl_m" "$ans"
-	done
-}
-
 final() { # setting -> the value that was collected, or the current default
 	# what decides is whether it was asked, not whether it has a value
-	if fn=$(awk -F'\t' -v k="$1" '$1 == k { v = $2; f = 1 }
+	if fn=$(awk -v k="$1" '
+		{ t = index($0, "\t")
+		  if (t && substr($0, 1, t - 1) == k) { v = substr($0, t + 1); f = 1 } }
 		END { if (!f) exit 1; print v }' "$vals"); then
 		printf '%s' "$fn"
 	else
@@ -554,15 +633,15 @@ generate() { # the config file, every value quoted so spaces survive
 	printf 'prefix = "%s"\n' "$(final prefix)"
 	printf 'separator = "%s"\n' "$(final separator)"
 	printf 'suffix = "%s"\n\n' "$(final suffix)"
-	for gn_m in date time battery cpu ram netdown netup; do
+	for gn_m in $all_modules; do
 		printf '%s_format = "%s"\n' "$gn_m" "$(final "${gn_m}_format")"
 	done
 	printf '\nnet_interface = "%s"\n\n' "$(final net_interface)"
-	for gn_m in date time battery cpu ram netdown netup; do
+	for gn_m in $all_modules; do
 		printf 'icon_%s = "%s"\n' "$gn_m" "$(final "icon_$gn_m")"
 	done
 	printf '\n'
-	for gn_m in date time battery cpu ram netdown netup; do
+	for gn_m in $all_modules; do
 		printf 'color_%s = "%s"\n' "$gn_m" "$(final "color_$gn_m")"
 	done
 	printf '\nbattery_low = "%s"\n' "$(final battery_low)"
@@ -573,7 +652,7 @@ generate() { # the config file, every value quoted so spaces survive
 # the bar's own parser, in awk: a preview that printed the escapes instead of
 # the colours they stand for would be worth nothing
 ansify() {
-	[ -n "$A" ] || { cat; return; }
+	[ "$depth" = 0 ] && { cat; return; }
 	awk '
 	function val(s,   i, v) {
 		v = 0
@@ -616,29 +695,25 @@ preview() { # one line, drawn by g0wn-status.sh itself from the new file
 	[ -x "$pv" ] || pv=$(command -v g0wn-status.sh 2>/dev/null)
 	[ -n "$pv" ] && [ -x "$pv" ] || { note 'g0wn-status.sh not found, no preview'; return; }
 	note 'one line, as the bar would draw it:'
+	# a rate has to be sampled twice, so the script holds for one interval
+	case " $sel " in
+	*' cpu '*|*' netdown '*|*' netup '*) note 'one update away, hold on' ;;
+	esac
 	G0WN_STATUS_CONF=$1 "$pv" --once | ansify
 }
 
 main() {
 	srcdir=$(CDPATH= cd -- "$(dirname -- "$0")" && pwd)
-	out=${G0WN_STATUS_CONF:-${XDG_CONFIG_HOME:-$HOME/.config}/g0wn/status.conf}
+	out=${G0WN_STATUS_CONF:-${XDG_CONFIG_HOME:-${HOME:-.}/.config}/g0wn/status.conf}
 	def= # set once an existing file becomes the template
 	mode=normal
 	edit=
 
 	options "$@"
 	workspace
-
-	all_modules='date time battery cpu ram netdown netup'
-	all_colors='color_date color_time color_battery color_cpu color_ram
-color_netdown color_netup color_battery_low color_battery_charging'
-	use_icons=0
-	ip= # '%i ' once icons are on
-	sel= # the modules that were picked, in order
-
 	interface
 
-	printf '%sg0wn status bar generator%s\n' "$B" "$R"
+	banner 'status bar generator'
 
 	keep=
 	if [ -f "$out" ] && [ -z "$edit" ]; then
@@ -651,8 +726,7 @@ color_netdown color_netup color_battery_low color_battery_charging'
 		4) def=$out keep=$out.$(date +%Y%m%d-%H%M%S).bak ;;
 		esac
 	elif [ -n "$edit" ]; then
-		[ -f "$out" ] || die "$out not found"
-		def=$out keep=$out.$(date +%Y%m%d-%H%M%S).bak
+		keep=$out.$(date +%Y%m%d-%H%M%S).bak
 	fi
 	if [ -n "$def" ]; then
 		note "defaults from ${def##*/}, writing ${out##*/}"
@@ -680,7 +754,6 @@ color_netdown color_netup color_battery_low color_battery_charging'
 	if [ -n "$keep" ]; then
 		cp "$out" "$keep" || die "cannot back up $out"
 	fi
-	mkdir -p "$(dirname "$out")" || die "cannot create $(dirname "$out")"
 	cp "$tmp/status.conf" "$out" || die "cannot write $out"
 
 	title 'Done'
