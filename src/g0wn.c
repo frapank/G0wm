@@ -382,6 +382,8 @@ static void axisnotify(struct wl_listener* listener, void* data);
 static bool baracceptsinput(struct wlr_scene_buffer* buffer,
                             double* sx,
                             double* sy);
+static Monitor* barmonitor(void);
+static int barvisible(Monitor* m);
 #ifdef INTEGRATED_BACKGROUND
 static void blurbar(Monitor* m);
 static void blurbox(Client* c,
@@ -453,6 +455,7 @@ static void destroykeyboardgroup(struct wl_listener* listener, void* data);
 static Monitor* dirtomon(enum wlr_direction dir);
 static void drawbar(Monitor* m);
 static void drawbars(void);
+static void drawselbar(void);
 static int drawstatus(Monitor* m, const char* text, int x, int w, int render);
 static void drawtitle(Client* c);
 static void focusclient(Client* c, int lift);
@@ -963,6 +966,37 @@ bool baracceptsinput(struct wlr_scene_buffer* buffer, double* sx, double* sy)
     return true;
 }
 
+/* The monitor the bar is drawn on: the first output matched by monrules[] with
+ * barsinglemon, the focused one without it. NULL when no output is enabled. */
+Monitor* barmonitor(void)
+{
+    const MonitorRule* r;
+    Monitor* m;
+
+    if (!barsinglemon)
+        return selmon;
+
+    for (r = monrules; r < END(monrules); r++) {
+        /* mons grows at its head, so backwards is the order the outputs
+         * showed up in: under the catch-all row the oldest one wins */
+        wl_list_for_each_reverse(m, &mons, link)
+        {
+            if (m->wlr_output->enabled &&
+                (!r->name || strstr(m->wlr_output->name, r->name)))
+                return m;
+        }
+    }
+    return NULL;
+}
+
+/* Whether m carries a bar. barsinglemon leaves every other monitor without
+ * one, and arrangelayers() reads that off the scene node to free the height. */
+int barvisible(Monitor* m)
+{
+    return m->wlr_output->enabled && showbar &&
+           (!barsinglemon || m == barmonitor());
+}
+
 #ifdef INTEGRATED_BACKGROUND
 /* Repoints the bar's backdrop at the strip of frosted wallpaper it sits on.
  * The bar is drawn by g0wn, so decotranslucent() decides whether it shows. */
@@ -1364,6 +1398,7 @@ void buttonpress(struct wl_listener* listener, void* data)
     struct wlr_keyboard* keyboard;
     struct wlr_scene_node* node;
     struct wlr_scene_buffer* buffer;
+    Monitor* pm; /* the monitor the pointer is on, bar included */
     uint32_t mods;
     Arg arg = {
         .v = NULL
@@ -1382,37 +1417,44 @@ void buttonpress(struct wl_listener* listener, void* data)
     switch (event->state) {
         case WL_POINTER_BUTTON_STATE_PRESSED:
             cursor_mode = CurPressed;
-            selmon = xytomon(cursor->x, cursor->y);
-            if (locked)
+            pm = xytomon(cursor->x, cursor->y);
+            if (locked) {
+                selmon = pm;
                 break;
+            }
 
-            if (!c && !exclusive_focus &&
+            if (!c && !exclusive_focus && pm &&
                 (node = wlr_scene_node_at(&layers[LyrBottom]->node,
                                           cursor->x,
                                           cursor->y,
                                           NULL,
                                           NULL)) &&
                 (buffer = wlr_scene_buffer_from_node(node)) &&
-                buffer == selmon->scene_buffer) {
-                cx = (cursor->x - selmon->m.x) * selmon->wlr_output->scale;
+                buffer == pm->scene_buffer) {
+                /* The bar belongs to pm, but under barsinglemon it stands in
+                 * for the focused monitor: leaving selmon alone is what lands
+                 * the click on the monitor whose tags are on show. */
+                if (!barsinglemon || !selmon)
+                    selmon = pm;
+                cx = (cursor->x - pm->m.x) * pm->wlr_output->scale;
 #ifdef SYSTRAY
-                traywidth = tray_get_width(selmon->tray);
+                traywidth = tray_get_width(pm->tray);
 #endif
-                statusw = STATUSW(selmon);
+                statusw = STATUSW(pm);
                 do
-                    x += TEXTW(selmon, tags[i]);
+                    x += TEXTW(pm, tags[i]);
                 while (cx >= x && ++i < LENGTH(tags));
                 if (i < LENGTH(tags)) {
                     click = ClkTagBar;
                     arg.ui = 1 << i;
-                } else if (cx < x + TEXTW(selmon, selmon->ltsymbol))
+                } else if (cx < x + TEXTW(pm, selmon->ltsymbol))
                     click = ClkLtSymbol;
 #ifdef SYSTRAY
-                else if (traywidth && cx > selmon->b.width - traywidth) {
+                else if (traywidth && cx > pm->b.width - traywidth) {
                     /* the tray slots are evenly sized, so which one was hit
                      * follows from the cursor offset into the tray */
                     trayitems = watcher_get_n_items(&watcher);
-                    tx = selmon->b.width - traywidth;
+                    tx = pm->b.width - traywidth;
                     while (trayitems && ++ti < trayitems &&
                            cx >= (tx += (double)traywidth / trayitems))
                         ;
@@ -1420,10 +1462,12 @@ void buttonpress(struct wl_listener* listener, void* data)
                     arg.ui = ti - 1;
                 }
 #endif
-                else if (cx > selmon->b.width - (statusw + traywidth)) {
+                else if (cx > pm->b.width - (statusw + traywidth)) {
                     click = ClkStatus;
                 } else
                     click = ClkTitle;
+            } else {
+                selmon = pm;
             }
 
             /* Change focus if the button was _pressed_ over a client */
@@ -2356,9 +2400,15 @@ void drawbar(Monitor* m)
     int x, w, tw = 0, traywidth = 0;
     int boxs = m->drw->font->height / 9;
     int boxw = m->drw->font->height / 6 + 2;
+    /* the little squares follow the text, which drwl centers */
+    int boxy = (m->b.height - m->drw->font->height) / 2 + boxs;
     uint32_t i, occ = 0, urg = 0;
     Client* c;
     Buffer* buf;
+    /* what the bar reports on: its own monitor, or the focused one when
+     * barsinglemon leaves a single bar standing in for the lot */
+    Monitor* s = barsinglemon && selmon ? selmon : m;
+    int sel = s == selmon;
 
     /* Title bars are refreshed on the same events as the bar */
     wl_list_for_each(c, &clients, link) if (c->mon == m) drawtitle(c);
@@ -2379,41 +2429,41 @@ void drawbar(Monitor* m)
 #endif
 
     /* draw status first so it can be overdrawn by tags later */
-    if (m == selmon) { /* status is only drawn on selected monitor */
+    if (sel) { /* status is only drawn on selected monitor */
         tw = STATUSW(m);
         drawstatus(m, stext, m->b.width - (tw + traywidth), tw, 1);
     }
 
     wl_list_for_each(c, &clients, link)
     {
-        if (c->mon != m)
+        if (c->mon != s)
             continue;
         occ |= c->tags;
         if (c->isurgent)
             urg |= c->tags;
     }
     x = 0;
-    c = focustop(m);
+    c = focustop(s);
     for (i = 0; i < LENGTH(tags); i++) {
         w = TEXTW(m, tags[i]);
         drwl_setscheme(
             m->drw,
-            colors[m->tagset[m->seltags] & 1 << i ? SchemeSel : SchemeNorm]);
+            colors[s->tagset[s->seltags] & 1 << i ? SchemeSel : SchemeNorm]);
         drwl_text(
             m->drw, x, 0, w, m->b.height, m->lrpad / 2, tags[i], urg & 1 << i);
         if (occ & 1 << i)
             drwl_rect(m->drw,
                       x + w - boxs - boxw,
-                      boxs,
+                      boxy,
                       boxw,
                       boxw,
-                      m == selmon && c && c->tags & 1 << i,
+                      sel && c && c->tags & 1 << i,
                       urg & 1 << i);
         x += w;
     }
-    w = TEXTW(m, m->ltsymbol);
+    w = TEXTW(m, s->ltsymbol);
     drwl_setscheme(m->drw, colors[SchemeNorm]);
-    x = drwl_text(m->drw, x, 0, w, m->b.height, m->lrpad / 2, m->ltsymbol, 0);
+    x = drwl_text(m->drw, x, 0, w, m->b.height, m->lrpad / 2, s->ltsymbol, 0);
 
     /* Remember the free box for notifyclick(): the title and the notification
      * share it, so its geometry must be measured in exactly one place. */
@@ -2424,7 +2474,7 @@ void drawbar(Monitor* m)
 #ifdef RUNNER
         /* The prompt takes the box over the same way a notification does,
          * and outranks one if both would want it at once. */
-        if (runner_active && m == selmon) {
+        if (runner_active && sel) {
             const char* sug = runnersuggest();
             /* the caret scales with the font, which is loaded at the output's
              * dpi, so it keeps its proportions on every monitor */
@@ -2447,7 +2497,13 @@ void drawbar(Monitor* m)
              * and unconditionally: with nothing typed yet it is the only thing
              * telling the box apart from an empty title area. */
             if (cx + cw <= x + w)
-                drwl_rect(m->drw, cx, boxs, cw, m->b.height - 2 * boxs, 1, 0);
+                drwl_rect(m->drw,
+                          cx,
+                          boxy,
+                          cw,
+                          m->drw->font->height - 2 * boxs,
+                          1,
+                          0);
             tx += cw;
 
             if (sug && (size_t)runner_len < strlen(sug) && tx < x + w) {
@@ -2481,7 +2537,7 @@ void drawbar(Monitor* m)
              * window title (if barwintitle is on) steps aside and comes back
              * once the notification expires or is dismissed. */
             const char* text =
-                shownotifications && m == selmon ? notify_gettext() : NULL;
+                shownotifications && sel ? notify_gettext() : NULL;
             if (text) {
                 notifysync();
                 drwl_setscheme(m->drw, colors[SchemeNotify]);
@@ -2496,8 +2552,7 @@ void drawbar(Monitor* m)
             } else
 #endif
                 if (barwintitle && c) {
-                drwl_setscheme(m->drw,
-                               colors[m == selmon ? SchemeSel : SchemeNorm]);
+                drwl_setscheme(m->drw, colors[sel ? SchemeSel : SchemeNorm]);
                 drwl_text(m->drw,
                           x,
                           0,
@@ -2507,7 +2562,7 @@ void drawbar(Monitor* m)
                           client_get_title(c),
                           0);
                 if (c && c->isfloating)
-                    drwl_rect(m->drw, x + boxs, boxs, boxw, boxw, 0, 0);
+                    drwl_rect(m->drw, x + boxs, boxy, boxw, boxw, 0, 0);
             } else {
                 drwl_setscheme(m->drw, colors[SchemeNorm]);
                 drwl_rect(m->drw, x, 0, w, m->b.height, 1, 1);
@@ -2550,6 +2605,16 @@ void drawbars(void)
     Monitor* m = NULL;
 
     wl_list_for_each(m, &mons, link) drawbar(m);
+}
+
+/* Redraws the bar that shows what selmon is up to, which barsinglemon can
+ * keep on another monitor entirely. */
+void drawselbar(void)
+{
+    Monitor* m = barmonitor();
+
+    if (m)
+        drawbar(m);
 }
 
 /* One colour escape at p: ^c#RRGGBB^ and ^b#RRGGBB^ set the foreground and
@@ -2742,12 +2807,20 @@ void traynotify(void* data)
 
 void trayactivate(const Arg* arg)
 {
-    tray_leftclicked(selmon->tray, arg->ui);
+    Monitor* m = barmonitor(); /* the tray belongs to the bar clicked */
+
+    if (!m)
+        return;
+    tray_leftclicked(m->tray, arg->ui);
 }
 
 void traymenu(const Arg* arg)
 {
-    tray_rightclicked(selmon->tray, arg->ui, traymenucmd);
+    Monitor* m = barmonitor();
+
+    if (!m)
+        return;
+    tray_rightclicked(m->tray, arg->ui, traymenucmd);
 }
 #endif /* SYSTRAY */
 
@@ -3361,7 +3434,7 @@ static void runnertoggle(const Arg* arg)
         runner_repeating = 0;
     }
     runner_active = !runner_active;
-    drawbar(selmon);
+    drawselbar();
 }
 
 static void runnerkey(xkb_keysym_t sym, uint32_t mods, uint32_t codepoint)
@@ -3466,9 +3539,7 @@ static void runnerkey(xkb_keysym_t sym, uint32_t mods, uint32_t codepoint)
                 }
                 break;
         }
-    /* the last monitor can go away while the prompt is up */
-    if (selmon)
-        drawbar(selmon);
+    drawselbar();
 }
 #endif /* RUNNER */
 
@@ -3955,8 +4026,14 @@ void motionnotify(uint32_t time,
         handlecursoractivity();
 
         /* Update selmon (even while dragging a window) */
-        if (sloppyfocus)
+        if (sloppyfocus) {
+            Monitor* old = selmon;
             selmon = xytomon(cursor->x, cursor->y);
+            /* the single bar follows the focus, and crossing into empty
+             * space changes it without going through focusclient() */
+            if (barsinglemon && selmon != old)
+                drawbars();
+        }
     }
 
     /* Update drag icon's position */
@@ -4058,23 +4135,25 @@ void moveresize(const Arg* arg)
  * the window title share (ClkTitle). */
 void notifyclick(const Arg* arg)
 {
+    /* the box is measured on the monitor the bar is drawn on */
+    Monitor* m = barmonitor();
     const char* text;
     char buf[NOTIFY_TEXTMAX];
     int boxw;
     size_t len, off, cut, good, n;
 
-    if (!shownotifications || !selmon || !selmon->b.titlew ||
+    if (!shownotifications || !m || !m->b.titlew ||
         !(text = notify_gettext()))
         return;
     notifysync();
 
     /* drwl_text() spends lrpad/2 of the box on the left padding: measuring
      * against the full width would scroll text past unread. */
-    boxw = selmon->b.titlew - selmon->lrpad / 2;
+    boxw = m->b.titlew - m->lrpad / 2;
     len = strlen(text);
     off = notifyoff < len ? notifyoff : 0;
 
-    if (boxw <= 0 || (int)drwl_font_getwidth(selmon->drw, text + off) <= boxw) {
+    if (boxw <= 0 || (int)drwl_font_getwidth(m->drw, text + off) <= boxw) {
         notifyoff = 0;
         drawbars();
         return;
@@ -4089,7 +4168,7 @@ void notifyclick(const Arg* arg)
             break;
         memcpy(buf, text + off, n);
         buf[n] = '\0';
-        if ((int)drwl_font_getwidth(selmon->drw, buf) > boxw)
+        if ((int)drwl_font_getwidth(m->drw, buf) > boxw)
             break;
         good = cut;
     }
@@ -4629,7 +4708,7 @@ void setlayout(const Arg* arg)
              "%s",
              selmon->lt[selmon->sellt]->symbol);
     arrange(selmon);
-    drawbar(selmon);
+    drawselbar();
 }
 
 /* arg > 1.0 will set mfact absolutely */
@@ -5246,9 +5325,14 @@ void tile(Monitor* m)
 
 void togglebar(const Arg* arg)
 {
-    wlr_scene_node_set_enabled(&selmon->scene_buffer->node,
-                               !selmon->scene_buffer->node.enabled);
-    arrangelayers(selmon);
+    /* under barsinglemon this hides the one bar from any monitor */
+    Monitor* m = barmonitor();
+
+    if (!m)
+        return;
+    wlr_scene_node_set_enabled(&m->scene_buffer->node,
+                               !m->scene_buffer->node.enabled);
+    arrangelayers(m);
     drawbars();
 }
 
@@ -5491,6 +5575,9 @@ void updatemons(struct wl_listener* listener, void* data)
     wl_list_for_each(m, &mons, link)
     {
         updatebar(m);
+        /* this very change can hand a monitor the single bar, and with it
+         * the strip of height its clients are kept out of */
+        arrangelayers(m);
         drawbar(m);
     }
 
@@ -5516,8 +5603,7 @@ void updatebar(Monitor* m)
     m->b.width = rw;
     m->b.real_width = (int)((float)m->b.width / m->wlr_output->scale);
 
-    wlr_scene_node_set_enabled(&m->scene_buffer->node,
-                               m->wlr_output->enabled ? showbar : 0);
+    wlr_scene_node_set_enabled(&m->scene_buffer->node, barvisible(m));
 
     bufpooldrop(m->pool, LENGTH(m->pool));
 
@@ -5532,7 +5618,12 @@ void updatebar(Monitor* m)
 
     m->b.scale = m->wlr_output->scale;
     m->lrpad = m->drw->font->height;
+    /* the automatic height follows the font, which is loaded at the output's
+     * dpi, so barheight scales it the same on every monitor */
     m->b.height = m->drw->font->height + 2;
+    if (barheight > 0)
+        m->b.height = MAX((int)((float)m->b.height * barheight + 0.5f),
+                          m->drw->font->height);
     m->b.real_height = (int)((float)m->b.height / m->wlr_output->scale);
     m->t.height = m->drw->font->height + (int)titlepadding;
     m->t.real_height = (int)((float)m->t.height / m->wlr_output->scale);

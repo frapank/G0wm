@@ -110,6 +110,15 @@ static const int showbar     = 1; // 0 means no bar
 static const int topbar      = 1; // 0 means bottom bar
 static const int barwintitle = 0; // focused window title in the bar
 
+/* Bar height, times the automatic one (the font height plus two pixels), so
+ * it holds at any dpi: 1.1 is a tenth taller, 0 leaves it alone. */
+static const float barheight = 1.1f;
+
+/* 1 keeps one bar on the first monitor matched by monrules[], with only the
+ * catch-all row the first output that came up. It never moves, the others get
+ * none, and it reports on whichever monitor is focused. */
+static const int barsinglemon = 0;
+
 /* --- SYSTRAY: menu is traymenucmd (7), clicks are ClkTray (10) --- */
 #ifdef SYSTRAY
 static const int showsystray              = 1;
