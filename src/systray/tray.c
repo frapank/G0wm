@@ -14,10 +14,12 @@
 #include <stdio.h>
 #include <stdlib.h>
 
+/* premultiplied, like drwl's convert_color: the canvas is a8r8g8b8 and the
+ * bar it is pasted into carries the same colour through drwl */
 #define PIXMAN_COLOR(hex)                                                      \
-    { .red = ((hex >> 24) & 0xff) * 0x101,                                     \
-      .green = ((hex >> 16) & 0xff) * 0x101,                                   \
-      .blue = ((hex >> 8) & 0xff) * 0x101,                                     \
+    { .red = ((hex >> 24) & 0xff) * 0x101 * (hex & 0xff) / 0xff,               \
+      .green = ((hex >> 16) & 0xff) * 0x101 * (hex & 0xff) / 0xff,             \
+      .blue = ((hex >> 8) & 0xff) * 0x101 * (hex & 0xff) / 0xff,               \
       .alpha = (hex & 0xff) * 0x101 }
 
 static Watcher* tray_get_watcher(const Tray* tray)
