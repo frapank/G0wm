@@ -28,7 +28,8 @@ It currently includes:
 - **Title bars** for every window and an i3/sway style tabbed layout
 - **Notifications** through an `org.freedesktop.Notifications` server shown in the bar
 - **Runner** opened with `MODKEY+r`, with `$PATH` completion and basic arithmetic
-- **Window opacity** that can be set per client or globally and changed at runtime
+- **Window opacity** that can be set per client or globally and changed at
+  runtime, optionally as frosted glass over the wallpaper
 - **Graphics tablet support** and the usual [dwl-patches]
 
 More details about the features and their settings can be found in
