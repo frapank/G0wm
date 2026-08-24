@@ -78,6 +78,7 @@ Some features can be disabled during the build:
 | `--no-systray` | the tray in the bar |
 | `--no-notify` | the notification server |
 | `--no-runner` | the bar runner, `MODKEY+r` starts `menucmd` instead |
+| `--no-titlebar` | the per-window title bars and the tabs drawn in them |
 | `--no-integrated-background` | the wallpaper renderer (`gdk-pixbuf`) |
 
 Run `./configure --help` to see the other available options such as

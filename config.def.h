@@ -80,8 +80,12 @@ static int gaps                 = 1; // runtime: MODKEY+g
 static const unsigned int gappx = 3; // gap size, times gaps
 static const int smartgaps      = 0; // 1 drops the outer gap with one window
 
-static const int titlebar              = 1; // per-window title bar, not barwintitle
+/* --- TITLEBAR: per-window title bars, not barwintitle --- */
+#ifdef TITLEBAR
+static int titlebar                    = 1; // runtime: MODKEY+Shift+t
 static const unsigned int titlepadding = 6; // on top of the font height
+#endif
+/* --- end TITLEBAR --- */
 
 static const Layout layouts[] = {
     /* symbol     arrange function */
@@ -265,6 +269,9 @@ static const Key keys[] = {
 	{ MODKEY,                    XKB_KEY_v,           togglefloating,   {0} },
 	{ MODKEY,                    XKB_KEY_g,           togglegaps,       {0} },
 	{ MODKEY|WLR_MODIFIER_SHIFT, XKB_KEY_b,           togglebar,        {0} },
+#ifdef TITLEBAR
+	{ MODKEY|WLR_MODIFIER_SHIFT, XKB_KEY_t,           toggletitlebar,   {0} },
+#endif
 	{ MODKEY,                    XKB_KEY_t,           toggletabbed,     {.v = &layouts[3]} },
 	{ MODKEY,                    XKB_KEY_e,           togglefullscreen, {0} },
 
