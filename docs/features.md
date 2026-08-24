@@ -100,7 +100,7 @@ fixes carried on top of upstream. Every configuration knob named here lives in
   title, and the title comes back as soon as it expires or is dismissed.
 
   Toggle with `shownotifications`; when off (or if another notification daemon
-  like mako/dunst/swaync already owns the bus name), dwl doesn't touch the bus
+  like mako/dunst/swaync already owns the bus name), g0wn doesn't touch the bus
   name and nothing changes.
 - **Graphics tablet support** — pen tablets (tested on a Wacom Intuos S) move
   the cursor and click like a pointer. `inputdevice()` attaches
@@ -129,7 +129,7 @@ fixes carried on top of upstream. Every configuration knob named here lives in
   Since neither changing the opacity nor toggling it damages anything on its
   own, and the values are applied while rendering, both ask every enabled
   output for a frame.
-- **Bar runner** (`src/dwl.c`, `RUNNER`) — `MODKEY+r` turns the same shared
+- **Bar runner** (`src/g0wn.c`, `RUNNER`) — `MODKEY+r` turns the same shared
   box the title/notification use into a prompt: a caret marks the insertion
   point (it is what tells an empty prompt apart from an empty title area, and
   its size is derived from the font height so it holds up on every monitor
@@ -156,16 +156,16 @@ fixes carried on top of upstream. Every configuration knob named here lives in
   `$PATH` directories against the ones the cache was built from: a directory's
   mtime moves whenever an entry is added or removed, so one `stat()` per entry
   (~0.04ms in total, no `readdir`) is enough to tell whether a rescan would
-  turn anything up. A program installed while dwl runs therefore shows up at
+  turn anything up. A program installed while g0wn runs therefore shows up at
   the next prompt, and only that prompt pays for the rescan. Making an
   *existing* file executable is the one change this misses, since it leaves
   the directory's mtime alone.
 
   Disable at build time with `./configure --no-runner`, which reverts
   `MODKEY+r` to spawning `menucmd` (`wmenu-run`) instead.
-- **Status text modules** (`scripts/dwl-status.sh`, `./status_gen`) — the
-  script `start-dwl` pipes into dwl builds its line out of modules named in
-  `$XDG_CONFIG_HOME/dwl/status.conf`: `date`, `time`, `battery`, `cpu`, `ram`,
+- **Status text modules** (`scripts/g0wn-status.sh`, `./status_gen`) — the
+  script `start-g0wn` pipes into g0wn builds its line out of modules named in
+  `$XDG_CONFIG_HOME/g0wn/status.conf`: `date`, `time`, `battery`, `cpu`, `ram`,
   `netdown`, `netup`, printed in the order they are listed there. Each one has
   a format of its own — a strftime string for `date` and `time`, a template
   with `%v` for the value, `%i` for the icon, and `%u`/`%t` for the memory in
@@ -176,7 +176,7 @@ fixes carried on top of upstream. Every configuration knob named here lives in
   `./status_gen` writes that file the way `config_gen` writes `config.h`, with
   the same prompts, the same `-c` to edit the current one and the same backup.
   Each format is picked from a menu that shows the line the bar would draw,
-  not the template, and the last thing it does is run `dwl-status.sh --once`
+  not the template, and the last thing it does is run `g0wn-status.sh --once`
   on what it wrote.
 
   Icons are Nerd Font glyphs substituted into `%i`, offered only after
