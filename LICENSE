@@ -1,8 +1,10 @@
-dwl - dwm for Wayland
+g0wn - a Wayland desktop, forked from dwl
 
+Copyright © 2026 frapank
 Copyright © 2020 dwl team
 
-See also the files license/tinywl.txt, license/dwm.txt and license/sway.txt.
+See also the files license/tinywl.txt, license/dwm.txt, license/sway.txt and
+license/drwl.txt, and docs/credits.md for where each part comes from.
 
 This program is free software: you can redistribute it and/or modify
 it under the terms of the GNU General Public License as published by
