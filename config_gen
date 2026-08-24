@@ -223,6 +223,8 @@ defval() { # initializer of a static variable in config.def.h
 
 defbin() { defval "$1" | sed 's/[{}",]/ /g; s/^ *//; s/ .*//'; }
 
+deffloat() { defval "$1" | sed 's/f$//'; } # float initializer, without the f
+
 # float initializer as a percentage, 100 when the config predates the setting
 defpct() {
 	defval "$1" | awk '{ sub(/f$/, ""); p = $0 * 100 + 0.5 }
@@ -378,6 +380,38 @@ opacity() {
 	note 'its systray and notifications, the title bars and the borders'
 	askpct 'opacity of the bar, title bars and borders' "$(defpct opacity_deco)"
 	setval opacity_deco "$ans"
+
+	# these settings are only in the config when the background is compiled in
+	if grep -q '^static const int opacity_type' "$def"; then
+		note 'blur puts a frosted copy of the wallpaper behind everything'
+		note 'transparent, the way macOS does, instead of showing what is'
+		note 'really behind it; it needs a wallpaper and costs nothing to'
+		note 'keep on, as the blurring happens once when it is loaded'
+		case $(defval opacity_type) in *Blur*) op_ty=2 ;; *) op_ty=1 ;; esac
+		menu 'what a transparent window shows through itself' "$op_ty" \
+			'normal: whatever happens to be behind it' \
+			'blur: frosted glass'
+		if [ "$choice" = 2 ]; then
+			setval opacity_type OpacityBlur
+			# a config predating a setting leaves its default empty
+			bl_r=$(defval blur_radius) bl_p=$(defval blur_passes)
+			bl_s=$(deffloat blur_saturation)
+			bl_b=$(deffloat blur_brightness)
+			asknum 'how far the wallpaper smears, in pixels' "${bl_r:-32}"
+			setval blur_radius "$ans"
+			asknum 'blur passes, more is rounder and 3 is plenty' "${bl_p:-3}"
+			setval blur_passes "$ans"
+			note 'a wide blur leaves grey mush, so the colors are pushed'
+			note 'back up afterwards: 1.0 leaves them as they are'
+			askfloat 'saturation of the glass' "${bl_s:-1.60}"
+			setval blur_saturation "${ans}f"
+			askfloat 'brightness of the glass, below 1 for darker glass' \
+				"${bl_b:-1.00}"
+			setval blur_brightness "${ans}f"
+		else
+			setval opacity_type OpacityNormal
+		fi
+	fi
 
 	note 'the app list is matched against app ids, as the window rules are'
 	menu 'the apps in the list are' \
