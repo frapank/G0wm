@@ -5436,21 +5436,28 @@ void toggletag(const Arg* arg)
 }
 
 #ifdef TITLEBAR
-/* the title row comes off the client box, so it all gets laid out again */
+/* arrange() leaves floating clients alone, and no client redraws a title
+ * bar, so both are done by hand here */
 void toggletitlebar(const Arg* arg)
 {
     Monitor* m;
     Client* c;
 
     titlebar = !titlebar;
+
+    wl_list_for_each(m, &mons, link) arrange(m);
     wl_list_for_each(c, &clients, link)
     {
-        if (!titlebar && c->title)
-            wlr_scene_node_set_enabled(&c->title->node, 0);
-        resize(c, c->geom, 0);
+        if (c->mon && c->isfloating && !c->isfullscreen)
+            resize(c, c->geom, 1);
     }
-    wl_list_for_each(m, &mons, link) arrange(m);
     drawbars();
+
+    wl_list_for_each(m, &mons, link)
+    {
+        if (m->wlr_output->enabled)
+            wlr_output_schedule_frame(m->wlr_output);
+    }
 }
 #endif /* TITLEBAR */
 
