@@ -446,6 +446,19 @@ bar() {
 		setval topbar "$([ "$choice" = 1 ] && echo 1 || echo 0)"
 		askyn 'show the focused window title' "$(yn "$(defval barwintitle)")" &&
 			setval barwintitle 1 || setval barwintitle 0
+		bar_h=$(deffloat barheight)
+		if askyn 'scale the bar height' \
+			"$(yn "$([ "${bar_h:-0}" = 0 ] && echo 0 || echo 1)")"; then
+			note '1.1 is a tenth taller than the automatic height'
+			askfloat 'bar height, times the automatic one' \
+				"$([ "${bar_h:-0}" = 0 ] && echo 1.1 || echo "$bar_h")"
+			setval barheight "${ans}f"
+		else
+			setval barheight 0
+		fi
+		askyn 'one bar on the first monitor of monrules only' \
+			"$(yn "$(defval barsinglemon)")" &&
+			setval barsinglemon 1 || setval barsinglemon 0
 		if askyn 'show the systray' "$(yn "$(defval showsystray)")"; then
 			setval showsystray 1
 			asknum 'systray icon size (0 fills the bar)' "$(defval systrayiconsize)"

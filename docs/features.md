@@ -70,6 +70,18 @@ fixes carried on top of upstream. Every configuration knob named here lives in
 
 ## Local additions
 
+- **Bar height** (`barheight`) — scales the bar against its automatic height
+  (the font height plus two pixels) rather than setting pixels, so one number
+  holds at any dpi: `1.1` is a tenth taller, `0` leaves it alone. The text
+  stays centered and the tag and floating markers follow it; anything below one
+  font height is raised to it, or the text would be cut.
+- **Single bar** (`barsinglemon`) — one bar instead of one per monitor. It sits
+  on the monitor matched by the earliest `monrules[]` row (with only the
+  catch-all row, the first output that came up), never moves, and leaves the
+  others their full height for clients. It reports on whichever monitor is
+  focused, so tags, layout symbol, status, notifications and the runner all
+  stay in one place. Clicks are measured on the bar but act on the monitor it
+  is showing, and `togglebar` hides it from anywhere.
 - **Title bars** — every window gets a title bar showing its title, drawn with
   the same `drwl` code as the bar. Height and colors come from
   `titlebar`/`titlepadding` and the `SchemeTitle`/`SchemeTitleSel` entries of
