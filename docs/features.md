@@ -1,260 +1,105 @@
-# Features of this fork
+<div align="center">
 
-Detail behind the overview in the [README](../README.md): the [dwl-patches]
-applied on top of upstream dwl, the features written for this tree, and the
-fixes carried on top of upstream. Every configuration knob named here lives in
-`config.h`/`config.def.h` and is prompted for by `./config_gen`.
+# **What g0wn does**
 
-## Applied patches
+[README](../README.md) · [config.def.h](../config.def.h) · [man page](g0wn.1) · [credits](credits.md)
 
-- **[bar]** — internal i3-like status bar (tags, layout symbol, focused client
-  title, external status text), rendered with `fcft`/`pixman`. Configured for
-  an always-black bar with white text and black window borders (`colors[]`).
-- **[gaps]** — gaps between tiled clients, toggled with `MODKEY+g`. Set to 3px
-  (`gappx`).
-- **[autostart]** — runs the commands in `autostart[]` at startup and
-  terminates them on exit, instead of relying on the `-s` flag. Used here to
-  start `swaybg` for the wallpaper.
-- **[cursortheme]** — makes the xcursor theme and size configurable via
-  `cursor_theme`/`cursor_size` (and exports `XCURSOR_THEME`/`XCURSOR_SIZE` so
-  clients match). Naming a theme is required on systems with no `default`
-  cursor theme installed: otherwise wlroots falls back to a 10x16px built-in
-  cursor that ignores `cursor_size`. Set to `"Adwaita"` at size 48, which the
-  monitor scale in `monrules` multiplies.
-- **[attachbottom]** — new windows are appended to the bottom of the stack
-  instead of becoming the new master, so the 2nd window you open lands in the
-  stack (right side) rather than displacing the 1st one out of master.
-- **[movestack]** (by Nikita Ivanov) — moves the focused client up or down the
-  stack, bound to `MODKEY+Shift+h/j/k/l`.
-- **[bar-systray]** (by [janetski]) — a StatusNotifierItem tray at the right
-  end of the bar, adding a `libdbus` dependency. Left click activates an item,
-  right click opens its menu through `traymenucmd`. Size and spacing come from
-  `systrayiconsize`/`systrayspacing`, and `showsystray` turns it off.
+</div>
 
-  Disable at build time with `./configure --no-systray` (`--no-tray` is
-  accepted too), which leaves `src/systray/` out of the build and drops the
-  tray settings and the `ClkTray` bindings from `config.h`.
+## The bar
 
-  Ported from 0.7 to this tree, with three changes: icons are drawn at a
-  configurable size centered in the bar instead of always filling its height;
-  `destroytray()` unlinks the tray before freeing it (it was left on the
-  watcher's list, so re-creating a monitor's tray left a dangling pointer); and
-  the watcher accepts registrations under a well-known bus name, which is what
-  KStatusNotifierItem (so every Qt/KDE app) sends and which was previously
-  rejected as a bad argument. A missing session bus now logs a warning instead
-  of aborting startup.
+Tags on the left, layout icon next to them, right: status text and tray, middle:
+a box that changes according to context.
 
-  It does not read icons from the filesystem, by design: apps that publish an
-  icon *name* rather than pixel data show the first letter of their name
-  instead of an icon.
-- **[hide-cursor-when-typing]** (by [unixchad]) — hides the mouse cursor as
-  soon as a key is pressed, restoring it on the next pointer motion or button
-  press, like `xbanish`. Toggle with `hide_cursor_when_typing`.
-- **[warpcursor]** (by [Ben Collerson]) — warps the cursor to the center of a
-  newly focused client if it isn't already over it, and to the center of the
-  monitor's usable area on `arrange()` when no client is focused.
-- **[client-opacity-focus]** (by [Hansvon], on top of [client-opacity]) — one
-  opacity for the focused window and another for every unfocused one, set by
-  `opacity_focus`/`opacity_unfocus` and overridable per client through the two
-  opacity columns of `rules[]` (a `0` there keeps the default). `MODKEY+o` and
-  `MODKEY+Shift+O` step the focused window's opacity up and down,
-  `MODKEY+Ctrl+o`/`MODKEY+Ctrl+Shift+O` do the same for what it fades to once
-  it loses focus, both clamped to 10-100%. Both defaults are `1.00f`, so
-  nothing is transparent until you ask for it. Fullscreen clients are always
-  drawn opaque, and the opacity applies to the client's own buffers only, so
-  borders, title bars and popups keep their own colors.
+This middle box is the most interesting thing about the panel. Normally it
+displays the name of the window that you have active focus on. However, once the
+notification comes in, it takes over the box and draws it in its own colours, to
+differentiate the two. And when you press the launcher button it turns into a
+prompt. One element, three roles.
 
-  Merged with the X11 client initialisation the focus variant is missing, and
-  with the rule fields treated as an override rather than an overwrite. The app
-  filter and global toggle below are not part of it.
+The bar can be placed either at the top or the bottom, it can be slightly
+taller or shorter than the font suggests and it can be transparent according to
+your settings. In a multi-monitor configuration you can choose between having a
+bar for each monitor or a single bar following the monitor where you work.
 
-## Local additions
+#### **Tray** 
+A StatusNotifierItem tray positioned at the right edge. 
+Left click sends a signal to the app, right click opens its menu. 
+It does not search for the icons on disk, therefore applications, 
+which publish only a name of an icon, have their first letter displayed. 
+Most applications provide real pixel-based icon.
 
-- **Bar height** (`barheight`) — scales the bar against its automatic height
-  (the font height plus two pixels) rather than setting pixels, so one number
-  holds at any dpi: `1.1` is a tenth taller, `0` leaves it alone. The text
-  stays centered and the tag and floating markers follow it; anything below one
-  font height is raised to it, or the text would be cut.
-- **Single bar** (`barsinglemon`) — one bar instead of one per monitor. It sits
-  on the monitor matched by the earliest `monrules[]` row (with only the
-  catch-all row, the first output that came up), never moves, and leaves the
-  others their full height for clients. It reports on whichever monitor is
-  focused, so tags, layout symbol, status, notifications and the runner all
-  stay in one place. Clicks are measured on the bar but act on the monitor it
-  is showing, and `togglebar` hides it from anywhere.
-- **Title bars** — every window gets a title bar showing its title, drawn with
-  the same `drwl` code as the bar. Height and colors come from
-  `titlebar`/`titlepadding` and the `SchemeTitle`/`SchemeTitleSel` entries of
-  `colors[]`; clicking a title bar focuses its window.
-- **Tabbed layout** — an i3/sway-style `tabbed` layout toggled with `MODKEY+t`.
-  The group is laid out as a single window and the members' title bars are
-  packed into its one title row as tabs, so `MODKEY+h/l` cycles between them.
-  Pressing `MODKEY+t` again restores the previous layout.
-- **Bar notifications** (`src/notify.c`) — a minimal
-  `org.freedesktop.Notifications` server on the session bus that renders the
-  most recent notification (`app: summary - body`) centered in the same bar
-  space used for the title/blank area, computed so it never overlaps the tags,
-  layout symbol, status text, or systray. Long text is truncated with an
-  ellipsis (the same way titles already are); left-clicking it scrolls to
-  whatever didn't fit, wrapping back to the start once you reach the end.
-  Right-clicking dismisses it early.
+#### **Notifications** 
+A small `org.freedesktop.Notifications` server. One
+notification at a time, a new one replaces the old one, and it goes away by
+itself after a few seconds. Click it to scroll through text that did not fit,
+right click to make it go away sooner. If mako or dunst is already running,
+g0wn stays out of the way.
 
-  Only one notification is tracked at a time — a new one always replaces
-  whatever is showing — and it auto-hides after `notification_timeout` seconds,
-  or after the `expire_timeout` the client asked for when that is shorter (a
-  request to never expire is not honoured: the bar has a single slot, capped at
-  60s either way). Clients are told what happened through the usual
-  `NotificationClosed` signal, and `replaces_id` updates a notification in
-  place.
+#### **Launcher** 
+Hit the key and the bar turns into a prompt. Type a few letters
+and it completes against everything executable in your `$PATH`, Tab takes the
+suggestion, Enter runs it. If what you typed looks like arithmetic instead, it
+does the math and shows you the answer, so `2+2` gives you `= 4` without
+opening a calculator. While the prompt is open it owns the keyboard, so none of
+your bindings fire and nothing leaks into the window underneath.
 
-  That bar space is shared with `barwintitle`: while a notification is up it
-  takes the box over, drawn in `SchemeNotify` so it doesn't read as a window
-  title, and the title comes back as soon as it expires or is dismissed.
+#### **Status text** 
+Whatever you pipe into g0wn ends up on the right side of the
+bar. The shipped script builds that line out of small modules, date, clock,
+battery, cpu, ram and network speed, in whatever order you list them. Run
+`./status_gen` and it walks you through picking them, with Nerd Font icons if
+you have a Nerd Font. A module the machine cannot feed, like a battery on a
+desktop, quietly drops out instead of printing an empty box.
 
-  Toggle with `shownotifications`; when off (or if another notification daemon
-  like mako/dunst/swaync already owns the bus name), g0wn doesn't touch the bus
-  name and nothing changes.
-- **Graphics tablet support** — pen tablets (tested on a Wacom Intuos S) move
-  the cursor and click like a pointer. `inputdevice()` attaches
-  `WLR_INPUT_DEVICE_TABLET` devices to the cursor the same way pointers are,
-  but wlroots reports tablet tool motion and clicks on separate
-  `tablet_tool_axis`/`tablet_tool_tip` signals instead of the generic pointer
-  ones, so two listeners translate them: `tabletaxis()` turns an axis event
-  into the same absolute-to-relative motion `motionabsolute()` does for
-  pointers (skipping events that update neither X nor Y, e.g. pressure-only
-  samples), and `tablettip()` maps the tool tip touching down/up to a synthetic
-  `BTN_LEFT` press/release through the existing `buttonpress()`. Both send a
-  `wlr_seat_pointer_notify_frame()` afterwards, since tablets don't emit a
-  frame event of their own and clients hold pointer events back until one
-  arrives. Pressure, tilt, the pad buttons, and the eraser end are not
-  forwarded — only cursor motion and the tip-as-click.
-- **Opacity filter and global toggle** — written on top of
-  [client-opacity-focus]. `opacity_apps[]` lists the app ids opacity applies
-  to, matched against the app id the way the window rules are;
-  `opacity_exclusion_type` flips what the list means — `0`, the default, makes
-  it an include list, `1` a skip list — and an empty list covers every app. The
-  filter is evaluated once per client in `mapnotify()` rather than in
-  `applyrules()`, so the clients that have a parent, which skip the rules
-  entirely, are covered too. `MODKEY+Alt+o` (`toggleopacity()`) turns opacity
-  off for every window at once and back on, and `opacity_enabled` picks the
-  state it starts in, so a config can carry its opacity settings switched off.
-  Since neither changing the opacity nor toggling it damages anything on its
-  own, and the values are applied while rendering, both ask every enabled
-  output for a frame.
-- **Frosted glass** (`INTEGRATED_BACKGROUND`) — `opacity_type` picks what a
-  transparent window shows through itself. `OpacityNormal`, the default, is
-  the plain behaviour above: whatever happens to be behind it. `OpacityBlur`
-  puts a frosted copy of the wallpaper there instead, the way macOS does.
+## Windows
 
-  It is the wallpaper that is blurred, not the screen: `blurwallpaper()` makes
-  one blurred copy when `setwallpaper()` loads it, and every window's backdrop
-  is a crop of that buffer, positioned by `blurclient()`. Nothing is blurred
-  per frame. The cheapness costs depth — a transparent window over another one
-  shows the wallpaper, not the window underneath; blurring what has already
-  been composited is what SceneFX exists for, and it does not follow wlroots
-  0.20 yet.
+Tags, not workspaces, like in dwm. Each window has its own tags, each monitor has
+its own tags, and you may have several at once.
 
-  The copy is shrunk (`blurshrink()`), box blurred `blur_passes` times at
-  `blur_radius` along its rows and then, transposed, along its columns
-  (`blurrows()`, `blurtranspose()`), then recoloured by `blur_saturation` and
-  `blur_brightness` (`blurtint()`). It stays at the shrunk size and the GPU
-  scales it back up, `blursrcbox()` dividing each crop down into it: a backdrop
-  sits under every translucent window, so unlike the wallpaper it is never
-  occluded away, and a full-size copy in system memory would cross the bus on
-  every frame anything moved.
+Four layouts. Tiling layout with master area, floating, monocle, and tabbed that
+takes ideas from i3 and sway. In the tabbed layout all members of the group are
+drawn as one window and they become tabs in the titlebar, so you can have six
+terminals in one corner. Toggle the layout off and get your previous layout
+back.
 
-  `blurclient()` runs from the render pass, so it must leave the scene alone on
-  frames where nothing changed — anything it touches is damage, and damage asks
-  for another frame. The wlroots setters return early when the value matches,
-  except `wlr_scene_buffer_set_buffer()`; the node's own `buffer` field is no
-  use as a guard either, as the scene nulls it once it holds a texture, so
-  `Client.blurbuf` remembers what it was last handed. Get this wrong and
-  everything still draws — the compositor just never idles.
+Each window has its own titlebar, drawn with the same code as the bar. Click it
+and focus that window.
 
-  The backdrop sits under a client's whole box, borders and title bar
-  included, and the bar gets one of its own (`blurbar()`). Whether either is
-  drawn is `decotranslucent()`'s call, which asks whether `opacity_deco` fades
-  the decorations and whether a colour in `colors[]` carries an alpha of its
-  own — that second half is how a bar stays see-through with `opacity_deco`
-  left at `1.00f`. Fullscreen clients are drawn opaque and get no backdrop,
-  `MODKEY+Alt+o` takes the glass away with the rest of the opacity, and with
-  no wallpaper the effect turns itself off.
+Newly opened windows go to the bottom of the stack, not the master area, so
+your second application lands next to the first one, not in front of it. You can
+have gaps, you can have borders, and you can define the rules table for apps
+that must be always floating and for those that must always be on tag 4.
 
-- **Bar runner** (`src/g0wn.c`, `RUNNER`) — `MODKEY+r` turns the same shared
-  box the title/notification use into a prompt: a caret marks the insertion
-  point (it is what tells an empty prompt apart from an empty title area, and
-  its size is derived from the font height so it holds up on every monitor
-  scale), type a prefix and the first match among every executable name in
-  `$PATH` is drawn after it in `SchemeRunnerSuggest`, `Tab` accepts it,
-  `Return` runs the suggestion (or
-  whatever was typed if there is none) through `/bin/sh -c`, `Ctrl+C` empties
-  the prompt without closing it, `Escape` cancels. While it's open every key
-  belongs to it — no keybinding fires and nothing reaches the focused client —
-  and held keys repeat into it at the keyboard's own rate, so backspace clears
-  by holding it. Colors come from `SchemeRunner`/`SchemeRunnerSuggest`.
+## Glass
 
-  When there's no `$PATH` match, a buffer made only of digits, `+ - * / % ( )`,
-  a decimal point and whitespace (with at least one digit and one operator)
-  is instead evaluated as arithmetic by a small hand-rolled recursive-descent
-  parser and its result drawn the same way, e.g. `2+2` shows `= 4`. It never
-  shells out or touches the filesystem, so a malformed expression just fails
-  to parse; division by zero, unmatched parens and non-finite results are all
-  rejected rather than shown. `Tab` replaces the buffer with the bare result
-  (so it can feed into a further expression), and `Return` on a bare
-  expression is a no-op instead of handing `2+2` to `/bin/sh` as a command.
+Windows are capable of transparency, with the active one being more opaque
+than others so that one may easily determine their position visually.
+Opacity can be controlled for everything, per app, and per window via some
+key shortcuts. A particular key combination disables all transparency when
+one needs to actually read anything.
 
-  The `$PATH` scan is cached, and each open first compares the mtime of the
-  `$PATH` directories against the ones the cache was built from: a directory's
-  mtime moves whenever an entry is added or removed, so one `stat()` per entry
-  (~0.04ms in total, no `readdir`) is enough to tell whether a rescan would
-  turn anything up. A program installed while g0wn runs therefore shows up at
-  the next prompt, and only that prompt pays for the rescan. Making an
-  *existing* file executable is the one change this misses, since it leaves
-  the directory's mtime alone.
+A fancier implementation applies a blurred copy of the wallpaper under all
+translucent windows, similarly to how it is done in macOS. It is a cheap
+hack and it admits that fact. The wallpaper is only blurred once upon loading
+and each window is getting a cropped version of that blurred wallpaper, so
+nothing has to be blurred per frame, making its overhead virtually non-existent.
+The cost is depth. A translucent window placed over another one still displays
+wallpaper rather than the window below it.
 
-  Disable at build time with `./configure --no-runner`, which reverts
-  `MODKEY+r` to spawning `menucmd` (`wmenu-run`) instead.
-- **Status text modules** (`scripts/g0wn-status.sh`, `./status_gen`) — the
-  script `start-g0wn` pipes into g0wn builds its line out of modules named in
-  `$XDG_CONFIG_HOME/g0wn/status.conf`: `date`, `time`, `battery`, `cpu`, `ram`,
-  `netdown`, `netup`, printed in the order they are listed there. Each one has
-  a format of its own — a strftime string for `date` and `time`, a template
-  with `%v` for the value, `%i` for the icon, and `%u`/`%t` for the memory in
-  use and the total — and there is a `prefix`, a `separator` and a `suffix`
-  around them. Without a config file the output is the date, clock and battery
-  the script printed before it was made configurable, byte for byte.
+## Wallpaper
 
-  `./status_gen` writes that file the way `config_gen` writes `config.h`, with
-  the same prompts, the same `-c` to edit the current one and the same backup.
-  Each format is picked from a menu that shows the line the bar would draw,
-  not the template, and the last thing it does is run `g0wn-status.sh --once`
-  on what it wrote.
+g0wn loads and draws the wallpaper itself. Point it at an image and you are done. 
+Build without it and you get a flat color plus whatever you start from autostart.
 
-  Icons are Nerd Font glyphs substituted into `%i`, offered only after
-  `fc-list` reports a Nerd Font family: without one they would draw as boxes,
-  so they are skipped with a warning unless asked for anyway. `icon_battery`
-  holds a list, drawn from empty to full according to the charge.
+## Monitors
 
-  A module whose readings the system cannot provide — no battery, no
-  `/proc/meminfo`, `netstat` without byte counters — is dropped at startup
-  with a warning on stderr instead of printing an empty field. The loop runs
-  once a second, so it reads `/proc` and `/sys` with the shell's own `read`
-  and does its arithmetic in the shell: `date` stays the only command it forks
-  per tick.
+A different set of scaling, positioning, modality, rotation, and layout can be
+assigned to each output, corresponding by name. The windows switch between displays, 
+the focus changes, and using the single bar modality, the bar remains stationary but 
+only communicates regarding the current focus.
 
-[dwl-patches]: https://codeberg.org/dwl/dwl-patches
-[attachbottom]: https://codeberg.org/dwl/dwl-patches/wiki/attachbottom
-[autostart]: https://codeberg.org/dwl/dwl-patches/wiki/autostart
-[bar]: https://codeberg.org/dwl/dwl-patches/wiki/bar
-[cursortheme]: https://codeberg.org/dwl/dwl-patches/wiki/cursortheme
-[gaps]: https://codeberg.org/dwl/dwl-patches/wiki/gaps
-[movestack]: https://codeberg.org/dwl/dwl-patches/src/branch/main/patches/movestack
-[bar-systray]: https://codeberg.org/dwl/dwl-patches/src/branch/main/patches/bar-systray
-[hide-cursor-when-typing]: https://codeberg.org/dwl/dwl-patches/src/branch/main/patches/hide-cursor-when-typing
-[warpcursor]: https://codeberg.org/dwl/dwl-patches/src/branch/main/patches/warpcursor
-[client-opacity-focus]: https://codeberg.org/dwl/dwl-patches/src/branch/main/patches/client-opacity-focus
-[client-opacity]: https://codeberg.org/dwl/dwl-patches/src/branch/main/patches/client-opacity
-[Hansvon]: https://codeberg.org/Hansvon
-[unixchad]: https://codeberg.org/unixchad
-[janetski]: https://codeberg.org/janetski
-[Ben Collerson]: https://codeberg.org/bencc
+## Credits
+
+Most of this started as dwl, and a good part of it started as patches other
+people wrote. They are all listed in [credits.md](credits.md).
