@@ -213,16 +213,22 @@ typedef struct {
     struct wl_listener configure;
     struct wl_listener set_hints;
 #endif
+#ifdef TITLEBAR
     struct wlr_scene_buffer* title;
+#endif
 #ifdef INTEGRATED_BACKGROUND
     struct wlr_scene_buffer* blur; /* frosted wallpaper, below the whole box */
     struct wlr_buffer* blurbuf;    /* what blur's node was last handed */
+#ifdef TITLEBAR
     struct wlr_scene_buffer* titleblur; /* the same, for the title bar */
     struct wlr_buffer* titleblurbuf;
 #endif
+#endif
+#ifdef TITLEBAR
     Buffer* titlepool[2];
     int titlex, titlew; /* title bar placement, relative to the border box */
     int titlebufw;      /* pixel width titlepool was allocated at */
+#endif
     unsigned int bw;
     uint32_t tags;
     int isfloating, isurgent, isfullscreen;
@@ -300,10 +306,12 @@ struct Monitor {
                      * notification, 0 when it doesn't fit */
         float scale;
     } b; /* bar area */
+#ifdef TITLEBAR
     struct {
         int height;
         int real_height; /* non-scaled */
     } t;                 /* per-client title bar */
+#endif
 #ifdef SYSTRAY
     Tray* tray;
 #endif
@@ -457,7 +465,9 @@ static void drawbar(Monitor* m);
 static void drawbars(void);
 static void drawselbar(void);
 static int drawstatus(Monitor* m, const char* text, int x, int w, int render);
+#ifdef TITLEBAR
 static void drawtitle(Client* c);
+#endif
 static void focusclient(Client* c, int lift);
 static void focusmon(const Arg* arg);
 static void focusstack(const Arg* arg);
@@ -536,8 +546,10 @@ static void setfloating(Client* c, int floating);
 static void setfullscreen(Client* c, int fullscreen);
 static void setlayout(const Arg* arg);
 static void setmfact(const Arg* arg);
+#ifdef TITLEBAR
 static void settitle(Client* c);
 static int titleheight(Client* c);
+#endif
 static void setmon(Client* c, Monitor* m, uint32_t newtags);
 static void setopacityfocus(const Arg* arg);
 static void setopacityunfocus(const Arg* arg);
@@ -566,6 +578,9 @@ static void togglegaps(const Arg* arg);
 static void toggleopacity(const Arg* arg);
 static void toggletabbed(const Arg* arg);
 static void toggletag(const Arg* arg);
+#ifdef TITLEBAR
+static void toggletitlebar(const Arg* arg);
+#endif
 static void toggleview(const Arg* arg);
 #ifdef SYSTRAY
 static void trayactivate(const Arg* arg);
@@ -1075,7 +1090,11 @@ void blurbox(Client* c,
 void blurclient(Client* c)
 {
     Monitor* m = c->mon;
+#ifdef TITLEBAR
     int th, bw, x, w;
+#else
+    int th = 0;
+#endif
 
     if (!c->blur)
         return;
@@ -1085,21 +1104,28 @@ void blurclient(Client* c)
     if (!m || !m->blurpool[0] || c->isfullscreen || !opacity_enabled ||
         ((!c->hasopacity || c->opacity >= 1.0f) && !decotranslucent())) {
         wlr_scene_node_set_enabled(&c->blur->node, 0);
+#ifdef TITLEBAR
         if (c->titleblur)
             wlr_scene_node_set_enabled(&c->titleblur->node, 0);
+#endif
         return;
     }
 
+#ifdef TITLEBAR
     th = titleheight(c);
     bw = (int)c->bw;
+#endif
 
     if (!th || m->lt[m->sellt]->arrange != tabbed || c->isfloating) {
         blurbox(c, c->blur, &c->blurbuf, 0, 0, c->geom.width, c->geom.height);
+#ifdef TITLEBAR
         if (c->titleblur)
             wlr_scene_node_set_enabled(&c->titleblur->node, 0);
+#endif
         return;
     }
 
+#ifdef TITLEBAR
     /* Tabs share one box and the ones under the top are drawn in lower trees,
      * so a backdrop over the whole box buries their title bars. Each tab backs
      * its own slice of the row, the top one backs the body below it. */
@@ -1123,6 +1149,7 @@ void blurclient(Client* c)
                 c->geom.height - bw - th);
     else
         wlr_scene_node_set_enabled(&c->blur->node, 0);
+#endif /* TITLEBAR */
 }
 
 /* One box blur along the rows: a 2r+1 window slides on a running sum, so a
@@ -1257,8 +1284,12 @@ void blurwallpaper(Monitor* m)
 
     /* the nodes pick the new buffer up next frame; the pointer they compare
      * against has to go now, or a reused address would read as unchanged */
+#ifdef TITLEBAR
     wl_list_for_each(c, &clients, link) if (c->mon == m) c->blurbuf =
         c->titleblurbuf = NULL;
+#else
+    wl_list_for_each(c, &clients, link) if (c->mon == m) c->blurbuf = NULL;
+#endif
 
     if (opacity_type != OpacityBlur || !m->wallpaperpool[0] || w <= 0 || h <= 0)
         return;
@@ -2410,8 +2441,10 @@ void drawbar(Monitor* m)
     Monitor* s = barsinglemon && selmon ? selmon : m;
     int sel = s == selmon;
 
+#ifdef TITLEBAR
     /* Title bars are refreshed on the same events as the bar */
     wl_list_for_each(c, &clients, link) if (c->mon == m) drawtitle(c);
+#endif
 
     if (!m->scene_buffer->node.enabled) {
 #ifdef INTEGRATED_BACKGROUND
@@ -2824,6 +2857,7 @@ void traymenu(const Arg* arg)
 }
 #endif /* SYSTRAY */
 
+#ifdef TITLEBAR
 /* Renders the client's own title bar. In the tabbed layout every client of the
  * group shares one row, so these end up drawn side by side as tabs. */
 void drawtitle(Client* c)
@@ -2871,6 +2905,7 @@ void drawtitle(Client* c)
     wlr_scene_buffer_set_buffer(c->title, &buf->base);
     wlr_buffer_unlock(&buf->base);
 }
+#endif /* TITLEBAR */
 
 void focusclient(Client* c, int lift)
 {
@@ -3774,9 +3809,11 @@ void mapnotify(struct wl_listener* listener, void* data)
     /* the colour comes from here, once all four exist */
     setbordercolor(c, c->isurgent ? SchemeUrg : SchemeNorm);
 
+#ifdef TITLEBAR
     c->title = wlr_scene_buffer_create(c->scene, NULL);
     c->title->node.data = c;
     wlr_scene_node_set_enabled(&c->title->node, 0);
+#endif
 
 #ifdef INTEGRATED_BACKGROUND
     /* the frosted backdrop goes under the lot: the surface, which is what it
@@ -3786,11 +3823,13 @@ void mapnotify(struct wl_listener* listener, void* data)
     wlr_scene_node_set_enabled(&c->blur->node, 0);
     wlr_scene_node_lower_to_bottom(&c->blur->node);
 
+#ifdef TITLEBAR
     /* backs the title bar alone, which is what tabs need */
     c->titleblur = wlr_scene_buffer_create(c->scene, NULL);
     c->titleblur->node.data = c;
     wlr_scene_node_set_enabled(&c->titleblur->node, 0);
     wlr_scene_node_lower_to_bottom(&c->titleblur->node);
+#endif
 #endif
 
     /* Initialize client geometry with room for border */
@@ -4439,12 +4478,14 @@ void resize(Client* c, struct wlr_box geo, int interact)
 {
     struct wlr_box* bbox;
     struct wlr_box clip;
-    int th;
+    int th = 0;
 
     if (!c->mon || !client_surface(c)->mapped)
         return;
 
+#ifdef TITLEBAR
     th = titleheight(c);
+#endif
 
     bbox = interact ? &sgeom : &c->mon->w;
 
@@ -4471,7 +4512,9 @@ void resize(Client* c, struct wlr_box geo, int interact)
     clip.height -= th;
     wlr_scene_subsurface_tree_set_clip(&c->scene_surface->node, &clip);
 
+#ifdef TITLEBAR
     settitle(c);
+#endif
 }
 
 void resizeheight(const Arg* arg)
@@ -4725,6 +4768,7 @@ void setmfact(const Arg* arg)
     arrange(selmon);
 }
 
+#ifdef TITLEBAR
 /* Sizes and places the client's title bar. It spans the whole window, except
  * in the tabbed layout where each client of the group only gets its own slice
  * of the shared row - which is what turns the title bars into tabs. */
@@ -4764,6 +4808,7 @@ int titleheight(Client* c)
 {
     return titlebar && c->mon && !c->isfullscreen ? c->mon->t.real_height : 0;
 }
+#endif /* TITLEBAR */
 
 void setmon(Client* c, Monitor* m, uint32_t newtags)
 {
@@ -5390,6 +5435,25 @@ void toggletag(const Arg* arg)
     drawbars();
 }
 
+#ifdef TITLEBAR
+/* the title row comes off the client box, so it all gets laid out again */
+void toggletitlebar(const Arg* arg)
+{
+    Monitor* m;
+    Client* c;
+
+    titlebar = !titlebar;
+    wl_list_for_each(c, &clients, link)
+    {
+        if (!titlebar && c->title)
+            wlr_scene_node_set_enabled(&c->title->node, 0);
+        resize(c, c->geom, 0);
+    }
+    wl_list_for_each(m, &mons, link) arrange(m);
+    drawbars();
+}
+#endif /* TITLEBAR */
+
 void toggleview(const Arg* arg)
 {
     uint32_t newtagset;
@@ -5452,15 +5516,21 @@ void unmapnotify(struct wl_listener* listener, void* data)
     if (client_surface(c))
         client_surface(c)->data = NULL;
     wlr_scene_node_destroy(&c->scene->node);
+#ifdef TITLEBAR
     c->title = NULL;
+#endif
 #ifdef INTEGRATED_BACKGROUND
     c->blur = NULL;
     c->blurbuf = NULL;
+#ifdef TITLEBAR
     c->titleblur = NULL;
     c->titleblurbuf = NULL;
 #endif
+#endif
+#ifdef TITLEBAR
     bufpooldrop(c->titlepool, LENGTH(c->titlepool));
     c->titlebufw = 0;
+#endif
     drawbars();
     motionnotify(0, NULL, 0, 0, 0, 0);
 }
@@ -5625,8 +5695,10 @@ void updatebar(Monitor* m)
         m->b.height = MAX((int)((float)m->b.height * barheight + 0.5f),
                           m->drw->font->height);
     m->b.real_height = (int)((float)m->b.height / m->wlr_output->scale);
+#ifdef TITLEBAR
     m->t.height = m->drw->font->height + (int)titlepadding;
     m->t.real_height = (int)((float)m->t.height / m->wlr_output->scale);
+#endif
 
 #ifdef SYSTRAY
     if (showbar && showsystray && watcher.running) {
