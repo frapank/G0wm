@@ -15,7 +15,7 @@ options() { # "$@" -> out, edit set from the command line; -h exits on its own
 			cat <<EOF
 Usage: ./config_gen [-c] [-o FILE]
 
-Walks through the dwl settings and writes config.h. Every default comes from
+Walks through the g0wn settings and writes config.h. Every default comes from
 config.def.h, so pressing Enter at each prompt reproduces it.
 
   -c, --current   edit the existing config.h instead: it becomes both the
@@ -29,9 +29,10 @@ EOF
 	done
 }
 
-workspace() { # validates the template, then scratch dir, cleanup trap and fds
+workspace() { # validates the paths, then scratch dir, cleanup trap and fds
 	[ -n "$edit" ] && def=$out
 	[ -f "$def" ] || die "$def not found"
+	case $out in */*) [ -d "${out%/*}" ] || die "${out%/*} is not a directory" ;; esac
 	tmp=$(mktemp -d "${TMPDIR:-/tmp}/config_gen.XXXXXX") || exit 1
 	trap 'rm -rf "$tmp"' EXIT
 	trap 'rm -rf "$tmp"; exit 130' HUP INT TERM
@@ -42,20 +43,74 @@ workspace() { # validates the template, then scratch dir, cleanup trap and fds
 	exec 3<&0 # answers always come from here, loops are free to redirect stdin
 }
 
-interface() { # B D A R (bold/dim/accent/reset) and dash, used by rule()/title()
-	B= D= A= R= dash=-
+interface() { # B D A R, dash, colour depth and terminal width
+	B= D= A= R= sg= dash=- depth=0 utf8=0
 	if [ -t 1 ] && [ -z "${NO_COLOR:-}" ] && [ "${TERM:-dumb}" != dumb ]; then
-		B=$(printf '\033[1m') D=$(printf '\033[2m')
-		A=$(printf '\033[36m') R=$(printf '\033[0m')
+		depth=8
+		case ${TERM:-} in *256color*) depth=256 ;; *direct*) depth=24 ;; esac
+		case ${COLORTERM:-} in truecolor|24bit) depth=24 ;; esac
+		B=$(printf '\033[1m') D=$(printf '\033[2m') R=$(printf '\033[0m')
+		sgr 124 58 237 93 35; A=$sg
 	fi
 	case ${LC_ALL:-${LC_CTYPE:-${LANG:-C}}} in
-	*[Uu][Tt][Ff]*) dash=$(printf '\342\224\200') ;;
+	*[Uu][Tt][Ff]*) dash=$(printf '\342\224\200') utf8=1 ;;
+	esac
+	cols=$(tput cols 2>/dev/null) || cols=80
+	case $cols in ''|*[!0-9]*|0) cols=80 ;; esac
+}
+
+sgr() { # r g b, 256 index, 8 code -> sg
+	case $depth in
+	24) sg=$(printf '\033[38;2;%d;%d;%dm' "$1" "$2" "$3") ;;
+	256) sg=$(printf '\033[38;5;%dm' "$4") ;;
+	8) sg=$(printf '\033[%sm' "$5") ;;
+	*) sg= ;;
 	esac
 }
 
+# f full block, u upper half, l lower half, so this file stays ASCII
+banner() { # subtitle
+	bn_f=$(printf '\342\226\210') bn_u=$(printf '\342\226\200')
+	bn_l=$(printf '\342\226\204')
+	[ "$utf8" = 1 ] || { bn_f='#' bn_u='"' bn_l=','; }
+	[ "$cols" -ge 36 ] || { printf '%sg0wm%s %s\n' "$B" "$R" "$1"; return; }
+	bn_i=0
+	for bn_row in '.l...llll...lll' '.uffffffu.lffuuu' \
+		'...ff...l.ff.lufl|...........l' \
+		'...ff..ff.ff...ff|.ufl.fl.ffuffflfffl' \
+		'...ff..ff.ff..lff|..fflfflff.ff.ff.ff' \
+		'...ufffff..ufffu.|...uffuffulff.ff.uf' \
+		'...l...ff' '...uffffu'; do
+		bn_i=$((bn_i + 1))
+		case $bn_i in
+		3) sgr 255 255 255 231 '1;37' ;;
+		4) sgr 216 216 216 252 '0;37' ;;
+		5) sgr 168 168 168 247 '0;37' ;;
+		6) sgr 120 120 120 243 '1;30' ;;
+		esac
+		draw "${bn_row%%|*}"; printf '%s%s' "$A" "$dw"
+		case $bn_row in
+		*'|'*) draw "${bn_row#*|}"; printf '%s%s' "$sg" "$dw" ;;
+		esac
+		printf '%s\n' "$R"
+	done
+	printf '%s   %s%s\n' "$D" "$1" "$R"
+}
+
+draw() { # tokens -> dw
+	dw= dw_r=$1
+	while [ -n "$dw_r" ]; do
+		case $dw_r in
+		f*) dw=$dw$bn_f ;; u*) dw=$dw$bn_u ;; l*) dw=$dw$bn_l ;; *) dw="$dw " ;;
+		esac
+		dw_r=${dw_r#?}
+	done
+}
+
 rule() {
-	rl_s= rl_i=0
-	while [ $rl_i -lt 58 ]; do rl_s=$rl_s$dash rl_i=$((rl_i + 1)); done
+	rl_w=58 rl_s= rl_i=0
+	[ "$cols" -lt "$rl_w" ] && rl_w=$cols
+	while [ $rl_i -lt $rl_w ]; do rl_s=$rl_s$dash rl_i=$((rl_i + 1)); done
 	printf '%s%s%s\n' "$D" "$rl_s" "$R"
 }
 title() { printf '\n%s%s%s\n' "$B" "$1" "$R"; rule; }
@@ -89,13 +144,14 @@ asknum() { # prompt default -> ans
 	done
 }
 
-askfloat() { # prompt default -> ans
+askfloat() { # prompt default -> ans, above zero
 	while :; do
 		ask "$1" "$2"
 		case $ans in
-		''|*[!0-9.]*|*.*.*) note 'enter a number like 0.55' ;;
-		*) return ;;
+		*[!0-9.]*|*.*.*) ;;
+		*[1-9]*) return ;;
 		esac
+		note 'enter a number like 0.55'
 	done
 }
 
@@ -103,7 +159,7 @@ askpct() { # prompt default(0-100) -> ans as a float like 0.85f
 	while :; do
 		ask "$1" "$2"
 		case $ans in
-		''|*[!0-9]*) ;;
+		''|*[!0-9]*|????*) ;;
 		*) if [ "$ans" -le 100 ]; then
 			ans=$(awk -v p="$ans" 'BEGIN { printf "%.2ff", p / 100 }'); return
 		fi ;;
@@ -145,7 +201,7 @@ menu() { # prompt default-index item... -> choice
 	while :; do
 		ask "$mn_prompt" "$mn_def"
 		case $ans in
-		''|*[!0-9]*) ;;
+		''|*[!0-9]*|??????*) ;;
 		*) [ "$ans" -ge 1 ] && [ "$ans" -lt "$mn_i" ] && { choice=$ans; return; } ;;
 		esac
 		note "enter 1-$((mn_i - 1))"
@@ -234,14 +290,15 @@ defkey() { # key bound to an action or command
 # monrules[] uses designated initializers, so read the field by name
 defmfact() {
 	awk '/\.mfact[ \t]*=/ {
-		sub(/.*\.mfact[ \t]*=[ \t]*/, ""); sub(/[ \t,f].*/, ""); print; exit
-	}' "$def"
+		sub(/.*\.mfact[ \t]*=[ \t]*/, ""); sub(/[ \t,f].*/, ""); m = $0; exit
+	}
+	END { print (m ~ /^[0-9]*\.?[0-9]+$/ ? m : "0.55") }' "$def"
 }
 
 cargs() { # words -> "a", "b", with C escapes and ~ expanded (there is no shell)
 	ca_out=
 	for ca_w in "$@"; do
-		case $ca_w in "~/"*) ca_w=$HOME/${ca_w#\~/} ;; esac
+		case $ca_w in "~/"*) [ -z "${HOME:-}" ] || ca_w=$HOME/${ca_w#\~/} ;; esac
 		ca_e=$(printf '%s' "$ca_w" | sed 's/[\\"]/\\&/g')
 		ca_out=$ca_out'"'$ca_e'", '
 	done
@@ -279,6 +336,13 @@ theme_defaults() {
 	c_normfg=$(defscheme SchemeNorm 1) c_normbg=$(defscheme SchemeNorm 2)
 	c_selfg=$(defscheme SchemeSel 1) c_selbg=$(defscheme SchemeSel 3)
 	c_urg=$(defscheme SchemeUrg 3) c_dimfg=$(defscheme SchemeTitle 1)
+	[ -n "$font_name" ] || font_name=monospace
+	[ -n "$c_normfg" ] || c_normfg=ffffffff
+	[ -n "$c_normbg" ] || c_normbg=000000ff
+	[ -n "$c_selfg" ] || c_selfg=$c_normfg
+	[ -n "$c_selbg" ] || c_selbg=$c_normfg
+	[ -n "$c_urg" ] || c_urg=ff0000ff
+	[ -n "$c_dimfg" ] || c_dimfg=$c_normfg
 }
 
 appearance() {
@@ -310,7 +374,7 @@ opacity() {
 	askpct 'opacity of the unfocused windows' "$(defpct opacity_unfocus)"
 	setval opacity_unfocus "$ans"
 
-	note 'what dwl draws itself takes one value for the lot: the bar, with'
+	note 'what g0wn draws itself takes one value for the lot: the bar, with'
 	note 'its systray and notifications, the title bars and the borders'
 	askpct 'opacity of the bar, title bars and borders' "$(defpct opacity_deco)"
 	setval opacity_deco "$ans"
@@ -328,7 +392,7 @@ opacity() {
 	IFS=$op_ifs; set +f
 	setval opacity_apps "$(carray "$@")"
 
-	note 'opacity can be turned off and on while dwl runs, with the key below'
+	note 'opacity can be turned off and on while g0wn runs, with the key below'
 	op_en=$(defval opacity_enabled)
 	if askyn 'start with opacity on' "$(yn "${op_en:-1}")"; then
 		setval opacity_enabled 1
@@ -417,11 +481,11 @@ programs() {
 	askcmd browsercmd 'browser' "$(defcmd browsercmd)"
 }
 
-# dwl runs these through execvp, so each one is stored as its own argument list
+# g0wn runs these through execvp, so each one is stored as its own argument list
 # terminated by NULL, and no shell expands anything.
 autostart() {
 	title 'Autostart'
-	note 'started with dwl, one command per line, e.g. swaybg -i ~/wall.png -m fill'
+	note 'started with g0wn, one command per line, e.g. swaybg -i ~/wall.png -m fill'
 	: >"$tmp/auto"
 	while :; do
 		ask 'command to autostart (Enter when done)' ''
@@ -501,7 +565,13 @@ manual_outputs() {
 	mo_n=$ans mo_i=1
 	: >"$tmp/outs"
 	while [ "$mo_i" -le "$mo_n" ]; do
-		ask "name of monitor $mo_i, as in wlr-randr" "eDP-$mo_i"
+		while :; do
+			ask "name of monitor $mo_i, as in wlr-randr" "eDP-$mo_i"
+			case $ans in
+			*[!A-Za-z0-9._-]*) note 'letters, digits, - . _' ;;
+			*) break ;;
+			esac
+		done
 		mo_out=$ans
 		printf '%s\n' "$mo_out" >>"$tmp/outs"
 		asknum "  width of $mo_out" 1920; mo_w=$ans
@@ -525,7 +595,7 @@ ask_scale() { # output -> mo_sc
 	esac
 }
 
-pick_mode() { # output -> mode_w mode_h mode_hz (0: dwl picks) and log_w log_h
+pick_mode() { # output -> mode_w mode_h mode_hz (0: g0wn picks) and log_w log_h
 	pm_out=$1 pm_i=1 pm_def=1 pm_best=0
 	: >"$tmp/list"
 	# the mode in use wins, then the first one the display calls preferred
@@ -546,7 +616,7 @@ pick_mode() { # output -> mode_w mode_h mode_hz (0: dwl picks) and log_w log_h
 	set -- $(cat "$tmp/list")
 	IFS=$pm_ifs; set +f
 	printf '\n%smonitor %s%s\n' "$B" "$pm_out" "$R"
-	menu '  mode' "$pm_def" "$@" 'let dwl pick the preferred mode'
+	menu '  mode' "$pm_def" "$@" 'let g0wn pick the preferred mode'
 	if [ "$choice" -le $# ]; then
 		pm_line=$(sed -n "${choice}p" "$tmp/list")
 		mode_hz=$(printf '%s' "$pm_line" | awk '{ print $2 }')
@@ -682,7 +752,12 @@ generate() { # config.def.h rewritten with the collected values
 	skip { if (index($0, ";")) skip = 0; next }
 	drop { if ($0 ~ /^\};/) { print; drop = 0 } next }
 
-	/^#define MODKEY/ && ("MODKEY" in v) { print "#define MODKEY " v["MODKEY"]; next }
+	# the hint names the other modifier, so it follows the choice
+	/^#define MODKEY/ && ("MODKEY" in v) {
+		print "#define MODKEY " v["MODKEY"] (v["MODKEY"] ~ /LOGO/ ?
+			" // WLR_MODIFIER_ALT to use Alt instead" :
+			" // WLR_MODIFIER_LOGO to use Super instead"); next
+	}
 
 	/static const MonitorRule monrules\[\][ \t]*=/ {
 		print
@@ -698,7 +773,11 @@ generate() { # config.def.h rewritten with the collected values
 
 	/^[ \t]*\[Scheme[A-Za-z]*\][ \t]*=/ {
 		s = $0; sub(/^[ \t]*\[/, "", s); sub(/\].*/, "", s)
-		if (s in v) { printf "%s= %s,\n", substr($0, 1, index($0, "=") - 1), v[s]; next }
+		if (s in v) {
+			eq = index($0, "="); rest = substr($0, eq + 1); cb = index(rest, "}")
+			printf "%s= %s%s\n", substr($0, 1, eq - 1), v[s],
+				(cb ? substr(rest, cb + 1) : ","); next
+		}
 	}
 
 	/XKB_KEY_/ {
@@ -714,7 +793,9 @@ generate() { # config.def.h rewritten with the collected values
 	}
 
 	/^[ \t]*\.options[ \t]*=/ && ("xkb_options" in v) {
-		printf "%s= %s,\n", substr($0, 1, index($0, "=") - 1), v["xkb_options"]; next
+		eq = index($0, "="); rest = substr($0, eq + 1)
+		printf "%s= %s%s\n", substr($0, 1, eq - 1), v["xkb_options"],
+			(match(rest, /,[ \t]*(\/\/.*)?$/) ? substr(rest, RSTART) : ","); next
 	}
 
 	/^static/ && index($0, "=") {
@@ -744,9 +825,8 @@ main() {
 	options "$@"
 	workspace
 	interface
-	theme_defaults
 
-	printf '%sdwl config generator%s\n' "$B" "$R"
+	banner 'config generator'
 
 	keep=
 	if [ -f "$out" ] && [ -z "$edit" ]; then
@@ -762,6 +842,7 @@ main() {
 		keep=$out.$(date +%Y%m%d-%H%M%S).bak
 	fi
 	note "defaults from ${def##*/}, writing ${out##*/}"
+	theme_defaults
 
 	title 'Mode'
 	menu 'how much do you want to configure' 1 \

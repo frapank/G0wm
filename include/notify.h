@@ -1,5 +1,5 @@
-#ifndef DWLNOTIFY_H
-#define DWLNOTIFY_H
+#ifndef G0WNNOTIFY_H
+#define G0WNNOTIFY_H
 
 #include <dbus/dbus.h>
 #include <wayland-server-core.h>
@@ -25,4 +25,4 @@ unsigned int notify_getid(void);
 /* Drop the current notification as if the user had clicked it away. */
 void notify_dismiss(void);
 
-#endif /* DWLNOTIFY_H */
+#endif /* G0WNNOTIFY_H */
