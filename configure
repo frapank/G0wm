@@ -40,6 +40,8 @@ Features:
                           systrayspacing in config.h are ignored
   --no-runner             build without the integrated app runner;
                           MODKEY+r spawns menucmd instead
+  --no-titlebar           build without the per-window title bars; titlebar
+                          and titlepadding in config.h are ignored
   --debug                 -O0 -g3, no frame pointer omission
   --release               -O2 (default)
   --enable-sanitizers     build with ASan and UBSan
@@ -77,6 +79,7 @@ defaults() {
 	notify=yes
 	systray=yes
 	runner=yes
+	titlebar=yes
 	opt_cflags='-O2'
 	extra_cflags=
 	extra_ldflags=
@@ -123,6 +126,7 @@ options() { # "$@" -> every setting above, overridden from the command line
 		--no-notify) notify=no ;;
 		--no-systray|--no-tray) systray=no ;;
 		--no-runner) runner=no ;;
+		--no-titlebar|--no-titlebars) titlebar=no ;;
 		--debug) opt_cflags='-O0 -g3 -fno-omit-frame-pointer' ;;
 		--release) opt_cflags='-O2' ;;
 		--enable-sanitizers) sanitize=yes ;;
@@ -253,12 +257,14 @@ SYSTRAY = $([ "$systray" = yes ] && echo -DSYSTRAY)
 
 RUNNER = $([ "$runner" = yes ] && echo -DRUNNER)
 
+TITLEBAR = $([ "$titlebar" = yes ] && echo -DTITLEBAR)
+
 CFLAGS = $(trim "$opt_cflags$extra_cflags")
 LDFLAGS = $(trim "$extra_ldflags")
 LIBS = $(trim "$extra_libs")
 EOF
 
-	say "wrote config.mk: $cc, $wlr_pkg, xwayland $xwayland, integrated background $integrated_background, notify $notify, systray $systray, runner $runner, native $native, install to $bindir"
+	say "wrote config.mk: $cc, $wlr_pkg, xwayland $xwayland, integrated background $integrated_background, notify $notify, systray $systray, runner $runner, titlebar $titlebar, native $native, install to $bindir"
 	say "run 'make' to build"
 }
 
