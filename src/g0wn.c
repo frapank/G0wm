@@ -289,8 +289,8 @@ struct Monitor {
     struct wlr_scene_buffer* scene_buffer; /* bar buffer */
 #ifdef INTEGRATED_BACKGROUND
     struct wlr_scene_buffer* wallpaper; /* wallpaper buffer */
-    struct wlr_buffer* wallpaperbuf;    /* what wallpaper's node was last handed */
-    struct wlr_scene_buffer* barblur;   /* the bar's own frosted backdrop */
+    struct wlr_buffer* wallpaperbuf; /* what wallpaper's node was last handed */
+    struct wlr_scene_buffer* barblur; /* the bar's own frosted backdrop */
 #endif
     struct wlr_scene_rect* fullscreen_bg; /* See createmon() for info */
     struct wl_listener frame;
@@ -697,8 +697,8 @@ static char** runner_cmds;
 static int runner_ncmds;
 static struct timespec runner_stamp; /* newest PATH mtime the cache was built
                                         from */
-static uint32_t runner_repeatcp; /* codepoint the armed key repeat types */
-static int runner_repeating;     /* the armed repeat belongs to the prompt */
+static uint32_t runner_repeatcp;     /* codepoint the armed key repeat types */
+static int runner_repeating; /* the armed repeat belongs to the prompt */
 #endif
 
 static const struct wlr_buffer_impl buffer_impl = {
@@ -1153,7 +1153,8 @@ void blurclient(Client* c)
 }
 
 /* One box blur along the rows: a 2r+1 window slides on a running sum, so a
- * pass costs the same whatever the radius is, and three land near a Gaussian. */
+ * pass costs the same whatever the radius is, and three land near a Gaussian.
+ */
 void blurrows(uint32_t* dst, const uint32_t* src, int w, int h, int r)
 {
     int x, y, i;
@@ -2767,7 +2768,8 @@ void setwallpaper(Monitor* m)
         /* guarded like blurclient()'s: set_buffer throws the texture away,
          * and this path runs on every monitor layout change */
         if (m->wallpaperbuf != &m->wallpaperpool[0]->base) {
-            wlr_scene_buffer_set_buffer(m->wallpaper, &m->wallpaperpool[0]->base);
+            wlr_scene_buffer_set_buffer(m->wallpaper,
+                                        &m->wallpaperpool[0]->base);
             m->wallpaperbuf = &m->wallpaperpool[0]->base;
         }
         /* the frosted copy is the same size and survives with it, unless the
@@ -2793,7 +2795,8 @@ void setwallpaper(Monitor* m)
     scalefactor = MAX((double)mw / pw, (double)mh / ph);
     sw = MAX(1, (int)lround(pw * scalefactor));
     sh = MAX(1, (int)lround(ph * scalefactor));
-    scaled = gdk_pixbuf_scale_simple(wallpaper_src, sw, sh, GDK_INTERP_BILINEAR);
+    scaled =
+        gdk_pixbuf_scale_simple(wallpaper_src, sw, sh, GDK_INTERP_BILINEAR);
     if (!scaled) {
         wlr_log(WLR_ERROR, "wallpaper: failed to scale %s", wallpaper);
         return;
@@ -2803,8 +2806,7 @@ void setwallpaper(Monitor* m)
     oy = MIN(sh - mh, (sh - mh) / 2);
 
     bufpooldrop(m->wallpaperpool, LENGTH(m->wallpaperpool));
-    if (!(buf =
-              bufget(m->wallpaperpool, LENGTH(m->wallpaperpool), mw, mh))) {
+    if (!(buf = bufget(m->wallpaperpool, LENGTH(m->wallpaperpool), mw, mh))) {
         g_object_unref(scaled);
         return;
     }
@@ -3427,11 +3429,9 @@ static int runnerisexpr(void)
         ch = runner_buf[i];
         if (ch >= '0' && ch <= '9')
             digit = 1;
-        else if (ch == '+' || ch == '-' || ch == '*' || ch == '/' ||
-                 ch == '%')
+        else if (ch == '+' || ch == '-' || ch == '*' || ch == '/' || ch == '%')
             op = 1;
-        else if (ch != '(' && ch != ')' && ch != '.' && ch != ' ' &&
-                 ch != '\t')
+        else if (ch != '(' && ch != ')' && ch != '.' && ch != ' ' && ch != '\t')
             return 0;
     }
     return digit && op;
@@ -3488,17 +3488,22 @@ static void runnerkey(xkb_keysym_t sym, uint32_t mods, uint32_t codepoint)
         runner_len = 0;
         runner_cur = 0;
         runner_buf[0] = '\0';
-    } else if (mods & WLR_MODIFIER_CTRL && xkb_keysym_to_lower(sym) == XKB_KEY_a) {
+    } else if (mods & WLR_MODIFIER_CTRL &&
+               xkb_keysym_to_lower(sym) == XKB_KEY_a) {
         runner_cur = 0;
-    } else if (mods & WLR_MODIFIER_CTRL && xkb_keysym_to_lower(sym) == XKB_KEY_e) {
+    } else if (mods & WLR_MODIFIER_CTRL &&
+               xkb_keysym_to_lower(sym) == XKB_KEY_e) {
         runner_cur = runner_len;
-    } else if (mods & WLR_MODIFIER_CTRL && xkb_keysym_to_lower(sym) == XKB_KEY_f) {
+    } else if (mods & WLR_MODIFIER_CTRL &&
+               xkb_keysym_to_lower(sym) == XKB_KEY_f) {
         if (runner_cur < runner_len)
             runner_cur++;
-    } else if (mods & WLR_MODIFIER_CTRL && xkb_keysym_to_lower(sym) == XKB_KEY_b) {
+    } else if (mods & WLR_MODIFIER_CTRL &&
+               xkb_keysym_to_lower(sym) == XKB_KEY_b) {
         if (runner_cur > 0)
             runner_cur--;
-    } else if (mods & WLR_MODIFIER_CTRL && xkb_keysym_to_lower(sym) == XKB_KEY_w) {
+    } else if (mods & WLR_MODIFIER_CTRL &&
+               xkb_keysym_to_lower(sym) == XKB_KEY_w) {
         /* delete the word behind the cursor: skip trailing spaces, then the
          * run of non-spaces before them, same as a shell's line editor */
         int end = runner_cur;
@@ -3506,9 +3511,8 @@ static void runnerkey(xkb_keysym_t sym, uint32_t mods, uint32_t codepoint)
             runner_cur--;
         while (runner_cur > 0 && runner_buf[runner_cur - 1] != ' ')
             runner_cur--;
-        memmove(runner_buf + runner_cur,
-                runner_buf + end,
-                runner_len - end + 1);
+        memmove(
+            runner_buf + runner_cur, runner_buf + end, runner_len - end + 1);
         runner_len -= end - runner_cur;
     } else
         switch (sym) {
@@ -4181,8 +4185,7 @@ void notifyclick(const Arg* arg)
     int boxw;
     size_t len, off, cut, good, n;
 
-    if (!shownotifications || !m || !m->b.titlew ||
-        !(text = notify_gettext()))
+    if (!shownotifications || !m || !m->b.titlew || !(text = notify_gettext()))
         return;
     notifysync();
 
@@ -5122,15 +5125,14 @@ void setup(void)
 
     /* Missing the session bus is not fatal: g0wn comes up without a tray
      * and/or bar notifications. */
-    if (showbar &&
-        (0
+    if (showbar && (0
 #ifdef SYSTRAY
-         || showsystray
+                    || showsystray
 #endif
 #ifdef NOTIFICATIONS
-         || shownotifications
+                    || shownotifications
 #endif
-         )) {
+                    )) {
         if ((bus_conn = dbus_bus_get(DBUS_BUS_SESSION, NULL)) &&
             (bus_source = startbus(bus_conn, event_loop))) {
 #ifdef SYSTRAY
