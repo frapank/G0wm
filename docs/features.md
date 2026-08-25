@@ -64,7 +64,8 @@ terminals in one corner. Toggle the layout off and get your previous layout
 back.
 
 Each window has its own titlebar, drawn with the same code as the bar. Click it
-and focus that window.
+and focus that window. `MODKEY+Shift+t` toggles them at runtime, and
+`./configure --no-titlebar` builds without them.
 
 Newly opened windows go to the bottom of the stack, not the master area, so
 your second application lands next to the first one, not in front of it. You can
