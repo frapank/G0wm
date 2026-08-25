@@ -11,5 +11,5 @@ runs:
         pacman -Syu --noconfirm --needed \
           base-devel clang \
           wayland wayland-protocols wlroots0.20 \
-          libxkbcommon libinput pixman fcft dbus \
+          libxkbcommon libinput pixman fcft tllist dbus \
           libxcb xcb-util-wm gdk-pixbuf2
