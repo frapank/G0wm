@@ -2,6 +2,8 @@
 # Interactive generator for status.conf, the config of scripts/g0wn-status.sh,
 # driven by the defaults that script falls back to on its own.
 # Plain POSIX shell: runs on Linux, the BSDs and anything else with a /bin/sh.
+# `B= D= A=` on one line: several empty assignments, not a typo (SC1007).
+# shellcheck disable=SC1007
 set -u
 
 options() { # "$@" -> out, edit set from the command line; -h exits on its own
@@ -358,6 +360,8 @@ askfmt() { # setting module prompt hint preset...
 	done
 	[ "$af_def" = 0 ] && af_def=$af_i
 	set -f; af_ifs=$IFS; IFS=$nl
+	# The split into menu entries is the point of the call.
+	# shellcheck disable=SC2046
 	set -- $(cat "$tmp/items")
 	IFS=$af_ifs; set +f
 	menu "$af_prompt" "$af_def" "$@" 'something else'
