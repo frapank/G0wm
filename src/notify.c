@@ -276,7 +276,8 @@ static DBusHandlerResult handle_serverinfo(DBusConnection* conn,
                                            DBusMessage* msg)
 {
     DBusMessage* reply = dbus_message_new_method_return(msg);
-    const char *name = "g0wn", *vendor = "g0wn", *version = "1.0", *spec = "1.2";
+    const char *name = "g0wn", *vendor = "g0wn", *version = "1.0",
+               *spec = "1.2";
     DBusHandlerResult res = DBUS_HANDLER_RESULT_HANDLED;
 
     if (!reply)
