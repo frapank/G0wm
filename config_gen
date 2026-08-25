@@ -561,7 +561,8 @@ keybinds() {
 	for kb_pair in 'termcmd:terminal' 'menucmd:launcher' 'browsercmd:browser' \
 		'filemanagercmd:file manager' 'killclient:close window' \
 		'togglefloating:toggle floating' 'togglegaps:toggle gaps' \
-		'togglebar:toggle bar' 'togglefullscreen:fullscreen (with shift)'; do
+		'togglebar:toggle bar' 'toggletitlebar:toggle title bars (with shift)' \
+		'togglefullscreen:fullscreen (with shift)'; do
 		kb_tok=${kb_pair%%:*}
 		askkey "MOD + ? for ${kb_pair#*:}" "$(defkey "$kb_tok")"
 		setval "bind:$kb_tok" "XKB_KEY_$ans"
