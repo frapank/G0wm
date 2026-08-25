@@ -1,0 +1,118 @@
+name: CI
+
+on:
+  push:
+    branches: [main]
+  pull_request:
+  workflow_dispatch:
+
+concurrency:
+  group: ${{ github.workflow }}-${{ github.ref }}
+  cancel-in-progress: true
+
+permissions:
+  contents: read
+
+jobs:
+  build:
+    name: build (${{ matrix.name }})
+    runs-on: ubuntu-latest
+    container: archlinux:base-devel
+    strategy:
+      fail-fast: false
+      matrix:
+        include:
+          - { name: gcc,             cc: gcc,   flags: "" }
+          - { name: clang,           cc: clang, flags: "" }
+          - { name: gcc sanitizers,  cc: gcc,   flags: "--debug --enable-sanitizers" }
+          - { name: gcc LTO,         cc: gcc,   flags: "--enable-lto" }
+    steps:
+      - name: Install git for the checkout
+        run: pacman -Syu --noconfirm --needed git
+      - uses: actions/checkout@v5
+        with:
+          fetch-depth: 0
+      - uses: ./.github/actions/arch-deps
+      - run: ./configure --compiler=${{ matrix.cc }} ${{ matrix.flags }}
+      - run: make -j"$(nproc)"
+      - name: Smoke test the binary
+        run: |
+          out=$(./g0wn -v 2>&1) || true
+          printf '%s\n' "$out"
+          case $out in g0wn\ *) ;; *) echo "g0wn -v did not run" >&2; exit 1 ;; esac
+
+  features:
+    name: features (${{ matrix.name }})
+    runs-on: ubuntu-latest
+    container: archlinux:base-devel
+    strategy:
+      fail-fast: false
+      matrix:
+        include:
+          - { name: no xwayland,   flags: "--disable-xwayland" }
+          - { name: no background, flags: "--no-integrated-background" }
+          - { name: no notify,     flags: "--no-notify" }
+          - { name: no systray,    flags: "--no-systray" }
+          - { name: no runner,     flags: "--no-runner" }
+          - { name: no titlebar,   flags: "--no-titlebar" }
+          - name: minimal
+            flags: >-
+              --disable-xwayland --no-integrated-background --no-notify
+              --no-systray --no-runner --no-titlebar
+    steps:
+      - name: Install git for the checkout
+        run: pacman -Syu --noconfirm --needed git
+      - uses: actions/checkout@v5
+        with:
+          fetch-depth: 0
+      - uses: ./.github/actions/arch-deps
+      - run: ./configure ${{ matrix.flags }}
+      - run: make -j"$(nproc)"
+
+  install:
+    name: clone and install
+    runs-on: ubuntu-latest
+    container: archlinux:base-devel
+    steps:
+      - name: Install git for the checkout
+        run: pacman -Syu --noconfirm --needed git
+      - uses: actions/checkout@v5
+        with:
+          fetch-depth: 0
+      - uses: ./.github/actions/arch-deps
+      - run: make -j"$(nproc)"
+      - name: Install to a throwaway prefix
+        run: |
+          make install BINDIR="$PWD/_install"
+          test -x _install/g0wn
+          test -x _install/start-g0wn
+          test -x _install/g0wn-status.sh
+
+  format:
+    name: clang-format
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v5
+      - uses: actions/setup-python@v5
+        with:
+          python-version: "3.x"
+      - run: pip install "clang-format==21.1.7"
+      - run: make format-check
+
+  shellcheck:
+    name: shellcheck
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v5
+      - run: |
+          shellcheck -S warning \
+            configure config_gen status_gen \
+            scripts/start-g0wn scripts/g0wn-status.sh
+
+  manpage:
+    name: man page
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v5
+      - run: sudo apt-get update && sudo apt-get install -y --no-install-recommends mandoc
+      - run: mandoc -T lint -W warning docs/g0wn.1
