@@ -1,6 +1,9 @@
 #!/bin/sh
 # Interactive generator for config.h, driven by the defaults in config.def.h.
 # Plain POSIX shell: runs on Linux, the BSDs and anything else with a /bin/sh.
+# `B= D= A=` on one line: several empty assignments, not a typo (SC1007).
+# `set -- $(split_cmd "$ans")`: the split is the point of the call (SC2046).
+# shellcheck disable=SC1007,SC2046
 set -u
 
 options() { # "$@" -> out, edit set from the command line; -h exits on its own
@@ -300,6 +303,8 @@ defmfact() {
 cargs() { # words -> "a", "b", with C escapes and ~ expanded (there is no shell)
 	ca_out=
 	for ca_w in "$@"; do
+		# A literal tilde in a glob pattern, not an expansion.
+		# shellcheck disable=SC2088
 		case $ca_w in "~/"*) [ -z "${HOME:-}" ] || ca_w=$HOME/${ca_w#\~/} ;; esac
 		ca_e=$(printf '%s' "$ca_w" | sed 's/[\\"]/\\&/g')
 		ca_out=$ca_out'"'$ca_e'", '
