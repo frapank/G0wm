@@ -36,6 +36,8 @@ setup_log() {
 
     cd "$HOME"
 
+    # ulimit -c is a bashism, guarded with `|| true`.
+    # shellcheck disable=SC3045
     ulimit -c unlimited 2>/dev/null || true
 }
 
