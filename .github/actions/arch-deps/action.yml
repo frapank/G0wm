@@ -1,0 +1,15 @@
+name: Arch build dependencies
+description: >
+  Installs the toolchain and the libraries g0wn links against. Arch is used
+  because wlroots 0.20 is not packaged for any Ubuntu the runners offer.
+
+runs:
+  using: composite
+  steps:
+    - shell: bash
+      run: |
+        pacman -Syu --noconfirm --needed \
+          base-devel clang \
+          wayland wayland-protocols wlroots0.20 \
+          libxkbcommon libinput pixman fcft dbus \
+          libxcb xcb-util-wm gdk-pixbuf2
