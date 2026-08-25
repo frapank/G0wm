@@ -2,6 +2,9 @@
 # Status text for g0wn's bar: one line per tick on stdout, made of the modules
 # listed in status.conf, or of the built-in clock and battery without it.
 # Plain POSIX shell: runs on Linux, the BSDs and anything else with a /bin/sh.
+# `sb= sb_rest=$1` and friends: several empty assignments, not a typo (SC1007).
+# Tables of colour/format variables consumed by name through eval (SC2034).
+# shellcheck disable=SC1007,SC2034
 set -u
 
 warn() { printf 'g0wn-status.sh: %s\n' "$*" >&2; }
@@ -356,6 +359,8 @@ cpu_sample() {
 		;;
 	sysctl)
 		# idle is the last field of kern.cp_time on every BSD that has it
+		# The split into fields is the point of the call.
+		# shellcheck disable=SC2046
 		set -- $(sysctl -n kern.cp_time 2>/dev/null)
 		[ $# -gt 0 ] || return 1
 		cpu_tot=0
@@ -459,6 +464,8 @@ fmt() { # format value icon -> r
 	subst "$r" '%i' "$3"; r=$sb
 }
 
+# render assigns rn_col through eval before using it.
+# shellcheck disable=SC2154
 render() { # module -> r, empty when there is nothing to show
 	r=
 	case $1 in
