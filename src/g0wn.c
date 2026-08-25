@@ -4435,7 +4435,10 @@ void rendermon(struct wl_listener* listener, void* data)
 #ifdef INTEGRATED_BACKGROUND
         blurclient(c);
 #endif
-        if (c->resize && !c->isfloating && !client_is_stopped(c))
+        /* a tab below the top one is not drawn and gets no frame callbacks,
+         * so it never acks */
+        if (c->resize && !c->isfloating && c->scene_surface->node.enabled &&
+            !client_is_stopped(c))
             goto skip;
     }
 
