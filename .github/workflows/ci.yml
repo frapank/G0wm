@@ -37,9 +37,9 @@ jobs:
       - run: make -j"$(nproc)"
       - name: Smoke test the binary
         run: |
-          out=$(./g0wn -v 2>&1) || true
+          out=$(./g0wm -v 2>&1) || true
           printf '%s\n' "$out"
-          case $out in g0wn\ *) ;; *) echo "g0wn -v did not run" >&2; exit 1 ;; esac
+          case $out in g0wm\ *) ;; *) echo "g0wm -v did not run" >&2; exit 1 ;; esac
 
   features:
     name: features (${{ matrix.name }})
@@ -84,9 +84,9 @@ jobs:
       - name: Install to a throwaway prefix
         run: |
           make install BINDIR="$PWD/_install"
-          test -x _install/g0wn
-          test -x _install/start-g0wn
-          test -x _install/g0wn-status.sh
+          test -x _install/g0wm
+          test -x _install/start-g0wm
+          test -x _install/g0wm-status.sh
 
   format:
     name: clang-format
@@ -107,7 +107,7 @@ jobs:
       - run: |
           shellcheck -S warning \
             configure config_gen status_gen \
-            scripts/start-g0wn scripts/g0wn-status.sh
+            scripts/start-g0wm scripts/g0wm-status.sh
 
   manpage:
     name: man page
@@ -115,4 +115,4 @@ jobs:
     steps:
       - uses: actions/checkout@v5
       - run: sudo apt-get update && sudo apt-get install -y --no-install-recommends mandoc
-      - run: mandoc -T lint -W warning docs/g0wn.1
+      - run: mandoc -T lint -W warning docs/g0wm.1

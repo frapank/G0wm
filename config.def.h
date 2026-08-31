@@ -43,7 +43,7 @@
 
 static const char* fonts[] = { "monospace:size=10" };
 
-/* { fg, bg, border } as 0xRRGGBBAA, indexed by the Scheme* enum in src/g0wn.c */
+/* { fg, bg, border } as 0xRRGGBBAA, indexed by the Scheme* enum in src/g0wm.c */
 static uint32_t colors[][3] = {
     /*                          fg          bg          border   */
     [SchemeNorm]          = { 0xffffffff, 0x000000ff, 0x000000ff }, // unfocused
@@ -97,7 +97,7 @@ static const Layout layouts[] = {
 
 /* Substring match on app id and title, NULL matches everything. opacity 0
  * keeps the section 4 default, monitor -1 the focused one. Fields are named so
- * a new one in Rule (src/g0wn.c) cannot silently shift the rows below. */
+ * a new one in Rule (src/g0wm.c) cannot silently shift the rows below. */
 static const Rule rules[] = {
     { .id              = "Placeholder",
       .title           = NULL,
@@ -235,7 +235,7 @@ static const char* termcmd[]        = { "foot", NULL };
 static const char* filemanagercmd[] = { "thunar", NULL };
 static const char* browsercmd[]     = { "firefox", NULL };
 
-/* --- RUNNER: the launcher MODKEY+r spawns without g0wn's own prompt --- */
+/* --- RUNNER: the launcher MODKEY+r spawns without g0wm's own prompt --- */
 #ifndef RUNNER
 static const char* menucmd[]        = { "wmenu-run", NULL };
 #endif
@@ -248,7 +248,7 @@ static const char* traymenucmd[]    = { "wmenu", "-f", "monospace 10", NULL };
 /* --- end SYSTRAY --- */
 
 /* == 8. AUTOSTART =========================================================
- * Started with g0wn, killed on exit. One NULL-terminated argument list each,
+ * Started with g0wm, killed on exit. One NULL-terminated argument list each,
  * run through execvp(): no shell, so no ~, no $VAR, no globs. */
 
 static const char* const autostart[] = {
@@ -275,7 +275,7 @@ static const Key keys[] = {
 	{ MODKEY,                    XKB_KEY_t,           toggletabbed,     {.v = &layouts[3]} },
 	{ MODKEY,                    XKB_KEY_e,           togglefullscreen, {0} },
 
-	/* --- RUNNER: g0wn's own prompt, or menucmd without it --- */
+	/* --- RUNNER: g0wm's own prompt, or menucmd without it --- */
 #ifdef RUNNER
 	{ MODKEY,                    XKB_KEY_r,           runnertoggle,     {0} },
 #else
@@ -327,7 +327,7 @@ static const Key keys[] = {
 	{ 0, XKB_KEY_XF86AudioPlay,         spawn, SHCMD("playerctl play-pause") },
 	{ 0, XKB_KEY_XF86AudioPrev,         spawn, SHCMD("playerctl previous") },
 
-	/* --- g0wn defaults --- */
+	/* --- g0wm defaults --- */
 	{ MODKEY,                    XKB_KEY_i,           incnmaster,       {.i = +1} },
 	{ MODKEY,                    XKB_KEY_d,           incnmaster,       {.i = -1} },
 	{ MODKEY,                    XKB_KEY_Return,      zoom,             {0} },

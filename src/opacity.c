@@ -3,7 +3,7 @@
  *
  * opacity, the blurred wallpaper and the frosted decorations
  */
-#include "g0wn.h"
+#include "g0wm.h"
 
 /* function declarations */
 #ifdef INTEGRATED_BACKGROUND
@@ -37,7 +37,7 @@ static int wallpaper_load_failed;
 /* function implementations */
 #ifdef INTEGRATED_BACKGROUND
 /* Repoints the bar's backdrop at the strip of frosted wallpaper it sits on.
- * The bar is drawn by g0wn, so decotranslucent() decides whether it shows. */
+ * The bar is drawn by g0wm, so decotranslucent() decides whether it shows. */
 void blurbar(Monitor* m)
 {
     struct wlr_fbox src;
@@ -367,14 +367,14 @@ static void blurwallpaper(Monitor* m)
 }
 
 #endif /* INTEGRATED_BACKGROUND */
-/* The opacity g0wn's own drawing runs at. It rides on opacity_enabled, so the
+/* The opacity g0wm's own drawing runs at. It rides on opacity_enabled, so the
  * one key turns the windows and the decorations off and on together. */
 float decoopacity(void)
 {
     return opacity_enabled ? opacity_deco : 1.0f;
 }
 
-/* Whether light gets through what g0wn draws itself. opacity_deco fades the
+/* Whether light gets through what g0wm draws itself. opacity_deco fades the
  * lot, and a colour in colors[] can carry an alpha of its own, which is how a
  * bar stays see-through with opacity_deco left at 1. */
 static int decotranslucent(void)
@@ -502,7 +502,7 @@ static void opacityrefresh(void)
     Monitor* m;
     Client* c;
 
-    /* a decoration is drawn by g0wn, not by a client, so nothing would come
+    /* a decoration is drawn by g0wm, not by a client, so nothing would come
      * back to redraw it: the bar and the title bars follow drawbars() */
     wl_list_for_each(c, &clients, link) setbordercolor(c, c->borderscheme);
     drawbars();

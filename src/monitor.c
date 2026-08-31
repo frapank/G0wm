@@ -3,7 +3,7 @@
  *
  * outputs, their layout and the layer-shell surfaces on them
  */
-#include "g0wn.h"
+#include "g0wm.h"
 
 /* function declarations */
 static void arrangelayer(Monitor* m,
@@ -524,7 +524,7 @@ void powermgrsetmode(struct wl_listener* listener, void* data)
     wlr_output_state_set_enabled(&state, event->mode);
     if (!wlr_output_commit_state(m->wlr_output, &state))
         fprintf(stderr,
-                "g0wn: failed to %s output %s\n",
+                "g0wm: failed to %s output %s\n",
                 event->mode ? "enable" : "disable",
                 m->wlr_output->name);
 
@@ -646,7 +646,7 @@ void updatemons(struct wl_listener* listener, void* data)
     wlr_scene_node_set_position(&root_bg->node, sgeom.x, sgeom.y);
     wlr_scene_rect_set_size(root_bg, sgeom.width, sgeom.height);
 
-    /* Make sure the clients are hidden when g0wn is locked */
+    /* Make sure the clients are hidden when g0wm is locked */
     wlr_scene_node_set_position(&locked_bg->node, sgeom.x, sgeom.y);
     wlr_scene_rect_set_size(locked_bg, sgeom.width, sgeom.height);
 
@@ -710,7 +710,7 @@ void updatemons(struct wl_listener* listener, void* data)
     }
 
     if (stext[0] == '\0')
-        strncpy(stext, "g0wn-" VERSION, sizeof(stext));
+        strncpy(stext, "g0wm-" VERSION, sizeof(stext));
     wl_list_for_each(m, &mons, link)
     {
         updatebar(m);

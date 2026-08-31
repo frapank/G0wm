@@ -1,8 +1,8 @@
 <div align="center">
 
-# **What g0wn does**
+# **What g0wm does**
 
-[README](../README.md) · [config.def.h](../config.def.h) · [man page](g0wn.1) · [credits](credits.md)
+[README](../README.md) · [config.def.h](../config.def.h) · [man page](g0wm.1) · [credits](credits.md)
 
 </div>
 
@@ -34,7 +34,7 @@ A small `org.freedesktop.Notifications` server. One
 notification at a time, a new one replaces the old one, and it goes away by
 itself after a few seconds. Click it to scroll through text that did not fit,
 right click to make it go away sooner. If mako or dunst is already running,
-g0wn stays out of the way.
+g0wm stays out of the way.
 
 #### **Launcher** 
 Hit the key and the bar turns into a prompt. Type a few letters
@@ -45,7 +45,7 @@ opening a calculator. While the prompt is open it owns the keyboard, so none of
 your bindings fire and nothing leaks into the window underneath.
 
 #### **Status text** 
-Whatever you pipe into g0wn ends up on the right side of the
+Whatever you pipe into g0wm ends up on the right side of the
 bar. The shipped script builds that line out of small modules, date, clock,
 battery, cpu, ram and network speed, in whatever order you list them. Run
 `./status_gen` and it walks you through picking them, with Nerd Font icons if
@@ -90,7 +90,7 @@ wallpaper rather than the window below it.
 
 ## Wallpaper
 
-g0wn loads and draws the wallpaper itself. Point it at an image and you are done. 
+g0wm loads and draws the wallpaper itself. Point it at an image and you are done. 
 Build without it and you get a flat color plus whatever you start from autostart.
 
 ## Monitors

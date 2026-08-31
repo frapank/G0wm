@@ -22,7 +22,7 @@ static void close_pipe(void* data)
     free(pipefd);
 }
 
-static int g0wn_dbus_dispatch(int fd, unsigned int mask, void* data)
+static int g0wm_dbus_dispatch(int fd, unsigned int mask, void* data)
 {
     DBusConnection* conn = data;
 
@@ -45,7 +45,7 @@ static int g0wn_dbus_dispatch(int fd, unsigned int mask, void* data)
     return 0;
 }
 
-static int g0wn_dbus_watch_handle(int fd, uint32_t mask, void* data)
+static int g0wm_dbus_watch_handle(int fd, uint32_t mask, void* data)
 {
     DBusWatch* watch = data;
 
@@ -68,7 +68,7 @@ static int g0wn_dbus_watch_handle(int fd, uint32_t mask, void* data)
     return 0;
 }
 
-static dbus_bool_t g0wn_dbus_add_watch(DBusWatch* watch, void* data)
+static dbus_bool_t g0wm_dbus_add_watch(DBusWatch* watch, void* data)
 {
     struct wl_event_loop* loop = data;
 
@@ -87,14 +87,14 @@ static dbus_bool_t g0wn_dbus_add_watch(DBusWatch* watch, void* data)
 
     fd = dbus_watch_get_unix_fd(watch);
     watch_source =
-        wl_event_loop_add_fd(loop, fd, mask, g0wn_dbus_watch_handle, watch);
+        wl_event_loop_add_fd(loop, fd, mask, g0wm_dbus_watch_handle, watch);
 
     dbus_watch_set_data(watch, watch_source, NULL);
 
     return TRUE;
 }
 
-static void g0wn_dbus_remove_watch(DBusWatch* watch, void* data)
+static void g0wm_dbus_remove_watch(DBusWatch* watch, void* data)
 {
     struct wl_event_source* watch_source = dbus_watch_get_data(watch);
 
@@ -102,7 +102,7 @@ static void g0wn_dbus_remove_watch(DBusWatch* watch, void* data)
         wl_event_source_remove(watch_source);
 }
 
-static int g0wn_dbus_timeout_handle(void* data)
+static int g0wm_dbus_timeout_handle(void* data)
 {
     DBusTimeout* timeout = data;
 
@@ -112,7 +112,7 @@ static int g0wn_dbus_timeout_handle(void* data)
     return 0;
 }
 
-static dbus_bool_t g0wn_dbus_add_timeout(DBusTimeout* timeout, void* data)
+static dbus_bool_t g0wm_dbus_add_timeout(DBusTimeout* timeout, void* data)
 {
     struct wl_event_loop* loop = data;
 
@@ -125,7 +125,7 @@ static dbus_bool_t g0wn_dbus_add_timeout(DBusTimeout* timeout, void* data)
     interval = dbus_timeout_get_interval(timeout);
 
     timeout_source =
-        wl_event_loop_add_timer(loop, g0wn_dbus_timeout_handle, timeout);
+        wl_event_loop_add_timer(loop, g0wm_dbus_timeout_handle, timeout);
 
     r = wl_event_source_timer_update(timeout_source, interval);
     if (r < 0) {
@@ -138,7 +138,7 @@ static dbus_bool_t g0wn_dbus_add_timeout(DBusTimeout* timeout, void* data)
     return TRUE;
 }
 
-static void g0wn_dbus_remove_timeout(DBusTimeout* timeout, void* data)
+static void g0wm_dbus_remove_timeout(DBusTimeout* timeout, void* data)
 {
     struct wl_event_source* timeout_source;
 
@@ -150,7 +150,7 @@ static void g0wn_dbus_remove_timeout(DBusTimeout* timeout, void* data)
     }
 }
 
-static void g0wn_dbus_dispatch_status(DBusConnection* conn,
+static void g0wm_dbus_dispatch_status(DBusConnection* conn,
                                       DBusDispatchStatus status,
                                       void* data)
 {
@@ -198,23 +198,23 @@ struct wl_event_source* startbus(DBusConnection* conn,
     dbus_connection_set_exit_on_disconnect(conn, FALSE);
 
     bus_source = wl_event_loop_add_fd(
-        loop, pipefd[0], WL_EVENT_READABLE, g0wn_dbus_dispatch, conn);
+        loop, pipefd[0], WL_EVENT_READABLE, g0wm_dbus_dispatch, conn);
     if (!bus_source)
         goto fail;
 
     dbus_connection_set_dispatch_status_function(
-        conn, g0wn_dbus_dispatch_status, pipefd, close_pipe);
+        conn, g0wm_dbus_dispatch_status, pipefd, close_pipe);
     if (!dbus_connection_set_watch_functions(conn,
-                                             g0wn_dbus_add_watch,
-                                             g0wn_dbus_remove_watch,
+                                             g0wm_dbus_add_watch,
+                                             g0wm_dbus_remove_watch,
                                              NULL,
                                              loop,
                                              NULL)) {
         goto fail;
     }
     if (!dbus_connection_set_timeout_functions(conn,
-                                               g0wn_dbus_add_timeout,
-                                               g0wn_dbus_remove_timeout,
+                                               g0wm_dbus_add_timeout,
+                                               g0wm_dbus_remove_timeout,
                                                NULL,
                                                loop,
                                                NULL)) {
