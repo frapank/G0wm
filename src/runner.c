@@ -3,7 +3,7 @@
  *
  * the command prompt and its calculator
  */
-#include "g0wn.h"
+#include "g0wm.h"
 
 /* function declarations */
 #ifdef RUNNER

@@ -1,6 +1,6 @@
 <div align="center">
 
-# G0wn
+# G0wm
 
 **A personal desktop environment designed to my liking**
 
@@ -19,7 +19,7 @@ project.
 
 The original dwl is a minimal Wayland compositor that relies on external
 programs for things like the bar, notifications and the application launcher.
-g0wn handles all of these directly, which makes it closer to a small desktop
+g0wm handles all of these directly, which makes it closer to a small desktop
 environment than to a plain compositor.
 
 It currently includes:
@@ -35,7 +35,7 @@ It currently includes:
 A tour of what all of this looks like in use is in
 [docs/features.md](docs/features.md), the settings are documented in the
 comments of [`config.def.h`](config.def.h), and the man page is at
-[`docs/g0wn.1`](docs/g0wn.1).
+[`docs/g0wm.1`](docs/g0wm.1).
 
 Screen locking, idle handling, portals and a polkit agent are not included.
 If you need them, you can start programs such as `swayidle` and `swaylock`
@@ -43,7 +43,7 @@ from `autostart[]`.
 
 ## Status
 
-g0wn is still in early development and things are likely to change.
+g0wm is still in early development and things are likely to change.
 
 There is currently one branch called `main` and there are no releases yet.
 The project follows the [wlroots] version selected in `config.mk`, which is
@@ -64,7 +64,7 @@ X11 support also requires `libxcb`, `libxcb-icccm` and `Xwayland`.
 
 ```sh
 ./configure && make
-make install      # g0wn, start-g0wn and g0wn-status.sh into ~/.local/bin
+make install      # g0wm, start-g0wm and g0wm-status.sh into ~/.local/bin
 ```
 
 You can also just run `make`. It will use `config.def.mk` and `config.def.h`
@@ -102,8 +102,8 @@ You can generate a new configuration with:
 
 The second command keeps your current values as the default answers.
 
-The status text shown in the bar comes from `scripts/g0wn-status.sh`. Its
-configuration is stored in `~/.config/g0wn/status.conf`.
+The status text shown in the bar comes from `scripts/g0wm-status.sh`. Its
+configuration is stored in `~/.config/g0wm/status.conf`.
 
 You can generate it with:
 
@@ -119,15 +119,15 @@ formats in the comments `./status_gen` writes into it.
 
 ## Run
 
-Run `start-g0wn` from a VT.
+Run `start-g0wm` from a VT.
 
 It sets up the session environment, starts PipeWire, runs the status script
-and stores logs in `~/.local/state/g0wn/`.
+and stores logs in `~/.local/state/g0wm/`.
 
-The file `share/g0wn.desktop` can be used as a session entry for display
+The file `share/g0wm.desktop` can be used as a session entry for display
 managers. It is not installed automatically by `make install`.
 
-The desktop entry starts g0wn directly instead of using `start-g0wn`. If you
+The desktop entry starts g0wm directly instead of using `start-g0wm`. If you
 want to use it, copy it to `/usr/share/wayland-sessions/` and set `Exec` to
 whichever startup method you prefer.
 
@@ -139,21 +139,21 @@ configure       writes config.mk
 config_gen      writes config.h
 status_gen      writes status.conf
 
-src/            g0wn.c (setup, teardown, the event loop and the shared
+src/            g0wm.c (setup, teardown, the event loop and the shared
                 state), then one file per subsystem: monitor.c, client.c,
                 layout.c, input.c, bar.c, opacity.c, lock.c, buffer.c,
                 runner.c, xwayland.c, plus util.c, notify.c, dbus.c, systray/
-include/        g0wn.h (the types, the shared state and what the modules
+include/        g0wm.h (the types, the shared state and what the modules
                 call across files), client.h and the other headers
 external/       drwl.h, vendored from the drwl project
 protocols/      wlr protocol XML for wayland-scanner
-scripts/        start-g0wn, g0wn-status.sh
+scripts/        start-g0wm, g0wm-status.sh
 docs/           man page, features.md and credits.md
 ```
 
 ## License
 
-g0wn is licensed under **GPL-3.0-or-later**.
+g0wm is licensed under **GPL-3.0-or-later**.
 
 The full license text is available in [`LICENSE`](LICENSE).
 

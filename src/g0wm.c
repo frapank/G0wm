@@ -3,7 +3,7 @@
  *
  * setup, teardown and the event loop
  */
-#include "g0wn.h"
+#include "g0wm.h"
 
 /* function declarations */
 static void autostartexec(void);
@@ -74,7 +74,7 @@ static struct wl_listener xwayland_ready = { .notify = xwaylandready };
 static pid_t* autostart_pids;
 static size_t autostart_len;
 
-/* variables the other modules share, declared in g0wn.h */
+/* variables the other modules share, declared in g0wm.h */
 int locked;
 void* exclusive_focus;
 struct wl_event_loop* event_loop;
@@ -140,7 +140,7 @@ static void autostartexec(void)
         if ((autostart_pids[i] = fork()) == 0) {
             setsid();
             execvp(*p, (char* const*)p);
-            die("g0wn: execvp %s:", *p);
+            die("g0wm: execvp %s:", *p);
         }
         /* skip arguments */
         while (*++p)
@@ -371,7 +371,7 @@ void run(char* startup_cmd)
     }
 
     /* Mark stdout as non-blocking to avoid the startup script
-     * causing g0wn to freeze when a user neither closes stdin
+     * causing g0wm to freeze when a user neither closes stdin
      * nor consumes standard input in his startup script */
 
     if (fd_set_nonblock(STDOUT_FILENO) < 0)
@@ -632,7 +632,7 @@ static void setup(void)
                                                statusin,
                                                NULL);
 
-    /* Missing the session bus is not fatal: g0wn comes up without a tray
+    /* Missing the session bus is not fatal: g0wm comes up without a tray
      * and/or bar notifications. */
     if (showbar && (0
 #ifdef SYSTRAY
@@ -688,7 +688,7 @@ void spawn(const Arg* arg)
         dup2(STDERR_FILENO, STDOUT_FILENO);
         setsid();
         execvp(((char**)arg->v)[0], (char**)arg->v);
-        die("g0wn: execvp %s failed:", ((char**)arg->v)[0]);
+        die("g0wm: execvp %s failed:", ((char**)arg->v)[0]);
     }
 }
 
@@ -703,7 +703,7 @@ int main(int argc, char* argv[])
         else if (c == 'd')
             log_level = WLR_DEBUG;
         else if (c == 'v')
-            die("g0wn " VERSION);
+            die("g0wm " VERSION);
         else
             goto usage;
     }

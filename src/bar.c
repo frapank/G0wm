@@ -3,7 +3,7 @@
  *
  * the bar, the status text, the window title bars and the tray
  */
-#include "g0wn.h"
+#include "g0wm.h"
 
 /* function declarations */
 static Monitor* barmonitor(void);

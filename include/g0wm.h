@@ -1,8 +1,8 @@
 /*
  * See LICENSE file for copyright and license details.
  */
-#ifndef G0WN_H
-#define G0WN_H
+#ifndef G0WM_H
+#define G0WM_H
 
 #include <fcntl.h>
 #ifdef INTEGRATED_BACKGROUND
@@ -594,4 +594,4 @@ extern struct wlr_xwayland* xwayland;
 /* attempt to encapsulate suck into one file */
 #include "client.h"
 
-#endif /* G0WN_H */
+#endif /* G0WM_H */
