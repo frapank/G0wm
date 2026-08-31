@@ -27,11 +27,21 @@ G0WNCFLAGS = `$(PKG_CONFIG) --cflags $(PKGS)` $(WLR_INCS) $(G0WNCPPFLAGS) $(G0WN
 LDLIBS    = `$(PKG_CONFIG) --libs $(PKGS)` $(WLR_LIBS) -lm $(LIBS)
 
 # Sources. The systray and its dbus glue come from the bar-systray patch.
-SRC = $(SRCDIR)/g0wn.c $(SRCDIR)/util.c $(SRCDIR)/dbus.c
-HDR = $(INCDIR)/client.h $(INCDIR)/util.h $(INCDIR)/dbus.h $(EXTDIR)/drwl.h
+SRC = $(SRCDIR)/g0wn.c $(SRCDIR)/bar.c $(SRCDIR)/buffer.c $(SRCDIR)/client.c \
+	$(SRCDIR)/input.c $(SRCDIR)/layout.c $(SRCDIR)/lock.c \
+	$(SRCDIR)/monitor.c $(SRCDIR)/opacity.c \
+	$(SRCDIR)/util.c $(SRCDIR)/dbus.c
+HDR = $(INCDIR)/g0wn.h $(INCDIR)/client.h $(INCDIR)/util.h $(INCDIR)/dbus.h \
+	$(EXTDIR)/drwl.h
 ifneq ($(NOTIFY),)
 SRC += $(SRCDIR)/notify.c
 HDR += $(INCDIR)/notify.h
+endif
+ifneq ($(RUNNER),)
+SRC += $(SRCDIR)/runner.c
+endif
+ifneq ($(XWAYLAND),)
+SRC += $(SRCDIR)/xwayland.c
 endif
 ifneq ($(SYSTRAY),)
 SRC += $(SRCDIR)/systray/watcher.c $(SRCDIR)/systray/tray.c \
@@ -103,10 +113,15 @@ config.mk:
 
 # Formatting, per .clang-format. external/ is vendored and config*.h are
 # alignment-sensitive tables, so neither is reformatted.
-FMT_SRC = $(SRCDIR)/g0wn.c $(SRCDIR)/util.c $(SRCDIR)/dbus.c $(SRCDIR)/notify.c \
+FMT_SRC = $(SRCDIR)/g0wn.c $(SRCDIR)/bar.c $(SRCDIR)/buffer.c \
+	$(SRCDIR)/client.c $(SRCDIR)/input.c $(SRCDIR)/layout.c \
+	$(SRCDIR)/lock.c $(SRCDIR)/monitor.c $(SRCDIR)/opacity.c \
+	$(SRCDIR)/runner.c $(SRCDIR)/xwayland.c \
+	$(SRCDIR)/util.c $(SRCDIR)/dbus.c $(SRCDIR)/notify.c \
 	$(SRCDIR)/systray/watcher.c $(SRCDIR)/systray/tray.c \
 	$(SRCDIR)/systray/item.c $(SRCDIR)/systray/icon.c \
 	$(SRCDIR)/systray/menu.c $(SRCDIR)/systray/helpers.c \
+	$(INCDIR)/g0wn.h \
 	$(INCDIR)/client.h $(INCDIR)/util.h $(INCDIR)/dbus.h $(INCDIR)/notify.h \
 	$(INCDIR)/systray/watcher.h $(INCDIR)/systray/tray.h \
 	$(INCDIR)/systray/item.h $(INCDIR)/systray/icon.h \
