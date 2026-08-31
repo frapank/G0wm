@@ -139,8 +139,12 @@ configure       writes config.mk
 config_gen      writes config.h
 status_gen      writes status.conf
 
-src/            g0wn.c, util.c, notify.c, dbus.c, systray/
-include/        headers
+src/            g0wn.c (setup, teardown, the event loop and the shared
+                state), then one file per subsystem: monitor.c, client.c,
+                layout.c, input.c, bar.c, opacity.c, lock.c, buffer.c,
+                runner.c, xwayland.c, plus util.c, notify.c, dbus.c, systray/
+include/        g0wn.h (the types, the shared state and what the modules
+                call across files), client.h and the other headers
 external/       drwl.h, vendored from the drwl project
 protocols/      wlr protocol XML for wayland-scanner
 scripts/        start-g0wn, g0wn-status.sh
