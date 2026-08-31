@@ -1,6 +1,6 @@
 # Credits
 
-g0wn is licensed under **GPL-3.0-or-later**; the full text is in
+g0wm is licensed under **GPL-3.0-or-later**; the full text is in
 [`LICENSE`](../LICENSE). It is not an independent piece of work: it started as
 a fork of [dwl] and still carries code from dwl, from the projects dwl itself
 inherited from, and from patches written by other people. This page records
@@ -8,9 +8,9 @@ where those parts come from.
 
 ## Upstream
 
-g0wn is a fork of **[dwl]**, the dwm-inspired Wayland compositor by Devin J.
+g0wm is a fork of **[dwl]**, the dwm-inspired Wayland compositor by Devin J.
 Pohly and the dwl contributors, and inherits its GPL-3.0-or-later license.
-Everything that is not described in [features.md](features.md) as g0wn's own
+Everything that is not described in [features.md](features.md) as g0wm's own
 behaviour is, in one form or another, still dwl.
 
 Through dwl, the tree also carries:
@@ -27,7 +27,7 @@ Through dwl, the tree also carries:
 | --- | --- | --- |
 | [`external/drwl.h`](../external/drwl.h) | [drwl] by sewn and notchoc, including Björn Höhrmann's UTF-8 decoder | MIT ([`license/drwl.txt`](../license/drwl.txt)) |
 
-`drwl` is what draws every piece of text g0wn puts on screen: the bar, the
+`drwl` is what draws every piece of text g0wm puts on screen: the bar, the
 title bars, the notifications and the runner.
 
 ## Patches
@@ -35,7 +35,7 @@ title bars, the notifications and the runner.
 Several features arrived as [dwl-patches] and were then adapted, extended or
 rewritten in this tree. The originals, and their authors:
 
-| Patch | Author | What it gave g0wn |
+| Patch | Author | What it gave g0wm |
 | --- | --- | --- |
 | [bar] | dwl-patches | the bar itself |
 | [gaps] | dwl-patches | gaps between tiled clients |
@@ -59,7 +59,7 @@ bad argument.
 The opacity patches were merged with the X11 client initialisation the focus
 variant is missing, and with the rule fields treated as an override rather than
 an overwrite; the app filter, the global toggle and the frosted glass on top of
-them are g0wn's own.
+them are g0wm's own.
 
 ## Thanks
 

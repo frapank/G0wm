@@ -3,7 +3,7 @@
  *
  * the wlr_buffer pool the bar and the title bars draw into
  */
-#include "g0wn.h"
+#include "g0wm.h"
 
 /* function declarations */
 static void bufrelease(struct wl_listener* listener, void* data);
