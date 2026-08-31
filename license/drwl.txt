@@ -1,4 +1,4 @@
-Text rendering in g0wn uses drwl, which is used under the following license:
+Text rendering in g0wm uses drwl, which is used under the following license:
 
 drwl - https://codeberg.org/sewn/drwl
 
