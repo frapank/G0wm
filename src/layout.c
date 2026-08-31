@@ -3,7 +3,7 @@
  *
  * the tiling layouts, the tag actions and the stack order
  */
-#include "g0wn.h"
+#include "g0wm.h"
 
 /* function declarations */
 static unsigned int tagindex(uint32_t tagset);
@@ -164,7 +164,7 @@ void resizewidth(const Arg* arg)
         return;
     if (!c->isfloating) {
         /* A tiled client has no free geometry, so widen/narrow the master
-         * area instead - g0wn's equivalent of resizing a sway split. */
+         * area instead - g0wm's equivalent of resizing a sway split. */
         setmfact(&(Arg){ .f = arg->i > 0 ? +0.05f : -0.05f });
         return;
     }

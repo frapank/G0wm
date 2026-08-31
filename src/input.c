@@ -3,7 +3,7 @@
  *
  * keyboard, pointer, tablet and drag-and-drop handling
  */
-#include "g0wn.h"
+#include "g0wm.h"
 
 /* function declarations */
 static void createkeyboard(struct wlr_keyboard* keyboard);
@@ -421,7 +421,7 @@ void inputdevice(struct wl_listener* listener, void* data)
     }
 
     /* We need to let the wlr_seat know what our capabilities are, which is
-     * communiciated to the client. In g0wn we always have a cursor, even if
+     * communiciated to the client. In g0wm we always have a cursor, even if
      * there are no pointer devices, so we always include that capability. */
     /* TODO do we actually require a cursor? */
     caps = WL_SEAT_CAPABILITY_POINTER;
@@ -926,7 +926,7 @@ void setpsel(struct wl_listener* listener, void* data)
 {
     /* This event is raised by the seat when a client wants to set the
      * selection, usually when the user copies something. wlroots allows
-     * compositors to ignore such requests if they so choose, but in g0wn we
+     * compositors to ignore such requests if they so choose, but in g0wm we
      * always honor them
      */
     struct wlr_seat_request_set_primary_selection_event* event = data;
@@ -937,7 +937,7 @@ void setsel(struct wl_listener* listener, void* data)
 {
     /* This event is raised by the seat when a client wants to set the
      * selection, usually when the user copies something. wlroots allows
-     * compositors to ignore such requests if they so choose, but in g0wn we
+     * compositors to ignore such requests if they so choose, but in g0wm we
      * always honor them
      */
     struct wlr_seat_request_set_selection_event* event = data;
