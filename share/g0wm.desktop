@@ -1,5 +1,5 @@
 [Desktop Entry]
-Name=g0wn
+Name=g0wm
 Comment=A personal Wayland desktop environment
-Exec=sh -c 'g0wn-status.sh | exec g0wn'
+Exec=sh -c 'g0wm-status.sh | exec g0wm'
 Type=Application

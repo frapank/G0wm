@@ -1,6 +1,6 @@
 name: Arch build dependencies
 description: >
-  Installs the toolchain and the libraries g0wn links against. Arch is used
+  Installs the toolchain and the libraries g0wm links against. Arch is used
   because wlroots 0.20 is not packaged for any Ubuntu the runners offer.
 
 runs:
