@@ -3,7 +3,7 @@
  *
  * session lock
  */
-#include "g0wn.h"
+#include "g0wm.h"
 
 /* function declarations */
 static void createlocksurface(struct wl_listener* listener, void* data);
