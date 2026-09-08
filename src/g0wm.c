@@ -140,7 +140,9 @@ static void autostartexec(void)
         if ((autostart_pids[i] = fork()) == 0) {
             setsid();
             execvp(*p, (char* const*)p);
-            die("g0wm: execvp %s:", *p);
+            fprintf(stderr, "g0wm: execvp %s: ", *p);
+            perror(NULL);
+            _exit(1);
         }
         /* skip arguments */
         while (*++p)
@@ -688,7 +690,9 @@ void spawn(const Arg* arg)
         dup2(STDERR_FILENO, STDOUT_FILENO);
         setsid();
         execvp(((char**)arg->v)[0], (char**)arg->v);
-        die("g0wm: execvp %s failed:", ((char**)arg->v)[0]);
+        fprintf(stderr, "g0wm: execvp %s failed: ", ((char**)arg->v)[0]);
+        perror(NULL);
+        _exit(1);
     }
 }
 
