@@ -572,6 +572,12 @@ skip:
     /* Let clients know a frame has been rendered */
     clock_gettime(CLOCK_MONOTONIC, &now);
     wlr_scene_output_send_frame_done(m->scene_output, &now);
+
+    wl_list_for_each(c, &clients, link)
+        if (c->mon == m && c->isfullscreen && !VISIBLEON(c, m) &&
+            client_surface(c)->mapped)
+            wlr_surface_send_frame_done(client_surface(c), &now);
+
     wlr_output_state_finish(&pending);
 }
 
