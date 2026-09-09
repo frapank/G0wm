@@ -11,6 +11,27 @@ EXTDIR   = external
 BUILDDIR = build
 GENDIR   = $(BUILDDIR)/protocols
 
+# MSG ( Messages )
+MESS			:= printf
+RESET       	:= \033[0m
+RED         	:= \033[31m
+GREEN       	:= \033[32m
+YELLOW      	:= \033[33m
+MAGENTA     	:= \033[35m
+CYAN        	:= \033[36m
+
+ifneq ($(TERM),dumb)
+  ifneq (, $(shell command -v tput 2>/dev/null))
+    RESET  := $(shell tput sgr0)
+    RED    := $(shell tput setaf 1)
+    GREEN  := $(shell tput setaf 2)
+    YELLOW := $(shell tput setaf 3)
+    MAGENTA:= $(shell tput setaf 5)
+    CYAN   := $(shell tput setaf 6)
+  endif
+endif
+export MESS RESET RED GREEN YELLOW MAGENTA CYAN
+
 # flags for compiling
 G0WMCPPFLAGS = -I. -I$(INCDIR) -I$(INCDIR)/systray -I$(EXTDIR) -I$(GENDIR) \
 	-DWLR_USE_UNSTABLE -D_POSIX_C_SOURCE=200809L \
@@ -76,35 +97,43 @@ g0wm: $(OBJ)
 # Every object waits on the generated headers: which of them a given source
 # needs is not worth tracking, and they are cheap to produce.
 $(BUILDDIR)/%.o: $(SRCDIR)/%.c $(HDR) $(GENHDR) config.h config.mk
+	@$(MESS) '[$(GREEN)COMPILER$(RESET)] %s\n' 'Compiling $@'
 	@mkdir -p $(@D)
 	$(CC) $(CPPFLAGS) $(G0WMCFLAGS) -c $< -o $@
 
 $(GENDIR)/cursor-shape-v1-protocol.h:
+	@$(MESS) '[$(GREEN)COMPILER$(RESET)] %s\n' 'Compiling $@'
 	@mkdir -p $(@D)
 	$(WAYLAND_SCANNER) enum-header \
 		$(WAYLAND_PROTOCOLS)/staging/cursor-shape/cursor-shape-v1.xml $@
 $(GENDIR)/ext-image-copy-capture-v1-protocol.h:
+	@$(MESS) '[$(GREEN)COMPILER$(RESET)] %s\n' 'Compiling $@'
 	@mkdir -p $(@D)
 	$(WAYLAND_SCANNER) enum-header \
 		$(WAYLAND_PROTOCOLS)/staging/ext-image-copy-capture/ext-image-copy-capture-v1.xml $@
 $(GENDIR)/pointer-constraints-unstable-v1-protocol.h:
+	@$(MESS) '[$(GREEN)COMPILER$(RESET)] %s\n' 'Compiling $@'
 	@mkdir -p $(@D)
 	$(WAYLAND_SCANNER) enum-header \
 		$(WAYLAND_PROTOCOLS)/unstable/pointer-constraints/pointer-constraints-unstable-v1.xml $@
 $(GENDIR)/wlr-layer-shell-unstable-v1-protocol.h:
+	@$(MESS) '[$(GREEN)COMPILER$(RESET)] %s\n' 'Compiling $@'
 	@mkdir -p $(@D)
 	$(WAYLAND_SCANNER) enum-header \
 		protocols/wlr-layer-shell-unstable-v1.xml $@
 $(GENDIR)/wlr-output-power-management-unstable-v1-protocol.h:
+	@$(MESS) '[$(GREEN)COMPILER$(RESET)] %s\n' 'Compiling $@'
 	@mkdir -p $(@D)
 	$(WAYLAND_SCANNER) server-header \
 		protocols/wlr-output-power-management-unstable-v1.xml $@
 $(GENDIR)/xdg-shell-protocol.h:
+	@$(MESS) '[$(GREEN)COMPILER$(RESET)] %s\n' 'Compiling $@'
 	@mkdir -p $(@D)
 	$(WAYLAND_SCANNER) server-header \
 		$(WAYLAND_PROTOCOLS)/stable/xdg-shell/xdg-shell.xml $@
 
 config.h:
+	@$(MESS) '[$(GREEN)COMPILER$(RESET)] %s\n' 'Creating $@'
 	cp config.def.h $@
 
 # ./configure writes this file; without it the defaults are used as-is.
@@ -128,7 +157,9 @@ FMT_SRC = $(SRCDIR)/g0wm.c $(SRCDIR)/bar.c $(SRCDIR)/buffer.c \
 	$(INCDIR)/systray/menu.h $(INCDIR)/systray/helpers.h
 
 format:
+	@$(MESS) '[$(CYAN)FORMAT$(RESET)] %s\n' 'Formatting...'
 	clang-format -i $(FMT_SRC)
+	@$(MESS) '[$(CYAN)FORMAT$(RESET)] %s\n' 'Done!'
 
 format-check:
 	@for f in $(FMT_SRC); do \
@@ -137,7 +168,9 @@ format-check:
 	done
 
 clean:
+	@$(MESS) '[$(RED)CLEANER$(RESET)] %s\n' 'Cleaning...'
 	rm -rf g0wm $(BUILDDIR)
+	@$(MESS) '[$(RED)CLEANER$(RESET)] %s\n' 'Done!'
 
 dist: clean
 	mkdir -p g0wm-$(VERSION)
@@ -148,8 +181,13 @@ dist: clean
 	rm -rf g0wm-$(VERSION)
 
 install: g0wm
+	@$(MESS) '[$(YELLOW)INSTALL$(RESET)] %s\n' 'Starting...'
 	mkdir -p $(BINDIR)
 	cp -f g0wm scripts/start-g0wm scripts/g0wm-status.sh $(BINDIR)
 	chmod 755 $(BINDIR)/g0wm $(BINDIR)/start-g0wm $(BINDIR)/g0wm-status.sh
+	@$(MESS) '[$(YELLOW)INSTALL$(RESET)] %s\n' 'Done!'
+
 uninstall remove:
+	@$(MESS) '[$(RED)UNINSTALL$(RESET)] %s\n' 'Removing G0wm'
 	rm -f $(BINDIR)/g0wm $(BINDIR)/start-g0wm $(BINDIR)/g0wm-status.sh
+	@$(MESS) '[$(RED)UNINSTALL$(RESET)] %s\n' 'Done!'
