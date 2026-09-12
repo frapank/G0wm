@@ -302,8 +302,8 @@ static int statusescape(const char* p, uint32_t* scm)
         return 0;
     if (p[1] == 'd' && p[2] == '^') {
         if (scm) {
-            scm[ColFg] = colors[SchemeNorm][ColFg];
-            scm[ColBg] = colors[SchemeNorm][ColBg];
+            scm[ColFg] = colors[SchemeStatus][ColFg];
+            scm[ColBg] = colors[SchemeStatus][ColBg];
         }
         return 3;
     }
@@ -336,12 +336,12 @@ int drawstatus(Monitor* m, const char* text, int x, int w, int render)
 
     if (!m || !text)
         return 0;
-    memcpy(scm, colors[SchemeNorm], sizeof(scm));
+    memcpy(scm, colors[SchemeStatus], sizeof(scm));
 
     /* the runs cover the glyphs only, so the padding around them would keep
      * whatever the buffer held */
     if (render) {
-        drwl_setscheme(m->drw, colors[SchemeNorm]);
+        drwl_setscheme(m->drw, colors[SchemeStatus]);
         drwl_rect(m->drw, x, 0, w, m->b.height, 1, 1);
     }
 
