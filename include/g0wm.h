@@ -134,6 +134,7 @@ enum {
     SchemeUrg,
     SchemeTitle,
     SchemeTitleSel,
+    SchemeStatus,
     SchemeNotify,
     SchemeRunner,
     SchemeRunnerSuggest

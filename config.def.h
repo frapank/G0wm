@@ -53,6 +53,7 @@ static uint32_t colors[][3] = {
     [SchemeTitle]         = { 0x888888ff, 0x000000ff, 0x000000ff }, // title bar
     [SchemeTitleSel]      = { 0xffffffff, 0x000000ff, 0x000000ff }, // ... focused
 
+    [SchemeStatus]        = { 0xffffffff, 0x000000ff, 0x000000ff }, // status text, overridden by ^c#/^b#/^d^
     [SchemeNotify]        = { 0x000000ff, 0xffffffff, 0xffffffff }, // notification
 
     [SchemeRunner]        = { 0xffffffff, 0x000000ff, 0x000000ff }, // MODKEY+r prompt
