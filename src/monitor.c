@@ -63,8 +63,9 @@ void arrangelayers(Monitor* m)
         return;
 
     if (m->scene_buffer->node.enabled) {
-        usable_area.height -= m->b.real_height;
-        usable_area.y += topbar ? m->b.real_height : 0;
+        /* the padding goes with the bar, so tiles keep the same gap */
+        usable_area.height -= m->b.real_height + (int)barpadding;
+        usable_area.y += topbar ? m->b.real_height + (int)barpadding : 0;
     }
 
     /* Arrange exclusive surfaces from top->bottom */

@@ -49,7 +49,7 @@ LDLIBS    = `$(PKG_CONFIG) --libs $(PKGS)` $(WLR_LIBS) -lm $(LIBS)
 
 # Sources. The systray and its dbus glue come from the bar-systray patch.
 SRC = $(SRCDIR)/g0wm.c $(SRCDIR)/bar.c $(SRCDIR)/buffer.c $(SRCDIR)/client.c \
-	$(SRCDIR)/input.c $(SRCDIR)/layout.c $(SRCDIR)/lock.c \
+	$(SRCDIR)/corner.c $(SRCDIR)/input.c $(SRCDIR)/layout.c $(SRCDIR)/lock.c \
 	$(SRCDIR)/monitor.c $(SRCDIR)/opacity.c \
 	$(SRCDIR)/util.c $(SRCDIR)/dbus.c
 HDR = $(INCDIR)/g0wm.h $(INCDIR)/client.h $(INCDIR)/util.h $(INCDIR)/dbus.h \
@@ -143,9 +143,9 @@ config.mk:
 # Formatting, per .clang-format. external/ is vendored and config*.h are
 # alignment-sensitive tables, so neither is reformatted.
 FMT_SRC = $(SRCDIR)/g0wm.c $(SRCDIR)/bar.c $(SRCDIR)/buffer.c \
-	$(SRCDIR)/client.c $(SRCDIR)/input.c $(SRCDIR)/layout.c \
-	$(SRCDIR)/lock.c $(SRCDIR)/monitor.c $(SRCDIR)/opacity.c \
-	$(SRCDIR)/runner.c $(SRCDIR)/xwayland.c \
+	$(SRCDIR)/client.c $(SRCDIR)/corner.c $(SRCDIR)/input.c \
+	$(SRCDIR)/layout.c $(SRCDIR)/lock.c $(SRCDIR)/monitor.c \
+	$(SRCDIR)/opacity.c $(SRCDIR)/runner.c $(SRCDIR)/xwayland.c \
 	$(SRCDIR)/util.c $(SRCDIR)/dbus.c $(SRCDIR)/notify.c \
 	$(SRCDIR)/systray/watcher.c $(SRCDIR)/systray/tray.c \
 	$(SRCDIR)/systray/item.c $(SRCDIR)/systray/icon.c \
