@@ -159,7 +159,7 @@ void createnotify(struct wl_listener* listener, void* data)
     /* Allocate a Client for this surface */
     c = toplevel->base->data = ecalloc(1, sizeof(*c));
     c->surface.xdg = toplevel->base;
-    c->bw = borderpx;
+    c->bw = borderwidth();
     c->opacity = c->opacity_unfocus = opacity_unfocus;
     c->opacity_focus = opacity_focus;
 
@@ -366,6 +366,10 @@ void mapnotify(struct wl_listener* listener, void* data)
         c->border[i] = wlr_scene_rect_create(
             c->scene, 0, 0, (float[]){ 0.0f, 0.0f, 0.0f, 0.0f });
         c->border[i]->node.data = c;
+        /* above the borders, which stop short of the curve */
+        c->corner[i] = wlr_scene_buffer_create(c->scene, NULL);
+        c->corner[i]->node.data = c;
+        wlr_scene_node_set_enabled(&c->corner[i]->node, 0);
     }
     /* the colour comes from here, once all four exist */
     setbordercolor(c, c->isurgent ? SchemeUrg : SchemeNorm);
@@ -458,7 +462,7 @@ void resize(Client* c, struct wlr_box geo, int interact)
 {
     struct wlr_box* bbox;
     struct wlr_box clip;
-    int th = 0;
+    int th = 0, r, v;
 
     if (!c->mon || !client_surface(c)->mapped)
         return;
@@ -476,14 +480,20 @@ void resize(Client* c, struct wlr_box geo, int interact)
     /* Update scene-graph, including borders */
     wlr_scene_node_set_position(&c->scene->node, c->geom.x, c->geom.y);
     wlr_scene_node_set_position(&c->scene_surface->node, c->bw, c->bw + th);
-    wlr_scene_rect_set_size(c->border[0], c->geom.width, c->bw);
-    wlr_scene_rect_set_size(c->border[1], c->geom.width, c->bw);
-    wlr_scene_rect_set_size(c->border[2], c->bw, c->geom.height - 2 * c->bw);
-    wlr_scene_rect_set_size(c->border[3], c->bw, c->geom.height - 2 * c->bw);
-    wlr_scene_node_set_position(&c->border[1]->node, 0, c->geom.height - c->bw);
-    wlr_scene_node_set_position(&c->border[2]->node, 0, c->bw);
-    wlr_scene_node_set_position(
-        &c->border[3]->node, c->geom.width - c->bw, c->bw);
+    /* the borders run between the corners, which take r off each edge */
+    r = cornerradius(c);
+    v = MAX(r, (int)c->bw);
+    wlr_scene_rect_set_size(c->border[0], MAX(c->geom.width - 2 * r, 0), c->bw);
+    wlr_scene_rect_set_size(c->border[1], MAX(c->geom.width - 2 * r, 0), c->bw);
+    wlr_scene_rect_set_size(
+        c->border[2], c->bw, MAX(c->geom.height - 2 * v, 0));
+    wlr_scene_rect_set_size(
+        c->border[3], c->bw, MAX(c->geom.height - 2 * v, 0));
+    wlr_scene_node_set_position(&c->border[0]->node, r, 0);
+    wlr_scene_node_set_position(&c->border[1]->node, r, c->geom.height - c->bw);
+    wlr_scene_node_set_position(&c->border[2]->node, 0, v);
+    wlr_scene_node_set_position(&c->border[3]->node, c->geom.width - c->bw, v);
+    drawcorners(c);
 
     /* this is a no-op if size hasn't changed */
     c->resize = client_set_size(
@@ -519,7 +529,7 @@ static void setfullscreen(Client* c, int fullscreen)
     c->isfullscreen = fullscreen;
     if (!c->mon || !client_surface(c)->mapped)
         return;
-    c->bw = fullscreen ? 0 : borderpx;
+    c->bw = fullscreen ? 0 : borderwidth();
     client_set_fullscreen(c, fullscreen);
     wlr_scene_node_reparent(&c->scene->node,
                             layers[c->isfullscreen ? LyrFS
@@ -583,6 +593,8 @@ void unmapnotify(struct wl_listener* listener, void* data)
 {
     /* Called when the surface is unmapped, and should no longer be shown. */
     Client* c = wl_container_of(listener, c, unmap);
+    int i;
+
     if (c == grabc) {
         cursor_mode = CurNormal;
         grabc = NULL;
@@ -621,6 +633,11 @@ void unmapnotify(struct wl_listener* listener, void* data)
     bufpooldrop(c->titlepool, LENGTH(c->titlepool));
     c->titlebufw = 0;
 #endif
+    for (i = 0; i < 4; i++) {
+        c->corner[i] = NULL;
+        bufpooldrop(c->cornerpool[i], LENGTH(c->cornerpool[i]));
+    }
+    c->cornerbufr = 0;
     drawbars();
     motionnotify(0, NULL, 0, 0, 0, 0);
 }

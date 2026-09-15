@@ -97,7 +97,7 @@ void createnotifyx11(struct wl_listener* listener, void* data)
     c = xsurface->data = ecalloc(1, sizeof(*c));
     c->surface.xwayland = xsurface;
     c->type = X11;
-    c->bw = client_is_unmanaged(c) ? 0 : borderpx;
+    c->bw = client_is_unmanaged(c) ? 0 : borderwidth();
     c->opacity = c->opacity_unfocus = opacity_unfocus;
     c->opacity_focus = opacity_focus;
 
