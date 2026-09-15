@@ -42,14 +42,18 @@ void blurbar(Monitor* m)
 {
     struct wlr_fbox src;
     Buffer* buf;
-    int y, w, h;
+    int x, y, w, h;
+    /* the backdrop is square, keep it off the corners a rounded bar drops */
+    int r = barcorner(m);
 
     if (!m->barblur)
         return;
 
     buf = m->blurpool[0];
-    y = topbar ? 0 : m->m.height - m->b.real_height;
-    w = MIN(m->b.real_width, m->wallpaperw);
+    x = (int)barpadding + r;
+    y = topbar ? (int)barpadding
+               : m->m.height - m->b.real_height - (int)barpadding;
+    w = MIN(m->b.real_width - 2 * r, m->wallpaperw - x);
     h = MIN(m->b.real_height, m->wallpaperh - y);
     if (!buf || !m->scene_buffer->node.enabled || !opacity_enabled ||
         !decotranslucent() || y < 0 || w <= 0 || h <= 0) {
@@ -57,8 +61,8 @@ void blurbar(Monitor* m)
         return;
     }
 
-    blursrcbox(m, &src, 0, y, w, h);
-    wlr_scene_node_set_position(&m->barblur->node, m->m.x, m->m.y + y);
+    blursrcbox(m, &src, x, y, w, h);
+    wlr_scene_node_set_position(&m->barblur->node, m->m.x + x, m->m.y + y);
     wlr_scene_buffer_set_dest_size(m->barblur, w, h);
     wlr_scene_buffer_set_source_box(m->barblur, &src);
     wlr_scene_node_set_enabled(&m->barblur->node, 1);
@@ -79,10 +83,25 @@ static void blurbox(Client* c,
     struct wlr_fbox src;
     Monitor* m = c->mon;
     Buffer* buf = m ? m->blurpool[0] : NULL;
-    int x, y, w, h;
+    int x, y, w, h, x1, y1;
 
     if (!node || !m)
         return;
+
+    /* same for a rounded client: shrink the box to the contents, or the
+     * square backdrop fills the corners back in */
+    if (cornerradius(c)) {
+        x1 = MIN(bx + bw, c->geom.width - (int)c->bw);
+        y1 = MIN(by + bh, c->geom.height - (int)c->bw);
+        bx = MAX(bx, (int)c->bw);
+        by = MAX(by, (int)c->bw);
+        bw = x1 - bx;
+        bh = y1 - by;
+        if (bw <= 0 || bh <= 0) {
+            wlr_scene_node_set_enabled(&node->node, 0);
+            return;
+        }
+    }
 
     /* the wallpaper covers the monitor pixel for pixel, so the crop is just
      * the box in monitor-local coordinates, clipped to it */
@@ -542,6 +561,7 @@ void setbordercolor(Client* c, int scheme)
     color[2] *= a;
     color[3] = a;
     client_set_border_color(c, color);
+    drawcorners(c);
 }
 
 /* arg->f is added to the opacity the focused client uses while focused */

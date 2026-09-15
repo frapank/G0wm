@@ -77,6 +77,7 @@ void drawbar(Monitor* m)
      * barsinglemon leaves a single bar standing in for the lot */
     Monitor* s = barsinglemon && selmon ? selmon : m;
     int sel = s == selmon;
+    int r = (int)roundf((float)barcorner(m) * m->wlr_output->scale);
 
 #ifdef TITLEBAR
     /* Title bars are refreshed on the same events as the bar */
@@ -94,6 +95,7 @@ void drawbar(Monitor* m)
     if (!(buf = bufget(m->pool, LENGTH(m->pool), m->b.width, m->b.height)))
         return;
     drwl_setimage(m->drw, buf->image);
+    cornerclear(buf->data, m->b.width, m->b.height, r);
 #ifdef SYSTRAY
     traywidth = tray_get_width(m->tray);
 #endif
@@ -256,13 +258,16 @@ void drawbar(Monitor* m)
                                  m->b.height);
 #endif
 
+    cornercut(buf->data, m->b.width, m->b.height, r);
+
     wlr_scene_buffer_set_opacity(m->scene_buffer, decoopacity());
     wlr_scene_buffer_set_dest_size(
         m->scene_buffer, m->b.real_width, m->b.real_height);
     wlr_scene_node_set_position(
         &m->scene_buffer->node,
-        m->m.x,
-        m->m.y + (topbar ? 0 : m->m.height - m->b.real_height));
+        m->m.x + (int)barpadding,
+        m->m.y + (topbar ? (int)barpadding
+                         : m->m.height - m->b.real_height - (int)barpadding));
     wlr_scene_buffer_set_buffer(m->scene_buffer, &buf->base);
     wlr_buffer_unlock(&buf->base);
 #ifdef INTEGRATED_BACKGROUND
@@ -657,7 +662,9 @@ void updatebar(Monitor* m)
 #endif
 
     wlr_output_transformed_resolution(m->wlr_output, &rw, &rh);
-    m->b.width = rw;
+    /* the bar is narrower than the output by its padding on both sides */
+    m->b.width =
+        MAX(1, rw - 2 * (int)roundf((float)barpadding * m->wlr_output->scale));
     m->b.real_width = (int)((float)m->b.width / m->wlr_output->scale);
 
     wlr_scene_node_set_enabled(&m->scene_buffer->node, barvisible(m));

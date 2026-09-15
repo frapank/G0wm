@@ -75,6 +75,12 @@ static char* tags[] = { "1", "2", "3", "4", "5", "6", "7", "8", "9" };
 
 static const unsigned int borderpx = 1; // 0 for no border
 
+/* The border carries the curve and the contents stay square, so a large
+ * radius widens the border on its own: past 3.4 * borderpx, 6.2 with
+ * CornerSquircle. */
+static const int cornerstyle       = CornerNormal; // or CornerSquircle
+static const unsigned int cornerpx = 0; // corner radius, 0 for square corners
+
 /* gaps multiplies gappx, it is not a bool: MODKEY+g sets it to !gaps, so
  * anything above 1 collapses to 1 on the first toggle. */
 static int gaps                 = 1; // runtime: MODKEY+g
@@ -114,6 +120,10 @@ static const Rule rules[] = {
 static const int showbar     = 1; // 0 means no bar
 static const int topbar      = 1; // 0 means bottom bar
 static const int barwintitle = 0; // focused window title in the bar
+
+/* Gap between the bar and the edges of its output, for a floating bar. The
+ * layout leaves the same gap on the side the bar faces. */
+static const unsigned int barpadding = 0; // 0 puts the bar against the edges
 
 /* Bar height, times the automatic one (the font height plus two pixels), so
  * it holds at any dpi: 1.1 is a tenth taller, 0 leaves it alone. */
