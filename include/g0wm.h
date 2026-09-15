@@ -139,6 +139,7 @@ enum {
     SchemeRunner,
     SchemeRunnerSuggest
 }; /* color schemes */
+enum { CornerNormal, CornerSquircle };              /* corner curve */
 enum { CurNormal, CurPressed, CurMove, CurResize }; /* cursor */
 enum { OpacityNormal, OpacityBlur };                /* opacity_type */
 enum { XDGShell, LayerShell, X11 };                 /* client types */
@@ -193,7 +194,8 @@ typedef struct {
 
     Monitor* mon;
     struct wlr_scene_tree* scene;
-    struct wlr_scene_rect* border[4]; /* top, bottom, left, right */
+    struct wlr_scene_rect* border[4];   /* top, bottom, left, right */
+    struct wlr_scene_buffer* corner[4]; /* tl, tr, bl, br */
     struct wlr_scene_tree* scene_surface;
     struct wl_list link;
     struct wl_list flink;
@@ -237,6 +239,9 @@ typedef struct {
     int titlex, titlew; /* title bar placement, relative to the border box */
     int titlebufw;      /* pixel width titlepool was allocated at */
 #endif
+    Buffer* cornerpool[4][2];
+    int cornerbufr, cornerbufbw; /* radius and border cornerpool was drawn at */
+    uint32_t cornercolor;        /* and the colour it was drawn with */
     unsigned int bw;
     uint32_t tags;
     int isfloating, isurgent, isfullscreen;
@@ -389,6 +394,7 @@ void arrange(Monitor* m);
 void arrangelayers(Monitor* m);
 void axisnotify(struct wl_listener* listener, void* data);
 bool baracceptsinput(struct wlr_scene_buffer* buffer, double* sx, double* sy);
+int barcorner(Monitor* m);
 #ifdef INTEGRATED_BACKGROUND
 void blurbar(Monitor* m);
 void blurclient(Client* c);
@@ -402,6 +408,7 @@ bool bufdatabegin(struct wlr_buffer* buffer,
 void bufdataend(struct wlr_buffer* buffer);
 Buffer* bufget(Buffer** pool, size_t poollen, int width, int height);
 void bufpooldrop(Buffer** pool, size_t poollen);
+unsigned int borderwidth(void);
 void buttonpress(struct wl_listener* listener, void* data);
 void chvt(const Arg* arg);
 void checkidleinhibitor(struct wlr_surface* exclude);
@@ -413,6 +420,9 @@ void createmon(struct wl_listener* listener, void* data);
 void createnotify(struct wl_listener* listener, void* data);
 void createpointerconstraint(struct wl_listener* listener, void* data);
 void createpopup(struct wl_listener* listener, void* data);
+void cornerclear(uint32_t* px, int w, int h, int r);
+void cornercut(uint32_t* px, int w, int h, int r);
+int cornerradius(Client* c);
 void cursorframe(struct wl_listener* listener, void* data);
 float decoopacity(void);
 void destroylocksurface(struct wl_listener* listener, void* data);
@@ -420,6 +430,7 @@ void destroynotify(struct wl_listener* listener, void* data);
 void destroykeyboardgroup(struct wl_listener* listener, void* data);
 void drawbar(Monitor* m);
 void drawbars(void);
+void drawcorners(Client* c);
 void drawselbar(void);
 int drawstatus(Monitor* m, const char* text, int x, int w, int render);
 void focusclient(Client* c, int lift);
