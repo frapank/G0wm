@@ -113,7 +113,7 @@ void buttonpress(struct wl_listener* listener, void* data)
                  * the click on the monitor whose tags are on show. */
                 if (!barsinglemon || !selmon)
                     selmon = pm;
-                cx = (cursor->x - pm->m.x) * pm->wlr_output->scale;
+                cx = (cursor->x - pm->m.x - barpadding) * pm->wlr_output->scale;
 #ifdef SYSTRAY
                 traywidth = tray_get_width(pm->tray);
 #endif
