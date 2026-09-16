@@ -53,8 +53,11 @@ to the child process group and waits for it to exit.
 .Pp
 Users are encouraged to customize
 .Nm
-by editing the sources, in particular
-.Pa config.h .
+by editing
+.Pa ~/.config/g0wm/settings.json ,
+whose built-in values come from
+.Pa include/config.h
+in the sources.
 The default key bindings are as follows:
 .Bl -tag -width 20n -offset indent -compact
 .It Mod-[1-9]
@@ -259,11 +262,15 @@ server.
 .Sh FILES
 .Bl -tag -width "~/.config/g0wm/settings.json"
 .It Pa ~/.config/g0wm/settings.json
+Every setting
+.Nm
+reads at startup.
 Written by
 .Fl c ,
 and by
 .Cm make install
-when it is not there yet.
+when it is not there yet; the values it starts out with come from
+.Pa include/config.h .
 It holds only the sections this build was configured with, so a build without
 the system tray has no tray settings in it.
 .It Pa ~/.config/g0wm/status.conf

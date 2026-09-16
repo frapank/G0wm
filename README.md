@@ -34,7 +34,7 @@ It currently includes:
 
 A tour of what all of this looks like in use is in
 [docs/features.md](docs/features.md), the settings are documented in the
-comments of [`config.def.h`](config.def.h), and the man page is at
+comments of [`include/config.h`](include/config.h), and the man page is at
 [`docs/g0wm.1`](docs/g0wm.1).
 
 Screen locking, idle handling, portals and a polkit agent are not included.
@@ -67,8 +67,8 @@ X11 support also requires `libxcb`, `libxcb-icccm` and `Xwayland`.
 make install      # g0wm, start-g0wm and g0wm-status.sh into ~/.local/bin
 ```
 
-You can also just run `make`. It will use `config.def.mk` and `config.def.h`
-if no custom configuration exists yet.
+You can also just run `make`. It will use `config.def.mk` if no custom
+configuration exists yet.
 
 Some features can be disabled during the build:
 
@@ -86,21 +86,25 @@ toolchain settings, `--debug` and `--native`.
 
 ## Configure
 
-Most settings are stored in `config.h` and require a rebuild after changes,
-similar to [dwm].
-
-The configuration file is divided into numbered sections. It is a good idea
-to read the header at the top of [`config.def.h`](config.def.h) before changing
-anything.
-
-You can generate a new configuration with:
+Every setting lives in `~/.config/g0wm/settings.json`, which `make install`
+writes and g0wm reads at startup. Only the sections the build was configured
+with go in it: a `--no-systray` build has no tray settings.
 
 ```sh
-./config_gen        # create config.h by answering prompts
-./config_gen -c     # edit the current configuration
+g0wm -c             # write it if it is not there, then print what g0wm reads
 ```
 
-The second command keeps your current values as the default answers.
+An existing file is never overwritten. Startup checks it and reports anything
+missing, mistyped or unknown, and keeps the built-in value for it.
+
+[`include/config.h`](include/config.h) holds those built-in values, divided
+into numbered sections; it is what a fresh `settings.json` is written from, so
+read the header at the top of it before changing anything. Changing it needs a
+rebuild, and a `settings.json` that is already there wins over it:
+
+```sh
+./config_gen        # rewrite include/config.h by answering prompts
+```
 
 The status text shown in the bar comes from `scripts/g0wm-status.sh`. Its
 configuration is stored in `~/.config/g0wm/status.conf`.
@@ -134,17 +138,18 @@ whichever startup method you prefer.
 ## Layout
 
 ```text
-config.def.h    settings, copied to config.h on first build
 configure       writes config.mk
-config_gen      writes config.h
+config_gen      writes include/config.h
 status_gen      writes status.conf
 
 src/            g0wm.c (setup, teardown, the event loop and the shared
                 state), then one file per subsystem: monitor.c, client.c,
                 layout.c, input.c, bar.c, opacity.c, lock.c, buffer.c,
-                runner.c, xwayland.c, plus util.c, notify.c, dbus.c, systray/
+                runner.c, xwayland.c, plus util.c, notify.c, dbus.c,
+                settings.c and systray/
 include/        g0wm.h (the types, the shared state and what the modules
-                call across files), client.h and the other headers
+                call across files), config.h (the built-in setting values),
+                client.h and the other headers
 external/       drwl.h and cJSON, vendored third-party code
 protocols/      wlr protocol XML for wayland-scanner
 scripts/        start-g0wm, g0wm-status.sh
