@@ -1,11 +1,7 @@
-/* == 0. MACROS ============================================================ */
+/* The values a fresh settings.json is written from; the file wins over them
+ * once it exists. Changing anything here needs a rebuild. */
 
-/* 0xRRGGBBAA -> the float[4] wlroots wants (dwl issue #466) */
-#define COLOR(hex)                                                             \
-    { ((hex >> 24) & 0xFF) / 255.0f,                                           \
-      ((hex >> 16) & 0xFF) / 255.0f,                                           \
-      ((hex >> 8) & 0xFF) / 255.0f,                                            \
-      (hex & 0xFF) / 255.0f }
+/* == 0. MACROS ============================================================ */
 
 #define MODKEY WLR_MODIFIER_LOGO // WLR_MODIFIER_ALT to use Alt instead
 
@@ -41,10 +37,12 @@
 
 /* == 1. LOOK ============================================================== */
 
-static const char* fonts[] = { "monospace:size=10" };
+static const char* fonts_def[] = { "monospace:size=10" };
+const char** fonts = fonts_def;
+size_t nfonts      = LENGTH(fonts_def);
 
 /* { fg, bg, border } as 0xRRGGBBAA, indexed by the Scheme* enum in src/g0wm.c */
-static uint32_t colors[][3] = {
+uint32_t colors[NumSchemes][3] = {
     /*                          fg          bg          border   */
     [SchemeNorm]          = { 0xffffffff, 0x000000ff, 0x000000ff }, // unfocused
     [SchemeSel]           = { 0xffffffff, 0x000000ff, 0x000000ff }, // focused
@@ -60,52 +58,56 @@ static uint32_t colors[][3] = {
     [SchemeRunnerSuggest] = { 0xaaaaaaff, 0x000000ff, 0x000000ff }, // ... its completion, same bg
 };
 
-static const float rootcolor[]     = COLOR(0x000000ff);        // behind the windows
-static const float fullscreen_bg[] = { 0.0f, 0.0f, 0.0f, 1.0f }; // fullscreen letterbox
+float rootcolor[]     = COLOR(0x000000ff);        // behind the windows
+float fullscreen_bg[] = { 0.0f, 0.0f, 0.0f, 1.0f }; // fullscreen letterbox
 
 /* --- INTEGRATED_BACKGROUND (--no-integrated-background: use swaybg) --- */
 #ifdef INTEGRATED_BACKGROUND
-static const char* wallpaper = ""; // image path, empty for just rootcolor
+const char* wallpaper = ""; // image path, empty for just rootcolor
 #endif
 /* --- end INTEGRATED_BACKGROUND --- */
 
-static char* tags[] = { "1", "2", "3", "4", "5", "6", "7", "8", "9" };
+static char* tags_def[] = { "1", "2", "3", "4", "5", "6", "7", "8", "9" };
+char** tags  = tags_def;
+size_t ntags = LENGTH(tags_def);
 
 /* == 2. WINDOWS =========================================================== */
 
-static const unsigned int borderpx = 1; // 0 for no border
+unsigned int borderpx = 1; // 0 for no border
 
 /* The border carries the curve and the contents stay square, so a large
  * radius widens the border on its own: past 3.4 * borderpx, 6.2 with
  * CornerSquircle. */
-static const int cornerstyle       = CornerNormal; // or CornerSquircle
-static const unsigned int cornerpx = 0; // corner radius, 0 for square corners
+int cornerstyle       = CornerNormal; // or CornerSquircle
+unsigned int cornerpx = 0; // corner radius, 0 for square corners
 
 /* gaps multiplies gappx, it is not a bool: MODKEY+g sets it to !gaps, so
  * anything above 1 collapses to 1 on the first toggle. */
-static int gaps                 = 1; // runtime: MODKEY+g
-static const unsigned int gappx = 3; // gap size, times gaps
-static const int smartgaps      = 0; // 1 drops the outer gap with one window
+int gaps                = 1; // runtime: MODKEY+g
+unsigned int gappx      = 3; // gap size, times gaps
+int smartgaps           = 0; // 1 drops the outer gap with one window
 
 /* --- TITLEBAR: per-window title bars, not barwintitle --- */
 #ifdef TITLEBAR
-static int titlebar                    = 1; // runtime: MODKEY+Shift+t
-static const unsigned int titlepadding = 6; // on top of the font height
+int titlebar              = 1; // runtime: MODKEY+Shift+t
+unsigned int titlepadding = 6; // on top of the font height
 #endif
 /* --- end TITLEBAR --- */
 
-static const Layout layouts[] = {
+static Layout layouts_def[] = {
     /* symbol     arrange function */
     { "[ ]", tile },    // Normal
     { "< >", NULL },    // Floating
     { "[M]", monocle }, // Mixed
     { "|||", tabbed },  // Tabbed
 };
+Layout* layouts = layouts_def;
+size_t nlayouts = LENGTH(layouts_def);
 
 /* Substring match on app id and title, NULL matches everything. opacity 0
  * keeps the section 4 default, monitor -1 the focused one. Fields are named so
  * a new one in Rule (src/g0wm.c) cannot silently shift the rows below. */
-static const Rule rules[] = {
+static Rule rules_def[] = {
     { .id              = "Placeholder",
       .title           = NULL,
       .tags            = 0,
@@ -114,65 +116,68 @@ static const Rule rules[] = {
       .opacity_unfocus = 0,
       .monitor         = -1 },
 };
+Rule* rules   = rules_def;
+size_t nrules = LENGTH(rules_def);
 
 /* == 3. BAR =============================================================== */
 
-static const int showbar     = 1; // 0 means no bar
-static const int topbar      = 1; // 0 means bottom bar
-static const int barwintitle = 0; // focused window title in the bar
+int showbar     = 1; // 0 means no bar
+int topbar      = 1; // 0 means bottom bar
+int barwintitle = 0; // focused window title in the bar
 
 /* Gap between the bar and the edges of its output, for a floating bar. The
  * layout leaves the same gap on the side the bar faces. */
-static const unsigned int barpadding = 0; // 0 puts the bar against the edges
+unsigned int barpadding = 0; // 0 puts the bar against the edges
 
 /* Bar height, times the automatic one (the font height plus two pixels), so
  * it holds at any dpi: 1.1 is a tenth taller, 0 leaves it alone. */
-static const float barheight = 1.1f;
+float barheight = 1.1f;
 
 /* 1 keeps one bar on the first monitor matched by monrules[], with only the
  * catch-all row the first output that came up. It never moves, the others get
  * none, and it reports on whichever monitor is focused. */
-static const int barsinglemon = 0;
+int barsinglemon = 0;
 
 /* --- SYSTRAY: menu is traymenucmd (7), clicks are ClkTray (10) --- */
 #ifdef SYSTRAY
-static const int showsystray              = 1;
-static const unsigned int systrayspacing  = 2;
-static const unsigned int systrayiconsize = 16; // 0 fills the bar
+int showsystray              = 1;
+unsigned int systrayspacing  = 2;
+unsigned int systrayiconsize = 16; // 0 fills the bar
 #endif
 /* --- end SYSTRAY --- */
 
 /* --- NOTIFICATIONS: share the bar's title box, clicks are ClkTitle (10) --- */
 #ifdef NOTIFICATIONS
-static const int shownotifications             = 1;
-static const unsigned int notification_timeout = 5; // seconds one stays up
+int shownotifications             = 1;
+unsigned int notification_timeout = 5; // seconds one stays up
 #endif
 /* --- end NOTIFICATIONS --- */
 
 /* == 4. OPACITY (1.0 is opaque, i.e. off) ================================= */
 
-static int opacity_enabled = 1; // runtime: MODKEY+Alt+o
+int opacity_enabled = 1; // runtime: MODKEY+Alt+o
 
-static const float opacity_focus   = 1.00f; // rules[] overrides these per client
-static const float opacity_unfocus = 1.00f;
-static const float opacity_deco    = 1.00f; // the bar, title bars and borders
+float opacity_focus   = 1.00f; // rules[] overrides these per client
+float opacity_unfocus = 1.00f;
+float opacity_deco    = 1.00f; // the bar, title bars and borders
 
 /* app ids matched like rules[]; an empty list means every app */
-static const int opacity_exclusion_type = 0; // 0 only these, 1 all but these
-static const char* const opacity_apps[] = {
+int opacity_exclusion_type = 0; // 0 only these, 1 all but these
+static const char* opacity_apps_def[] = {
     NULL // Terminator
 };
+const char** opacity_apps = opacity_apps_def;
 
 /* --- BLUR: the frosted glass is a copy of the wallpaper, so it needs one --- */
 #ifdef INTEGRATED_BACKGROUND
 /* what a transparent window shows through itself: whatever happens to be
  * behind it, or a frosted copy of the wallpaper */
-static const int opacity_type = OpacityNormal; // OpacityNormal or OpacityBlur
+int opacity_type = OpacityNormal; // OpacityNormal or OpacityBlur
 
-static const unsigned int blur_radius = 15; // how far the wallpaper smears
-static const unsigned int blur_passes = 1;  // more is rounder, 3 is plenty
-static const float blur_saturation    = 1.60f; // 1.0 leaves the colors alone
-static const float blur_brightness    = 1.00f; // below 1 for darker glass
+unsigned int blur_radius = 15; // how far the wallpaper smears
+unsigned int blur_passes = 1;  // more is rounder, 3 is plenty
+float blur_saturation    = 1.60f; // 1.0 leaves the colors alone
+float blur_brightness    = 1.00f; // below 1 for darker glass
 #endif
 /* --- end BLUR --- */
 
@@ -182,12 +187,12 @@ static const float blur_brightness    = 1.00f; // below 1 for darker glass
  * pixels (resolution / scale), (-1,-1) autoconfigures and other negatives
  * break Xwayland. width/height/refresh 0 means the preferred mode. */
 
-static const MonitorRule monrules[] = {
+static MonitorRule monrules_def[] = {
     { .name    = NULL, // catch-all for every monitor
       .mfact   = 0.55f,
       .nmaster = 1,
       .scale   = 1,
-      .lt      = &layouts[0],
+      .lt      = &layouts_def[0],
       .rr      = WL_OUTPUT_TRANSFORM_NORMAL,
       .x       = -1,
       .y       = -1,
@@ -195,49 +200,51 @@ static const MonitorRule monrules[] = {
       .height  = 0,
       .refresh = 0 },
 };
+MonitorRule* monrules = monrules_def;
+size_t nmonrules      = LENGTH(monrules_def);
 
 /* == 6. INPUT ============================================================= */
 
-static const int sloppyfocus = 1; // focus follows the mouse
+int sloppyfocus = 1; // focus follows the mouse
 
-static const struct xkb_rule_names xkb_rules = {
+struct xkb_rule_names xkb_rules = {
     /* also takes .rules, .model, .layout, .variant; e.g. .options = "ctrl:nocaps" */
     .options = NULL,
 };
 
-static const int repeat_rate  = 25;
-static const int repeat_delay = 600;
+int repeat_rate  = 25;
+int repeat_delay = 600;
 
-static const char* cursor_theme = NULL; // naming one is required for the size
-static const int cursor_size    = 24;   // base size, times the monitor scale
-static const int hide_cursor_when_typing = 1;
+const char* cursor_theme = NULL; // naming one is required for the size
+int cursor_size    = 24;   // base size, times the monitor scale
+int hide_cursor_when_typing = 1;
 
 /* trackpad */
-static const int tap_to_click            = 1;
-static const int tap_and_drag            = 1;
-static const int drag_lock               = 1;
-static const int natural_scrolling       = 0;
-static const int disable_while_typing    = 1;
-static const int left_handed             = 0;
-static const int middle_button_emulation = 0;
+int tap_to_click            = 1;
+int tap_and_drag            = 1;
+int drag_lock               = 1;
+int natural_scrolling       = 0;
+int disable_while_typing    = 1;
+int left_handed             = 0;
+int middle_button_emulation = 0;
 
 /* NO_SCROLL, 2FG, EDGE, ON_BUTTON_DOWN */
-static const enum libinput_config_scroll_method scroll_method = LIBINPUT_CONFIG_SCROLL_2FG;
+enum libinput_config_scroll_method scroll_method = LIBINPUT_CONFIG_SCROLL_2FG;
 
 /* NONE, BUTTON_AREAS, CLICKFINGER */
-static const enum libinput_config_click_method click_method =
+enum libinput_config_click_method click_method =
     LIBINPUT_CONFIG_CLICK_METHOD_BUTTON_AREAS;
 
 /* ENABLED, DISABLED, DISABLED_ON_EXTERNAL_MOUSE */
-static const uint32_t send_events_mode = LIBINPUT_CONFIG_SEND_EVENTS_ENABLED;
+uint32_t send_events_mode = LIBINPUT_CONFIG_SEND_EVENTS_ENABLED;
 
 /* FLAT, ADAPTIVE */
-static const enum libinput_config_accel_profile accel_profile =
+enum libinput_config_accel_profile accel_profile =
     LIBINPUT_CONFIG_ACCEL_PROFILE_ADAPTIVE;
-static const double accel_speed = 0.0;
+double accel_speed = 0.0;
 
 /* LRM or LMR: 1/2/3 finger tap -> left/right/middle or left/middle/right */
-static const enum libinput_config_tap_button_map button_map = LIBINPUT_CONFIG_TAP_MAP_LRM;
+enum libinput_config_tap_button_map button_map = LIBINPUT_CONFIG_TAP_MAP_LRM;
 
 /* == 7. PROGRAMS ==========================================================
  * execvp() argument lists: no shell, so use SHCMD() in section 9 for pipes. */
@@ -254,7 +261,8 @@ static const char* menucmd[]        = { "wmenu-run", NULL };
 
 /* --- SYSTRAY: opened by a right click on a tray icon --- */
 #ifdef SYSTRAY
-static const char* traymenucmd[]    = { "wmenu", "-f", "monospace 10", NULL };
+static const char* traymenucmd_def[] = { "wmenu", "-f", "monospace 10", NULL };
+const char** traymenucmd = traymenucmd_def;
 #endif
 /* --- end SYSTRAY --- */
 
@@ -262,15 +270,16 @@ static const char* traymenucmd[]    = { "wmenu", "-f", "monospace 10", NULL };
  * Started with g0wm, killed on exit. One NULL-terminated argument list each,
  * run through execvp(): no shell, so no ~, no $VAR, no globs. */
 
-static const char* const autostart[] = {
+static const char* autostart_def[] = {
     /* "example", "arg1", "arg2", NULL, */
     NULL // Terminator
 };
+const char** autostart = autostart_def;
 
 /* == 9. KEYS ==============================================================
  * { modifier, key, function, argument }. Shift changes key codes: 2 -> at. */
 
-static const Key keys[] = {
+static Key keys_def[] = {
 	/* --- APPLICATIONS AND SYSTEM --- */
 	{ MODKEY,                    XKB_KEY_q,           spawn,            {.v = termcmd} },
 	{ MODKEY,                    XKB_KEY_f,           spawn,            {.v = filemanagercmd} },
@@ -283,7 +292,7 @@ static const Key keys[] = {
 #ifdef TITLEBAR
 	{ MODKEY|WLR_MODIFIER_SHIFT, XKB_KEY_t,           toggletitlebar,   {0} },
 #endif
-	{ MODKEY,                    XKB_KEY_t,           toggletabbed,     {.v = &layouts[3]} },
+	{ MODKEY,                    XKB_KEY_t,           toggletabbed,     {.v = &layouts_def[3]} },
 	{ MODKEY,                    XKB_KEY_e,           togglefullscreen, {0} },
 
 	/* --- RUNNER: g0wm's own prompt, or menucmd without it --- */
@@ -343,7 +352,7 @@ static const Key keys[] = {
 	{ MODKEY,                    XKB_KEY_d,           incnmaster,       {.i = -1} },
 	{ MODKEY,                    XKB_KEY_Return,      zoom,             {0} },
 	{ MODKEY,                    XKB_KEY_Tab,         view,             {0} },
-	{ MODKEY,                    XKB_KEY_m,           setlayout,        {.v = &layouts[2]} },
+	{ MODKEY,                    XKB_KEY_m,           setlayout,        {.v = &layouts_def[2]} },
 	{ MODKEY,                    XKB_KEY_space,       setlayout,        {0} },
 	{ MODKEY,                    XKB_KEY_0,           view,             {.ui = ~0} },
 	{ MODKEY|WLR_MODIFIER_SHIFT, XKB_KEY_parenright,  tag,              {.ui = ~0} },
@@ -367,14 +376,16 @@ static const Key keys[] = {
 	CHVT(1), CHVT(2), CHVT(3), CHVT(4), CHVT(5), CHVT(6),
 	CHVT(7), CHVT(8), CHVT(9), CHVT(10), CHVT(11), CHVT(12),
 };
+Key* keys    = keys_def;
+size_t nkeys = LENGTH(keys_def);
 
 /* == 10. MOUSE ============================================================
  * { where, modifier, button, function, argument }. ClkTitle is the shared bar
  * box holding the window title, notifications and the runner. */
 
-static const Button buttons[] = {
-	{ ClkLtSymbol, 0,      BTN_LEFT,   setlayout,      {.v = &layouts[0]} },
-	{ ClkLtSymbol, 0,      BTN_RIGHT,  setlayout,      {.v = &layouts[2]} },
+static Button buttons_def[] = {
+	{ ClkLtSymbol, 0,      BTN_LEFT,   setlayout,      {.v = &layouts_def[0]} },
+	{ ClkLtSymbol, 0,      BTN_RIGHT,  setlayout,      {.v = &layouts_def[2]} },
 
 	{ ClkTitle,    0,      BTN_MIDDLE, zoom,           {0} },
 	/* --- NOTIFICATIONS: left scrolls a truncated one, right dismisses --- */
@@ -402,11 +413,13 @@ static const Button buttons[] = {
 	{ ClkClient,   MODKEY, BTN_MIDDLE, togglefloating, {0} },
 	{ ClkClient,   MODKEY, BTN_RIGHT,  moveresize,     {.ui = CurResize} },
 };
+Button* buttons = buttons_def;
+size_t nbuttons = LENGTH(buttons_def);
 
 /* == 11. MISC ============================================================= */
 
 /* WLR_SILENT, WLR_ERROR, WLR_INFO, WLR_DEBUG; -d forces WLR_DEBUG */
-static int log_level = WLR_ERROR; // runtime: the -d flag
+int log_level = WLR_ERROR; // runtime: the -d flag
 
 /* 1 lets a hidden fullscreen client still keep the screen awake */
-static const int bypass_surface_visibility = 0;
+int bypass_surface_visibility = 0;
