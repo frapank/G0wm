@@ -53,7 +53,7 @@ SRC = $(SRCDIR)/g0wm.c $(SRCDIR)/bar.c $(SRCDIR)/buffer.c $(SRCDIR)/client.c \
 	$(SRCDIR)/monitor.c $(SRCDIR)/opacity.c \
 	$(SRCDIR)/util.c $(SRCDIR)/dbus.c
 HDR = $(INCDIR)/g0wm.h $(INCDIR)/client.h $(INCDIR)/util.h $(INCDIR)/dbus.h \
-	$(EXTDIR)/drwl.h
+	$(EXTDIR)/drwl.h $(EXTDIR)/cJSON.h
 ifneq ($(NOTIFY),)
 SRC += $(SRCDIR)/notify.c
 HDR += $(INCDIR)/notify.h
@@ -74,6 +74,10 @@ HDR += $(INCDIR)/systray/watcher.h $(INCDIR)/systray/tray.h \
 endif
 OBJ = $(SRC:$(SRCDIR)/%.c=$(BUILDDIR)/%.o)
 
+# Vendored third-party sources, built without the dev warning flags.
+EXTSRC = $(EXTDIR)/cJSON.c
+EXTOBJ = $(EXTSRC:$(EXTDIR)/%.c=$(BUILDDIR)/external/%.o)
+
 # wayland-scanner is a tool which generates C headers and rigging for Wayland
 # protocols, which are specified in XML. wlroots requires you to rig these up
 # to your build system yourself and provide them in the include path.
@@ -91,8 +95,8 @@ GENHDR = $(GENDIR)/cursor-shape-v1-protocol.h \
 
 all: g0wm
 
-g0wm: $(OBJ)
-	$(CC) $(OBJ) $(G0WMCFLAGS) $(LDFLAGS) $(LDLIBS) -o $@
+g0wm: $(OBJ) $(EXTOBJ)
+	$(CC) $(OBJ) $(EXTOBJ) $(G0WMCFLAGS) $(LDFLAGS) $(LDLIBS) -o $@
 
 # Every object waits on the generated headers: which of them a given source
 # needs is not worth tracking, and they are cheap to produce.
@@ -100,6 +104,11 @@ $(BUILDDIR)/%.o: $(SRCDIR)/%.c $(HDR) $(GENHDR) config.h config.mk
 	@$(MESS) '[$(GREEN)COMPILER$(RESET)] %s\n' 'Compiling $@'
 	@mkdir -p $(@D)
 	$(CC) $(CPPFLAGS) $(G0WMCFLAGS) -c $< -o $@
+
+$(BUILDDIR)/external/%.o: $(EXTDIR)/%.c $(EXTDIR)/%.h config.mk
+	@$(MESS) '[$(GREEN)COMPILER$(RESET)] %s\n' 'Compiling $@'
+	@mkdir -p $(@D)
+	$(CC) $(CPPFLAGS) $(CFLAGS) -c $< -o $@
 
 $(GENDIR)/cursor-shape-v1-protocol.h:
 	@$(MESS) '[$(GREEN)COMPILER$(RESET)] %s\n' 'Compiling $@'

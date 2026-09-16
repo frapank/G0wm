@@ -26,9 +26,10 @@ Through dwl, the tree also carries:
 | File | Project | License |
 | --- | --- | --- |
 | [`external/drwl.h`](../external/drwl.h) | [drwl] by sewn and notchoc, including Björn Höhrmann's UTF-8 decoder | MIT ([`license/drwl.txt`](../license/drwl.txt)) |
+| [`external/cJSON.c`](../external/cJSON.c), [`external/cJSON.h`](../external/cJSON.h) | [cJSON] 1.7.19 by Dave Gamble and contributors | MIT ([`license/cjson.txt`](../license/cjson.txt)) |
 
 `drwl` is what draws every piece of text g0wm puts on screen: the bar, the
-title bars, the notifications and the runner.
+title bars, the notifications and the runner. `cJSON` parses the JSON config.
 
 ## Patches
 
@@ -72,6 +73,7 @@ would exist without their work.
 [dwm]: https://dwm.suckless.org/
 [sway]: https://github.com/swaywm/sway
 [drwl]: https://codeberg.org/sewn/drwl
+[cJSON]: https://github.com/DaveGamble/cJSON
 [dwl-patches]: https://codeberg.org/dwl/dwl-patches
 [bar]: https://codeberg.org/dwl/dwl-patches/wiki/bar
 [gaps]: https://codeberg.org/dwl/dwl-patches/wiki/gaps
