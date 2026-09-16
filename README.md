@@ -5,7 +5,7 @@
 **A personal desktop environment designed to my liking**
 
 [![C](https://img.shields.io/badge/C-99%2B-A8B9CC?style=flat-square&logo=c)](https://en.wikipedia.org/wiki/C_(programming_language))
-[![Status](https://img.shields.io/badge/status-early%20development-orange?style=flat-square)](#status)
+![Status](https://img.shields.io/badge/status-early%20development-orange?style=flat-square)
 [![License](https://img.shields.io/badge/license-GPL--3.0-blue?style=flat-square)](LICENSE)
 
 </div>
@@ -22,35 +22,23 @@ programs for things like the bar, notifications and the application launcher.
 g0wm handles all of these directly, which makes it closer to a small desktop
 environment than to a plain compositor.
 
-It currently includes:
-
-- **Bar** with tags, layout symbol, status text and a [systray]
-- **Title bars** for every window and an i3/sway style tabbed layout
-- **Notifications** through an `org.freedesktop.Notifications` server shown in the bar
-- **Runner** opened with `MODKEY+r`, with `$PATH` completion and basic arithmetic
-- **Window opacity** that can be set per client or globally and changed at
-  runtime, optionally as frosted glass over the wallpaper
-- **Graphics tablet support** and the usual [dwl-patches]
-
 A tour of what all of this looks like in use is in
 [docs/features.md](docs/features.md), the settings are documented in the
 comments of [`include/config.h`](include/config.h), and the man page is at
 [`docs/g0wm.1`](docs/g0wm.1).
 
-Screen locking, idle handling, portals and a polkit agent are not included.
-If you need them, you can start programs such as `swayidle` and `swaylock`
-from `autostart[]`.
+## Screenshots
 
-## Status
-
-g0wm is still in early development and things are likely to change.
-
-There is currently one branch called `main` and there are no releases yet.
-The project follows the [wlroots] version selected in `config.mk`, which is
-currently 0.20.
-
-The defaults are the ones that suit me rather than the most sensible ones, and
-names and features move around whenever something starts to annoy me.
+<table align="center">
+<tr>
+<td align="center"><b>Windowed</b></td>
+<td align="center"><b>Tabbed</b></td>
+</tr>
+<tr>
+<td><img src=".github/assets/windows.png" alt="g0wm in the tiling layout"></td>
+<td><img src=".github/assets/tabbed.png" alt="g0wm in the tabbed layout"></td>
+</tr>
+</table>
 
 ## Build
 
@@ -99,12 +87,9 @@ missing, mistyped or unknown, and keeps the built-in value for it.
 
 [`include/config.h`](include/config.h) holds those built-in values, divided
 into numbered sections; it is what a fresh `settings.json` is written from, so
-read the header at the top of it before changing anything. Changing it needs a
-rebuild, and a `settings.json` that is already there wins over it:
-
-```sh
-./config_gen        # rewrite include/config.h by answering prompts
-```
+read the header at the top of it before changing anything. Edit it by hand:
+changing it needs a rebuild, and a `settings.json` that is already there wins
+over it.
 
 The status text shown in the bar comes from `scripts/g0wm-status.sh`. Its
 configuration is stored in `~/.config/g0wm/status.conf`.
@@ -115,7 +100,7 @@ You can generate it with:
 ./status_gen        # choose the modules, order and format
 ```
 
-Both generators create a backup before replacing an existing file.
+`status_gen` creates a backup before replacing an existing file.
 
 The available modules are listed in the status text section of
 [docs/features.md](docs/features.md), and `status.conf` documents its own
@@ -134,27 +119,6 @@ managers. It is not installed automatically by `make install`.
 The desktop entry starts g0wm directly instead of using `start-g0wm`. If you
 want to use it, copy it to `/usr/share/wayland-sessions/` and set `Exec` to
 whichever startup method you prefer.
-
-## Layout
-
-```text
-configure       writes config.mk
-config_gen      writes include/config.h
-status_gen      writes status.conf
-
-src/            g0wm.c (setup, teardown, the event loop and the shared
-                state), then one file per subsystem: monitor.c, client.c,
-                layout.c, input.c, bar.c, opacity.c, lock.c, buffer.c,
-                runner.c, xwayland.c, plus util.c, notify.c, dbus.c,
-                settings.c and systray/
-include/        g0wm.h (the types, the shared state and what the modules
-                call across files), config.h (the built-in setting values),
-                client.h and the other headers
-external/       drwl.h and cJSON, vendored third-party code
-protocols/      wlr protocol XML for wayland-scanner
-scripts/        start-g0wm, g0wm-status.sh
-docs/           man page, features.md and credits.md
-```
 
 ## License
 
