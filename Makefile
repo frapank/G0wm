@@ -208,7 +208,7 @@ clean:
 
 dist: clean
 	mkdir -p g0wm-$(VERSION)
-	cp -R LICENSE license Makefile configure config_gen status_gen README.md \
+	cp -R LICENSE license Makefile configure status_gen README.md \
 		config.def.mk .clang-format src include external protocols docs \
 		scripts share g0wm-$(VERSION)
 	tar -caf g0wm-$(VERSION).tar.gz g0wm-$(VERSION)
