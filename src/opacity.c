@@ -588,6 +588,31 @@ void setopacityunfocus(const Arg* arg)
         MIN(MAX(sel->opacity_unfocus + arg->f, OPACITY_MIN), 1.0f);
 }
 
+/* the wallpaper is decoded once and the frosted copy cached with it, so a
+ * reload has to throw both away before anything redraws */
+void reloadopacity(void)
+{
+#ifdef INTEGRATED_BACKGROUND
+    Monitor* m;
+
+    if (wallpaper_src) {
+        g_object_unref(wallpaper_src);
+        wallpaper_src = NULL;
+    }
+    wallpaper_load_failed = 0;
+    wl_list_for_each(m, &mons, link)
+    {
+        bufpooldrop(m->wallpaperpool, LENGTH(m->wallpaperpool));
+        bufpooldrop(m->blurpool, LENGTH(m->blurpool));
+        m->wallpaperbuf = NULL;
+        m->wallpaperw = m->wallpaperh = 0;
+        m->blurw = m->blurh = 0;
+        setwallpaper(m);
+    }
+#endif
+    opacityrefresh();
+}
+
 void toggleopacity(const Arg* arg)
 {
     opacity_enabled = !opacity_enabled;

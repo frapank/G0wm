@@ -8,6 +8,7 @@
 .Nm
 .Op Fl v
 .Op Fl d
+.Op Fl c
 .Op Fl s Ar startup command
 .Sh DESCRIPTION
 .Nm
@@ -29,6 +30,17 @@ option,
 enables full wlroots logging, including debug information.
 .Pp
 When given the
+.Fl c
+option,
+.Nm
+writes the default settings to
+.Pa ~/.config/g0wm/settings.json
+and exits.
+An existing file is kept and checked instead: every setting this build has
+must be in it, and anything else in it is reported.
+The same check runs at startup.
+.Pp
+When given the
 .Fl s
 option,
 .Nm
@@ -41,8 +53,11 @@ to the child process group and waits for it to exit.
 .Pp
 Users are encouraged to customize
 .Nm
-by editing the sources, in particular
-.Pa config.h .
+by editing
+.Pa ~/.config/g0wm/settings.json ,
+whose built-in values come from
+.Pa include/config.h
+in the sources.
 The default key bindings are as follows:
 .Bl -tag -width 20n -offset indent -compact
 .It Mod-[1-9]
@@ -77,6 +92,9 @@ Switch to tabbed layout.
 Switch to floating layout.
 .It Mod-m
 Switch to monocle layout.
+.It Mod-Shift-r
+Re-read
+.Pa settings.json .
 .It Mod-Space
 Switch to previous layout.
 .It Mod-Shift-Space
@@ -243,6 +261,25 @@ If using
 tell how to connect to the
 .Nm Xwayland
 server.
+.El
+.Sh FILES
+.Bl -tag -width "~/.config/g0wm/settings.json"
+.It Pa ~/.config/g0wm/settings.json
+Every setting
+.Nm
+reads at startup.
+Written by
+.Fl c ,
+and by
+.Cm make install
+when it is not there yet; the values it starts out with come from
+.Pa include/config.h .
+It holds only the sections this build was configured with, so a build without
+the system tray has no tray settings in it.
+.It Pa ~/.config/g0wm/status.conf
+Read by
+.Nm g0wm-status.sh ,
+which feeds the status text in the bar.
 .El
 .Sh EXAMPLES
 Start
