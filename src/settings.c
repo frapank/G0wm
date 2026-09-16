@@ -142,6 +142,7 @@ static const Action actions[] = {
     { notifydismiss, "notifydismiss", 0 },
 #endif
     { quit, "quit", 0 },
+    { reloadsettings, "reloadsettings", 0 },
     { resizeheight, "resizeheight", 'i' },
     { resizewidth, "resizewidth", 'i' },
 #ifdef RUNNER
@@ -227,8 +228,6 @@ static const char* arrangename(void (*fn)(Monitor*))
             return arranges[i].name;
     return "float";
 }
-
-/* writing out ------------------------------------------------------------ */
 
 static uint32_t packrgba(const float c[static 4])
 {
@@ -602,8 +601,6 @@ static cJSON* defaults(void)
     cJSON_AddItemToObject(o, "misc", jmisc());
     return o;
 }
-
-/* reading back in -------------------------------------------------------- */
 
 static const cJSON* item(const cJSON* o, const char* k)
 {
@@ -1107,8 +1104,6 @@ static void apply(const cJSON* o)
     applymisc(item(o, "misc"));
 }
 
-/* the file ------------------------------------------------------------- */
-
 static const char* settingspath(void)
 {
     static char path[PATH_MAX];
@@ -1313,6 +1308,7 @@ int settingswrite(void)
 void settingsload(void)
 {
     const char* path = settingspath();
+    cJSON* tree;
     cJSON* def;
     char* text;
     int bad = 0;
@@ -1328,8 +1324,8 @@ void settingsload(void)
         return;
     }
 
-    settings = cJSON_Parse(text);
-    if (!settings) {
+    tree = cJSON_Parse(text);
+    if (!tree) {
         /* the error points into text, so print before freeing it */
         const char* at = cJSON_GetErrorPtr();
         fprintf(stderr,
@@ -1342,9 +1338,12 @@ void settingsload(void)
     free(text);
 
     def = defaults();
-    checkobj(def, settings, "", &bad);
+    checkobj(def, tree, "", &bad);
     cJSON_Delete(def);
-    apply(settings);
+    apply(tree);
+    /* the tree a reload replaces is left behind: the settings point into
+     * its strings */
+    settings = tree;
     if (bad)
         fprintf(stderr,
                 "g0wm: %s has %d problem%s; delete it and run 'g0wm -c' for a "
@@ -1352,4 +1351,69 @@ void settingsload(void)
                 path,
                 bad,
                 bad == 1 ? "" : "s");
+}
+
+/* the keymap and the repeat rate are otherwise only set when a keyboard
+ * shows up; the trackpad settings are per device and still need a restart */
+static void reloadkeyboard(void)
+{
+    struct xkb_context* context;
+    struct xkb_keymap* keymap;
+
+    if (!kb_group)
+        return;
+    if ((context = xkb_context_new(XKB_CONTEXT_NO_FLAGS))) {
+        if ((keymap = xkb_keymap_new_from_names(
+                 context, &xkb_rules, XKB_KEYMAP_COMPILE_NO_FLAGS))) {
+            wlr_keyboard_set_keymap(&kb_group->wlr_group->keyboard, keymap);
+            xkb_keymap_unref(keymap);
+        }
+        xkb_context_unref(context);
+    }
+    wlr_keyboard_set_repeat_info(
+        &kb_group->wlr_group->keyboard, repeat_rate, repeat_delay);
+}
+
+void reloadsettings(const Arg* arg)
+{
+    Monitor* m;
+    Client* c;
+
+    settingsload();
+
+    /* fewer tags than before would leave windows on bits nothing shows */
+    wl_list_for_each(m, &mons, link)
+    {
+        if (!(m->tagset[m->seltags] & TAGMASK))
+            m->tagset[m->seltags] = 1;
+        wlr_scene_rect_set_color(m->fullscreen_bg, fullscreen_bg);
+    }
+    /* what a client copied out of the settings when it was mapped: the
+     * filter it was measured against, its border and its own opacity */
+    wl_list_for_each(c, &clients, link)
+    {
+        if (!(c->tags & TAGMASK))
+            c->tags = 1;
+        c->hasopacity = opacityallowed(client_get_appid(c));
+        c->opacity = c->opacity_unfocus = opacity_unfocus;
+        c->opacity_focus = opacity_focus;
+        if (!c->isfullscreen)
+            c->bw = client_is_unmanaged(c) ? 0 : borderwidth();
+    }
+    wlr_scene_rect_set_color(root_bg, rootcolor);
+
+    reloadkeyboard();
+    reloadmons();
+    updatemons(NULL, NULL);
+
+    /* a floating client keeps its own geometry, so a new border or title bar
+     * only reaches it through resize() */
+    wl_list_for_each(c, &clients, link)
+    {
+        if (c->mon && c->isfloating && !c->isfullscreen)
+            resize(c, c->geom, 1);
+    }
+
+    reloadopacity();
+    drawbars();
 }
