@@ -294,6 +294,7 @@ static Key keys_def[] = {
 #endif
 	{ MODKEY,                    XKB_KEY_t,           toggletabbed,     {.v = &layouts_def[3]} },
 	{ MODKEY,                    XKB_KEY_e,           togglefullscreen, {0} },
+	{ MODKEY|WLR_MODIFIER_SHIFT, XKB_KEY_r,           reloadsettings,   {0} }, // re-read settings.json
 
 	/* --- RUNNER: g0wm's own prompt, or menucmd without it --- */
 #ifdef RUNNER

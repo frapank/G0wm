@@ -254,16 +254,104 @@ void createlayersurface(struct wl_listener* listener, void* data)
     wlr_surface_send_enter(surface, layer_surface->output);
 }
 
+/* the first matching rule onto the monitor and the state about to be
+ * committed; also the path a reload takes */
+void applymonrules(Monitor* m, struct wlr_output_state* state)
+{
+    struct wlr_output* wlr_output = m->wlr_output;
+    struct wlr_output_mode* mode = NULL;
+    const MonitorRule* r;
+    size_t i;
+
+    m->gaps = gaps;
+    for (r = monrules; r < monrules + nmonrules; r++) {
+        if (r->name && !strstr(wlr_output->name, r->name))
+            continue;
+        m->m.x = r->x;
+        m->m.y = r->y;
+        m->mfact = r->mfact;
+        m->nmaster = r->nmaster;
+        m->lt[0] = r->lt;
+        m->lt[1] = &layouts[nlayouts > 1 && r->lt != &layouts[1]];
+        snprintf(
+            m->ltsymbol, LENGTH(m->ltsymbol), "%s", m->lt[m->sellt]->symbol);
+        for (i = 0; i < LENGTH(m->taglt); i++) {
+            m->taglt[i][0] = m->lt[0];
+            m->taglt[i][1] = m->lt[1];
+        }
+        wlr_output_state_set_scale(state, r->scale);
+        wlr_output_state_set_transform(state, r->rr);
+        /* Load (or reuse, if already cached) the xcursor theme at this
+         * monitor's scale so the cursor renders crisp and sized
+         * relative to cursor_size * scale, not just cursor_size. */
+        wlr_xcursor_manager_load(cursor_mgr, r->scale);
+        if (r->width && r->height) {
+            struct wlr_output_mode* m2;
+            int32_t want = r->refresh * 1000, best_diff = INT32_MAX;
+            wl_list_for_each(m2, &wlr_output->modes, link)
+            {
+                int32_t diff = abs(m2->refresh - want);
+                if (m2->width == r->width && m2->height == r->height &&
+                    diff < best_diff) {
+                    mode = m2;
+                    best_diff = diff;
+                }
+            }
+            if (!mode)
+                wlr_log(WLR_ERROR,
+                        "no %dx%d mode found on %s, using preferred mode",
+                        r->width,
+                        r->height,
+                        wlr_output->name);
+        }
+        break;
+    }
+
+    /* The mode is a tuple of (width, height, refresh rate), and each
+     * monitor supports only a specific set of modes. Use the mode matched
+     * against the rule above, falling back to the preferred mode when the
+     * rule didn't request one (or it wasn't found). */
+    wlr_output_state_set_mode(
+        state, mode ? mode : wlr_output_preferred_mode(wlr_output));
+}
+
+/* the monrules again, over monitors that already exist */
+void reloadmons(void)
+{
+    struct wlr_output_state state;
+    Monitor* m;
+
+    wl_list_for_each(m, &mons, link)
+    {
+        if (!m->wlr_output->enabled)
+            continue;
+        wlr_output_state_init(&state);
+        applymonrules(m, &state);
+        /* a mode or a scale the output cannot take would blank it */
+        if (wlr_output_test_state(m->wlr_output, &state))
+            wlr_output_commit_state(m->wlr_output, &state);
+        wlr_output_state_finish(&state);
+
+        if (m->m.x == -1 && m->m.y == -1)
+            wlr_output_layout_add_auto(output_layout, m->wlr_output);
+        else
+            wlr_output_layout_add(output_layout, m->wlr_output, m->m.x, m->m.y);
+
+        /* a scale of 0 is what a scale change looks like to updatebar(), and
+         * the bar has to be its new height before anything is arranged */
+        m->b.scale = 0;
+        updatebar(m);
+    }
+}
+
 void createmon(struct wl_listener* listener, void* data)
 {
     /* This event is raised by the backend when a new output (aka a display or
      * monitor) becomes available. */
     struct wlr_output* wlr_output = data;
-    const MonitorRule* r;
-    size_t i;
     struct wlr_output_state state;
-    struct wlr_output_mode* mode = NULL;
     Monitor* m;
+    size_t i;
 
     if (!wlr_output_init_render(wlr_output, alloc, drw))
         return;
@@ -275,61 +363,8 @@ void createmon(struct wl_listener* listener, void* data)
         wl_list_init(&m->layers[i]);
 
     wlr_output_state_init(&state);
-    /* Initialize monitor state using configured rules */
-    m->gaps = gaps;
-
     m->tagset[0] = m->tagset[1] = 1;
-    for (r = monrules; r < monrules + nmonrules; r++) {
-        if (!r->name || strstr(wlr_output->name, r->name)) {
-            m->m.x = r->x;
-            m->m.y = r->y;
-            m->mfact = r->mfact;
-            m->nmaster = r->nmaster;
-            m->lt[0] = r->lt;
-            m->lt[1] = &layouts[nlayouts > 1 && r->lt != &layouts[1]];
-            snprintf(m->ltsymbol,
-                     LENGTH(m->ltsymbol),
-                     "%s",
-                     m->lt[m->sellt]->symbol);
-            for (i = 0; i < LENGTH(m->taglt); i++) {
-                m->taglt[i][0] = m->lt[0];
-                m->taglt[i][1] = m->lt[1];
-            }
-            wlr_output_state_set_scale(&state, r->scale);
-            wlr_output_state_set_transform(&state, r->rr);
-            /* Load (or reuse, if already cached) the xcursor theme at this
-             * monitor's scale so the cursor renders crisp and sized
-             * relative to cursor_size * scale, not just cursor_size. */
-            wlr_xcursor_manager_load(cursor_mgr, r->scale);
-            if (r->width && r->height) {
-                struct wlr_output_mode* m2;
-                int32_t want = r->refresh * 1000, best_diff = INT32_MAX;
-                wl_list_for_each(m2, &wlr_output->modes, link)
-                {
-                    int32_t diff = abs(m2->refresh - want);
-                    if (m2->width == r->width && m2->height == r->height &&
-                        diff < best_diff) {
-                        mode = m2;
-                        best_diff = diff;
-                    }
-                }
-                if (!mode)
-                    wlr_log(WLR_ERROR,
-                            "no %dx%d mode found on %s, using preferred mode",
-                            r->width,
-                            r->height,
-                            wlr_output->name);
-            }
-            break;
-        }
-    }
-
-    /* The mode is a tuple of (width, height, refresh rate), and each
-     * monitor supports only a specific set of modes. Use the mode matched
-     * against the rule above, falling back to the preferred mode when the
-     * rule didn't request one (or it wasn't found). */
-    wlr_output_state_set_mode(
-        &state, mode ? mode : wlr_output_preferred_mode(wlr_output));
+    applymonrules(m, &state);
 
     /* Set up event listeners */
     LISTEN(&wlr_output->events.frame, &m->frame, rendermon);
