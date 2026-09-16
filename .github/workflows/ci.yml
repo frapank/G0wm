@@ -106,7 +106,7 @@ jobs:
       - uses: actions/checkout@v5
       - run: |
           shellcheck -S warning \
-            configure config_gen status_gen \
+            configure status_gen \
             scripts/start-g0wm scripts/g0wm-status.sh
 
   manpage:
