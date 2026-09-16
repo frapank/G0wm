@@ -87,6 +87,7 @@
 #endif
 
 #include "dbus.h"
+#include "settings.h"
 /* vendored, and every helper in it is static */
 #pragma GCC diagnostic push
 #pragma GCC diagnostic ignored "-Wunused-function"
