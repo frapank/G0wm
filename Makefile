@@ -51,8 +51,9 @@ LDLIBS    = `$(PKG_CONFIG) --libs $(PKGS)` $(WLR_LIBS) -lm $(LIBS)
 SRC = $(SRCDIR)/g0wm.c $(SRCDIR)/bar.c $(SRCDIR)/buffer.c $(SRCDIR)/client.c \
 	$(SRCDIR)/corner.c $(SRCDIR)/input.c $(SRCDIR)/layout.c $(SRCDIR)/lock.c \
 	$(SRCDIR)/monitor.c $(SRCDIR)/opacity.c \
-	$(SRCDIR)/util.c $(SRCDIR)/dbus.c
+	$(SRCDIR)/util.c $(SRCDIR)/dbus.c $(SRCDIR)/settings.c
 HDR = $(INCDIR)/g0wm.h $(INCDIR)/client.h $(INCDIR)/util.h $(INCDIR)/dbus.h \
+	$(INCDIR)/settings.h \
 	$(EXTDIR)/drwl.h $(EXTDIR)/cJSON.h
 ifneq ($(NOTIFY),)
 SRC += $(SRCDIR)/notify.c
@@ -156,11 +157,13 @@ FMT_SRC = $(SRCDIR)/g0wm.c $(SRCDIR)/bar.c $(SRCDIR)/buffer.c \
 	$(SRCDIR)/layout.c $(SRCDIR)/lock.c $(SRCDIR)/monitor.c \
 	$(SRCDIR)/opacity.c $(SRCDIR)/runner.c $(SRCDIR)/xwayland.c \
 	$(SRCDIR)/util.c $(SRCDIR)/dbus.c $(SRCDIR)/notify.c \
+	$(SRCDIR)/settings.c \
 	$(SRCDIR)/systray/watcher.c $(SRCDIR)/systray/tray.c \
 	$(SRCDIR)/systray/item.c $(SRCDIR)/systray/icon.c \
 	$(SRCDIR)/systray/menu.c $(SRCDIR)/systray/helpers.c \
 	$(INCDIR)/g0wm.h \
 	$(INCDIR)/client.h $(INCDIR)/util.h $(INCDIR)/dbus.h $(INCDIR)/notify.h \
+	$(INCDIR)/settings.h \
 	$(INCDIR)/systray/watcher.h $(INCDIR)/systray/tray.h \
 	$(INCDIR)/systray/item.h $(INCDIR)/systray/icon.h \
 	$(INCDIR)/systray/menu.h $(INCDIR)/systray/helpers.h
@@ -176,6 +179,25 @@ format-check:
 			{ echo "Wrong format in $$f, run 'make format'" >&2; exit 1; }; \
 	done
 
+# what -c writes must pass the check startup makes, a damaged file must not
+TESTCFG = $(BUILDDIR)/test-config
+
+test: g0wm
+	@rm -rf $(TESTCFG)
+	@XDG_CONFIG_HOME=$(TESTCFG) ./g0wm -c >/dev/null
+	@out=`XDG_CONFIG_HOME=$(TESTCFG) ./g0wm -c 2>&1 >/dev/null`; \
+	[ -z "$$out" ] || { printf '%s\n' "$$out" >&2; \
+		echo 'a fresh settings.json did not pass its own check' >&2; exit 1; }
+	@sed 's/"showbar"/"shobwar"/' $(TESTCFG)/g0wm/settings.json >$(TESTCFG)/t \
+		&& mv $(TESTCFG)/t $(TESTCFG)/g0wm/settings.json
+	@out=`XDG_CONFIG_HOME=$(TESTCFG) ./g0wm -c 2>&1 >/dev/null`; \
+	case $$out in \
+	*"bar.showbar is missing"*"bar.shobwar is not a setting"*) ;; \
+	*) printf '%s\n' "$$out" >&2; \
+		echo 'a damaged settings.json went unreported' >&2; exit 1 ;; \
+	esac
+	@$(MESS) '[$(GREEN)TEST$(RESET)] %s\n' 'settings.json round trip ok'
+
 clean:
 	@$(MESS) '[$(RED)CLEANER$(RESET)] %s\n' 'Cleaning...'
 	rm -rf g0wm $(BUILDDIR)
@@ -189,11 +211,13 @@ dist: clean
 	tar -caf g0wm-$(VERSION).tar.gz g0wm-$(VERSION)
 	rm -rf g0wm-$(VERSION)
 
+# g0wm -c writes settings.json: only the binary knows which features it has.
 install: g0wm
 	@$(MESS) '[$(YELLOW)INSTALL$(RESET)] %s\n' 'Starting...'
 	mkdir -p $(BINDIR)
 	cp -f g0wm scripts/start-g0wm scripts/g0wm-status.sh $(BINDIR)
 	chmod 755 $(BINDIR)/g0wm $(BINDIR)/start-g0wm $(BINDIR)/g0wm-status.sh
+	./g0wm -c
 	@$(MESS) '[$(YELLOW)INSTALL$(RESET)] %s\n' 'Done!'
 
 uninstall remove:

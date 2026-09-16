@@ -234,6 +234,9 @@ static void cleanup(void)
         g_object_unref(wallpaper_src);
 #endif
 
+    cJSON_Delete(settings);
+    settings = NULL;
+
     drwl_fini();
 }
 
@@ -701,13 +704,15 @@ int main(int argc, char* argv[])
     char* startup_cmd = NULL;
     int c;
 
-    while ((c = getopt(argc, argv, "s:hdv")) != -1) {
+    while ((c = getopt(argc, argv, "s:hdvc")) != -1) {
         if (c == 's')
             startup_cmd = optarg;
         else if (c == 'd')
             log_level = WLR_DEBUG;
         else if (c == 'v')
             die("g0wm " VERSION);
+        else if (c == 'c')
+            return settingswrite();
         else
             goto usage;
     }
@@ -718,11 +723,12 @@ int main(int argc, char* argv[])
      */
     if (!getenv("XDG_RUNTIME_DIR"))
         die("XDG_RUNTIME_DIR must be set");
+    settingsload();
     setup();
     run(startup_cmd);
     cleanup();
     return EXIT_SUCCESS;
 
 usage:
-    die("Usage: %s [-v] [-d] [-s startup command]", argv[0]);
+    die("Usage: %s [-v] [-d] [-c] [-s startup command]", argv[0]);
 }
