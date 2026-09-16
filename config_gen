@@ -1,5 +1,6 @@
 #!/bin/sh
-# Interactive generator for config.h, driven by the defaults in config.def.h.
+# Interactive generator for include/config.h, the initial values behind
+# settings.json.
 # Plain POSIX shell: runs on Linux, the BSDs and anything else with a /bin/sh.
 # `B= D= A=` on one line: several empty assignments, not a typo (SC1007).
 # `set -- $(split_cmd "$ans")`: the split is the point of the call (SC2046).
@@ -18,12 +19,12 @@ options() { # "$@" -> out, edit set from the command line; -h exits on its own
 			cat <<EOF
 Usage: ./config_gen [-c] [-o FILE]
 
-Walks through the g0wm settings and writes config.h. Every default comes from
-config.def.h, so pressing Enter at each prompt reproduces it.
+Walks through the g0wm settings and rewrites include/config.h, the initial
+values a fresh settings.json is written from. Every default comes from the
+file itself, so pressing Enter at each prompt leaves a setting alone.
 
-  -c, --current   edit the existing config.h instead: it becomes both the
-                  template and the source of every default
-  -o, --output    write somewhere else than config.h
+  -c, --current   same thing; kept for the old spelling
+  -o, --output    write somewhere else than include/config.h
 EOF
 			exit 0 ;;
 		*) echo "config_gen: unknown option '$1'" >&2; exit 1 ;;
@@ -213,9 +214,9 @@ menu() { # prompt default-index item... -> choice
 
 setval() { printf '%s\t%s\n' "$1" "$2" >>"$vals"; }
 
-defval() { # initializer of a static variable in config.def.h
+defval() { # initializer of a setting in config.h
 	awk -v want="$1" '
-	/^static/ && index($0, "=") {
+	/^[A-Za-z_]/ && index($0, "=") {
 		eq = index($0, "="); lhs = substr($0, 1, eq - 1); name = lhs
 		sub(/[ \t]*(\[\])?[ \t]*$/, "", name); sub(/^.*[^A-Za-z0-9_]/, "", name)
 		if (name != want) next
@@ -366,7 +367,7 @@ appearance() {
 	askyn 'focus follows the mouse' "$(yn "$(defval sloppyfocus)")" &&
 		setval sloppyfocus 1 || setval sloppyfocus 0
 	asknum 'cursor size' "$(defval cursor_size)"; setval cursor_size "$ans"
-	if grep -q '^static const char\* wallpaper' "$def"; then
+	if grep -q '^const char\* wallpaper' "$def"; then
 		wp_def=$(defval wallpaper); wp_def=${wp_def#\"} wp_def=${wp_def%\"}
 		ask 'wallpaper image path (empty for none)' "$wp_def"
 		setval wallpaper "\"$ans\""
@@ -387,7 +388,7 @@ opacity() {
 	setval opacity_deco "$ans"
 
 	# these settings are only in the config when the background is compiled in
-	if grep -q '^static const int opacity_type' "$def"; then
+	if grep -q '^int opacity_type' "$def"; then
 		note 'blur puts a frosted copy of the wallpaper behind everything'
 		note 'transparent, the way macOS does, instead of showing what is'
 		note 'really behind it; it needs a wallpaper and costs nothing to'
@@ -787,7 +788,7 @@ monitors() {
 EOF
 }
 
-generate() { # config.def.h rewritten with the collected values
+generate() { # config.h rewritten with the collected values
 	awk -v mons="$mons" -v auto="$auto" '
 	# keeps the column layout when a replacement is wider or narrower
 	function realign(rest, d) {
@@ -812,13 +813,13 @@ generate() { # config.def.h rewritten with the collected values
 			" // WLR_MODIFIER_LOGO to use Super instead"); next
 	}
 
-	/static const MonitorRule monrules\[\][ \t]*=/ {
+	/MonitorRule monrules_def\[\][ \t]*=/ {
 		print
 		while ((getline l < mons) > 0) print l
 		drop = 1; next
 	}
 
-	auto != "" && /autostart\[\][ \t]*=/ {
+	auto != "" && /autostart_def\[\][ \t]*=/ {
 		print
 		while ((getline l < auto) > 0) print l
 		drop = 1; next
@@ -851,7 +852,7 @@ generate() { # config.def.h rewritten with the collected values
 			(match(rest, /,[ \t]*(\/\/.*)?$/) ? substr(rest, RSTART) : ","); next
 	}
 
-	/^static/ && index($0, "=") {
+	/^[A-Za-z_]/ && index($0, "=") {
 		eq = index($0, "="); lhs = substr($0, 1, eq - 1); name = lhs
 		sub(/[ \t]*(\[\])?[ \t]*$/, "", name); sub(/^.*[^A-Za-z0-9_]/, "", name)
 		if (name in v) {
@@ -870,8 +871,8 @@ generate() { # config.def.h rewritten with the collected values
 
 main() {
 	srcdir=$(CDPATH= cd -- "$(dirname -- "$0")" && pwd)
-	def=$srcdir/config.def.h
-	out=$srcdir/config.h
+	def=$srcdir/include/config.h
+	out=$srcdir/include/config.h
 	mode=normal
 	edit=
 
@@ -921,7 +922,7 @@ main() {
 	monitors
 
 	generate >"$tmp/config.h"
-	grep -q 'static const Key keys' "$tmp/config.h" || die 'generated file looks wrong, nothing written'
+	grep -q 'Key keys_def' "$tmp/config.h" || die 'generated file looks wrong, nothing written'
 	if [ -n "$keep" ]; then
 		cp "$out" "$keep" || die "cannot back up $out"
 	fi

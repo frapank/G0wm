@@ -42,7 +42,7 @@ static Monitor* barmonitor(void)
     if (!barsinglemon)
         return selmon;
 
-    for (r = monrules; r < END(monrules); r++) {
+    for (r = monrules; r < monrules + nmonrules; r++) {
         /* mons grows at its head, so backwards is the order the outputs
          * showed up in: under the catch-all row the oldest one wins */
         wl_list_for_each_reverse(m, &mons, link)
@@ -116,7 +116,7 @@ void drawbar(Monitor* m)
     }
     x = 0;
     c = focustop(s);
-    for (i = 0; i < LENGTH(tags); i++) {
+    for (i = 0; i < ntags; i++) {
         w = TEXTW(m, tags[i]);
         drwl_setscheme(
             m->drw,
@@ -677,7 +677,7 @@ void updatebar(Monitor* m)
     drwl_font_destroy(m->drw->font);
     snprintf(
         fontattrs, sizeof(fontattrs), "dpi=%.2f", 96. * m->wlr_output->scale);
-    if (!(drwl_font_create(m->drw, LENGTH(fonts), fonts, fontattrs)))
+    if (!(drwl_font_create(m->drw, nfonts, fonts, fontattrs)))
         die("Could not load font");
 
     m->b.scale = m->wlr_output->scale;
