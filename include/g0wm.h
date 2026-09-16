@@ -400,6 +400,7 @@ typedef struct {
 /* function declarations */
 void arrange(Monitor* m);
 void arrangelayers(Monitor* m);
+void applymonrules(Monitor* m, struct wlr_output_state* state);
 void axisnotify(struct wl_listener* listener, void* data);
 bool baracceptsinput(struct wlr_scene_buffer* buffer, double* sx, double* sy);
 int barcorner(Monitor* m);
@@ -473,6 +474,9 @@ void outputmgrapply(struct wl_listener* listener, void* data);
 void outputmgrtest(struct wl_listener* listener, void* data);
 void powermgrsetmode(struct wl_listener* listener, void* data);
 void quit(const Arg* arg);
+void reloadmons(void);
+void reloadopacity(void);
+void reloadsettings(const Arg* arg);
 void requeststartdrag(struct wl_listener* listener, void* data);
 void resize(Client* c, struct wlr_box geo, int interact);
 void resizeheight(const Arg* arg);
