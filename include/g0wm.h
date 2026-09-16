@@ -114,9 +114,15 @@
 #define VISIBLEON(C, M)                                                        \
     ((M) && (C)->mon == (M) && ((C)->tags & (M)->tagset[(M)->seltags]))
 #define LENGTH(X) (sizeof X / sizeof X[0])
+/* 0xRRGGBBAA -> the float[4] wlroots wants (dwl issue #466) */
+#define COLOR(hex)                                                             \
+    { ((hex >> 24) & 0xFF) / 255.0f,                                           \
+      ((hex >> 16) & 0xFF) / 255.0f,                                           \
+      ((hex >> 8) & 0xFF) / 255.0f,                                            \
+      (hex & 0xFF) / 255.0f }
 #define OPACITY_MIN 0.1f /* floor for the opacity keybindings */
 #define END(A) ((A) + LENGTH(A))
-#define TAGMASK ((1u << LENGTH(tags)) - 1)
+#define TAGMASK ((1u << ntags) - 1)
 #define LISTEN(E, L, H) wl_signal_add((E), ((L)->notify = (H), (L)))
 #define LISTEN_STATIC(E, H)                                                    \
     do {                                                                       \
@@ -138,7 +144,8 @@ enum {
     SchemeStatus,
     SchemeNotify,
     SchemeRunner,
-    SchemeRunnerSuggest
+    SchemeRunnerSuggest,
+    NumSchemes
 }; /* color schemes */
 enum { CornerNormal, CornerSquircle };              /* corner curve */
 enum { CurNormal, CurPressed, CurMove, CurResize }; /* cursor */
@@ -177,7 +184,7 @@ typedef struct {
     unsigned int mod;
     unsigned int button;
     void (*func)(const Arg*);
-    const Arg arg;
+    Arg arg;
 } Button;
 
 typedef struct {
@@ -258,7 +265,7 @@ typedef struct {
     uint32_t mod;
     xkb_keysym_t keysym;
     void (*func)(const Arg*);
-    const Arg arg;
+    Arg arg;
 } Key;
 
 typedef struct {
@@ -596,13 +603,90 @@ extern struct wl_listener request_activate;
 extern struct wlr_xwayland* xwayland;
 #endif /* XWAYLAND */
 
-/* configuration, allows nested code to access above variables. Each
- * module gets its own copy of the settings: config.h declares them
- * static, and no single module reads all of them. */
-#pragma GCC diagnostic push
-#pragma GCC diagnostic ignored "-Wunused-variable"
-#include "config.h"
-#pragma GCC diagnostic pop
+/* the settings. config.h holds their initial values and settings.c is the one
+ * file that includes it; settingsload() overwrites them from settings.json. */
+extern const char** fonts;
+extern size_t nfonts;
+extern uint32_t colors[NumSchemes][3];
+extern float rootcolor[4];
+extern float fullscreen_bg[4];
+#ifdef INTEGRATED_BACKGROUND
+extern const char* wallpaper;
+#endif /* INTEGRATED_BACKGROUND */
+extern char** tags;
+extern size_t ntags;
+extern unsigned int borderpx;
+extern int cornerstyle;
+extern unsigned int cornerpx;
+extern int gaps;
+extern unsigned int gappx;
+extern int smartgaps;
+#ifdef TITLEBAR
+extern int titlebar;
+extern unsigned int titlepadding;
+#endif /* TITLEBAR */
+extern Layout* layouts;
+extern size_t nlayouts;
+extern Rule* rules;
+extern size_t nrules;
+extern int showbar;
+extern int topbar;
+extern int barwintitle;
+extern unsigned int barpadding;
+extern float barheight;
+extern int barsinglemon;
+#ifdef SYSTRAY
+extern int showsystray;
+extern unsigned int systrayspacing;
+extern unsigned int systrayiconsize;
+extern const char** traymenucmd;
+#endif /* SYSTRAY */
+#ifdef NOTIFICATIONS
+extern int shownotifications;
+extern unsigned int notification_timeout;
+#endif /* NOTIFICATIONS */
+extern int opacity_enabled;
+extern float opacity_focus;
+extern float opacity_unfocus;
+extern float opacity_deco;
+extern int opacity_exclusion_type;
+extern const char** opacity_apps;
+#ifdef INTEGRATED_BACKGROUND
+extern int opacity_type;
+extern unsigned int blur_radius;
+extern unsigned int blur_passes;
+extern float blur_saturation;
+extern float blur_brightness;
+#endif /* INTEGRATED_BACKGROUND */
+extern MonitorRule* monrules;
+extern size_t nmonrules;
+extern int sloppyfocus;
+extern struct xkb_rule_names xkb_rules;
+extern int repeat_rate;
+extern int repeat_delay;
+extern const char* cursor_theme;
+extern int cursor_size;
+extern int hide_cursor_when_typing;
+extern int tap_to_click;
+extern int tap_and_drag;
+extern int drag_lock;
+extern int natural_scrolling;
+extern int disable_while_typing;
+extern int left_handed;
+extern int middle_button_emulation;
+extern enum libinput_config_scroll_method scroll_method;
+extern enum libinput_config_click_method click_method;
+extern uint32_t send_events_mode;
+extern enum libinput_config_accel_profile accel_profile;
+extern double accel_speed;
+extern enum libinput_config_tap_button_map button_map;
+extern const char** autostart;
+extern Key* keys;
+extern size_t nkeys;
+extern Button* buttons;
+extern size_t nbuttons;
+extern int log_level;
+extern int bypass_surface_visibility;
 
 /* attempt to encapsulate suck into one file */
 #include "client.h"
