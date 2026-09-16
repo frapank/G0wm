@@ -279,14 +279,14 @@ void createmon(struct wl_listener* listener, void* data)
     m->gaps = gaps;
 
     m->tagset[0] = m->tagset[1] = 1;
-    for (r = monrules; r < END(monrules); r++) {
+    for (r = monrules; r < monrules + nmonrules; r++) {
         if (!r->name || strstr(wlr_output->name, r->name)) {
             m->m.x = r->x;
             m->m.y = r->y;
             m->mfact = r->mfact;
             m->nmaster = r->nmaster;
             m->lt[0] = r->lt;
-            m->lt[1] = &layouts[LENGTH(layouts) > 1 && r->lt != &layouts[1]];
+            m->lt[1] = &layouts[nlayouts > 1 && r->lt != &layouts[1]];
             snprintf(m->ltsymbol,
                      LENGTH(m->ltsymbol),
                      "%s",
