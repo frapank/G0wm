@@ -120,8 +120,8 @@ void buttonpress(struct wl_listener* listener, void* data)
                 statusw = STATUSW(pm);
                 do
                     x += TEXTW(pm, tags[i]);
-                while (cx >= x && ++i < LENGTH(tags));
-                if (i < LENGTH(tags)) {
+                while (cx >= x && ++i < ntags);
+                if (i < ntags) {
                     click = ClkTagBar;
                     arg.ui = 1 << i;
                 } else if (cx < x + TEXTW(pm, selmon->ltsymbol))
@@ -155,7 +155,7 @@ void buttonpress(struct wl_listener* listener, void* data)
 
             keyboard = wlr_seat_get_keyboard(seat);
             mods = keyboard ? wlr_keyboard_get_modifiers(keyboard) : 0;
-            for (b = buttons; b < END(buttons); b++) {
+            for (b = buttons; b < buttons + nbuttons; b++) {
                 if (CLEANMASK(mods) == CLEANMASK(b->mod) &&
                     event->button == b->button && click == b->click &&
                     b->func) {
@@ -438,7 +438,7 @@ static int keybinding(uint32_t mods, xkb_keysym_t sym)
      * processing.
      */
     const Key* k;
-    for (k = keys; k < END(keys); k++) {
+    for (k = keys; k < keys + nkeys; k++) {
         if (CLEANMASK(mods) == CLEANMASK(k->mod) &&
             xkb_keysym_to_lower(sym) == xkb_keysym_to_lower(k->keysym) &&
             k->func) {

@@ -1,6 +1,5 @@
 g0wm
 build/
 .ccls-cache
-config.h
 config.mk
-config.h.*.bak
+include/config.h.*.bak
