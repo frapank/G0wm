@@ -145,7 +145,7 @@ src/            g0wm.c (setup, teardown, the event loop and the shared
                 runner.c, xwayland.c, plus util.c, notify.c, dbus.c, systray/
 include/        g0wm.h (the types, the shared state and what the modules
                 call across files), client.h and the other headers
-external/       drwl.h, vendored from the drwl project
+external/       drwl.h and cJSON, vendored third-party code
 protocols/      wlr protocol XML for wayland-scanner
 scripts/        start-g0wm, g0wm-status.sh
 docs/           man page, features.md and credits.md
