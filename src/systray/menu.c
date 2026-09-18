@@ -1,35 +1,30 @@
 #include "menu.h"
 
 #include <dbus/dbus.h>
-#include <wayland-server-core.h>
 #include <wayland-util.h>
 
 #include <errno.h>
-#include <signal.h>
-#include <stdint.h>
 #include <stdio.h>
 #include <stdlib.h>
 #include <string.h>
-#include <sys/types.h>
-#include <sys/wait.h>
 #include <time.h>
-#include <unistd.h>
 
 // IWYU pragma: no_include "dbus/dbus-protocol.h"
 // IWYU pragma: no_include "dbus/dbus-shared.h"
 
 #define DBUSMENU_IFACE "com.canonical.dbusmenu"
-#define BUFSIZE 512
-#define LABEL_MAX 64
+#define LABEL_MAX MENU_LABEL_MAX
+/* Entries a level shows, past which the tail is dropped. */
+#define ITEMS_MAX 64
 
-typedef struct {
+struct Menu {
     struct wl_array layout;
+    struct wl_array* shown; /* the level menu_pick() indexes into */
     DBusConnection* conn;
-    struct wl_event_loop* loop;
     char* busname;
     char* busobj;
-    const char** menucmd;
-} Menu;
+    MenuPresentFn present;
+};
 
 typedef struct {
     char label[LABEL_MAX];
@@ -37,15 +32,6 @@ typedef struct {
     struct wl_array submenu;
     int has_submenu;
 } MenuItem;
-
-typedef struct {
-    struct wl_event_loop* loop;
-    struct wl_event_source* fd_source;
-    struct wl_array* layout_node;
-    Menu* menu;
-    pid_t menu_pid;
-    int fd;
-} MenuShowContext;
 
 static int extract_menu(DBusMessageIter* av, struct wl_array* menu);
 static int real_show_menu(Menu* menu, struct wl_array* m);
@@ -79,34 +65,6 @@ static void menu_destroy(Menu* menu)
     free(menu->busname);
     free(menu->busobj);
     free(menu);
-}
-
-static void menu_show_ctx_finalize(MenuShowContext* ctx, int error)
-{
-    if (ctx->fd_source)
-        wl_event_source_remove(ctx->fd_source);
-
-    if (ctx->fd >= 0)
-        close(ctx->fd);
-
-    if (ctx->menu_pid >= 0) {
-        if (waitpid(ctx->menu_pid, NULL, WNOHANG) == 0)
-            kill(ctx->menu_pid, SIGTERM);
-    }
-
-    if (error)
-        menu_destroy(ctx->menu);
-
-    free(ctx);
-}
-
-static void remove_newline(char* buf)
-{
-    size_t len;
-
-    len = strlen(buf);
-    if (len > 0 && buf[len - 1] == '\n')
-        buf[len - 1] = '\0';
 }
 
 static void send_clicked(const char* busname,
@@ -151,159 +109,58 @@ fail:
         dbus_message_unref(msg);
 }
 
-static void menuitem_selected(const char* label, struct wl_array* m, Menu* menu)
+/* Hands a level to the presenter. Empty labels are not entries. */
+static int real_show_menu(Menu* menu, struct wl_array* layout_node)
 {
+    const char* labels[ITEMS_MAX];
     MenuItem* mi;
-
-    wl_array_for_each(mi, m)
-    {
-        if (strcmp(mi->label, label) == 0) {
-            if (mi->has_submenu) {
-                real_show_menu(menu, &mi->submenu);
-
-            } else {
-                send_clicked(menu->busname, menu->busobj, mi->id, menu->conn);
-                menu_destroy(menu);
-            }
-
-            return;
-        }
-    }
-}
-
-static int read_pipe(int fd, uint32_t mask, void* data)
-{
-    MenuShowContext* ctx = data;
-
-    char buf[BUFSIZE];
-    ssize_t bytes_read;
-
-    bytes_read = read(fd, buf, BUFSIZE);
-    /* 0 == Got EOF, menu program closed without writing to stdout */
-    if (bytes_read <= 0)
-        goto fail;
-
-    buf[bytes_read] = '\0';
-    remove_newline(buf);
-
-    menuitem_selected(buf, ctx->layout_node, ctx->menu);
-    menu_show_ctx_finalize(ctx, 0);
-    return 0;
-
-fail:
-    menu_show_ctx_finalize(ctx, 1);
-    return 0;
-}
-
-static MenuShowContext* prepare_show_ctx(struct wl_event_loop* loop,
-                                         int monitor_fd,
-                                         int dmenu_pid,
-                                         struct wl_array* layout_node,
-                                         Menu* menu)
-{
-    MenuShowContext* ctx = NULL;
-    struct wl_event_source* fd_src = NULL;
-
-    ctx = calloc(1, sizeof(MenuShowContext));
-    if (!ctx)
-        goto fail;
-
-    fd_src = wl_event_loop_add_fd(
-        menu->loop, monitor_fd, WL_EVENT_READABLE, read_pipe, ctx);
-    if (!fd_src)
-        goto fail;
-
-    ctx->fd_source = fd_src;
-    ctx->fd = monitor_fd;
-    ctx->menu_pid = dmenu_pid;
-    ctx->layout_node = layout_node;
-    ctx->menu = menu;
-
-    return ctx;
-
-fail:
-    if (fd_src)
-        wl_event_source_remove(fd_src);
-    free(ctx);
-    return NULL;
-}
-
-static int write_dmenu_buf(char* buf, struct wl_array* layout_node)
-{
-    MenuItem* mi;
-    int r;
-    size_t curlen = 0;
-
-    *buf = '\0';
+    int n = 0;
 
     wl_array_for_each(mi, layout_node)
     {
-        curlen += strlen(mi->label) + 2; /* +2 is newline + nul terminator */
-        if (curlen + 1 > BUFSIZE) {
-            r = -1;
-            goto fail;
-        }
-
-        strcat(buf, mi->label);
-        strcat(buf, "\n");
+        if (!*mi->label)
+            continue;
+        if (n == ITEMS_MAX)
+            break;
+        labels[n++] = mi->label;
     }
-    remove_newline(buf);
 
+    if (!n)
+        return -1;
+
+    menu->shown = layout_node;
+    menu->present(labels, n, menu);
     return 0;
-
-fail:
-    fprintf(stderr, "Failed to construct dmenu input\n");
-    return r;
 }
 
-static int real_show_menu(Menu* menu, struct wl_array* layout_node)
+void menu_pick(Menu* menu, int index)
 {
-    MenuShowContext* ctx = NULL;
-    char buf[BUFSIZE];
-    int to_pipe[2], from_pipe[2];
-    pid_t pid;
+    MenuItem* mi;
+    int i = 0;
 
-    if (pipe(to_pipe) < 0 || pipe(from_pipe) < 0)
-        goto fail;
+    if (!menu)
+        return;
+    if (index < 0 || !menu->shown)
+        goto done;
 
-    pid = fork();
-    if (pid < 0) {
-        goto fail;
-    } else if (pid == 0) {
-        dup2(to_pipe[0], STDIN_FILENO);
-        dup2(from_pipe[1], STDOUT_FILENO);
+    wl_array_for_each(mi, menu->shown)
+    {
+        if (!*mi->label)
+            continue;
+        if (i++ != index)
+            continue;
 
-        close(to_pipe[0]);
-        close(to_pipe[1]);
-        close(from_pipe[1]);
-        close(from_pipe[0]);
-
-        if (execvp(menu->menucmd[0], (char* const*)menu->menucmd)) {
-            perror("Error spawning menu program");
-            exit(EXIT_FAILURE);
+        if (mi->has_submenu) {
+            if (real_show_menu(menu, &mi->submenu) == 0)
+                return; /* the presenter answers again, on the submenu */
+        } else {
+            send_clicked(menu->busname, menu->busobj, mi->id, menu->conn);
         }
+        break;
     }
 
-    ctx = prepare_show_ctx(menu->loop, from_pipe[0], pid, layout_node, menu);
-    if (!ctx)
-        goto fail;
-
-    if (write_dmenu_buf(buf, layout_node) < 0 ||
-        write(to_pipe[1], buf, strlen(buf)) < 0) {
-        goto fail;
-    }
-
-    close(to_pipe[0]);
-    close(to_pipe[1]);
-    close(from_pipe[1]);
-    return 0;
-
-fail:
-    close(to_pipe[0]);
-    close(to_pipe[1]);
-    close(from_pipe[1]);
-    menu_show_ctx_finalize(ctx, 1);
-    return -1;
+done:
+    menu_destroy(menu);
 }
 
 static void createmenuitem(MenuItem* mi,
@@ -689,16 +546,19 @@ fail:
 }
 
 void menu_show(DBusConnection* conn,
-               struct wl_event_loop* loop,
                const char* busname,
                const char* busobj,
-               const char** menucmd)
+               MenuPresentFn present)
 {
     DBusMessage* msg = NULL;
     DBusPendingCall* pending = NULL;
     Menu* menu = NULL;
     char *busname_dup = NULL, *busobj_dup = NULL;
     dbus_int32_t parentid = 0;
+
+    /* the item may expose no menu, or its Menu property is still in flight */
+    if (!busname || !busobj || !present)
+        return;
 
     menu = calloc(1, sizeof(Menu));
     busname_dup = strdup(busname);
@@ -707,10 +567,9 @@ void menu_show(DBusConnection* conn,
         goto fail;
 
     menu->conn = conn;
-    menu->loop = loop;
     menu->busname = busname_dup;
     menu->busobj = busobj_dup;
-    menu->menucmd = menucmd;
+    menu->present = present;
 
     msg = dbus_message_new_method_call(
         menu->busname, menu->busobj, DBUSMENU_IFACE, "AboutToShow");
@@ -733,5 +592,7 @@ fail:
         dbus_pending_call_unref(pending);
     if (msg)
         dbus_message_unref(msg);
+    free(busname_dup);
+    free(busobj_dup);
     free(menu);
 }

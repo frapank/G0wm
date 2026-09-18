@@ -1,6 +1,7 @@
 #ifndef TRAY_H
 #define TRAY_H
 
+#include "menu.h"
 #include "watcher.h"
 
 #include <pixman.h>
@@ -39,6 +40,6 @@ int tray_get_width(const Tray* tray);
 int tray_get_icon_width(const Tray* tray);
 void tray_update(Tray* tray);
 void tray_leftclicked(Tray* tray, unsigned int index);
-void tray_rightclicked(Tray* tray, unsigned int index, const char** menucmd);
+void tray_rightclicked(Tray* tray, unsigned int index, MenuPresentFn present);
 
 #endif /* TRAY_H */
