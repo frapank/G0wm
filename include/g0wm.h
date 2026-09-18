@@ -97,6 +97,7 @@
 #include "notify.h"
 #endif
 #ifdef SYSTRAY
+#include "systray/menu.h"
 #include "systray/tray.h"
 #include "systray/watcher.h"
 #endif
@@ -114,6 +115,10 @@
 #define VISIBLEON(C, M)                                                        \
     ((M) && (C)->mon == (M) && ((C)->tags & (M)->tagset[(M)->seltags]))
 #define LENGTH(X) (sizeof X / sizeof X[0])
+#ifdef SYSTRAY
+/* Rows the tray menu shows at once, past which the tail is dropped. */
+#define TRAYPOPUP_ITEMS_MAX 64
+#endif /* SYSTRAY */
 /* 0xRRGGBBAA -> the float[4] wlroots wants (dwl issue #466) */
 #define COLOR(hex)                                                             \
     { ((hex >> 24) & 0xFF) / 255.0f,                                           \
@@ -533,6 +538,13 @@ void toggleview(const Arg* arg);
 #ifdef SYSTRAY
 void trayactivate(const Arg* arg);
 void traymenu(const Arg* arg);
+/* the tray context menu, drawn under the cursor */
+int traypopup_active(void);
+void traypopup_cleanup(void);
+void traypopup_click(double lx, double ly);
+void traypopup_dismiss(void);
+void traypopup_motion(double lx, double ly);
+void traypopup_present(const char* const* labels, int n, Menu* menu);
 #endif /* SYSTRAY */
 void unmapnotify(struct wl_listener* listener, void* data);
 void updatemons(struct wl_listener* listener, void* data);
@@ -643,7 +655,6 @@ extern int barsinglemon;
 extern int showsystray;
 extern unsigned int systrayspacing;
 extern unsigned int systrayiconsize;
-extern const char** traymenucmd;
 #endif /* SYSTRAY */
 #ifdef NOTIFICATIONS
 extern int shownotifications;

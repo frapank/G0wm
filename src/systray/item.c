@@ -94,53 +94,101 @@ static int select_image(DBusMessageIter* iter, int target_width)
     return --i;
 }
 
-static void menupath_ready_handler(DBusPendingCall* pending, void* data)
+/*
+ * Copy of the string a property Get replied with, NULL if it has none. The
+ * reply is consumed either way. `what` names it in the error, NULL is quiet.
+ */
+static char* take_string_property(DBusPendingCall* pending, const char* what)
 {
-    Item* item = data;
-
     DBusError err = DBUS_ERROR_INIT;
     DBusMessage* reply = NULL;
-    DBusMessageIter iter, opath;
-    char* path_dup = NULL;
-    const char* path;
+    DBusMessageIter iter, val;
+    char* dup = NULL;
+    const char* str;
+    int type;
 
     reply = dbus_pending_call_steal_reply(pending);
     if (!reply)
-        goto fail;
+        goto out;
 
     if (dbus_set_error_from_message(&err, reply)) {
-        fprintf(stderr,
-                "DBus Error: %s - %s: Couldn't get menupath\n",
-                err.name,
-                err.message);
-        goto fail;
+        if (what)
+            fprintf(stderr,
+                    "DBus Error: %s - %s: Couldn't get %s\n",
+                    err.name,
+                    err.message,
+                    what);
+        goto out;
     }
 
     dbus_message_iter_init(reply, &iter);
     if (dbus_message_iter_get_arg_type(&iter) != DBUS_TYPE_VARIANT)
-        goto fail;
-    dbus_message_iter_recurse(&iter, &opath);
-    if (dbus_message_iter_get_arg_type(&opath) != DBUS_TYPE_OBJECT_PATH)
-        goto fail;
-    dbus_message_iter_get_basic(&opath, &path);
+        goto out;
+    dbus_message_iter_recurse(&iter, &val);
+    type = dbus_message_iter_get_arg_type(&val);
+    if (type != DBUS_TYPE_STRING && type != DBUS_TYPE_OBJECT_PATH)
+        goto out;
+    dbus_message_iter_get_basic(&val, &str);
 
-    path_dup = strdup(path);
-    if (!path_dup)
-        goto fail;
+    dup = strdup(str);
 
-    item->menu_busobj = path_dup;
-
-    dbus_message_unref(reply);
-    dbus_pending_call_unref(pending);
-    return;
-
-fail:
-    free(path_dup);
+out:
     dbus_error_free(&err);
     if (reply)
         dbus_message_unref(reply);
     if (pending)
         dbus_pending_call_unref(pending);
+    return dup;
+}
+
+static void menupath_ready_handler(DBusPendingCall* pending, void* data)
+{
+    Item* item = data;
+
+    free(item->menu_busobj);
+    item->menu_busobj = take_string_property(pending, "menupath");
+}
+
+/* Second half of the fallback, where the name becomes a file. */
+static void iconname_ready_handler(DBusPendingCall* pending, void* data)
+{
+    Item* item = data;
+
+    Icon* icon;
+    char* name;
+
+    name = take_string_property(pending, NULL);
+    if (!name)
+        return;
+
+    icon = createiconfromname(name,
+                              item->icon_themepath,
+                              watcher_get_iconsize(item_get_watcher(item)));
+    free(name);
+    if (!icon)
+        return;
+
+    if (item->icon)
+        destroyicon(item->icon);
+    item->icon = icon;
+    watcher_update_trays(item_get_watcher(item));
+}
+
+/* IconThemePath has to be in before IconName resolves, so they chain. */
+static void themepath_ready_handler(DBusPendingCall* pending, void* data)
+{
+    Item* item = data;
+
+    free(item->icon_themepath);
+    item->icon_themepath = take_string_property(pending, NULL);
+
+    request_property(item_get_connection(item),
+                     item->busname,
+                     item->busobj,
+                     "IconName",
+                     SNI_IFACE,
+                     iconname_ready_handler,
+                     item);
 }
 
 /*
@@ -152,56 +200,18 @@ static void id_ready_handler(DBusPendingCall* pending, void* data)
 {
     Item* item = data;
 
-    DBusError err = DBUS_ERROR_INIT;
-    DBusMessage* reply = NULL;
-    DBusMessageIter iter, string;
-    Watcher* watcher;
-    char* id_dup = NULL;
-    const char* id;
+    char* id;
 
-    watcher = item_get_watcher(item);
+    id = take_string_property(pending, "appid");
+    if (!id)
+        return;
 
-    reply = dbus_pending_call_steal_reply(pending);
-    if (!reply)
-        goto fail;
-
-    if (dbus_set_error_from_message(&err, reply)) {
-        fprintf(stderr,
-                "DBus Error: %s - %s: Couldn't get appid\n",
-                err.name,
-                err.message);
-        goto fail;
-    }
-
-    dbus_message_iter_init(reply, &iter);
-    if (dbus_message_iter_get_arg_type(&iter) != DBUS_TYPE_VARIANT)
-        goto fail;
-    dbus_message_iter_recurse(&iter, &string);
-    if (dbus_message_iter_get_arg_type(&string) != DBUS_TYPE_STRING)
-        goto fail;
-    dbus_message_iter_get_basic(&string, &id);
-
-    id_dup = strdup(id);
-    if (!id_dup)
-        goto fail;
-    item->appid = id_dup;
+    free(item->appid);
+    item->appid = id;
 
     /* Don't trigger update if this item already has a real icon */
     if (!item->icon)
-        watcher_update_trays(watcher);
-
-    dbus_message_unref(reply);
-    dbus_pending_call_unref(pending);
-    return;
-
-fail:
-    dbus_error_free(&err);
-    if (id_dup)
-        free(id_dup);
-    if (reply)
-        dbus_message_unref(reply);
-    if (pending)
-        dbus_pending_call_unref(pending);
+        watcher_update_trays(item_get_watcher(item));
 }
 
 static void pixmap_ready_handler(DBusPendingCall* pending, void* data)
@@ -278,6 +288,15 @@ fail:
         dbus_message_unref(reply);
     if (pending)
         dbus_pending_call_unref(pending);
+
+    /* no pixmap, but the item may still name a themed icon like Steam does */
+    request_property(item_get_connection(item),
+                     item->busname,
+                     item->busobj,
+                     "IconThemePath",
+                     SNI_IFACE,
+                     themepath_ready_handler,
+                     item);
 }
 
 static DBusHandlerResult handle_newicon(Item* item,
@@ -382,6 +401,7 @@ void destroyitem(Item* item)
     free(item->busname);
     free(item->busobj);
     free(item->appid);
+    free(item->icon_themepath);
     free(item);
 }
 

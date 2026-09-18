@@ -403,7 +403,7 @@ void traymenu(const Arg* arg)
 
     if (!m)
         return;
-    tray_rightclicked(m->tray, arg->ui, traymenucmd);
+    tray_rightclicked(m->tray, arg->ui, traypopup_present);
 }
 
 #endif /* SYSTRAY */
