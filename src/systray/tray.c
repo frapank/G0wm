@@ -217,7 +217,7 @@ int tray_get_icon_width(const Tray* tray)
     return tray->iconsize;
 }
 
-void tray_rightclicked(Tray* tray, unsigned int index, const char** menucmd)
+void tray_rightclicked(Tray* tray, unsigned int index, MenuPresentFn present)
 {
     Item* item;
     Watcher* watcher;
@@ -228,11 +228,7 @@ void tray_rightclicked(Tray* tray, unsigned int index, const char** menucmd)
     wl_list_for_each(item, &watcher->items, link)
     {
         if (count == index) {
-            menu_show(watcher->conn,
-                      watcher->loop,
-                      item->busname,
-                      item->menu_busobj,
-                      menucmd);
+            menu_show(watcher->conn, item->busname, item->menu_busobj, present);
             return;
         }
         count++;
