@@ -146,7 +146,8 @@ configure_flags() { # package list and compiler/linker flags from the options
 	wlr_pkg=wlroots-$wlroots
 	pkgs="wayland-server xkbcommon libinput pixman-1 fcft dbus-1"
 	[ "$xwayland" = yes ] && pkgs="$pkgs xcb xcb-icccm"
-	[ "$integrated_background" = yes ] && pkgs="$pkgs gdk-pixbuf-2.0"
+	{ [ "$integrated_background" = yes ] || [ "$systray" = yes ]; } &&
+		pkgs="$pkgs gdk-pixbuf-2.0"
 
 	[ "$sanitize" = yes ] && {
 		extra_cflags="$extra_cflags -fsanitize=address,undefined"
@@ -249,7 +250,7 @@ XWAYLAND = $([ "$xwayland" = yes ] && echo -DXWAYLAND)
 XLIBS = $([ "$xwayland" = yes ] && echo xcb xcb-icccm)
 
 BACKGROUND = $([ "$integrated_background" = yes ] && echo -DINTEGRATED_BACKGROUND)
-BGLIBS = $([ "$integrated_background" = yes ] && echo gdk-pixbuf-2.0)
+BGLIBS = $({ [ "$integrated_background" = yes ] || [ "$systray" = yes ]; } && echo gdk-pixbuf-2.0)
 
 NOTIFY = $([ "$notify" = yes ] && echo -DNOTIFICATIONS)
 

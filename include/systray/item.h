@@ -25,6 +25,7 @@ typedef struct Item {
     char* busobj;
     char* menu_busobj;
     char* appid;
+    char* icon_themepath; /* where IconName is looked up first, if set */
     Icon* icon;
     FallbackIcon* fallback_icon;
 
