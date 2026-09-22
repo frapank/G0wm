@@ -14,6 +14,9 @@
 #include <stdio.h>
 #include <stdlib.h>
 
+#define MAX(A, B) ((A) > (B) ? (A) : (B))
+#define MIN(A, B) ((A) < (B) ? (A) : (B))
+
 /* premultiplied, like drwl's convert_color: the canvas is a8r8g8b8 and the
  * bar it is pasted into carries the same colour through drwl */
 #define PIXMAN_COLOR(hex)                                                      \
@@ -49,7 +52,8 @@ void tray_update(Tray* tray)
 {
     Item* item;
     Watcher* watcher;
-    int icon_size, i = 0, canvas_width, canvas_height, n_items, spacing;
+    int icon_size, i = 0, canvas_width, canvas_height, n_items, spacing,
+                   padding;
     pixman_image_t *canvas = NULL, *img;
 
     watcher = tray_get_watcher(tray);
@@ -66,7 +70,8 @@ void tray_update(Tray* tray)
 
     icon_size = tray->iconsize;
     spacing = tray->spacing;
-    canvas_width = n_items * (icon_size + spacing) + spacing;
+    padding = tray->padding;
+    canvas_width = 2 * padding + n_items * icon_size + (n_items - 1) * spacing;
     canvas_height = tray->height;
 
     canvas = createcanvas(canvas_width, canvas_height, tray->scheme[1]);
@@ -75,8 +80,8 @@ void tray_update(Tray* tray)
 
     wl_list_for_each(item, &watcher->items, link)
     {
-        int slot_x_start = spacing + i * (icon_size + spacing);
-        int slot_x_end = slot_x_start + icon_size + spacing;
+        int slot_x_start = padding + i * (icon_size + spacing);
+        int slot_x_end = slot_x_start + icon_size;
         int slot_x_width = slot_x_end - slot_x_start;
 
         int slot_y_start = 0;
@@ -165,6 +170,7 @@ Tray* createtray(void* monitor,
                  int height,
                  int iconsize,
                  int spacing,
+                 int padding,
                  uint32_t* colorscheme,
                  const char** fonts,
                  const char* fontattrs,
@@ -186,6 +192,7 @@ Tray* createtray(void* monitor,
     tray->height = height;
     tray->iconsize = iconsize;
     tray->spacing = spacing;
+    tray->padding = padding;
     tray->scheme = colorscheme;
     tray->cb = cb;
     tray->watcher = watcher;
@@ -217,7 +224,23 @@ int tray_get_icon_width(const Tray* tray)
     return tray->iconsize;
 }
 
-void tray_rightclicked(Tray* tray, unsigned int index, const char** menucmd)
+/* Which item an x offset into the tray falls on, clamped to the ends. */
+unsigned int tray_index_at(const Tray* tray, double x)
+{
+    int n, slot, i;
+
+    if (!tray)
+        return 0;
+    n = watcher_get_n_items(tray_get_watcher(tray));
+    slot = tray->iconsize + tray->spacing;
+    if (n < 2 || slot <= 0)
+        return 0;
+
+    i = (int)((x - tray->padding) / slot);
+    return (unsigned int)MIN(MAX(i, 0), n - 1);
+}
+
+void tray_rightclicked(Tray* tray, unsigned int index, MenuPresentFn present)
 {
     Item* item;
     Watcher* watcher;
@@ -228,11 +251,7 @@ void tray_rightclicked(Tray* tray, unsigned int index, const char** menucmd)
     wl_list_for_each(item, &watcher->items, link)
     {
         if (count == index) {
-            menu_show(watcher->conn,
-                      watcher->loop,
-                      item->busname,
-                      item->menu_busobj,
-                      menucmd);
+            menu_show(watcher->conn, item->busname, item->menu_busobj, present);
             return;
         }
         count++;

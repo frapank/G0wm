@@ -66,7 +66,8 @@ ifneq ($(XWAYLAND),)
 SRC += $(SRCDIR)/xwayland.c
 endif
 ifneq ($(SYSTRAY),)
-SRC += $(SRCDIR)/systray/watcher.c $(SRCDIR)/systray/tray.c \
+SRC += $(SRCDIR)/traypopup.c \
+	$(SRCDIR)/systray/watcher.c $(SRCDIR)/systray/tray.c \
 	$(SRCDIR)/systray/item.c $(SRCDIR)/systray/icon.c \
 	$(SRCDIR)/systray/menu.c $(SRCDIR)/systray/helpers.c
 HDR += $(INCDIR)/systray/watcher.h $(INCDIR)/systray/tray.h \
@@ -153,7 +154,7 @@ FMT_SRC = $(SRCDIR)/g0wm.c $(SRCDIR)/bar.c $(SRCDIR)/buffer.c \
 	$(SRCDIR)/layout.c $(SRCDIR)/lock.c $(SRCDIR)/monitor.c \
 	$(SRCDIR)/opacity.c $(SRCDIR)/runner.c $(SRCDIR)/xwayland.c \
 	$(SRCDIR)/util.c $(SRCDIR)/dbus.c $(SRCDIR)/notify.c \
-	$(SRCDIR)/settings.c \
+	$(SRCDIR)/settings.c $(SRCDIR)/traypopup.c \
 	$(SRCDIR)/systray/watcher.c $(SRCDIR)/systray/tray.c \
 	$(SRCDIR)/systray/item.c $(SRCDIR)/systray/icon.c \
 	$(SRCDIR)/systray/menu.c $(SRCDIR)/systray/helpers.c \
@@ -208,7 +209,7 @@ clean:
 
 dist: clean
 	mkdir -p g0wm-$(VERSION)
-	cp -R LICENSE license Makefile configure config_gen status_gen README.md \
+	cp -R LICENSE license Makefile configure status_gen README.md \
 		config.def.mk .clang-format src include external protocols docs \
 		scripts share g0wm-$(VERSION)
 	tar -caf g0wm-$(VERSION).tar.gz g0wm-$(VERSION)

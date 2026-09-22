@@ -13,6 +13,8 @@
 // IWYU pragma: no_include "dbus/dbus-protocol.h"
 // IWYU pragma: no_include "dbus/dbus-shared.h"
 
+#define MAX(A, B) ((A) > (B) ? (A) : (B))
+
 static const char* const match_rule = "type='signal',"
                                       "interface='" DBUS_INTERFACE_DBUS "',"
                                       "member='NameOwnerChanged'";
@@ -536,6 +538,20 @@ void watcher_stop(Watcher* watcher)
 int watcher_get_n_items(const Watcher* watcher)
 {
     return wl_list_length(&watcher->items);
+}
+
+/* The largest size any tray draws icons at, as one Icon serves them all. */
+int watcher_get_iconsize(const Watcher* watcher)
+{
+    Tray* tray;
+    int size = 0;
+
+    if (watcher)
+        wl_list_for_each(tray, &watcher->trays, link) size =
+            MAX(size, tray_get_icon_width(tray));
+
+    /* no tray yet, and resize_image() corrects this once one shows up */
+    return size > 0 ? size : 24;
 }
 
 void watcher_update_trays(Watcher* watcher)
