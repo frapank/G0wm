@@ -66,10 +66,6 @@ void buttonpress(struct wl_listener* listener, void* data)
     unsigned int i = 0, x = 0;
     double cx;
     int traywidth = 0, statusw;
-#ifdef SYSTRAY
-    unsigned int ti = 0, trayitems;
-    double tx;
-#endif
     unsigned int click;
     struct wlr_pointer_button_event* event = data;
     struct wlr_keyboard* keyboard;
@@ -85,6 +81,15 @@ void buttonpress(struct wl_listener* listener, void* data)
 
     wlr_idle_notifier_v1_notify_activity(idle_notifier, seat);
     handlecursoractivity();
+
+#ifdef SYSTRAY
+    /* the open menu owns the pointer, nothing under it sees the click */
+    if (!locked && traypopup_active()) {
+        if (event->state == WL_POINTER_BUTTON_STATE_PRESSED)
+            traypopup_click(cursor->x, cursor->y);
+        return;
+    }
+#endif
 
     click = ClkRoot;
     xytonode(cursor->x, cursor->y, NULL, &c, NULL, NULL, NULL);
@@ -128,15 +133,9 @@ void buttonpress(struct wl_listener* listener, void* data)
                     click = ClkLtSymbol;
 #ifdef SYSTRAY
                 else if (traywidth && cx > pm->b.width - traywidth) {
-                    /* the tray slots are evenly sized, so which one was hit
-                     * follows from the cursor offset into the tray */
-                    trayitems = watcher_get_n_items(&watcher);
-                    tx = pm->b.width - traywidth;
-                    while (trayitems && ++ti < trayitems &&
-                           cx >= (tx += (double)traywidth / trayitems))
-                        ;
                     click = ClkTray;
-                    arg.ui = ti - 1;
+                    arg.ui =
+                        tray_index_at(pm->tray, cx - (pm->b.width - traywidth));
                 }
 #endif
                 else if (cx > pm->b.width - (statusw + traywidth)) {
@@ -513,6 +512,18 @@ static void keypress(struct wl_listener* listener, void* data)
     }
 #endif
 
+#ifdef SYSTRAY
+    /* the open menu holds the keyboard, Escape closes it */
+    if (!locked && traypopup_active()) {
+        if (nsyms > 0 && event->state == WL_KEYBOARD_KEY_STATE_PRESSED &&
+            syms[0] == XKB_KEY_Escape)
+            traypopup_dismiss();
+        group->nsyms = 0;
+        wl_event_source_timer_update(group->key_repeat_source, 0);
+        return;
+    }
+#endif
+
     /* On _press_ if there is no active screen locker,
      * attempt to process a compositor keybinding. */
     if (!locked && event->state == WL_KEYBOARD_KEY_STATE_PRESSED) {
@@ -727,6 +738,16 @@ void motionnotify(uint32_t time,
     /* Update drag icon's position */
     wlr_scene_node_set_position(
         &drag_icon->node, (int)round(cursor->x), (int)round(cursor->y));
+
+#ifdef SYSTRAY
+    /* hovering the open menu, so nothing below it takes focus */
+    if (!locked && traypopup_active()) {
+        traypopup_motion(cursor->x, cursor->y);
+        if (!seat->drag && !cursor_hidden)
+            wlr_cursor_set_xcursor(cursor, cursor_mgr, "default");
+        return;
+    }
+#endif
 
     /* If we are currently grabbing the mouse, handle and return */
     if (cursor_mode == CurMove) {

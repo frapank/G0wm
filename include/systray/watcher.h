@@ -32,6 +32,7 @@ void watcher_start(Watcher* watcher,
 void watcher_stop(Watcher* watcher);
 
 int watcher_get_n_items(const Watcher* watcher);
+int watcher_get_iconsize(const Watcher* watcher);
 void watcher_update_trays(Watcher* watcher);
 
 #endif /* WATCHER_H */
