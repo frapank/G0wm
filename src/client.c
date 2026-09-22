@@ -336,6 +336,9 @@ void mapnotify(struct wl_listener* listener, void* data)
     Client *w, *c = wl_container_of(listener, c, map);
     Monitor* m;
     int i;
+#ifdef TITLEBAR
+    int th;
+#endif
 
     /* Create scene tree for this client and its border */
     c->scene = client_surface(c)->data = wlr_scene_tree_create(layers[LyrTile]);
@@ -421,6 +424,17 @@ void mapnotify(struct wl_listener* listener, void* data)
     } else {
         applyrules(c);
     }
+
+#ifdef TITLEBAR
+    if ((th = titleheight(c)) > 0 &&
+        (c->isfloating || !c->mon->lt[c->mon->sellt]->arrange)) {
+        c->geom.height += th;
+        c->prev.height += th;
+        c->prev.y -= th / 2;
+        resize(c, c->geom, c->isfloating && !c->isfullscreen);
+    }
+#endif
+
     drawbars();
 
 unset_fullscreen:
