@@ -96,6 +96,10 @@ void locksession(struct wl_listener* listener, void* data)
     }
     lock = session_lock->data = ecalloc(1, sizeof(*lock));
     focusclient(NULL, 0);
+#ifdef SYSTRAY
+    /* an open menu would keep taking clicks under the lock surface */
+    traypopup_dismiss();
+#endif
 
     lock->scene = wlr_scene_tree_create(layers[LyrBlock]);
     cur_lock = lock->lock = session_lock;

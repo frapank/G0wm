@@ -208,6 +208,8 @@ static void cleanup(void)
     destroykeyboardgroup(&kb_group->destroy, NULL);
 
 #ifdef SYSTRAY
+    /* before the watcher, an open menu still holds a bus connection */
+    traypopup_cleanup();
     if (watcher.running)
         watcher_stop(&watcher);
 #endif

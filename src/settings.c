@@ -407,8 +407,8 @@ static cJSON* jbar(void)
 #ifdef SYSTRAY
     cJSON_AddBoolToObject(o, "showsystray", showsystray);
     cJSON_AddNumberToObject(o, "systrayspacing", systrayspacing);
+    cJSON_AddNumberToObject(o, "systraypadding", systraypadding);
     cJSON_AddNumberToObject(o, "systrayiconsize", systrayiconsize);
-    cJSON_AddItemToObject(o, "traymenucmd", jargv(traymenucmd));
 #endif
 #ifdef NOTIFICATIONS
     cJSON_AddBoolToObject(o, "shownotifications", shownotifications);
@@ -866,16 +866,11 @@ static void applybar(const cJSON* o)
     barheight = (float)getnum(o, "barheight", barheight);
     barsinglemon = getbool(o, "barsinglemon", barsinglemon);
 #ifdef SYSTRAY
-    {
-        const char** list = strlist(item(o, "traymenucmd"), NULL);
-        showsystray = getbool(o, "showsystray", showsystray);
-        systrayspacing =
-            (unsigned int)getnum(o, "systrayspacing", systrayspacing);
-        systrayiconsize =
-            (unsigned int)getnum(o, "systrayiconsize", systrayiconsize);
-        if (list)
-            traymenucmd = list;
-    }
+    showsystray = getbool(o, "showsystray", showsystray);
+    systrayspacing = (unsigned int)getnum(o, "systrayspacing", systrayspacing);
+    systraypadding = (unsigned int)getnum(o, "systraypadding", systraypadding);
+    systrayiconsize =
+        (unsigned int)getnum(o, "systrayiconsize", systrayiconsize);
 #endif
 #ifdef NOTIFICATIONS
     shownotifications = getbool(o, "shownotifications", shownotifications);
