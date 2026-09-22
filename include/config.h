@@ -138,10 +138,11 @@ float barheight = 1.1f;
  * none, and it reports on whichever monitor is focused. */
 int barsinglemon = 0;
 
-/* --- SYSTRAY: menu is traymenucmd (7), clicks are ClkTray (10) --- */
+/* --- SYSTRAY: clicks are ClkTray (10) --- */
 #ifdef SYSTRAY
 int showsystray              = 1;
-unsigned int systrayspacing  = 2;
+unsigned int systrayspacing  = 2;  // gap between two icons
+unsigned int systraypadding  = 2;  // gap at both ends, the right edge included
 unsigned int systrayiconsize = 16; // 0 fills the bar
 #endif
 /* --- end SYSTRAY --- */
@@ -258,13 +259,6 @@ static const char* browsercmd[]     = { "firefox", NULL };
 static const char* menucmd[]        = { "wmenu-run", NULL };
 #endif
 /* --- end RUNNER --- */
-
-/* --- SYSTRAY: opened by a right click on a tray icon --- */
-#ifdef SYSTRAY
-static const char* traymenucmd_def[] = { "wmenu", "-f", "monospace 10", NULL };
-const char** traymenucmd = traymenucmd_def;
-#endif
-/* --- end SYSTRAY --- */
 
 /* == 8. AUTOSTART =========================================================
  * Started with g0wm, killed on exit. One NULL-terminated argument list each,
@@ -398,7 +392,7 @@ static Button buttons_def[] = {
 
 	{ ClkStatus,   0,      BTN_MIDDLE, spawn,          {.v = termcmd} },
 
-	/* --- SYSTRAY: left activates an item, right opens traymenucmd --- */
+	/* --- SYSTRAY: left activates an item, right opens its menu --- */
 #ifdef SYSTRAY
 	{ ClkTray,     0,      BTN_LEFT,   trayactivate,   {0} },
 	{ ClkTray,     0,      BTN_RIGHT,  traymenu,       {0} },

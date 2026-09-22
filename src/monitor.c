@@ -327,15 +327,17 @@ void reloadmons(void)
             continue;
         wlr_output_state_init(&state);
         applymonrules(m, &state);
-        /* a mode or a scale the output cannot take would blank it */
-        if (wlr_output_test_state(m->wlr_output, &state))
-            wlr_output_commit_state(m->wlr_output, &state);
-        wlr_output_state_finish(&state);
-
+        /* before the commit: a mode change runs updatemons(), which would
+         * overwrite the rule's m->m.x/y with the old layout position */
         if (m->m.x == -1 && m->m.y == -1)
             wlr_output_layout_add_auto(output_layout, m->wlr_output);
         else
             wlr_output_layout_add(output_layout, m->wlr_output, m->m.x, m->m.y);
+
+        /* a mode or a scale the output cannot take would blank it */
+        if (wlr_output_test_state(m->wlr_output, &state))
+            wlr_output_commit_state(m->wlr_output, &state);
+        wlr_output_state_finish(&state);
 
         /* a scale of 0 is what a scale change looks like to updatebar(), and
          * the bar has to be its new height before anything is arranged */
