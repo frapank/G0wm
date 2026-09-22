@@ -702,15 +702,17 @@ void updatebar(Monitor* m)
         iconsize = systrayiconsize
                        ? (int)((float)systrayiconsize * m->wlr_output->scale)
                        : m->b.height;
-        m->tray = createtray(m,
-                             m->b.height,
-                             MIN(iconsize, m->b.height),
-                             (int)systrayspacing,
-                             colors[SchemeNorm],
-                             fonts,
-                             fontattrs,
-                             &traynotify,
-                             &watcher);
+        m->tray =
+            createtray(m,
+                       m->b.height,
+                       MIN(iconsize, m->b.height),
+                       (int)((float)systrayspacing * m->wlr_output->scale),
+                       (int)((float)systraypadding * m->wlr_output->scale),
+                       colors[SchemeNorm],
+                       fonts,
+                       fontattrs,
+                       &traynotify,
+                       &watcher);
         if (!m->tray)
             die("Couldn't create tray for monitor");
         wl_list_insert(&watcher.trays, &m->tray->link);
