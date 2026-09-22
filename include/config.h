@@ -141,7 +141,8 @@ int barsinglemon = 0;
 /* --- SYSTRAY: clicks are ClkTray (10) --- */
 #ifdef SYSTRAY
 int showsystray              = 1;
-unsigned int systrayspacing  = 2;
+unsigned int systrayspacing  = 2;  // gap between two icons
+unsigned int systraypadding  = 2;  // gap at both ends, the right edge included
 unsigned int systrayiconsize = 16; // 0 fills the bar
 #endif
 /* --- end SYSTRAY --- */

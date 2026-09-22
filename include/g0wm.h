@@ -654,6 +654,7 @@ extern int barsinglemon;
 #ifdef SYSTRAY
 extern int showsystray;
 extern unsigned int systrayspacing;
+extern unsigned int systraypadding;
 extern unsigned int systrayiconsize;
 #endif /* SYSTRAY */
 #ifdef NOTIFICATIONS

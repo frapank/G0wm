@@ -407,6 +407,7 @@ static cJSON* jbar(void)
 #ifdef SYSTRAY
     cJSON_AddBoolToObject(o, "showsystray", showsystray);
     cJSON_AddNumberToObject(o, "systrayspacing", systrayspacing);
+    cJSON_AddNumberToObject(o, "systraypadding", systraypadding);
     cJSON_AddNumberToObject(o, "systrayiconsize", systrayiconsize);
 #endif
 #ifdef NOTIFICATIONS
@@ -867,6 +868,7 @@ static void applybar(const cJSON* o)
 #ifdef SYSTRAY
     showsystray = getbool(o, "showsystray", showsystray);
     systrayspacing = (unsigned int)getnum(o, "systrayspacing", systrayspacing);
+    systraypadding = (unsigned int)getnum(o, "systraypadding", systraypadding);
     systrayiconsize =
         (unsigned int)getnum(o, "systrayiconsize", systrayiconsize);
 #endif

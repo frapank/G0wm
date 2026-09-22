@@ -66,10 +66,6 @@ void buttonpress(struct wl_listener* listener, void* data)
     unsigned int i = 0, x = 0;
     double cx;
     int traywidth = 0, statusw;
-#ifdef SYSTRAY
-    unsigned int ti = 0, trayitems;
-    double tx;
-#endif
     unsigned int click;
     struct wlr_pointer_button_event* event = data;
     struct wlr_keyboard* keyboard;
@@ -137,15 +133,9 @@ void buttonpress(struct wl_listener* listener, void* data)
                     click = ClkLtSymbol;
 #ifdef SYSTRAY
                 else if (traywidth && cx > pm->b.width - traywidth) {
-                    /* the tray slots are evenly sized, so which one was hit
-                     * follows from the cursor offset into the tray */
-                    trayitems = watcher_get_n_items(&watcher);
-                    tx = pm->b.width - traywidth;
-                    while (trayitems && ++ti < trayitems &&
-                           cx >= (tx += (double)traywidth / trayitems))
-                        ;
                     click = ClkTray;
-                    arg.ui = ti - 1;
+                    arg.ui =
+                        tray_index_at(pm->tray, cx - (pm->b.width - traywidth));
                 }
 #endif
                 else if (cx > pm->b.width - (statusw + traywidth)) {
