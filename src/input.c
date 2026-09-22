@@ -733,7 +733,8 @@ void motionnotify(uint32_t time,
         /* A tiled client keeps its slot in the layout: dragging it just swaps
          * it with the tile under the cursor, i3/sway style. */
         if (!grabc->isfloating) {
-            if (c && c != grabc && !c->isfloating && c->mon == grabc->mon) {
+            if (time && c && c != grabc && !c->isfloating &&
+                c->mon == grabc->mon && VISIBLEON(grabc, grabc->mon)) {
                 swapclients(grabc, c);
                 arrange(grabc->mon);
             }
