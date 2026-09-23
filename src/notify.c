@@ -23,7 +23,10 @@ static struct {
     dbus_uint32_t seq; /* handed out to clients that don't pick one */
     int active;
     int running;
+    int hasdefault; /* the client offered a "default" action */
     char text[NOTIFY_TEXTMAX];
+    char app[64];     /* app_name */
+    char desktop[64]; /* desktop-entry hint */
 } notify;
 
 /* Copies src into dst keeping only whole, well-formed UTF-8 codepoints:
@@ -116,23 +119,75 @@ static int notify_arm(unsigned int ms)
            wl_event_source_timer_update(notify.timer, (int)ms) == 0;
 }
 
-/* expire_timeout is the 8th Notify argument, past the actions array and the
- * hints dict, so it can't be reached with dbus_message_get_args(). */
+/* Points iter at the n-th Notify argument: actions, hints and expire_timeout
+ * sit past containers dbus_message_get_args() won't hand back as is. */
+static int argat(DBusMessage* msg, DBusMessageIter* iter, int n, int type)
+{
+    if (!dbus_message_iter_init(msg, iter))
+        return 0;
+    while (n--)
+        if (!dbus_message_iter_next(iter))
+            return 0;
+    return dbus_message_iter_get_arg_type(iter) == type;
+}
+
 static int expire_timeout(DBusMessage* msg)
 {
     DBusMessageIter iter;
     dbus_int32_t ms;
-    int i;
 
-    if (!dbus_message_iter_init(msg, &iter))
-        return -1;
-    for (i = 0; i < 7; i++)
-        if (!dbus_message_iter_next(&iter))
-            return -1;
-    if (dbus_message_iter_get_arg_type(&iter) != DBUS_TYPE_INT32)
+    if (!argat(msg, &iter, 7, DBUS_TYPE_INT32))
         return -1;
     dbus_message_iter_get_basic(&iter, &ms);
     return ms;
+}
+
+/* actions is a flat (key, label, key, label, ...) list; only "default", what
+ * a click on the notification itself means, is of any use here. */
+static int has_default(DBusMessage* msg)
+{
+    DBusMessageIter iter, arr;
+    const char* key;
+    int i;
+
+    if (!argat(msg, &iter, 5, DBUS_TYPE_ARRAY))
+        return 0;
+    dbus_message_iter_recurse(&iter, &arr);
+    for (i = 0; dbus_message_iter_get_arg_type(&arr) == DBUS_TYPE_STRING;
+         i++, dbus_message_iter_next(&arr)) {
+        dbus_message_iter_get_basic(&arr, &key);
+        if (!(i & 1) && !strcmp(key, "default"))
+            return 1;
+    }
+    return 0;
+}
+
+/* The desktop-entry hint names the sender's .desktop file, which is also
+ * what a Wayland client usually sets as its app_id. */
+static void desktop_entry(DBusMessage* msg, char* dst, size_t dstsz)
+{
+    DBusMessageIter iter, arr, entry, var;
+    const char *key, *val;
+
+    *dst = '\0';
+    if (!argat(msg, &iter, 6, DBUS_TYPE_ARRAY))
+        return;
+    dbus_message_iter_recurse(&iter, &arr);
+    for (; dbus_message_iter_get_arg_type(&arr) == DBUS_TYPE_DICT_ENTRY;
+         dbus_message_iter_next(&arr)) {
+        dbus_message_iter_recurse(&arr, &entry);
+        if (dbus_message_iter_get_arg_type(&entry) != DBUS_TYPE_STRING)
+            return; /* not the a{sv} the spec asks for */
+        dbus_message_iter_get_basic(&entry, &key);
+        if (strcmp(key, "desktop-entry") || !dbus_message_iter_next(&entry))
+            continue;
+        dbus_message_iter_recurse(&entry, &var);
+        if (dbus_message_iter_get_arg_type(&var) != DBUS_TYPE_STRING)
+            continue;
+        dbus_message_iter_get_basic(&var, &val);
+        sanitize(dst, dstsz, val);
+        return;
+    }
 }
 
 static DBusHandlerResult reply_empty(DBusConnection* conn, DBusMessage* msg)
@@ -197,6 +252,9 @@ static DBusHandlerResult handle_notify(DBusConnection* conn, DBusMessage* msg)
                  "%s: %s",
                  capp,
                  *csummary ? csummary : cbody);
+    snprintf(notify.app, sizeof(notify.app), "%s", capp);
+    desktop_entry(msg, notify.desktop, sizeof(notify.desktop));
+    notify.hasdefault = has_default(msg);
 
     ms = expire_timeout(msg);
     /* -1 asks for the server default and 0 for "never expire"; the bar has a
@@ -255,15 +313,20 @@ static DBusHandlerResult handle_capabilities(DBusConnection* conn,
 {
     DBusMessage* reply = dbus_message_new_method_return(msg);
     DBusMessageIter iter, arr;
-    const char* cap = "body";
+    const char* caps[] = { "body", "actions" };
+    size_t i;
     DBusHandlerResult res = DBUS_HANDLER_RESULT_HANDLED;
 
     if (!reply)
         return DBUS_HANDLER_RESULT_NEED_MEMORY;
 
     dbus_message_iter_init_append(reply, &iter);
-    if (!dbus_message_iter_open_container(&iter, DBUS_TYPE_ARRAY, "s", &arr) ||
-        !dbus_message_iter_append_basic(&arr, DBUS_TYPE_STRING, &cap) ||
+    if (!dbus_message_iter_open_container(&iter, DBUS_TYPE_ARRAY, "s", &arr))
+        res = DBUS_HANDLER_RESULT_NEED_MEMORY;
+    for (i = 0; res == DBUS_HANDLER_RESULT_HANDLED && i < 2; i++)
+        if (!dbus_message_iter_append_basic(&arr, DBUS_TYPE_STRING, &caps[i]))
+            res = DBUS_HANDLER_RESULT_NEED_MEMORY;
+    if (res != DBUS_HANDLER_RESULT_HANDLED ||
         !dbus_message_iter_close_container(&iter, &arr) ||
         !dbus_connection_send(conn, reply, NULL))
         res = DBUS_HANDLER_RESULT_NEED_MEMORY;
@@ -385,6 +448,33 @@ void notify_stop(void)
 void notify_dismiss(void)
 {
     notify_clear(ClosedDismissed);
+}
+
+void notify_invoke(void)
+{
+    DBusMessage* sig;
+    const char* key = "default";
+
+    if (!notify.active)
+        return;
+    if (notify.hasdefault &&
+        (sig = dbus_message_new_signal(
+             NOTIFY_OPATH, NOTIFY_IFACE, "ActionInvoked"))) {
+        if (dbus_message_append_args(sig,
+                                     DBUS_TYPE_UINT32,
+                                     &notify.id,
+                                     DBUS_TYPE_STRING,
+                                     &key,
+                                     DBUS_TYPE_INVALID))
+            dbus_connection_send(notify.conn, sig, NULL);
+        dbus_message_unref(sig);
+    }
+    notify_clear(ClosedDismissed);
+}
+
+const char* notify_getapp(int desktop)
+{
+    return !notify.active ? NULL : desktop ? notify.desktop : notify.app;
 }
 
 const char* notify_gettext(void)
