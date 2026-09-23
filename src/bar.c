@@ -5,6 +5,8 @@
  */
 #include "g0wm.h"
 
+#include <strings.h>
+
 /* function declarations */
 static Monitor* barmonitor(void);
 static int barvisible(Monitor* m);
@@ -17,6 +19,7 @@ static void drawtitle(Client* c);
 #endif /* TITLEBAR */
 #ifdef NOTIFICATIONS
 static void notifysync(void);
+static int notifyfits(Monitor* m, const char* text);
 #endif /* NOTIFICATIONS */
 static void stopstatus(void);
 
@@ -137,7 +140,7 @@ void drawbar(Monitor* m)
     drwl_setscheme(m->drw, colors[SchemeNorm]);
     x = drwl_text(m->drw, x, 0, w, m->b.height, m->lrpad / 2, s->ltsymbol, 0);
 
-    /* Remember the free box for notifyclick(): the title and the notification
+    /* Remember the free box for notifyscroll(): the title and the notification
      * share it, so its geometry must be measured in exactly one place. */
     w = m->b.width - (tw + x + traywidth);
     m->b.titlew = w > m->b.height ? w : 0;
@@ -458,10 +461,16 @@ static void drawtitle(Client* c)
 
 #endif /* TITLEBAR */
 #ifdef NOTIFICATIONS
+/* Whether the notification fits in m's box from the current scroll offset. */
+static int notifyfits(Monitor* m, const char* text)
+{
+    return (int)drwl_font_getwidth(m->drw, text + notifyoff) <=
+           m->b.titlew - m->lrpad / 2;
+}
+
 /* Scrolls the notification on by one screenful, wrapping to the start once
- * the tail has been shown. Bound to a click on the box the notification and
- * the window title share (ClkTitle). */
-void notifyclick(const Arg* arg)
+ * the tail has been shown. */
+void notifyscroll(const Arg* arg)
 {
     /* the box is measured on the monitor the bar is drawn on */
     Monitor* m = barmonitor();
@@ -474,8 +483,8 @@ void notifyclick(const Arg* arg)
         return;
     notifysync();
 
-    /* drwl_text() spends lrpad/2 of the box on the left padding: measuring
-     * against the full width would scroll text past unread. */
+    /* drwl_text() pads the box by lrpad/2 on the left, so measure against
+     * that width. */
     boxw = m->b.titlew - m->lrpad / 2;
     len = strlen(text);
     off = notifyoff < len ? notifyoff : 0;
@@ -516,11 +525,65 @@ void notifydismiss(const Arg* arg)
         notify_dismiss();
 }
 
-/* A notification that just arrived (or replaced another one) is shown from
- * its start, whatever the previous one had been scrolled to. */
+/* Opens the notification: sends its default action and focuses the
+ * sender's window, since it can't raise itself. */
+void notifyopen(const Arg* arg)
+{
+    const char *app, *desk, *id;
+    Client* c;
+
+    if (!shownotifications || !(app = notify_getapp(0)))
+        return;
+    desk = notify_getapp(1);
+    wl_list_for_each(c, &clients, link)
+    {
+        id = client_get_appid(c);
+        if (!c->mon || client_is_unmanaged(c) ||
+            (strcasecmp(id, app) && (!*desk || strcasecmp(id, desk))))
+            continue;
+        selmon = c->mon;
+        if (!VISIBLEON(c, c->mon))
+            view(&(Arg){ .ui = c->tags });
+        focusclient(c, 1);
+        break;
+    }
+    notify_invoke();
+}
+
+/* Scrolls the notification a few codepoints per wheel notch. Returns
+ * whether the wheel was over the notification, i.e. was consumed here. */
+int notifywheel(Monitor* pm, double delta)
+{
+    /* a mouse notch is 15, so 3 codepoints; touchpads send it in slices */
+    static const double step = 5;
+    static double acc;
+    Monitor* m = barmonitor();
+    const char* text;
+
+    if (!shownotifications || !m || m != pm || !m->b.titlew ||
+        !(text = notify_gettext()))
+        return 0;
+    notifysync();
+
+    for (acc += delta; acc >= step; acc -= step)
+        if (!notifyfits(m, text))
+            do
+                notifyoff++;
+            while ((text[notifyoff] & 0xC0) == 0x80);
+    for (; acc <= -step; acc += step)
+        while (notifyoff && (text[--notifyoff] & 0xC0) == 0x80)
+            ;
+    drawbars();
+    return 1;
+}
+
+/* Reset the scroll offset for a new notification, or when the current one
+ * got shorter than where we'd scrolled to. */
 static void notifysync(void)
 {
-    if (notifyshownid != notify_getid()) {
+    const char* text = notify_gettext();
+
+    if (notifyshownid != notify_getid() || !text || notifyoff >= strlen(text)) {
         notifyshownid = notify_getid();
         notifyoff = 0;
     }
