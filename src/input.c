@@ -6,6 +6,7 @@
 #include "g0wm.h"
 
 /* function declarations */
+static unsigned int barclick(Monitor* pm, Arg* arg);
 static void createkeyboard(struct wlr_keyboard* keyboard);
 static void createpointer(struct wlr_pointer* pointer);
 static void cursorconstrain(struct wlr_pointer_constraint_v1* constraint);
@@ -41,6 +42,49 @@ static uint32_t runner_repeatcp; /* codepoint the armed key repeat types */
 #endif                           /* RUNNER */
 
 /* function implementations */
+/* The part of pm's bar the cursor is over, ClkRoot if it is not over it.
+ * arg picks up the tag or tray item the part stands for. */
+static unsigned int barclick(Monitor* pm, Arg* arg)
+{
+    unsigned int i = 0, x = 0;
+    double cx;
+    int traywidth = 0, statusw;
+    struct wlr_scene_node* node;
+    struct wlr_scene_buffer* buffer;
+    /* under barsinglemon the bar shows the focused monitor's tags */
+    Monitor* s = barsinglemon && selmon ? selmon : pm;
+
+    if (exclusive_focus || !pm ||
+        !(node = wlr_scene_node_at(
+              &layers[LyrBottom]->node, cursor->x, cursor->y, NULL, NULL)) ||
+        !(buffer = wlr_scene_buffer_from_node(node)) ||
+        buffer != pm->scene_buffer)
+        return ClkRoot;
+
+    cx = (cursor->x - pm->m.x - barpadding) * pm->wlr_output->scale;
+#ifdef SYSTRAY
+    traywidth = tray_get_width(pm->tray);
+#endif
+    statusw = STATUSW(pm);
+    do
+        x += TEXTW(pm, tags[i]);
+    while (cx >= x && ++i < ntags);
+    if (i < ntags) {
+        arg->ui = 1 << i;
+        return ClkTagBar;
+    } else if (cx < x + TEXTW(pm, s->ltsymbol))
+        return ClkLtSymbol;
+#ifdef SYSTRAY
+    else if (traywidth && cx > pm->b.width - traywidth) {
+        arg->ui = tray_index_at(pm->tray, cx - (pm->b.width - traywidth));
+        return ClkTray;
+    }
+#endif
+    else if (cx > pm->b.width - (statusw + traywidth))
+        return ClkStatus;
+    return ClkTitle;
+}
+
 void axisnotify(struct wl_listener* listener, void* data)
 {
     /* This event is forwarded by the cursor when a pointer emits an axis event,
@@ -48,6 +92,19 @@ void axisnotify(struct wl_listener* listener, void* data)
     struct wlr_pointer_axis_event* event = data;
     wlr_idle_notifier_v1_notify_activity(idle_notifier, seat);
     handlecursoractivity();
+#ifdef NOTIFICATIONS
+    {
+        Client* c;
+        Arg arg;
+        Monitor* pm = xytomon(cursor->x, cursor->y);
+
+        xytonode(cursor->x, cursor->y, NULL, &c, NULL, NULL, NULL);
+        if (!locked && !c &&
+            event->orientation == WL_POINTER_AXIS_VERTICAL_SCROLL &&
+            barclick(pm, &arg) == ClkTitle && notifywheel(pm, event->delta))
+            return;
+    }
+#endif
     /* TODO: allow usage of scroll wheel for mousebindings, it can be
      * implemented by checking the event's orientation and the delta of the
      * event */
@@ -63,14 +120,9 @@ void axisnotify(struct wl_listener* listener, void* data)
 
 void buttonpress(struct wl_listener* listener, void* data)
 {
-    unsigned int i = 0, x = 0;
-    double cx;
-    int traywidth = 0, statusw;
     unsigned int click;
     struct wlr_pointer_button_event* event = data;
     struct wlr_keyboard* keyboard;
-    struct wlr_scene_node* node;
-    struct wlr_scene_buffer* buffer;
     Monitor* pm; /* the monitor the pointer is on, bar included */
     uint32_t mods;
     Arg arg = {
@@ -105,43 +157,12 @@ void buttonpress(struct wl_listener* listener, void* data)
                 break;
             }
 
-            if (!c && !exclusive_focus && pm &&
-                (node = wlr_scene_node_at(&layers[LyrBottom]->node,
-                                          cursor->x,
-                                          cursor->y,
-                                          NULL,
-                                          NULL)) &&
-                (buffer = wlr_scene_buffer_from_node(node)) &&
-                buffer == pm->scene_buffer) {
+            if (!c && (click = barclick(pm, &arg)) != ClkRoot) {
                 /* The bar belongs to pm, but under barsinglemon it stands in
                  * for the focused monitor: leaving selmon alone is what lands
                  * the click on the monitor whose tags are on show. */
                 if (!barsinglemon || !selmon)
                     selmon = pm;
-                cx = (cursor->x - pm->m.x - barpadding) * pm->wlr_output->scale;
-#ifdef SYSTRAY
-                traywidth = tray_get_width(pm->tray);
-#endif
-                statusw = STATUSW(pm);
-                do
-                    x += TEXTW(pm, tags[i]);
-                while (cx >= x && ++i < ntags);
-                if (i < ntags) {
-                    click = ClkTagBar;
-                    arg.ui = 1 << i;
-                } else if (cx < x + TEXTW(pm, selmon->ltsymbol))
-                    click = ClkLtSymbol;
-#ifdef SYSTRAY
-                else if (traywidth && cx > pm->b.width - traywidth) {
-                    click = ClkTray;
-                    arg.ui =
-                        tray_index_at(pm->tray, cx - (pm->b.width - traywidth));
-                }
-#endif
-                else if (cx > pm->b.width - (statusw + traywidth)) {
-                    click = ClkStatus;
-                } else
-                    click = ClkTitle;
             } else {
                 selmon = pm;
             }
