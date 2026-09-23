@@ -4,10 +4,9 @@
 #include <dbus/dbus.h>
 #include <wayland-server-core.h>
 
-/* Minimal org.freedesktop.Notifications server: only ever tracks a single
- * notification (the most recent one always replaces whatever was shown
- * before) and drops actions/hints/icons entirely, since the only consumer
- * is one line of text in the bar. */
+/* Minimal org.freedesktop.Notifications server: tracks one notification at a
+ * time, drops icons, keeps only the "default" action. The bar just shows one
+ * line of text. */
 
 /* Size of that line, including the terminator. */
 #define NOTIFY_TEXTMAX 512
@@ -24,5 +23,10 @@ const char* notify_gettext(void);
 unsigned int notify_getid(void);
 /* Drop the current notification as if the user had clicked it away. */
 void notify_dismiss(void);
+/* Fire the notification's "default" action, if it has one, and drop it. */
+void notify_invoke(void);
+/* App name, or its desktop-entry hint if desktop is set ("" if none sent).
+ * NULL if there is no notification currently active. */
+const char* notify_getapp(int desktop);
 
 #endif /* G0WMNOTIFY_H */
