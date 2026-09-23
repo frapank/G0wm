@@ -138,8 +138,9 @@ static const Action actions[] = {
     { moveresize, "moveresize", 'c' },
     { movestack, "movestack", 'i' },
 #ifdef NOTIFICATIONS
-    { notifyclick, "notifyclick", 0 },
     { notifydismiss, "notifydismiss", 0 },
+    { notifyopen, "notifyopen", 0 },
+    { notifyscroll, "notifyscroll", 0 },
 #endif
     { quit, "quit", 0 },
     { reloadsettings, "reloadsettings", 0 },
