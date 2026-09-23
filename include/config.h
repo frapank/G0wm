@@ -298,6 +298,13 @@ static Key keys_def[] = {
 #endif
 	/* --- end RUNNER --- */
 
+	/* --- NOTIFICATIONS: n scrolls a long one by a screenful, Shift+n opens it --- */
+#ifdef NOTIFICATIONS
+	{ MODKEY,                    XKB_KEY_n,           notifyscroll,     {0} },
+	{ MODKEY|WLR_MODIFIER_SHIFT, XKB_KEY_n,           notifyopen,       {0} },
+#endif
+	/* --- end NOTIFICATIONS --- */
+
 	/* --- FOCUS CONTROL --- */
 	/* one master/stack list, not a 2D tree: h/k walk it backwards, j/l
 	 * forwards. In the tabbed layout this cycles through the tabs. */
@@ -383,9 +390,9 @@ static Button buttons_def[] = {
 	{ ClkLtSymbol, 0,      BTN_RIGHT,  setlayout,      {.v = &layouts_def[2]} },
 
 	{ ClkTitle,    0,      BTN_MIDDLE, zoom,           {0} },
-	/* --- NOTIFICATIONS: left scrolls a truncated one, right dismisses --- */
+	/* --- NOTIFICATIONS: left opens, right dismisses, the wheel scrolls --- */
 #ifdef NOTIFICATIONS
-	{ ClkTitle,    0,      BTN_LEFT,   notifyclick,    {0} },
+	{ ClkTitle,    0,      BTN_LEFT,   notifyopen,     {0} },
 	{ ClkTitle,    0,      BTN_RIGHT,  notifydismiss,  {0} },
 #endif
 	/* --- end NOTIFICATIONS --- */
