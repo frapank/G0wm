@@ -280,14 +280,14 @@ static Key keys_def[] = {
 	{ MODKEY,                    XKB_KEY_b,           spawn,            {.v = browsercmd} },
 	{ 0,                         XKB_KEY_Print,       spawn,            SHCMD("grim -g \"$(slurp)\" - | swappy -f -") },
 	{ MODKEY,                    XKB_KEY_c,           killclient,       {0} },
-	{ MODKEY,                    XKB_KEY_v,           togglefloating,   {0} },
-	{ MODKEY,                    XKB_KEY_g,           togglegaps,       {0} },
+	{ MODKEY|WLR_MODIFIER_SHIFT, XKB_KEY_v,           togglefloating,   {0} },
+	{ MODKEY|WLR_MODIFIER_SHIFT, XKB_KEY_g,           togglegaps,       {0} },
 	{ MODKEY|WLR_MODIFIER_SHIFT, XKB_KEY_b,           togglebar,        {0} },
 #ifdef TITLEBAR
 	{ MODKEY|WLR_MODIFIER_SHIFT, XKB_KEY_t,           toggletitlebar,   {0} },
 #endif
 	{ MODKEY,                    XKB_KEY_t,           toggletabbed,     {.v = &layouts_def[3]} },
-	{ MODKEY,                    XKB_KEY_e,           togglefullscreen, {0} },
+	{ MODKEY|WLR_MODIFIER_SHIFT, XKB_KEY_f,           togglefullscreen, {0} },
 	{ MODKEY|WLR_MODIFIER_SHIFT, XKB_KEY_r,           reloadsettings,   {0} }, // re-read settings.json
 
 	/* --- RUNNER: g0wm's own prompt, or menucmd without it --- */
@@ -313,22 +313,22 @@ static Key keys_def[] = {
 	{ MODKEY|WLR_MODIFIER_SHIFT, XKB_KEY_l,           movestack,        {.i = +1} },
 
 	/* --- RESIZE --- */
-	/* floating clients move their edges; tiled ones only react to h/l, which
-	 * adjust the master area, as the stack splits the height evenly */
-	{ MODKEY|WLR_MODIFIER_SHIFT|WLR_MODIFIER_ALT, XKB_KEY_h, resizewidth,  {.i = -50} },
-	{ MODKEY|WLR_MODIFIER_SHIFT|WLR_MODIFIER_ALT, XKB_KEY_l, resizewidth,  {.i = +50} },
-	{ MODKEY|WLR_MODIFIER_SHIFT|WLR_MODIFIER_ALT, XKB_KEY_k, resizeheight, {.i = -50} },
-	{ MODKEY|WLR_MODIFIER_SHIFT|WLR_MODIFIER_ALT, XKB_KEY_j, resizeheight, {.i = +50} },
+	/* same hjkl as focus/move, one more modifier: floating clients move
+	 * their edges; tiled ones only react to h/l, which adjust the master
+	 * area, as the stack splits the height evenly */
+	{ MODKEY|WLR_MODIFIER_CTRL, XKB_KEY_h,           resizewidth,  {.i = -50} },
+	{ MODKEY|WLR_MODIFIER_CTRL, XKB_KEY_l,           resizewidth,  {.i = +50} },
+	{ MODKEY|WLR_MODIFIER_CTRL, XKB_KEY_k,           resizeheight, {.i = -50} },
+	{ MODKEY|WLR_MODIFIER_CTRL, XKB_KEY_j,           resizeheight, {.i = +50} },
 
-	{ MODKEY|WLR_MODIFIER_CTRL,  XKB_KEY_h,           setmfact,         {.f = -0.05f} },
-	{ MODKEY|WLR_MODIFIER_CTRL,  XKB_KEY_l,           setmfact,         {.f = +0.05f} },
-
-	/* --- OPACITY: focused window, then the same window once unfocused --- */
-	{ MODKEY,                    XKB_KEY_o,           setopacityfocus,   {.f = +0.05f} },
-	{ MODKEY|WLR_MODIFIER_SHIFT, XKB_KEY_O,           setopacityfocus,   {.f = -0.05f} },
-	{ MODKEY|WLR_MODIFIER_CTRL,  XKB_KEY_o,           setopacityunfocus, {.f = +0.05f} },
-	{ MODKEY|WLR_MODIFIER_CTRL|WLR_MODIFIER_SHIFT, XKB_KEY_O, setopacityunfocus, {.f = -0.05f} },
-	{ MODKEY|WLR_MODIFIER_ALT,   XKB_KEY_o,           toggleopacity,     {0} }, // off everywhere
+	/* --- OPACITY: focused window, then the same window once unfocused.
+	 * shift is always the toggle group, ctrl is always the unfocused
+	 * plane, alt is always the decrement --- */
+	{ MODKEY,                                    XKB_KEY_o, setopacityfocus,   {.f = +0.05f} },
+	{ MODKEY|WLR_MODIFIER_ALT,                   XKB_KEY_o, setopacityfocus,   {.f = -0.05f} },
+	{ MODKEY|WLR_MODIFIER_CTRL,                  XKB_KEY_o, setopacityunfocus, {.f = +0.05f} },
+	{ MODKEY|WLR_MODIFIER_CTRL|WLR_MODIFIER_ALT, XKB_KEY_o, setopacityunfocus, {.f = -0.05f} },
+	{ MODKEY|WLR_MODIFIER_SHIFT,                 XKB_KEY_o, toggleopacity,     {0} }, // off everywhere
 
 	/* --- MEDIA CONTROLS --- */
 	{ 0, XKB_KEY_XF86AudioRaiseVolume,  spawn, SHCMD("wpctl set-volume @DEFAULT_AUDIO_SINK@ 5%+") },
@@ -364,7 +364,7 @@ static Key keys_def[] = {
 	TAGKEYS(          XKB_KEY_7, XKB_KEY_ampersand,                     6),
 	TAGKEYS(          XKB_KEY_8, XKB_KEY_asterisk,                      7),
 	TAGKEYS(          XKB_KEY_9, XKB_KEY_parenleft,                     8),
-	{ MODKEY|WLR_MODIFIER_SHIFT, XKB_KEY_q,           quit,             {0} },
+	{ MODKEY|WLR_MODIFIER_SHIFT, XKB_KEY_Escape,      quit,             {0} },
 
 	/* --- VT SWITCHING --- */
 	{ WLR_MODIFIER_CTRL|WLR_MODIFIER_ALT,XKB_KEY_Terminate_Server, quit, {0} },
