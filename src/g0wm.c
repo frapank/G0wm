@@ -11,6 +11,9 @@ static void cleanup(void);
 static void cleanuplisteners(void);
 static void createidleinhibitor(struct wl_listener* listener, void* data);
 static void destroyidleinhibitor(struct wl_listener* listener, void* data);
+static bool globalfilter(const struct wl_client* client,
+                         const struct wl_global* global,
+                         void* data);
 static void gpureset(struct wl_listener* listener, void* data);
 static void handlesig(int signo);
 static void setup(void);
@@ -30,6 +33,7 @@ static struct wlr_virtual_pointer_manager_v1* virtual_pointer_mgr;
 static struct wlr_cursor_shape_manager_v1* cursor_shape_mgr;
 static struct wlr_output_power_manager_v1* power_mgr;
 static struct wlr_session_lock_manager_v1* session_lock_mgr;
+static struct wlr_security_context_manager_v1* security_context_mgr;
 static DBusConnection* bus_conn;
 static struct wl_event_source* bus_source;
 /* global event handlers */
@@ -294,6 +298,43 @@ static void destroyidleinhibitor(struct wl_listener* listener, void* data)
     free(listener);
 }
 
+static bool globalfilter(const struct wl_client* client,
+                         const struct wl_global* global,
+                         void* data)
+{
+    static const char* const privileged[] = {
+        "ext_data_control_manager_v1",
+        "ext_foreign_toplevel_image_capture_source_manager_v1",
+        "ext_foreign_toplevel_list_v1",
+        "ext_idle_notifier_v1",
+        "ext_image_copy_capture_manager_v1",
+        "ext_output_image_capture_source_manager_v1",
+        "ext_session_lock_manager_v1",
+        "wp_security_context_manager_v1",
+        "zwlr_data_control_manager_v1",
+        "zwlr_export_dmabuf_manager_v1",
+        "zwlr_foreign_toplevel_manager_v1",
+        "zwlr_gamma_control_manager_v1",
+        "zwlr_layer_shell_v1",
+        "zwlr_output_manager_v1",
+        "zwlr_output_power_manager_v1",
+        "zwlr_screencopy_manager_v1",
+        "zwlr_virtual_pointer_manager_v1",
+        "zwp_input_method_manager_v2",
+        "zwp_virtual_keyboard_manager_v1",
+    };
+    const char* name = wl_global_get_interface(global)->name;
+    size_t i;
+
+    if (!wlr_security_context_manager_v1_lookup_client(security_context_mgr,
+                                                       client))
+        return true;
+    for (i = 0; i < LENGTH(privileged); i++)
+        if (!strcmp(name, privileged[i]))
+            return false;
+    return true;
+}
+
 static void gpureset(struct wl_listener* listener, void* data)
 {
     struct wlr_renderer* old_drw = drw;
@@ -486,6 +527,8 @@ static void setup(void)
     wlr_fractional_scale_manager_v1_create(dpy, 1);
     wlr_presentation_create(dpy, backend, 2);
     wlr_alpha_modifier_v1_create(dpy);
+    security_context_mgr = wlr_security_context_manager_v1_create(dpy);
+    wl_display_set_global_filter(dpy, globalfilter, NULL);
 
     /* Initializes the interface used to implement urgency hints */
     activation = wlr_xdg_activation_v1_create(dpy);
