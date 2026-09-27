@@ -510,8 +510,9 @@ void resize(Client* c, struct wlr_box geo, int interact)
     drawcorners(c);
 
     /* this is a no-op if size hasn't changed */
-    c->resize = client_set_size(
-        c, c->geom.width - 2 * c->bw, MAX(1, c->geom.height - 2 * c->bw - th));
+    c->resize = client_set_size(c,
+                                MAX(1, c->geom.width - 2 * (int)c->bw),
+                                MAX(1, c->geom.height - 2 * (int)c->bw - th));
     client_get_clip(c, &clip);
     clip.height -= th;
     wlr_scene_subsurface_tree_set_clip(&c->scene_surface->node, &clip);
