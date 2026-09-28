@@ -24,9 +24,17 @@ static struct {
     int active;
     int running;
     int hasdefault; /* the client offered a "default" action */
+    int sticky;
     char text[NOTIFY_TEXTMAX];
     char app[64];     /* app_name */
     char desktop[64]; /* desktop-entry hint */
+    struct {
+        dbus_uint32_t id;
+        int hasdefault;
+        char text[NOTIFY_TEXTMAX];
+        char app[64];
+        char desktop[64];
+    } saved;
 } notify;
 
 /* Copies src into dst keeping only whole, well-formed UTF-8 codepoints:
@@ -87,6 +95,30 @@ static void notify_closed(dbus_uint32_t id, dbus_uint32_t reason)
     dbus_message_unref(sig);
 }
 
+static void notify_save(void)
+{
+    notify_closed(notify.saved.id, ClosedUndefined);
+    notify.saved.id = notify.id;
+    notify.saved.hasdefault = notify.hasdefault;
+    memcpy(notify.saved.text, notify.text, sizeof(notify.text));
+    memcpy(notify.saved.app, notify.app, sizeof(notify.app));
+    memcpy(notify.saved.desktop, notify.desktop, sizeof(notify.desktop));
+}
+
+static void notify_restore(void)
+{
+    if (!notify.saved.id)
+        return;
+    notify.id = notify.saved.id;
+    notify.hasdefault = notify.saved.hasdefault;
+    memcpy(notify.text, notify.saved.text, sizeof(notify.text));
+    memcpy(notify.app, notify.saved.app, sizeof(notify.app));
+    memcpy(notify.desktop, notify.saved.desktop, sizeof(notify.desktop));
+    notify.saved.id = 0;
+    notify.sticky = 1;
+    notify.active = 1;
+}
+
 /* Clears the current notification, if any, and tells the bar to redraw so
  * whatever the notification was covering (the window title) comes back. */
 static void notify_clear(dbus_uint32_t reason)
@@ -97,6 +129,7 @@ static void notify_clear(dbus_uint32_t reason)
     if (notify.timer)
         wl_event_source_timer_update(notify.timer, 0);
     notify_closed(notify.id, reason);
+    notify_restore();
     if (notify.redraw)
         notify.redraw();
 }
@@ -162,32 +195,54 @@ static int has_default(DBusMessage* msg)
     return 0;
 }
 
-/* The desktop-entry hint names the sender's .desktop file, which is also
- * what a Wayland client usually sets as its app_id. */
-static void desktop_entry(DBusMessage* msg, char* dst, size_t dstsz)
+static int hint(DBusMessage* msg,
+                const char* name,
+                int type,
+                DBusMessageIter* var)
 {
-    DBusMessageIter iter, arr, entry, var;
-    const char *key, *val;
+    DBusMessageIter iter, arr, entry;
+    const char* key;
 
-    *dst = '\0';
     if (!argat(msg, &iter, 6, DBUS_TYPE_ARRAY))
-        return;
+        return 0;
     dbus_message_iter_recurse(&iter, &arr);
     for (; dbus_message_iter_get_arg_type(&arr) == DBUS_TYPE_DICT_ENTRY;
          dbus_message_iter_next(&arr)) {
         dbus_message_iter_recurse(&arr, &entry);
         if (dbus_message_iter_get_arg_type(&entry) != DBUS_TYPE_STRING)
-            return; /* not the a{sv} the spec asks for */
+            return 0; /* not the a{sv} the spec asks for */
         dbus_message_iter_get_basic(&entry, &key);
-        if (strcmp(key, "desktop-entry") || !dbus_message_iter_next(&entry))
+        if (strcmp(key, name) || !dbus_message_iter_next(&entry))
             continue;
-        dbus_message_iter_recurse(&entry, &var);
-        if (dbus_message_iter_get_arg_type(&var) != DBUS_TYPE_STRING)
-            continue;
-        dbus_message_iter_get_basic(&var, &val);
-        sanitize(dst, dstsz, val);
-        return;
+        dbus_message_iter_recurse(&entry, var);
+        return dbus_message_iter_get_arg_type(var) == type;
     }
+    return 0;
+}
+
+/* The desktop-entry hint names the sender's .desktop file, which is also
+ * what a Wayland client usually sets as its app_id. */
+static void desktop_entry(DBusMessage* msg, char* dst, size_t dstsz)
+{
+    DBusMessageIter var;
+    const char* val;
+
+    *dst = '\0';
+    if (!hint(msg, "desktop-entry", DBUS_TYPE_STRING, &var))
+        return;
+    dbus_message_iter_get_basic(&var, &val);
+    sanitize(dst, dstsz, val);
+}
+
+static int critical(DBusMessage* msg)
+{
+    DBusMessageIter var;
+    unsigned char urgency;
+
+    if (!hint(msg, "urgency", DBUS_TYPE_BYTE, &var))
+        return 0;
+    dbus_message_iter_get_basic(&var, &urgency);
+    return urgency == 2;
 }
 
 static DBusHandlerResult reply_empty(DBusConnection* conn, DBusMessage* msg)
@@ -208,7 +263,7 @@ static DBusHandlerResult handle_notify(DBusConnection* conn, DBusMessage* msg)
     DBusMessage* reply;
     const char *app_name = "", *app_icon = "", *summary = "", *body = "";
     dbus_uint32_t replaces_id = 0, id;
-    int ms;
+    int ms, sticky;
     /* bounded well under NOTIFY_TEXTMAX: snprintf() below can't truncate */
     char capp[64], csummary[200], cbody[200];
 
@@ -235,6 +290,30 @@ static DBusHandlerResult handle_notify(DBusConnection* conn, DBusMessage* msg)
         goto send;
     }
 
+    ms = expire_timeout(msg);
+    /* -1 asks for the server default and 0 for "never expire"; the bar has a
+     * single slot shared with the window title, so neither gets to sit there
+     * forever. */
+    if (ms <= 0)
+        ms = (int)notify.timeout_ms;
+    else if (ms > NOTIFY_TIMEOUT_MAX)
+        ms = NOTIFY_TIMEOUT_MAX;
+    sticky = critical(msg);
+
+    /* A client updating its own notification keeps the id it was given;
+     * anything else displaces whatever was on screen. */
+    id = replaces_id ? replaces_id : ++notify.seq;
+    if (!id) /* the counter wrapped; 0 means "no notification" */
+        id = ++notify.seq;
+    if (notify.saved.id == id)
+        notify.saved.id = 0;
+    if (notify.active && notify.id != id) {
+        if (notify.sticky)
+            notify_save();
+        else
+            notify_closed(notify.id, ClosedUndefined);
+    }
+
     sanitize(capp, sizeof(capp), *app_name ? app_name : "?");
     sanitize(csummary, sizeof(csummary), summary);
     sanitize(cbody, sizeof(cbody), body);
@@ -256,26 +335,15 @@ static DBusHandlerResult handle_notify(DBusConnection* conn, DBusMessage* msg)
     desktop_entry(msg, notify.desktop, sizeof(notify.desktop));
     notify.hasdefault = has_default(msg);
 
-    ms = expire_timeout(msg);
-    /* -1 asks for the server default and 0 for "never expire"; the bar has a
-     * single slot shared with the window title, so neither gets to sit there
-     * forever.
-     * ponytail: no persistent notifications, add a queue if that's wanted. */
-    if (ms <= 0)
-        ms = (int)notify.timeout_ms;
-    else if (ms > NOTIFY_TIMEOUT_MAX)
-        ms = NOTIFY_TIMEOUT_MAX;
-
-    /* A client updating its own notification keeps the id it was given;
-     * anything else displaces whatever was on screen. */
-    id = replaces_id ? replaces_id : ++notify.seq;
-    if (!id) /* the counter wrapped; 0 means "no notification" */
-        id = ++notify.seq;
-    if (notify.active && notify.id != id)
-        notify_closed(notify.id, ClosedUndefined);
-
     notify.id = id;
-    notify.active = notify_arm((unsigned int)ms);
+    notify.sticky = sticky;
+    if (sticky) {
+        if (notify.timer)
+            wl_event_source_timer_update(notify.timer, 0);
+        notify.active = 1;
+    } else {
+        notify.active = notify_arm((unsigned int)ms);
+    }
     if (!notify.active) /* no timer: don't show what we can't take down */
         notify_closed(id, ClosedUndefined);
     if (notify.redraw)
@@ -300,10 +368,15 @@ static DBusHandlerResult handle_close(DBusConnection* conn, DBusMessage* msg)
 {
     dbus_uint32_t id;
 
-    if (dbus_message_get_args(
-            msg, NULL, DBUS_TYPE_UINT32, &id, DBUS_TYPE_INVALID) &&
-        notify.active && id == notify.id)
+    if (!dbus_message_get_args(
+            msg, NULL, DBUS_TYPE_UINT32, &id, DBUS_TYPE_INVALID))
+        return reply_empty(conn, msg);
+    if (notify.active && id == notify.id)
         notify_clear(ClosedByCall);
+    else if (id && id == notify.saved.id) {
+        notify.saved.id = 0;
+        notify_closed(id, ClosedByCall);
+    }
 
     return reply_empty(conn, msg);
 }
@@ -435,6 +508,8 @@ void notify_stop(void)
     /* nothing is worth redrawing on the way out, but clients still deserve
      * to hear that their notification went away */
     notify.redraw = NULL;
+    notify_closed(notify.saved.id, ClosedUndefined);
+    notify.saved.id = 0;
     notify_clear(ClosedUndefined);
     if (notify.timer) {
         wl_event_source_remove(notify.timer);
