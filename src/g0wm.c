@@ -15,6 +15,7 @@ static bool globalfilter(const struct wl_client* client,
                          const struct wl_global* global,
                          void* data);
 static void gpureset(struct wl_listener* listener, void* data);
+static void gpurecreate(void* data);
 static void handlesig(int signo);
 static void setup(void);
 
@@ -335,11 +336,23 @@ static bool globalfilter(const struct wl_client* client,
     return true;
 }
 
+/* The renderer can't be destroyed from inside its own lost signal: wlroots
+ * asserts the listener list is empty, and the emission still holds markers
+ * in it. Recreate once the loop is idle instead. */
+static struct wl_event_source* gpu_reset_idle;
+
 static void gpureset(struct wl_listener* listener, void* data)
+{
+    if (!gpu_reset_idle)
+        gpu_reset_idle = wl_event_loop_add_idle(event_loop, gpurecreate, NULL);
+}
+
+static void gpurecreate(void* data)
 {
     struct wlr_renderer* old_drw = drw;
     struct wlr_allocator* old_alloc = alloc;
     struct Monitor* m;
+    gpu_reset_idle = NULL;
     if (!(drw = wlr_renderer_autocreate(backend)))
         die("couldn't recreate renderer");
 
