@@ -55,6 +55,7 @@ setup_log() {
 }
 
 stop_audio() {
+    [ "${G0WM_AUDIO:-1}" != 0 ] || return 0
     pkill -u "$(id -u)" -x "$audio_procs" 2>/dev/null || true
 
     i=0
@@ -81,7 +82,9 @@ cleanup() {
 
 start_audio() { # builds audio_cmd, run before g0wm in the inner shell
     audio_cmd=
-    if command -v pipewire >/dev/null 2>&1; then
+    if [ "${G0WM_AUDIO:-1}" = 0 ]; then
+        return 0
+    elif command -v pipewire >/dev/null 2>&1; then
         audio_cmd='pipewire >/dev/null 2>&1 &
 n=0
 while [ ! -S "${XDG_RUNTIME_DIR:-/run/user/$(id -u)}/pipewire-0" ] && [ "$n" -lt 50 ]; do
