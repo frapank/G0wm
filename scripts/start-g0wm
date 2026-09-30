@@ -107,6 +107,18 @@ pgrep -u \"\$(id -u)\" -x wireplumber >/dev/null 2>&1 || wireplumber >/dev/null 
     fi
 }
 
+# restart the status script while g0wm runs
+# 141 means g0wm closed the pipe
+status_loop() {
+    while :; do
+        rc=0
+        g0wm-status.sh || rc=$?
+        [ "$rc" -ne 141 ] || return 0
+        sleep 1
+        pgrep -u "$(id -u)" -x g0wm >/dev/null 2>&1 || return 0
+    done
+}
+
 run_session() {
     inner_cmd="${audio_cmd}exec g0wm"
 
@@ -118,7 +130,7 @@ run_session() {
     fi
 
     if command -v g0wm-status.sh >/dev/null 2>&1; then
-        g0wm-status.sh 9>&- | $session_launcher sh -c "$inner_cmd" 9>&- >>"$log_dir/g0wm.log" 2>&1
+        status_loop 9>&- | $session_launcher sh -c "$inner_cmd" 9>&- >>"$log_dir/g0wm.log" 2>&1
     else
         echo "start-g0wm: g0wm-status.sh not found, starting without bar status text" >&2
         $session_launcher sh -c "$inner_cmd" 9>&- >>"$log_dir/g0wm.log" 2>&1
