@@ -13,6 +13,19 @@ guard() {
         echo "start-g0wm: g0wm not found in PATH, cannot start" >&2
         exit 1
     fi
+
+    # a second session kills the audio and bar of the first
+    if pgrep -u "$(id -u)" -x g0wm >/dev/null 2>&1; then
+        echo "start-g0wm: g0wm is already running for this user, refusing to start another" >&2
+        exit 1
+    fi
+    if command -v flock >/dev/null 2>&1 && [ -n "${XDG_RUNTIME_DIR:-}" ]; then
+        exec 9>"$XDG_RUNTIME_DIR/start-g0wm.lock"
+        if ! flock -n 9; then
+            echo "start-g0wm: another start-g0wm is running, refusing to start" >&2
+            exit 1
+        fi
+    fi
 }
 
 export_env() {
@@ -105,10 +118,10 @@ run_session() {
     fi
 
     if command -v g0wm-status.sh >/dev/null 2>&1; then
-        g0wm-status.sh | $session_launcher sh -c "$inner_cmd" >>"$log_dir/g0wm.log" 2>&1
+        g0wm-status.sh 9>&- | $session_launcher sh -c "$inner_cmd" 9>&- >>"$log_dir/g0wm.log" 2>&1
     else
         echo "start-g0wm: g0wm-status.sh not found, starting without bar status text" >&2
-        $session_launcher sh -c "$inner_cmd" >>"$log_dir/g0wm.log" 2>&1
+        $session_launcher sh -c "$inner_cmd" 9>&- >>"$log_dir/g0wm.log" 2>&1
     fi
 }
 

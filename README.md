@@ -111,7 +111,8 @@ formats in the comments `./status_gen` writes into it.
 Run `start-g0wm` from a VT.
 
 It sets up the session environment, starts PipeWire, runs the status script
-and stores logs in `~/.local/state/g0wm/`.
+and stores logs in `~/.local/state/g0wm/`. It refuses to start
+while g0wm already runs for the same user.
 
 The file `share/g0wm.desktop` can be used as a session entry for display
 managers. It is not installed automatically by `make install`.
