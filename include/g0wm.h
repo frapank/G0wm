@@ -662,6 +662,7 @@ extern size_t nrules;
 extern int showbar;
 extern int topbar;
 extern int barwintitle;
+extern unsigned int barboxradius;
 extern unsigned int barpadding;
 extern float barheight;
 extern int barsinglemon;

@@ -11,6 +11,14 @@
 static Monitor* barmonitor(void);
 static int barvisible(Monitor* m);
 static int statusescape(const char* p, uint32_t* scm);
+static void drawpill(Monitor* m,
+                     int x,
+                     int y,
+                     int w,
+                     int h,
+                     double r,
+                     int hollow,
+                     uint32_t rgba);
 #ifdef SYSTRAY
 static void traynotify(void* data);
 #endif /* SYSTRAY */
@@ -42,8 +50,6 @@ static void drawnotifytext(Monitor* m,
                            const Notification* n,
                            const char* text,
                            uint32_t* scm);
-static void
-drawpill(Monitor* m, int x, int y, int w, int h, double r, uint32_t rgba);
 static size_t fitprefix(Monitor* m, const char* s, int w);
 static void notifybox(Monitor* m,
                       const Notification* n,
@@ -115,6 +121,66 @@ static int barvisible(Monitor* m)
            (!barsinglemon || m == barmonitor());
 }
 
+/* whether (x, y) falls in a w by h box with corners of radius r */
+static int inpill(double x, double y, int w, int h, double r)
+{
+    double dx, dy;
+
+    if (x > w || y > h)
+        return 0;
+    r = fmax(r, 0);
+    dx = fmax(fmax(r - x, x - (w - r)), 0);
+    dy = fmax(fmax(r - y, y - (h - r)), 0);
+    return dx * dx + dy * dy <= r * r;
+}
+
+/* Antialiased rounded rectangle, blended over the buffer. hollow keeps a
+ * one pixel outline, as drwl_rect() does when not filled. */
+static void drawpill(Monitor* m,
+                     int x,
+                     int y,
+                     int w,
+                     int h,
+                     double r,
+                     int hollow,
+                     uint32_t rgba)
+{
+    pixman_image_t *mask, *src;
+    pixman_color_t clr;
+    uint8_t* data;
+    int stride, px, py, sx, sy, cov;
+    double fx, fy;
+
+    if (w <= 0 || h <= 0 ||
+        !(mask = pixman_image_create_bits(PIXMAN_a8, w, h, NULL, 0)))
+        return;
+    r = fmin(fmax(r, 0), fmin(w, h) / 2.0);
+    data = (uint8_t*)pixman_image_get_data(mask);
+    stride = pixman_image_get_stride(mask);
+
+    /* 4x4 supersampling */
+    for (py = 0; py < h; py++)
+        for (px = 0; px < w; px++) {
+            for (cov = 0, sy = 0; sy < 4; sy++)
+                for (sx = 0; sx < 4; sx++) {
+                    fx = px + (sx + 0.5) / 4;
+                    fy = py + (sy + 0.5) / 4;
+                    cov += inpill(fx, fy, w, h, r) &&
+                           !(hollow && fx > 1 && fy > 1 &&
+                             inpill(fx - 1, fy - 1, w - 2, h - 2, r - 1));
+                }
+            data[py * stride + px] = (uint8_t)(cov * 255 / 16);
+        }
+
+    clr = convert_color(rgba);
+    if ((src = pixman_image_create_solid_fill(&clr))) {
+        pixman_image_composite32(
+            PIXMAN_OP_OVER, src, mask, m->drw->image, 0, 0, 0, 0, x, y, w, h);
+        pixman_image_unref(src);
+    }
+    pixman_image_unref(mask);
+}
+
 void drawbar(Monitor* m)
 {
     int x, w, tw = 0, traywidth = 0;
@@ -122,6 +188,7 @@ void drawbar(Monitor* m)
     int boxw = m->drw->font->height / 6 + 2;
     /* the little squares follow the text, which drwl centers */
     int boxy = (m->b.height - m->drw->font->height) / 2 + boxs;
+    double boxr = barboxradius * m->wlr_output->scale;
     uint32_t i, occ = 0, urg = 0;
     Client* c;
     Buffer* buf;
@@ -176,13 +243,14 @@ void drawbar(Monitor* m)
         drwl_text(
             m->drw, x, 0, w, m->b.height, m->lrpad / 2, tags[i], urg & 1 << i);
         if (occ & 1 << i)
-            drwl_rect(m->drw,
-                      x + w - boxs - boxw,
-                      boxy,
-                      boxw,
-                      boxw,
-                      sel && c && c->tags & 1 << i,
-                      urg & 1 << i);
+            drawpill(m,
+                     x + w - boxs - boxw,
+                     boxy,
+                     boxw,
+                     boxw,
+                     boxr,
+                     !(sel && c && c->tags & 1 << i),
+                     m->drw->scheme[urg & 1 << i ? ColBg : ColFg]);
         x += w;
     }
     w = TEXTW(m, s->ltsymbol);
@@ -278,7 +346,14 @@ void drawbar(Monitor* m)
                           client_get_title(c),
                           0);
                 if (c && c->isfloating)
-                    drwl_rect(m->drw, x + boxs, boxy, boxw, boxw, 0, 0);
+                    drawpill(m,
+                             x + boxs,
+                             boxy,
+                             boxw,
+                             boxw,
+                             boxr,
+                             1,
+                             m->drw->scheme[ColFg]);
             } else {
                 drwl_setscheme(m->drw, colors[SchemeNorm]);
                 drwl_rect(m->drw, x, 0, w, m->b.height, 1, 1);
@@ -649,6 +724,7 @@ static void drawnotify(Monitor* m,
                  b.linew,
                  len,
                  notification_lineradius * m->wlr_output->scale,
+                 0,
                  line);
     }
 
@@ -686,46 +762,6 @@ static void drawnotify(Monitor* m,
         notifytimer = wl_event_loop_add_timer(event_loop, notifytick, NULL);
     if (notifytimer)
         wl_event_source_timer_update(notifytimer, (int)wake);
-}
-
-/* Antialiased rounded rectangle, blended over the buffer. */
-static void
-drawpill(Monitor* m, int x, int y, int w, int h, double r, uint32_t rgba)
-{
-    pixman_image_t *mask, *src;
-    pixman_color_t clr;
-    uint8_t* data;
-    int stride, px, py, sx, sy, cov;
-    double fx, fy, dx, dy;
-
-    if (w <= 0 || h <= 0 ||
-        !(mask = pixman_image_create_bits(PIXMAN_a8, w, h, NULL, 0)))
-        return;
-    r = fmin(fmax(r, 0), fmin(w, h) / 2.0);
-    data = (uint8_t*)pixman_image_get_data(mask);
-    stride = pixman_image_get_stride(mask);
-
-    /* 4x4 supersampling */
-    for (py = 0; py < h; py++)
-        for (px = 0; px < w; px++) {
-            for (cov = 0, sy = 0; sy < 4; sy++)
-                for (sx = 0; sx < 4; sx++) {
-                    fx = px + (sx + 0.5) / 4;
-                    fy = py + (sy + 0.5) / 4;
-                    dx = fmax(fmax(r - fx, fx - (w - r)), 0);
-                    dy = fmax(fmax(r - fy, fy - (h - r)), 0);
-                    cov += dx * dx + dy * dy <= r * r;
-                }
-            data[py * stride + px] = (uint8_t)(cov * 255 / 16);
-        }
-
-    clr = convert_color(rgba);
-    if ((src = pixman_image_create_solid_fill(&clr))) {
-        pixman_image_composite32(
-            PIXMAN_OP_OVER, src, mask, m->drw->image, 0, 0, 0, 0, x, y, w, h);
-        pixman_image_unref(src);
-    }
-    pixman_image_unref(mask);
 }
 
 /* bytes of s, cut on a codepoint, that fit in w */
