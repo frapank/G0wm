@@ -218,6 +218,7 @@ static void cleanup(void)
         watcher_stop(&watcher);
 #endif
 #ifdef NOTIFICATIONS
+    notifyfini();
     if (shownotifications)
         notify_stop();
 #endif
