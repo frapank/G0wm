@@ -97,11 +97,15 @@ void axisnotify(struct wl_listener* listener, void* data)
         Client* c;
         Arg arg;
         Monitor* pm = xytomon(cursor->x, cursor->y);
+        struct wlr_keyboard* keyboard = wlr_seat_get_keyboard(seat);
+        int horizontal =
+            event->orientation == WL_POINTER_AXIS_HORIZONTAL_SCROLL ||
+            (keyboard &&
+             wlr_keyboard_get_modifiers(keyboard) & WLR_MODIFIER_SHIFT);
 
         xytonode(cursor->x, cursor->y, NULL, &c, NULL, NULL, NULL);
-        if (!locked && !c &&
-            event->orientation == WL_POINTER_AXIS_VERTICAL_SCROLL &&
-            barclick(pm, &arg) == ClkTitle && notifywheel(pm, event->delta))
+        if (!locked && !c && barclick(pm, &arg) == ClkTitle &&
+            notifywheel(pm, event->delta, horizontal))
             return;
     }
 #endif

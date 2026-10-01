@@ -298,10 +298,14 @@ static Key keys_def[] = {
 #endif
 	/* --- end RUNNER --- */
 
-	/* --- NOTIFICATIONS: n scrolls a long one by a screenful, Shift+n opens it --- */
+	/* --- NOTIFICATIONS: n scrolls, Shift+n opens, Ctrl+n next, Alt+n back in
+	 * the history, Ctrl+Shift+n clears all --- */
 #ifdef NOTIFICATIONS
-	{ MODKEY,                    XKB_KEY_n,           notifyscroll,     {0} },
-	{ MODKEY|WLR_MODIFIER_SHIFT, XKB_KEY_n,           notifyopen,       {0} },
+	{ MODKEY,                                      XKB_KEY_n, notifyscroll,     {0} },
+	{ MODKEY|WLR_MODIFIER_SHIFT,                   XKB_KEY_n, notifyopen,       {0} },
+	{ MODKEY|WLR_MODIFIER_CTRL,                    XKB_KEY_n, notifynext,       {0} },
+	{ MODKEY|WLR_MODIFIER_ALT,                     XKB_KEY_n, notifyprev,       {0} },
+	{ MODKEY|WLR_MODIFIER_CTRL|WLR_MODIFIER_SHIFT, XKB_KEY_n, notifydismissall, {0} },
 #endif
 	/* --- end NOTIFICATIONS --- */
 
@@ -390,7 +394,8 @@ static Button buttons_def[] = {
 	{ ClkLtSymbol, 0,      BTN_RIGHT,  setlayout,      {.v = &layouts_def[2]} },
 
 	{ ClkTitle,    0,      BTN_MIDDLE, zoom,           {0} },
-	/* --- NOTIFICATIONS: left opens, right dismisses, the wheel scrolls --- */
+	/* --- NOTIFICATIONS: left opens, right dismisses, the wheel walks the
+	 * history, sideways (or with Shift) it scrolls --- */
 #ifdef NOTIFICATIONS
 	{ ClkTitle,    0,      BTN_LEFT,   notifyopen,     {0} },
 	{ ClkTitle,    0,      BTN_RIGHT,  notifydismiss,  {0} },

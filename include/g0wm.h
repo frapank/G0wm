@@ -473,9 +473,13 @@ void motionrelative(struct wl_listener* listener, void* data);
 void moveresize(const Arg* arg);
 #ifdef NOTIFICATIONS
 void notifydismiss(const Arg* arg);
+void notifyfini(void);
+void notifydismissall(const Arg* arg);
+void notifynext(const Arg* arg);
 void notifyopen(const Arg* arg);
+void notifyprev(const Arg* arg);
 void notifyscroll(const Arg* arg);
-int notifywheel(Monitor* pm, double delta);
+int notifywheel(Monitor* pm, double delta, int horizontal);
 #endif /* NOTIFICATIONS */
 int opacityallowed(const char* appid);
 void outputmgrapply(struct wl_listener* listener, void* data);
