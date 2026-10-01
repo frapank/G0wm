@@ -476,6 +476,8 @@ void moveresize(const Arg* arg);
 #ifdef NOTIFICATIONS
 void notifydismiss(const Arg* arg);
 void notifyfini(void);
+const char* notifytoken(void);
+int notifytokenmine(const struct wlr_xdg_activation_token_v1* token);
 void notifydismissall(const Arg* arg);
 void notifynext(const Arg* arg);
 void notifyopen(const Arg* arg);
