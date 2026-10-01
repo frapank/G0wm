@@ -1,7 +1,10 @@
 #include "notify.h"
 
 #include <stdio.h>
+#include <stdlib.h>
 #include <string.h>
+#include <strings.h>
+#include <time.h>
 
 #define NOTIFY_NAME "org.freedesktop.Notifications"
 #define NOTIFY_OPATH "/org/freedesktop/Notifications"
@@ -9,6 +12,8 @@
 /* An unbounded expire_timeout would let one client hold the bar (and hide the
  * window title) for the rest of the session. */
 #define NOTIFY_TIMEOUT_MAX 60000
+/* image-data bigger than this on a side is refused rather than decoded */
+#define NOTIFY_IMAGEMAX 4096
 
 /* org.freedesktop.Notifications.NotificationClosed reasons */
 enum { ClosedExpired = 1, ClosedDismissed, ClosedByCall, ClosedUndefined };
@@ -18,24 +23,27 @@ static struct {
     struct wl_event_loop* loop;
     struct wl_event_source* timer;
     void (*redraw)(void);
+    const char* (*token)(void);
     unsigned int timeout_ms;
-    dbus_uint32_t id;  /* id of the notification on screen */
     dbus_uint32_t seq; /* handed out to clients that don't pick one */
     int active;
     int running;
-    int hasdefault; /* the client offered a "default" action */
-    int sticky;
-    char text[NOTIFY_TEXTMAX];
-    char app[64];     /* app_name */
-    char desktop[64]; /* desktop-entry hint */
-    struct {
-        dbus_uint32_t id;
-        int hasdefault;
-        char text[NOTIFY_TEXTMAX];
-        char app[64];
-        char desktop[64];
-    } saved;
+    int held;
+    unsigned int heldleft; /* time cur had left when held */
+    Notification cur;      /* valid when active */
+    Notification queue[NOTIFY_QUEUEMAX];
+    size_t nqueue;
+    Notification hist[NOTIFY_HISTMAX]; /* newest first */
+    size_t nhist;
 } notify;
+
+uint64_t notify_now(void)
+{
+    struct timespec ts;
+
+    clock_gettime(CLOCK_MONOTONIC, &ts);
+    return (uint64_t)ts.tv_sec * 1000 + (uint64_t)ts.tv_nsec / 1000000;
+}
 
 /* Copies src into dst keeping only whole, well-formed UTF-8 codepoints:
  * control characters become spaces, invalid bytes are dropped and a sequence
@@ -95,44 +103,82 @@ static void notify_closed(dbus_uint32_t id, dbus_uint32_t reason)
     dbus_message_unref(sig);
 }
 
-static void notify_save(void)
+static void release(Notification* n)
 {
-    notify_closed(notify.saved.id, ClosedUndefined);
-    notify.saved.id = notify.id;
-    notify.saved.hasdefault = notify.hasdefault;
-    memcpy(notify.saved.text, notify.text, sizeof(notify.text));
-    memcpy(notify.saved.app, notify.app, sizeof(notify.app));
-    memcpy(notify.saved.desktop, notify.desktop, sizeof(notify.desktop));
+    if (n->icon)
+        destroyicon(n->icon);
+    n->icon = NULL;
 }
 
-static void notify_restore(void)
+/* same id, or same app and stack tag */
+static int sameslot(const Notification* a, const Notification* b)
 {
-    if (!notify.saved.id)
-        return;
-    notify.id = notify.saved.id;
-    notify.hasdefault = notify.saved.hasdefault;
-    memcpy(notify.text, notify.saved.text, sizeof(notify.text));
-    memcpy(notify.app, notify.saved.app, sizeof(notify.app));
-    memcpy(notify.desktop, notify.saved.desktop, sizeof(notify.desktop));
-    notify.saved.id = 0;
-    notify.sticky = 1;
-    notify.active = 1;
+    return a->id == b->id ||
+           (*a->tag && !strcmp(a->tag, b->tag) && !strcmp(a->app, b->app));
 }
 
-/* Clears the current notification, if any, and tells the bar to redraw so
- * whatever the notification was covering (the window title) comes back. */
-static void notify_clear(dbus_uint32_t reason)
+/* Pushes n to the head of the history, taking over its icon. An entry for
+ * the same id or stack tag is replaced, so ten volume key presses leave one
+ * entry. */
+static void histpush(Notification* n)
 {
-    if (!notify.active)
+    size_t i;
+
+    if (n->transient) {
+        release(n);
         return;
-    notify.active = 0;
-    if (notify.timer)
-        wl_event_source_timer_update(notify.timer, 0);
-    notify_closed(notify.id, reason);
-    notify_restore();
-    if (notify.redraw)
-        notify.redraw();
+    }
+    for (i = 0; i < notify.nhist && !sameslot(&notify.hist[i], n); i++)
+        ;
+    if (i == notify.nhist && notify.nhist == NOTIFY_HISTMAX)
+        i = notify.nhist - 1; /* full: drop the oldest */
+    if (i < notify.nhist) {
+        release(&notify.hist[i]);
+        memmove(&notify.hist[i],
+                &notify.hist[i + 1],
+                (notify.nhist - i - 1) * sizeof(*notify.hist));
+        notify.nhist--;
+    }
+    memmove(&notify.hist[1], &notify.hist[0], notify.nhist * sizeof(*n));
+    notify.hist[0] = *n;
+    notify.nhist++;
+    n->icon = NULL;
 }
+
+static void unqueue(size_t i, Notification* dst)
+{
+    *dst = notify.queue[i];
+    memmove(&notify.queue[i],
+            &notify.queue[i + 1],
+            (notify.nqueue - i - 1) * sizeof(*notify.queue));
+    notify.nqueue--;
+}
+
+/* A full queue sends its oldest expiring entry straight to the history. */
+static void enqueue(Notification* n, int front)
+{
+    Notification old;
+    size_t i;
+
+    if (notify.nqueue == NOTIFY_QUEUEMAX) {
+        for (i = 0; i < notify.nqueue && !notify.queue[i].timeout_ms; i++)
+            ;
+        unqueue(i < notify.nqueue ? i : 0, &old);
+        notify_closed(old.id, ClosedUndefined);
+        histpush(&old);
+    }
+    if (front) {
+        memmove(&notify.queue[1],
+                &notify.queue[0],
+                notify.nqueue * sizeof(*notify.queue));
+        notify.queue[0] = *n;
+    } else {
+        notify.queue[notify.nqueue] = *n;
+    }
+    notify.nqueue++;
+}
+
+static void notify_clear(dbus_uint32_t reason);
 
 static int notify_expire(void* data)
 {
@@ -141,15 +187,71 @@ static int notify_expire(void* data)
     return 0;
 }
 
+/* 0 disarms */
 static int notify_arm(unsigned int ms)
 {
-    if (!notify.timer)
+    if (!notify.timer && ms)
         notify.timer =
             wl_event_loop_add_timer(notify.loop, notify_expire, NULL);
+    if (!notify.timer)
+        return !ms;
+    return wl_event_source_timer_update(notify.timer, (int)ms) == 0;
+}
+
+static int show(void)
+{
+    notify.cur.shown_ms = notify_now();
+    notify.cur.seen = 1;
+    if (notify.held) {
+        notify.heldleft = notify.cur.timeout_ms;
+        notify.active = 1;
+        return 1;
+    }
     /* Without a timer the notification would sit in the bar forever, so the
      * caller is expected to drop it instead of showing it unexpirable. */
-    return notify.timer &&
-           wl_event_source_timer_update(notify.timer, (int)ms) == 0;
+    notify.active = notify_arm(notify.cur.timeout_ms);
+    return notify.active;
+}
+
+/* An unseen critical goes first (it was held back by a pick); seen ones go
+ * last, or everything else would wait behind them forever. */
+static void shownext(void)
+{
+    size_t i;
+
+    while (!notify.active && notify.nqueue) {
+        for (i = 0; i < notify.nqueue; i++)
+            if (notify.queue[i].urgency == UrgencyCritical &&
+                !notify.queue[i].seen)
+                break;
+        if (i == notify.nqueue)
+            for (i = 0; i < notify.nqueue && !notify.queue[i].timeout_ms; i++)
+                ;
+        unqueue(i < notify.nqueue ? i : 0, &notify.cur);
+        if (!show()) {
+            notify_closed(notify.cur.id, ClosedUndefined);
+            histpush(&notify.cur);
+        }
+    }
+}
+
+/* Takes the current notification down and brings up the next one. */
+static void notify_clear(dbus_uint32_t reason)
+{
+    if (!notify.active)
+        return;
+    notify.active = 0;
+    notify.held = 0;
+    notify_arm(0);
+    notify_closed(notify.cur.id, reason);
+    /* closed by the client: not worth keeping */
+    if (reason == ClosedByCall)
+        release(&notify.cur);
+    else
+        histpush(&notify.cur);
+    shownext();
+    if (notify.redraw)
+        notify.redraw();
 }
 
 /* Points iter at the n-th Notify argument: actions, hints and expire_timeout
@@ -175,24 +277,34 @@ static int expire_timeout(DBusMessage* msg)
     return ms;
 }
 
-/* actions is a flat (key, label, key, label, ...) list; only "default", what
- * a click on the notification itself means, is of any use here. */
-static int has_default(DBusMessage* msg)
+/* actions is a flat (key, label, ...) list. Keys too long to store are
+ * skipped, not cut: they must go back to the client unchanged. */
+static void actions(DBusMessage* msg, Notification* n)
 {
     DBusMessageIter iter, arr;
-    const char* key;
-    int i;
+    const char *key, *label;
 
     if (!argat(msg, &iter, 5, DBUS_TYPE_ARRAY))
-        return 0;
+        return;
     dbus_message_iter_recurse(&iter, &arr);
-    for (i = 0; dbus_message_iter_get_arg_type(&arr) == DBUS_TYPE_STRING;
-         i++, dbus_message_iter_next(&arr)) {
+    while (dbus_message_iter_get_arg_type(&arr) == DBUS_TYPE_STRING) {
         dbus_message_iter_get_basic(&arr, &key);
-        if (!(i & 1) && !strcmp(key, "default"))
-            return 1;
+        dbus_message_iter_next(&arr);
+        if (dbus_message_iter_get_arg_type(&arr) != DBUS_TYPE_STRING)
+            break;
+        dbus_message_iter_get_basic(&arr, &label);
+        dbus_message_iter_next(&arr);
+        if (!strcmp(key, "default")) {
+            n->hasdefault = 1;
+        } else if (n->nact < NOTIFY_ACTMAX &&
+                   strlen(key) < sizeof(n->act[0].key)) {
+            memcpy(n->act[n->nact].key, key, strlen(key) + 1);
+            sanitize(n->act[n->nact].label,
+                     sizeof(n->act[0].label),
+                     *label ? label : key);
+            n->nact++;
+        }
     }
-    return 0;
 }
 
 static int hint(DBusMessage* msg,
@@ -234,15 +346,219 @@ static void desktop_entry(DBusMessage* msg, char* dst, size_t dstsz)
     sanitize(dst, dstsz, val);
 }
 
-static int critical(DBusMessage* msg)
+static int boolhint(DBusMessage* msg, const char* name)
 {
     DBusMessageIter var;
-    unsigned char urgency;
+    dbus_bool_t b;
+
+    if (!hint(msg, name, DBUS_TYPE_BOOLEAN, &var))
+        return 0;
+    dbus_message_iter_get_basic(&var, &b);
+    return b;
+}
+
+/* dunst's hint, then the older Ubuntu one */
+static void stack_tag(DBusMessage* msg, char* dst, size_t dstsz)
+{
+    DBusMessageIter var;
+    const char* val;
+
+    *dst = '\0';
+    if (!hint(msg, "x-dunst-stack-tag", DBUS_TYPE_STRING, &var) &&
+        !hint(msg, "x-canonical-private-synchronous", DBUS_TYPE_STRING, &var))
+        return;
+    dbus_message_iter_get_basic(&var, &val);
+    sanitize(dst, dstsz, val);
+}
+
+/* clients send it signed or unsigned */
+static int value(DBusMessage* msg)
+{
+    DBusMessageIter var;
+    dbus_int32_t i;
+    dbus_uint32_t u;
+
+    if (hint(msg, "value", DBUS_TYPE_INT32, &var)) {
+        dbus_message_iter_get_basic(&var, &i);
+    } else if (hint(msg, "value", DBUS_TYPE_UINT32, &var)) {
+        dbus_message_iter_get_basic(&var, &u);
+        i = u > 100 ? 100 : (dbus_int32_t)u;
+    } else {
+        return -1;
+    }
+    return i < 0 ? 0 : i > 100 ? 100 : i;
+}
+
+/* UTF-8 encodes cp into dst, 0 if it doesn't fit or isn't valid */
+static size_t putcp(char* dst, size_t room, unsigned long cp)
+{
+    if (!cp || (cp >= 0xD800 && cp <= 0xDFFF) || cp > 0x10FFFF)
+        return 0;
+    if (cp < 0x80 && room > 1) {
+        dst[0] = (char)cp;
+        return 1;
+    } else if (cp < 0x800 && room > 2) {
+        dst[0] = (char)(0xC0 | cp >> 6);
+        dst[1] = (char)(0x80 | (cp & 0x3F));
+        return 2;
+    } else if (cp < 0x10000 && room > 3) {
+        dst[0] = (char)(0xE0 | cp >> 12);
+        dst[1] = (char)(0x80 | (cp >> 6 & 0x3F));
+        dst[2] = (char)(0x80 | (cp & 0x3F));
+        return 3;
+    } else if (cp >= 0x10000 && room > 4) {
+        dst[0] = (char)(0xF0 | cp >> 18);
+        dst[1] = (char)(0x80 | (cp >> 12 & 0x3F));
+        dst[2] = (char)(0x80 | (cp >> 6 & 0x3F));
+        dst[3] = (char)(0x80 | (cp & 0x3F));
+        return 4;
+    }
+    return 0;
+}
+
+/* Flattens body markup to plain text: entities are decoded, the tags the
+ * spec allows are dropped (<br> becomes a space), any other < is kept. */
+static void demarkup(char* dst, size_t dstsz, const char* src)
+{
+    static const struct {
+        const char* name;
+        char c;
+    } ents[] = { { "amp;", '&' },
+                 { "lt;", '<' },
+                 { "gt;", '>' },
+                 { "quot;", '"' },
+                 { "apos;", '\'' } };
+    static const char* const tags[] = { "b", "i", "u", "a", "img", "br" };
+    const char *p, *end;
+    unsigned long cp;
+    size_t i = 0, k, n;
+    char* stop;
+
+    if (!dstsz)
+        return;
+    for (p = src; *p && i + 1 < dstsz;) {
+        if (*p == '&') {
+            for (k = 0; k < sizeof(ents) / sizeof(*ents); k++)
+                if (!strncmp(p + 1, ents[k].name, strlen(ents[k].name)))
+                    break;
+            if (k < sizeof(ents) / sizeof(*ents)) {
+                dst[i++] = ents[k].c;
+                p += 1 + strlen(ents[k].name);
+                continue;
+            }
+            if (p[1] == '#') {
+                cp = p[2] == 'x' || p[2] == 'X' ? strtoul(p + 3, &stop, 16)
+                                                : strtoul(p + 2, &stop, 10);
+                if (*stop == ';' && stop > p + 2 &&
+                    (n = putcp(dst + i, dstsz - i, cp))) {
+                    i += n;
+                    p = stop + 1;
+                    continue;
+                }
+            }
+        } else if (*p == '<' && (end = strchr(p, '>'))) {
+            const char* name = p + 1 + (p[1] == '/');
+            for (n = 0; name[n] && !strchr(" \t\n/>", name[n]); n++)
+                ;
+            for (k = 0; k < sizeof(tags) / sizeof(*tags); k++)
+                if (strlen(tags[k]) == n && !strncasecmp(name, tags[k], n))
+                    break;
+            if (k < sizeof(tags) / sizeof(*tags)) {
+                if (!strcmp(tags[k], "br"))
+                    dst[i++] = ' ';
+                p = end + 1;
+                continue;
+            }
+        }
+        dst[i++] = *p++;
+    }
+    dst[i] = '\0';
+}
+
+static int urgency(DBusMessage* msg)
+{
+    DBusMessageIter var;
+    unsigned char u;
 
     if (!hint(msg, "urgency", DBUS_TYPE_BYTE, &var))
-        return 0;
-    dbus_message_iter_get_basic(&var, &urgency);
-    return urgency == 2;
+        return UrgencyNormal;
+    dbus_message_iter_get_basic(&var, &u);
+    return u <= UrgencyCritical ? u : UrgencyNormal;
+}
+
+/* (iiibiiay): width, height, rowstride, has_alpha, bits_per_sample,
+ * channels, data. Validated before any byte is read. */
+static Icon* image_data(DBusMessage* msg, const char* name)
+{
+    DBusMessageIter var, st, arr;
+    dbus_int32_t v[3], bps, ch;
+    dbus_bool_t alpha;
+    const uint8_t* data;
+    int i, len;
+
+    if (!hint(msg, name, DBUS_TYPE_STRUCT, &var))
+        return NULL;
+    dbus_message_iter_recurse(&var, &st);
+    for (i = 0; i < 3; i++, dbus_message_iter_next(&st)) {
+        if (dbus_message_iter_get_arg_type(&st) != DBUS_TYPE_INT32)
+            return NULL;
+        dbus_message_iter_get_basic(&st, &v[i]);
+    }
+    if (dbus_message_iter_get_arg_type(&st) != DBUS_TYPE_BOOLEAN)
+        return NULL;
+    dbus_message_iter_get_basic(&st, &alpha);
+    dbus_message_iter_next(&st);
+    if (dbus_message_iter_get_arg_type(&st) != DBUS_TYPE_INT32)
+        return NULL;
+    dbus_message_iter_get_basic(&st, &bps);
+    dbus_message_iter_next(&st);
+    if (dbus_message_iter_get_arg_type(&st) != DBUS_TYPE_INT32)
+        return NULL;
+    dbus_message_iter_get_basic(&st, &ch);
+    dbus_message_iter_next(&st);
+    if (dbus_message_iter_get_arg_type(&st) != DBUS_TYPE_ARRAY ||
+        dbus_message_iter_get_element_type(&st) != DBUS_TYPE_BYTE)
+        return NULL;
+    dbus_message_iter_recurse(&st, &arr);
+    dbus_message_iter_get_fixed_array(&arr, &data, &len);
+
+    if (v[0] <= 0 || v[1] <= 0 || v[0] > NOTIFY_IMAGEMAX ||
+        v[1] > NOTIFY_IMAGEMAX || bps != 8 || ch != (alpha ? 4 : 3) ||
+        v[2] < v[0] * ch ||
+        (int64_t)len < (int64_t)v[2] * (v[1] - 1) + (int64_t)v[0] * ch)
+        return NULL;
+    return createiconfromdata(data, v[0], v[1], v[2], alpha, NOTIFY_ICONSIZE);
+}
+
+/* a path, a file:// URI or an icon name */
+static Icon* image_named(const char* s)
+{
+    if (!s || !*s)
+        return NULL;
+    if (!strncmp(s, "file://", 7))
+        s += 7;
+    return createiconfromname(s, NULL, NOTIFY_ICONSIZE);
+}
+
+/* in the spec's order of precedence */
+static Icon* notify_icon(DBusMessage* msg, const char* app_icon)
+{
+    DBusMessageIter var;
+    const char* path;
+    Icon* icon;
+
+    if ((icon = image_data(msg, "image-data")) ||
+        (icon = image_data(msg, "image_data")))
+        return icon;
+    if (hint(msg, "image-path", DBUS_TYPE_STRING, &var) ||
+        hint(msg, "image_path", DBUS_TYPE_STRING, &var)) {
+        dbus_message_iter_get_basic(&var, &path);
+        if ((icon = image_named(path)))
+            return icon;
+    }
+    if ((icon = image_named(app_icon)))
+        return icon;
+    return image_data(msg, "icon_data");
 }
 
 static DBusHandlerResult reply_empty(DBusConnection* conn, DBusMessage* msg)
@@ -263,9 +579,11 @@ static DBusHandlerResult handle_notify(DBusConnection* conn, DBusMessage* msg)
     DBusMessage* reply;
     const char *app_name = "", *app_icon = "", *summary = "", *body = "";
     dbus_uint32_t replaces_id = 0, id;
-    int ms, sticky;
+    Notification n = { 0 };
+    size_t i;
+    int ms;
     /* bounded well under NOTIFY_TEXTMAX: snprintf() below can't truncate */
-    char capp[64], csummary[200], cbody[200];
+    char capp[64], csummary[200], cbody[200], plain[1024];
 
     /* actions/hints intentionally left unread; expire_timeout comes after
      * them and is picked up separately below */
@@ -298,54 +616,80 @@ static DBusHandlerResult handle_notify(DBusConnection* conn, DBusMessage* msg)
         ms = (int)notify.timeout_ms;
     else if (ms > NOTIFY_TIMEOUT_MAX)
         ms = NOTIFY_TIMEOUT_MAX;
-    sticky = critical(msg);
-
-    /* A client updating its own notification keeps the id it was given;
-     * anything else displaces whatever was on screen. */
-    id = replaces_id ? replaces_id : ++notify.seq;
-    if (!id) /* the counter wrapped; 0 means "no notification" */
-        id = ++notify.seq;
-    if (notify.saved.id == id)
-        notify.saved.id = 0;
-    if (notify.active && notify.id != id) {
-        if (notify.sticky)
-            notify_save();
-        else
-            notify_closed(notify.id, ClosedUndefined);
-    }
+    n.urgency = urgency(msg);
+    n.timeout_ms = n.urgency == UrgencyCritical ? 0 : (unsigned int)ms;
+    n.transient = boolhint(msg, "transient");
+    n.resident = boolhint(msg, "resident");
+    actions(msg, &n);
 
     sanitize(capp, sizeof(capp), *app_name ? app_name : "?");
     sanitize(csummary, sizeof(csummary), summary);
-    sanitize(cbody, sizeof(cbody), body);
-
+    demarkup(plain, sizeof(plain), body);
+    sanitize(cbody, sizeof(cbody), plain);
     if (*csummary && *cbody)
-        snprintf(notify.text,
-                 sizeof(notify.text),
-                 "%s: %s - %s",
-                 capp,
-                 csummary,
-                 cbody);
+        snprintf(n.text, sizeof(n.text), "%s: %s - %s", capp, csummary, cbody);
     else
-        snprintf(notify.text,
-                 sizeof(notify.text),
+        snprintf(n.text,
+                 sizeof(n.text),
                  "%s: %s",
                  capp,
                  *csummary ? csummary : cbody);
-    snprintf(notify.app, sizeof(notify.app), "%s", capp);
-    desktop_entry(msg, notify.desktop, sizeof(notify.desktop));
-    notify.hasdefault = has_default(msg);
+    snprintf(n.app, sizeof(n.app), "%s", capp);
+    desktop_entry(msg, n.desktop, sizeof(n.desktop));
+    stack_tag(msg, n.tag, sizeof(n.tag));
+    n.value = value(msg);
+    n.icon = notify_icon(msg, app_icon);
 
-    notify.id = id;
-    notify.sticky = sticky;
-    if (sticky) {
-        if (notify.timer)
-            wl_event_source_timer_update(notify.timer, 0);
-        notify.active = 1;
-    } else {
-        notify.active = notify_arm((unsigned int)ms);
+    /* Updates, by id or by stack tag, keep their place on screen or in the
+     * queue. */
+    id = replaces_id;
+    if (!id && *n.tag) {
+        if (notify.active && sameslot(&notify.cur, &n))
+            id = notify.cur.id;
+        for (i = 0; !id && i < notify.nqueue; i++)
+            if (sameslot(&notify.queue[i], &n))
+                id = notify.queue[i].id;
     }
-    if (!notify.active) /* no timer: don't show what we can't take down */
-        notify_closed(id, ClosedUndefined);
+    if (!id)
+        id = ++notify.seq;
+    if (!id) /* the counter wrapped; 0 means "no notification" */
+        id = ++notify.seq;
+    n.id = id;
+
+    for (i = 0; i < notify.nqueue && notify.queue[i].id != id; i++)
+        ;
+    if (notify.active && notify.cur.id == id) {
+        release(&notify.cur);
+        notify.cur = n;
+        if (!show()) {
+            notify_closed(id, ClosedUndefined);
+            histpush(&notify.cur);
+            shownext();
+        }
+    } else if (i < notify.nqueue) {
+        release(&notify.queue[i]);
+        notify.queue[i] = n;
+    } else if (notify.held) {
+        /* the user is picking an action: nothing takes the box */
+        enqueue(&n, n.urgency == UrgencyCritical);
+    } else if (!notify.active || !notify.cur.timeout_ms ||
+               n.urgency == UrgencyCritical) {
+        /* shown now if the box is free, sticky, or this one is critical;
+         * what it covers goes back to the front of the queue */
+        if (notify.active) {
+            notify_arm(0);
+            notify.active = 0;
+            enqueue(&notify.cur, 1);
+        }
+        notify.cur = n;
+        if (!show()) {
+            notify_closed(id, ClosedUndefined);
+            histpush(&notify.cur);
+            shownext();
+        }
+    } else {
+        enqueue(&n, 0);
+    }
     if (notify.redraw)
         notify.redraw();
 
@@ -366,16 +710,23 @@ send:
 
 static DBusHandlerResult handle_close(DBusConnection* conn, DBusMessage* msg)
 {
+    Notification n;
     dbus_uint32_t id;
+    size_t i;
 
     if (!dbus_message_get_args(
             msg, NULL, DBUS_TYPE_UINT32, &id, DBUS_TYPE_INVALID))
         return reply_empty(conn, msg);
-    if (notify.active && id == notify.id)
+    for (i = 0; i < notify.nqueue && notify.queue[i].id != id; i++)
+        ;
+    if (notify.active && id == notify.cur.id) {
         notify_clear(ClosedByCall);
-    else if (id && id == notify.saved.id) {
-        notify.saved.id = 0;
+    } else if (id && i < notify.nqueue) {
+        unqueue(i, &n);
+        release(&n);
         notify_closed(id, ClosedByCall);
+        if (notify.redraw)
+            notify.redraw();
     }
 
     return reply_empty(conn, msg);
@@ -386,7 +737,7 @@ static DBusHandlerResult handle_capabilities(DBusConnection* conn,
 {
     DBusMessage* reply = dbus_message_new_method_return(msg);
     DBusMessageIter iter, arr;
-    const char* caps[] = { "body", "actions" };
+    const char* caps[] = { "body", "body-markup", "actions", "icon-static" };
     size_t i;
     DBusHandlerResult res = DBUS_HANDLER_RESULT_HANDLED;
 
@@ -396,7 +747,9 @@ static DBusHandlerResult handle_capabilities(DBusConnection* conn,
     dbus_message_iter_init_append(reply, &iter);
     if (!dbus_message_iter_open_container(&iter, DBUS_TYPE_ARRAY, "s", &arr))
         res = DBUS_HANDLER_RESULT_NEED_MEMORY;
-    for (i = 0; res == DBUS_HANDLER_RESULT_HANDLED && i < 2; i++)
+    for (i = 0;
+         res == DBUS_HANDLER_RESULT_HANDLED && i < sizeof(caps) / sizeof(*caps);
+         i++)
         if (!dbus_message_iter_append_basic(&arr, DBUS_TYPE_STRING, &caps[i]))
             res = DBUS_HANDLER_RESULT_NEED_MEMORY;
     if (res != DBUS_HANDLER_RESULT_HANDLED ||
@@ -463,7 +816,8 @@ static const DBusObjectPathVTable notify_vtable = {
 void notify_start(DBusConnection* conn,
                   struct wl_event_loop* loop,
                   unsigned int timeout_secs,
-                  void (*redraw)(void))
+                  void (*redraw)(void),
+                  const char* (*token)(void))
 {
     int r;
 
@@ -473,10 +827,9 @@ void notify_start(DBusConnection* conn,
     memset(&notify, 0, sizeof(notify));
     notify.conn = conn;
     notify.loop = loop;
-    notify.timeout_ms = timeout_secs > NOTIFY_TIMEOUT_MAX / 1000
-                            ? NOTIFY_TIMEOUT_MAX
-                            : (timeout_secs ? timeout_secs : 1) * 1000;
+    notify_settimeout(timeout_secs);
     notify.redraw = redraw;
+    notify.token = token;
 
     /* if another daemon (mako, dunst, swaync, ...) already owns the name,
      * don't fight it for it: just stay disabled */
@@ -502,15 +855,22 @@ void notify_start(DBusConnection* conn,
 
 void notify_stop(void)
 {
+    Notification n;
+
     if (!notify.running)
         return;
 
     /* nothing is worth redrawing on the way out, but clients still deserve
      * to hear that their notification went away */
     notify.redraw = NULL;
-    notify_closed(notify.saved.id, ClosedUndefined);
-    notify.saved.id = 0;
+    while (notify.nqueue) {
+        unqueue(0, &n);
+        notify_closed(n.id, ClosedUndefined);
+        release(&n);
+    }
     notify_clear(ClosedUndefined);
+    while (notify.nhist)
+        release(&notify.hist[--notify.nhist]);
     if (notify.timer) {
         wl_event_source_remove(notify.timer);
         notify.timer = NULL;
@@ -520,44 +880,171 @@ void notify_stop(void)
     notify.running = 0;
 }
 
+void notify_settimeout(unsigned int timeout_secs)
+{
+    notify.timeout_ms = timeout_secs > NOTIFY_TIMEOUT_MAX / 1000
+                            ? NOTIFY_TIMEOUT_MAX
+                            : (timeout_secs ? timeout_secs : 1) * 1000;
+}
+
+const Notification* notify_current(void)
+{
+    return notify.active ? &notify.cur : NULL;
+}
+
+size_t notify_queued(void)
+{
+    return notify.nqueue;
+}
+
+const Notification* notify_history(size_t i)
+{
+    return i < notify.nhist ? &notify.hist[i] : NULL;
+}
+
+size_t notify_histlen(void)
+{
+    return notify.nhist;
+}
+
+void notify_histremove(size_t i)
+{
+    if (i >= notify.nhist)
+        return;
+    release(&notify.hist[i]);
+    memmove(&notify.hist[i],
+            &notify.hist[i + 1],
+            (notify.nhist - i - 1) * sizeof(*notify.hist));
+    notify.nhist--;
+    if (notify.redraw)
+        notify.redraw();
+}
+
 void notify_dismiss(void)
 {
     notify_clear(ClosedDismissed);
 }
 
-void notify_invoke(void)
+void notify_dismissall(void)
 {
-    DBusMessage* sig;
-    const char* key = "default";
+    Notification n;
 
     if (!notify.active)
         return;
-    if (notify.hasdefault &&
+    /* not through notify_clear(), which would bring up each queued one */
+    notify.active = 0;
+    notify_arm(0);
+    notify_closed(notify.cur.id, ClosedDismissed);
+    histpush(&notify.cur);
+    while (notify.nqueue) {
+        unqueue(0, &n);
+        notify_closed(n.id, ClosedDismissed);
+        histpush(&n);
+    }
+    if (notify.redraw)
+        notify.redraw();
+}
+
+/* The activation token goes first, as the spec asks, so the client can
+ * raise the right window itself. */
+static void invoke(const char* key)
+{
+    DBusMessage* sig;
+    const char* token;
+
+    if (notify.token && (token = notify.token()) &&
         (sig = dbus_message_new_signal(
+             NOTIFY_OPATH, NOTIFY_IFACE, "ActivationToken"))) {
+        if (dbus_message_append_args(sig,
+                                     DBUS_TYPE_UINT32,
+                                     &notify.cur.id,
+                                     DBUS_TYPE_STRING,
+                                     &token,
+                                     DBUS_TYPE_INVALID))
+            dbus_connection_send(notify.conn, sig, NULL);
+        dbus_message_unref(sig);
+    }
+    if ((sig = dbus_message_new_signal(
              NOTIFY_OPATH, NOTIFY_IFACE, "ActionInvoked"))) {
         if (dbus_message_append_args(sig,
                                      DBUS_TYPE_UINT32,
-                                     &notify.id,
+                                     &notify.cur.id,
                                      DBUS_TYPE_STRING,
                                      &key,
                                      DBUS_TYPE_INVALID))
             dbus_connection_send(notify.conn, sig, NULL);
         dbus_message_unref(sig);
     }
-    notify_clear(ClosedDismissed);
+    if (notify.cur.resident) {
+        notify_hold(0);
+        if (notify.redraw)
+            notify.redraw();
+    } else {
+        notify_clear(ClosedDismissed);
+    }
 }
 
-const char* notify_getapp(int desktop)
+void notify_invoke(void)
 {
-    return !notify.active ? NULL : desktop ? notify.desktop : notify.app;
+    if (!notify.active)
+        return;
+    if (notify.cur.hasdefault)
+        invoke("default");
+    else
+        notify_clear(ClosedDismissed);
 }
 
-const char* notify_gettext(void)
+void notify_action(size_t i)
 {
-    return notify.active ? notify.text : NULL;
+    if (notify.active && i < notify.cur.nact)
+        invoke(notify.cur.act[i].key);
 }
 
-unsigned int notify_getid(void)
+void notify_hold(int on)
 {
-    return notify.active ? (unsigned int)notify.id : 0;
+    Notification n;
+    uint64_t now = notify_now(), end;
+    size_t i;
+
+    if (!notify.active || !on == !notify.held)
+        return;
+    if (on) {
+        end = notify.cur.shown_ms + notify.cur.timeout_ms;
+        notify.heldleft = !notify.cur.timeout_ms ? 0
+                          : end > now            ? (unsigned int)(end - now)
+                                                 : 1;
+        notify_arm(0);
+        notify.held = 1;
+        return;
+    }
+
+    notify.held = 0;
+    /* a critical that arrived meanwhile takes the box now */
+    for (i = 0; i < notify.nqueue; i++)
+        if (notify.queue[i].urgency == UrgencyCritical && !notify.queue[i].seen)
+            break;
+    if (i < notify.nqueue && notify.cur.urgency != UrgencyCritical) {
+        unqueue(i, &n);
+        notify.active = 0;
+        enqueue(&notify.cur, 1);
+        notify.cur = n;
+        if (!show()) {
+            notify_closed(notify.cur.id, ClosedUndefined);
+            histpush(&notify.cur);
+            shownext();
+        }
+        return;
+    }
+    if (notify.cur.timeout_ms) {
+        notify.cur.shown_ms = now - (notify.cur.timeout_ms - notify.heldleft);
+        /* no redraw from here: the bar may be drawing */
+        notify_arm(notify.heldleft);
+    }
+}
+
+int notify_held(unsigned int* left_ms)
+{
+    if (notify.held && left_ms)
+        *left_ms = notify.heldleft;
+    return notify.held;
 }

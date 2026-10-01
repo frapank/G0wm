@@ -82,6 +82,8 @@ static unsigned int barclick(Monitor* pm, Arg* arg)
 #endif
     else if (cx > pm->b.width - (statusw + traywidth))
         return ClkStatus;
+    /* x + 1, so 0 still means "from the keyboard" */
+    arg->ui = (unsigned int)cx + 1;
     return ClkTitle;
 }
 
@@ -97,11 +99,15 @@ void axisnotify(struct wl_listener* listener, void* data)
         Client* c;
         Arg arg;
         Monitor* pm = xytomon(cursor->x, cursor->y);
+        struct wlr_keyboard* keyboard = wlr_seat_get_keyboard(seat);
+        int horizontal =
+            event->orientation == WL_POINTER_AXIS_HORIZONTAL_SCROLL ||
+            (keyboard &&
+             wlr_keyboard_get_modifiers(keyboard) & WLR_MODIFIER_SHIFT);
 
         xytonode(cursor->x, cursor->y, NULL, &c, NULL, NULL, NULL);
-        if (!locked && !c &&
-            event->orientation == WL_POINTER_AXIS_VERTICAL_SCROLL &&
-            barclick(pm, &arg) == ClkTitle && notifywheel(pm, event->delta))
+        if (!locked && !c && barclick(pm, &arg) == ClkTitle &&
+            notifywheel(pm, event->delta, horizontal))
             return;
     }
 #endif
@@ -179,7 +185,8 @@ void buttonpress(struct wl_listener* listener, void* data)
                 if (CLEANMASK(mods) == CLEANMASK(b->mod) &&
                     event->button == b->button && click == b->click &&
                     b->func) {
-                    b->func((click == ClkTagBar || click == ClkTray) &&
+                    b->func((click == ClkTagBar || click == ClkTray ||
+                             click == ClkTitle) &&
                                     b->arg.i == 0
                                 ? &arg
                                 : &b->arg);
@@ -545,6 +552,16 @@ static void keypress(struct wl_listener* listener, void* data)
     }
 #endif
 
+#ifdef NOTIFICATIONS
+    if (!locked && notifypicking()) {
+        if (nsyms > 0 && event->state == WL_KEYBOARD_KEY_STATE_PRESSED)
+            notifypickkey(syms[0]);
+        group->nsyms = 0;
+        wl_event_source_timer_update(group->key_repeat_source, 0);
+        return;
+    }
+#endif
+
     /* On _press_ if there is no active screen locker,
      * attempt to process a compositor keybinding. */
     if (!locked && event->state == WL_KEYBOARD_KEY_STATE_PRESSED) {
@@ -591,6 +608,11 @@ static int keyrepeat(void* data)
     int i;
     if (!group->nsyms || group->wlr_group->keyboard.repeat_info.rate <= 0)
         return 0;
+#ifdef NOTIFICATIONS
+    /* the repeat of the key that opened the picker would close it */
+    if (notifypicking())
+        return 0;
+#endif
 #ifdef RUNNER
     if (runner_active) {
         /* Holding the binding down past the repeat delay would replay it

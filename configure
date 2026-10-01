@@ -30,11 +30,12 @@ Features:
   --disable-xwayland      build without X11 support
   --no-integrated-background
                           build without the built-in wallpaper renderer
-                          (drops the gdk-pixbuf/glib dependency; the
-                          wallpaper setting in config.h is ignored)
+                          (with --no-systray and --no-notify too, drops
+                          the gdk-pixbuf/glib dependency; the wallpaper
+                          setting in config.h is ignored)
   --no-notify             build without the notification daemon (org.
-                          freedesktop.Notifications); shownotifications
-                          and notification_timeout in config.h are ignored
+                          freedesktop.Notifications); the notification
+                          settings in config.h are ignored
   --no-systray, --no-tray build without the StatusNotifierItem tray in the
                           bar; showsystray, systrayiconsize and
                           systrayspacing in config.h are ignored
@@ -146,7 +147,8 @@ configure_flags() { # package list and compiler/linker flags from the options
 	wlr_pkg=wlroots-$wlroots
 	pkgs="wayland-server xkbcommon libinput pixman-1 fcft dbus-1"
 	[ "$xwayland" = yes ] && pkgs="$pkgs xcb xcb-icccm"
-	{ [ "$integrated_background" = yes ] || [ "$systray" = yes ]; } &&
+	{ [ "$integrated_background" = yes ] || [ "$systray" = yes ] ||
+		[ "$notify" = yes ]; } &&
 		pkgs="$pkgs gdk-pixbuf-2.0"
 
 	[ "$sanitize" = yes ] && {
@@ -250,7 +252,7 @@ XWAYLAND = $([ "$xwayland" = yes ] && echo -DXWAYLAND)
 XLIBS = $([ "$xwayland" = yes ] && echo xcb xcb-icccm)
 
 BACKGROUND = $([ "$integrated_background" = yes ] && echo -DINTEGRATED_BACKGROUND)
-BGLIBS = $({ [ "$integrated_background" = yes ] || [ "$systray" = yes ]; } && echo gdk-pixbuf-2.0)
+BGLIBS = $({ [ "$integrated_background" = yes ] || [ "$systray" = yes ] || [ "$notify" = yes ]; } && echo gdk-pixbuf-2.0)
 
 NOTIFY = $([ "$notify" = yes ] && echo -DNOTIFICATIONS)
 

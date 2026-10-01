@@ -18,16 +18,65 @@ static void traynotify(void* data);
 static void drawtitle(Client* c);
 #endif /* TITLEBAR */
 #ifdef NOTIFICATIONS
-static void notifysync(void);
-static int notifyfits(Monitor* m, const char* text);
+typedef struct {
+    int linex, linew;
+    int iconx, iconw, iconh; /* iconw 0 without one */
+    int textx, textw;        /* the › included */
+    int countx, countw;      /* queue or history position */
+    char count[32];
+    int signx, signw; /* notification_actionsign */
+    /* while picking, the action labels shown in place of the text */
+    int chipx[NOTIFY_ACTMAX], chipw[NOTIFY_ACTMAX];
+    size_t chip0, nchip;
+} NotifyBox;
+
+static void drawnotify(Monitor* m,
+                       int x,
+                       int w,
+                       const Notification* n,
+                       long hist);
+static void drawnotifytext(Monitor* m,
+                           const NotifyBox* b,
+                           int x,
+                           int w,
+                           const Notification* n,
+                           const char* text,
+                           uint32_t* scm);
+static void
+drawpill(Monitor* m, int x, int y, int w, int h, double r, uint32_t rgba);
+static size_t fitprefix(Monitor* m, const char* s, int w);
+static void notifybox(Monitor* m,
+                      const Notification* n,
+                      long hist,
+                      int x,
+                      int w,
+                      NotifyBox* b);
+static void notifybrowse(dbus_uint32_t id);
+static void notifypickclose(void);
+static void notifypickrun(size_t i);
+static const Notification* notifyshown(long* hist);
+static void notifysync(const Notification* n, long hist);
+static int notifytick(void* data);
 #endif /* NOTIFICATIONS */
 static void stopstatus(void);
 
 /* variables */
 #ifdef NOTIFICATIONS
-static unsigned int notifyshownid;
+static const char notifymore[] = "\xe2\x80\xba"; /* › */
+static dbus_uint32_t notifyshownid;              /* what notifyoff refers to */
+static int notifyshownhist;
 static size_t notifyoff;
-#endif /* NOTIFICATIONS */
+/* history entry being viewed, 0 for live; by id since indices shift */
+static dbus_uint32_t notifyviewid;
+static uint64_t notifyview_ms; /* last input, the view times out */
+static dbus_uint32_t notifyliveid;
+/* animates the line and times out the history view */
+static struct wl_event_source* notifytimer;
+/* picked action, -1 when closed; the picker belongs to notifypickid */
+static long notifypicksel = -1;
+static dbus_uint32_t notifypickid;
+static int notifyboxx; /* last drawn x, for hit testing */
+#endif                 /* NOTIFICATIONS */
 
 /* function implementations */
 bool baracceptsinput(struct wlr_scene_buffer* buffer, double* sx, double* sy)
@@ -211,19 +260,11 @@ void drawbar(Monitor* m)
             /* A notification takes the box over for as long as it lasts, so the
              * window title (if barwintitle is on) steps aside and comes back
              * once the notification expires or is dismissed. */
-            const char* text =
-                shownotifications && sel ? notify_gettext() : NULL;
-            if (text) {
-                notifysync();
-                drwl_setscheme(m->drw, colors[SchemeNotify]);
-                drwl_text(m->drw,
-                          x,
-                          0,
-                          w,
-                          m->b.height,
-                          m->lrpad / 2,
-                          text + (notifyoff < strlen(text) ? notifyoff : 0),
-                          0);
+            long hist = -1;
+            const Notification* n =
+                shownotifications && sel ? notifyshown(&hist) : NULL;
+            if (n) {
+                drawnotify(m, x, w, n, hist);
             } else
 #endif
                 if (barwintitle && c) {
@@ -461,11 +502,473 @@ static void drawtitle(Client* c)
 
 #endif /* TITLEBAR */
 #ifdef NOTIFICATIONS
-/* Whether the notification fits in m's box from the current scroll offset. */
-static int notifyfits(Monitor* m, const char* text)
+/* Background and text. drwl_text() paints its own background, so a progress
+ * fill is drawn by calling this twice under different clips. */
+static void drawnotifytext(Monitor* m,
+                           const NotifyBox* b,
+                           int x,
+                           int w,
+                           const Notification* n,
+                           const char* text,
+                           uint32_t* scm)
 {
-    return (int)drwl_font_getwidth(m->drw, text + notifyoff) <=
-           m->b.titlew - m->lrpad / 2;
+    char buf[NOTIFY_TEXTMAX];
+    size_t k, i;
+    int aw;
+
+    drwl_setscheme(m->drw, scm);
+    drwl_rect(m->drw, x, 0, (unsigned int)w, m->b.height, 1, 1);
+    if (b->nchip) {
+        for (i = b->chip0; i < b->chip0 + b->nchip; i++)
+            drwl_text(m->drw,
+                      b->chipx[i],
+                      0,
+                      b->chipw[i],
+                      m->b.height,
+                      m->lrpad / 2,
+                      n->act[i].label,
+                      (long)i == notifypicksel);
+        if (b->chip0 || b->chip0 + b->nchip < n->nact) {
+            aw = (int)drwl_font_getwidth(m->drw, notifymore);
+            if (aw <= b->textw)
+                drwl_text(m->drw,
+                          b->textx + b->textw - aw,
+                          0,
+                          aw,
+                          m->b.height,
+                          0,
+                          notifymore,
+                          0);
+        }
+    } else if (b->textw > 0 &&
+               (int)drwl_font_getwidth(m->drw, text) <= b->textw) {
+        drwl_text(m->drw, b->textx, 0, b->textw, m->b.height, 0, text, 0);
+    } else if (b->textw > 0) {
+        /* our own › instead of drwl's …, which covers the last codepoint */
+        aw = (int)drwl_font_getwidth(m->drw, notifymore);
+        k = fitprefix(m, text, b->textw - aw);
+        memcpy(buf, text, k);
+        buf[k] = '\0';
+        if (k)
+            drwl_text(
+                m->drw, b->textx, 0, b->textw - aw, m->b.height, 0, buf, 0);
+        if (aw <= b->textw)
+            drwl_text(m->drw,
+                      b->textx + b->textw - aw,
+                      0,
+                      aw,
+                      m->b.height,
+                      0,
+                      notifymore,
+                      0);
+    }
+    if (b->signw)
+        drwl_text(m->drw,
+                  b->signx,
+                  0,
+                  b->signw,
+                  m->b.height,
+                  0,
+                  notification_actionsign,
+                  0);
+    if (b->countw)
+        drwl_text(m->drw, b->countx, 0, b->countw, m->b.height, 0, b->count, 0);
+}
+
+/* hist is its history index, -1 for the live one */
+static void drawnotify(Monitor* m,
+                       int x,
+                       int w,
+                       const Notification* n,
+                       long hist)
+{
+    int scheme = n->urgency == UrgencyLow        ? SchemeNotifyLow
+                 : n->urgency == UrgencyCritical ? SchemeNotifyCrit
+                                                 : SchemeNotify;
+    int full = m->drw->font->height, len = full, top, fw, i;
+    uint64_t now = notify_now(), wake = 0, end, left;
+    uint32_t line = colors[scheme][ColBorder], filled[3], a, bg, tint;
+    unsigned int held;
+    const char* text;
+    pixman_image_t* img;
+    pixman_transform_t t;
+    pixman_region32_t clip;
+    NotifyBox b;
+
+    notifysync(n, hist);
+    notifypicking();
+    notifyboxx = x;
+    notifybox(m, n, hist, x, w, &b);
+    text = n->text + (notifyoff < strlen(n->text) ? notifyoff : 0);
+
+    if (n->value < 0) {
+        drawnotifytext(m, &b, x, w, n, text, colors[scheme]);
+    } else {
+        /* the fill's background is premixed: a tint drawn over would dye the
+         * text too */
+        memcpy(filled, colors[scheme], sizeof(filled));
+        bg = colors[scheme][ColBg];
+        a = (line & 0xff) / 3;
+        for (filled[ColBg] = bg & 0xff, i = 8; i < 32; i += 8) {
+            tint = (bg >> i & 0xff) * (255 - a) + (line >> i & 0xff) * a;
+            filled[ColBg] |= (tint / 255) << i;
+        }
+        fw = w * n->value / 100;
+        pixman_region32_init_rect(&clip, x, 0, (unsigned int)fw, m->b.height);
+        pixman_image_set_clip_region32(m->drw->image, &clip);
+        pixman_region32_fini(&clip);
+        drawnotifytext(m, &b, x, w, n, text, filled);
+        pixman_region32_init_rect(
+            &clip, x + fw, 0, (unsigned int)(w - fw), m->b.height);
+        pixman_image_set_clip_region32(m->drw->image, &clip);
+        pixman_region32_fini(&clip);
+        drawnotifytext(m, &b, x, w, n, text, colors[scheme]);
+        pixman_region32_init_rect(&clip, 0, 0, m->b.width, m->b.height);
+        pixman_image_set_clip_region32(m->drw->image, &clip);
+        pixman_region32_fini(&clip);
+    }
+
+    /* once, after both passes: they blend with OVER */
+    if (b.linew) {
+        /* full for sticky and history entries, the latter at half alpha */
+        if (hist < 0 && n->timeout_ms && notify_held(&held)) {
+            len = (int)((uint64_t)full * held / n->timeout_ms);
+        } else if (hist < 0 && n->timeout_ms) {
+            end = n->shown_ms + n->timeout_ms;
+            left = end > now ? end - now : 0;
+            len = (int)((uint64_t)full * left / n->timeout_ms);
+            wake = n->timeout_ms / (unsigned int)(full > 0 ? full : 1);
+            wake = wake < 16 ? 16 : wake;
+        }
+        if (hist >= 0)
+            line = (line & ~0xffu) | (line & 0xffu) / 2;
+        top = (m->b.height - full) / 2;
+        drawpill(m,
+                 b.linex,
+                 top + full - len,
+                 b.linew,
+                 len,
+                 notification_lineradius * m->wlr_output->scale,
+                 line);
+    }
+
+    if (b.iconw) {
+        img = n->icon->img;
+        pixman_transform_init_scale(
+            &t,
+            pixman_double_to_fixed((double)pixman_image_get_width(img) /
+                                   b.iconw),
+            pixman_double_to_fixed((double)pixman_image_get_height(img) /
+                                   b.iconh));
+        pixman_image_set_transform(img, &t);
+        pixman_image_set_filter(img, PIXMAN_FILTER_BILINEAR, NULL, 0);
+        pixman_image_composite32(PIXMAN_OP_OVER,
+                                 img,
+                                 NULL,
+                                 m->drw->image,
+                                 0,
+                                 0,
+                                 0,
+                                 0,
+                                 b.iconx,
+                                 (m->b.height - b.iconh) / 2,
+                                 b.iconw,
+                                 b.iconh);
+        pixman_image_set_transform(img, NULL);
+    }
+
+    if (notifyviewid) {
+        end = notifyview_ms + notification_timeout * 1000;
+        left = end > now ? end - now : 1;
+        wake = !wake || left < wake ? left : wake;
+    }
+    if (wake && !notifytimer)
+        notifytimer = wl_event_loop_add_timer(event_loop, notifytick, NULL);
+    if (notifytimer)
+        wl_event_source_timer_update(notifytimer, (int)wake);
+}
+
+/* Antialiased rounded rectangle, blended over the buffer. */
+static void
+drawpill(Monitor* m, int x, int y, int w, int h, double r, uint32_t rgba)
+{
+    pixman_image_t *mask, *src;
+    pixman_color_t clr;
+    uint8_t* data;
+    int stride, px, py, sx, sy, cov;
+    double fx, fy, dx, dy;
+
+    if (w <= 0 || h <= 0 ||
+        !(mask = pixman_image_create_bits(PIXMAN_a8, w, h, NULL, 0)))
+        return;
+    r = fmin(fmax(r, 0), fmin(w, h) / 2.0);
+    data = (uint8_t*)pixman_image_get_data(mask);
+    stride = pixman_image_get_stride(mask);
+
+    /* 4x4 supersampling */
+    for (py = 0; py < h; py++)
+        for (px = 0; px < w; px++) {
+            for (cov = 0, sy = 0; sy < 4; sy++)
+                for (sx = 0; sx < 4; sx++) {
+                    fx = px + (sx + 0.5) / 4;
+                    fy = py + (sy + 0.5) / 4;
+                    dx = fmax(fmax(r - fx, fx - (w - r)), 0);
+                    dy = fmax(fmax(r - fy, fy - (h - r)), 0);
+                    cov += dx * dx + dy * dy <= r * r;
+                }
+            data[py * stride + px] = (uint8_t)(cov * 255 / 16);
+        }
+
+    clr = convert_color(rgba);
+    if ((src = pixman_image_create_solid_fill(&clr))) {
+        pixman_image_composite32(
+            PIXMAN_OP_OVER, src, mask, m->drw->image, 0, 0, 0, 0, x, y, w, h);
+        pixman_image_unref(src);
+    }
+    pixman_image_unref(mask);
+}
+
+/* bytes of s, cut on a codepoint, that fit in w */
+static size_t fitprefix(Monitor* m, const char* s, int w)
+{
+    size_t cut[NOTIFY_TEXTMAX], ncut = 0, len = strlen(s), i, lo, hi, mid;
+    char buf[NOTIFY_TEXTMAX];
+
+    if (len >= sizeof(buf) || w <= 0)
+        return 0;
+    for (i = 1; i <= len; i++)
+        if (i == len || (s[i] & 0xC0) != 0x80)
+            cut[ncut++] = i;
+    /* width grows with length: binary search */
+    for (lo = 0, hi = ncut; lo < hi;) {
+        mid = (lo + hi + 1) / 2;
+        memcpy(buf, s, cut[mid - 1]);
+        buf[cut[mid - 1]] = '\0';
+        if ((int)drwl_font_getwidth(m->drw, buf) <= w)
+            lo = mid;
+        else
+            hi = mid - 1;
+    }
+    return lo ? cut[lo - 1] : 0;
+}
+
+/* Shared by drawing, scrolling and hit testing so they always agree. */
+static void notifybox(Monitor* m,
+                      const Notification* n,
+                      long hist,
+                      int x,
+                      int w,
+                      NotifyBox* b)
+{
+    int pad = m->lrpad / 2, size = m->drw->font->height, cx, end, iw, ih;
+    int picking;
+    size_t i;
+
+    memset(b, 0, sizeof(*b));
+    cx = x + pad;
+    if (notification_linewidth) {
+        b->linex = cx;
+        b->linew =
+            (int)roundf((float)notification_linewidth * m->wlr_output->scale);
+        b->linew = b->linew > 0 ? b->linew : 1;
+        cx += b->linew + pad;
+    }
+    if (n->icon && size > 0) {
+        iw = pixman_image_get_width(n->icon->img);
+        ih = pixman_image_get_height(n->icon->img);
+        if (iw > 0 && ih > 0) {
+            b->iconw = iw >= ih ? size : (iw * size / ih ? iw * size / ih : 1);
+            b->iconh = ih >= iw ? size : (ih * size / iw ? ih * size / iw : 1);
+            b->iconx = cx;
+            cx += b->iconw + pad;
+        }
+    }
+
+    if (hist >= 0)
+        snprintf(
+            b->count, sizeof(b->count), "%ld/%zu", hist + 1, notify_histlen());
+    else if (notify_queued())
+        snprintf(b->count, sizeof(b->count), "+%zu", notify_queued());
+    end = x + w - pad;
+    if (*b->count) {
+        b->countw = (int)drwl_font_getwidth(m->drw, b->count);
+        b->countx = end - b->countw;
+        end = b->countx - pad;
+    }
+    picking = hist < 0 && notifypicksel >= 0 && n->id == notifypickid;
+    if (hist < 0 && n->nact && !picking && *notification_actionsign) {
+        b->signw = (int)drwl_font_getwidth(m->drw, notification_actionsign);
+        b->signx = end - b->signw;
+        end = b->signx - pad;
+    }
+    b->textx = cx;
+    b->textw = end > cx ? end - cx : 0;
+
+    if (!picking)
+        return;
+    /* scroll the chips until the picked one fits */
+    for (b->chip0 = 0;; b->chip0++) {
+        for (i = b->chip0, cx = b->textx; i < n->nact; i++) {
+            b->chipw[i] =
+                (int)drwl_font_getwidth(m->drw, n->act[i].label) + m->lrpad;
+            if (cx + b->chipw[i] > end)
+                break;
+            b->chipx[i] = cx;
+            cx += b->chipw[i] + pad;
+        }
+        b->nchip = i - b->chip0;
+        if (i > (size_t)notifypicksel || b->chip0 >= (size_t)notifypicksel)
+            break;
+    }
+}
+
+/* id 0 goes back to the live notification */
+static void notifybrowse(dbus_uint32_t id)
+{
+    notifyviewid = id;
+    notifyview_ms = notify_now();
+    drawbars();
+}
+
+/* The history entry being viewed (its index in *hist) or the live one
+ * (*hist -1). Also ends the view on timeout or when a new one comes in. */
+static const Notification* notifyshown(long* hist)
+{
+    const Notification *cur = notify_current(), *n;
+    size_t i;
+
+    if (!cur) {
+        notifyliveid = 0;
+    } else if (cur->id != notifyliveid) {
+        notifyliveid = cur->id;
+        notifyviewid = 0;
+    }
+    if (notifyviewid &&
+        (notifypicksel >= 0 ||
+         notify_now() >= notifyview_ms + notification_timeout * 1000))
+        notifyviewid = 0;
+
+    for (i = 0; notifyviewid && (n = notify_history(i)); i++)
+        if (n->id == notifyviewid) {
+            *hist = (long)i;
+            return n;
+        }
+    notifyviewid = 0;
+    *hist = -1;
+    return cur;
+}
+
+/* Reset the scroll offset for another notification, or when this one got
+ * shorter than where we'd scrolled to. */
+static void notifysync(const Notification* n, long hist)
+{
+    if (!n || notifyshownid != n->id || notifyshownhist != (hist >= 0) ||
+        notifyoff >= strlen(n->text)) {
+        notifyshownid = n ? n->id : 0;
+        notifyshownhist = hist >= 0;
+        notifyoff = 0;
+    }
+}
+
+static int notifytick(void* data)
+{
+    drawselbar();
+    return 0;
+}
+
+void notifyfini(void)
+{
+    if (notifytimer)
+        wl_event_source_remove(notifytimer);
+    notifytimer = NULL;
+}
+
+/* Also closes the picker once its notification is gone or has no actions. */
+int notifypicking(void)
+{
+    const Notification* cur;
+
+    if (notifypicksel < 0)
+        return 0;
+    cur = notify_current();
+    if (!cur || cur->id != notifypickid || !cur->nact) {
+        notifypickclose();
+        return 0;
+    }
+    if ((size_t)notifypicksel >= cur->nact) /* updated with fewer */
+        notifypicksel = (long)cur->nact - 1;
+    return 1;
+}
+
+static void notifypickclose(void)
+{
+    notifypicksel = -1;
+    notify_hold(0);
+}
+
+static void notifypickrun(size_t i)
+{
+    notifypicksel = -1;
+    notify_action(i); /* releases the hold */
+    drawbars();
+}
+
+/* Toggles the picker; while open it owns the keyboard (notifypickkey()). */
+void notifyactions(const Arg* arg)
+{
+    const Notification* cur;
+
+    if (!shownotifications)
+        return;
+    if (notifypicking()) {
+        notifypickclose();
+    } else if ((cur = notify_current()) && cur->nact) {
+        notifyviewid = 0;
+        notifypicksel = 0;
+        notifypickid = cur->id;
+        notify_hold(1);
+    } else {
+        return;
+    }
+    drawbars();
+}
+
+/* left/right, h/l or Tab move, Return or space runs, 1-9 run directly,
+ * Escape closes */
+void notifypickkey(xkb_keysym_t sym)
+{
+    const Notification* cur;
+    long n;
+
+    if (!notifypicking() || !(cur = notify_current()))
+        return;
+    n = (long)cur->nact;
+    switch (sym) {
+        case XKB_KEY_Left:
+        case XKB_KEY_h:
+        case XKB_KEY_ISO_Left_Tab:
+            notifypicksel = (notifypicksel + n - 1) % n;
+            break;
+        case XKB_KEY_Right:
+        case XKB_KEY_l:
+        case XKB_KEY_Tab:
+            notifypicksel = (notifypicksel + 1) % n;
+            break;
+        case XKB_KEY_Return:
+        case XKB_KEY_KP_Enter:
+        case XKB_KEY_space:
+            notifypickrun((size_t)notifypicksel);
+            return;
+        case XKB_KEY_Escape:
+            notifypickclose();
+            break;
+        default:
+            if (sym >= XKB_KEY_1 && sym <= XKB_KEY_9 &&
+                (long)(sym - XKB_KEY_1) < n)
+                notifypickrun((size_t)(sym - XKB_KEY_1));
+            return;
+    }
+    drawbars();
 }
 
 /* Scrolls the notification on by one screenful, wrapping to the start once
@@ -474,40 +977,34 @@ void notifyscroll(const Arg* arg)
 {
     /* the box is measured on the monitor the bar is drawn on */
     Monitor* m = barmonitor();
+    const Notification* n;
     const char* text;
-    char buf[NOTIFY_TEXTMAX];
-    int boxw;
-    size_t len, off, cut, good, n;
+    NotifyBox b;
+    long hist;
+    size_t len, off, good;
 
-    if (!shownotifications || !m || !m->b.titlew || !(text = notify_gettext()))
+    if (!shownotifications || !m || !m->b.titlew || !(n = notifyshown(&hist)))
         return;
-    notifysync();
+    notifysync(n, hist);
+    if (hist >= 0)
+        notifyview_ms = notify_now();
+    notifybox(m, n, hist, 0, m->b.titlew, &b);
 
-    /* drwl_text() pads the box by lrpad/2 on the left, so measure against
-     * that width. */
-    boxw = m->b.titlew - m->lrpad / 2;
+    text = n->text;
     len = strlen(text);
     off = notifyoff < len ? notifyoff : 0;
-
-    if (boxw <= 0 || (int)drwl_font_getwidth(m->drw, text + off) <= boxw) {
+    if (b.textw <= 0 ||
+        (int)drwl_font_getwidth(m->drw, text + off) <= b.textw) {
         notifyoff = 0;
         drawbars();
         return;
     }
 
-    good = off;
-    for (cut = off + 1; cut <= len; cut++) {
-        if (cut < len && (text[cut] & 0xC0) == 0x80)
-            continue; /* not a UTF-8 codepoint boundary yet */
-        n = cut - off;
-        if (n >= sizeof(buf))
-            break;
-        memcpy(buf, text + off, n);
-        buf[n] = '\0';
-        if ((int)drwl_font_getwidth(m->drw, buf) > boxw)
-            break;
-        good = cut;
-    }
+    /* on from what was shown, which left room for the › */
+    good =
+        off + fitprefix(m,
+                        text + off,
+                        b.textw - (int)drwl_font_getwidth(m->drw, notifymore));
     if (good == off) {
         /* not even one codepoint fits: force progress anyway */
         good = off + 1;
@@ -518,28 +1015,116 @@ void notifyscroll(const Arg* arg)
     drawbars();
 }
 
-/* Puts the notification away early, giving the box back to the window title. */
-void notifydismiss(const Arg* arg)
+void notifyprev(const Arg* arg)
 {
-    if (shownotifications)
+    const Notification* h;
+    long hist;
+
+    if (!shownotifications)
+        return;
+    notifyshown(&hist);
+    if ((h = notify_history((size_t)(hist + 1))))
+        notifybrowse(h->id);
+    else if (hist >= 0) /* the oldest: just refresh the timeout */
+        notifybrowse(notifyviewid);
+}
+
+/* One step forward; on the live one, dismisses it for the next queued. */
+void notifynext(const Arg* arg)
+{
+    long hist;
+
+    if (!shownotifications)
+        return;
+    notifyshown(&hist);
+    if (hist > 0)
+        notifybrowse(notify_history((size_t)hist - 1)->id);
+    else if (hist == 0)
+        notifybrowse(0);
+    else
         notify_dismiss();
 }
 
+/* Puts the notification away early, giving the box back to the window title.
+ * On a history entry, forgets it; with the picker open, closes the picker. */
+void notifydismiss(const Arg* arg)
+{
+    const Notification* h;
+    long hist;
+
+    if (!shownotifications)
+        return;
+    if (notifypicking()) {
+        notifypickclose();
+        drawbars();
+        return;
+    }
+    notifyshown(&hist);
+    if (hist < 0) {
+        notify_dismiss();
+        return;
+    }
+    notify_histremove((size_t)hist);
+    if ((h = notify_history((size_t)hist)) ||
+        (h = hist ? notify_history((size_t)hist - 1) : NULL))
+        notifybrowse(h->id);
+    else
+        notifybrowse(0);
+}
+
+/* The live and queued ones go to the history. */
+void notifydismissall(const Arg* arg)
+{
+    int browsing = notifyviewid != 0;
+
+    if (!shownotifications)
+        return;
+    notifyviewid = 0;
+    notify_dismissall();
+    if (browsing)
+        drawbars();
+}
+
 /* Opens the notification: sends its default action and focuses the
- * sender's window, since it can't raise itself. */
+ * sender's window, since it can't raise itself. From the pointer (arg->ui is
+ * x + 1) a click on the action sign opens the picker, and with the picker
+ * open a click runs the action under it or closes the picker. */
 void notifyopen(const Arg* arg)
 {
-    const char *app, *desk, *id;
+    const Notification* n;
+    const char* id;
+    Monitor* m = barmonitor();
+    NotifyBox b;
     Client* c;
+    long hist, px = arg && arg->ui ? (long)arg->ui - 1 : -1;
+    size_t i;
 
-    if (!shownotifications || !(app = notify_getapp(0)))
+    if (!shownotifications || !(n = notifyshown(&hist)))
         return;
-    desk = notify_getapp(1);
+    if (px >= 0 && m && hist < 0) {
+        notifybox(m, n, hist, notifyboxx, m->b.titlew, &b);
+        if (notifypicking()) {
+            for (i = b.chip0; i < b.chip0 + b.nchip; i++)
+                if (px >= b.chipx[i] && px < b.chipx[i] + b.chipw[i]) {
+                    notifypickrun(i);
+                    return;
+                }
+            notifypickclose();
+            drawbars();
+            return;
+        }
+        if (b.signw && px >= b.signx - m->lrpad / 2 &&
+            px < b.signx + b.signw + m->lrpad / 2) {
+            notifyactions(NULL);
+            return;
+        }
+    }
     wl_list_for_each(c, &clients, link)
     {
         id = client_get_appid(c);
         if (!c->mon || client_is_unmanaged(c) ||
-            (strcasecmp(id, app) && (!*desk || strcasecmp(id, desk))))
+            (strcasecmp(id, n->app) &&
+             (!*n->desktop || strcasecmp(id, n->desktop))))
             continue;
         selmon = c->mon;
         if (!VISIBLEON(c, c->mon))
@@ -547,46 +1132,65 @@ void notifyopen(const Arg* arg)
         focusclient(c, 1);
         break;
     }
-    notify_invoke();
+    if (hist < 0) {
+        notify_invoke();
+    } else {
+        notifyviewid = 0;
+        drawbars();
+    }
 }
 
-/* Scrolls the notification a few codepoints per wheel notch. Returns
- * whether the wheel was over the notification, i.e. was consumed here. */
-int notifywheel(Monitor* pm, double delta)
+/* Vertical walks the history (or the picker), horizontal scrolls the text.
+ * Returns whether the wheel was consumed. */
+int notifywheel(Monitor* pm, double delta, int horizontal)
 {
-    /* a mouse notch is 15, so 3 codepoints; touchpads send it in slices */
-    static const double step = 5;
-    static double acc;
+    /* a mouse notch is 15; touchpads send it in slices */
+    static const double notch = 15, step = 5;
+    static double acc, hacc;
     Monitor* m = barmonitor();
+    const Notification* n;
     const char* text;
+    NotifyBox b;
+    long hist;
 
-    if (!shownotifications || !m || m != pm || !m->b.titlew ||
-        !(text = notify_gettext()))
+    if (!shownotifications || !m || m != pm || !m->b.titlew)
         return 0;
-    notifysync();
+    n = notifyshown(&hist);
 
-    for (acc += delta; acc >= step; acc -= step)
-        if (!notifyfits(m, text))
+    if (!horizontal && notifypicking()) {
+        for (acc += delta; acc >= notch; acc -= notch)
+            notifypickkey(XKB_KEY_Right);
+        for (; acc <= -notch; acc += notch)
+            notifypickkey(XKB_KEY_Left);
+        return 1;
+    }
+    if (!horizontal) {
+        if (!n && !notify_histlen())
+            return 0;
+        for (acc += delta; acc >= notch; acc -= notch)
+            notifynext(NULL);
+        for (; acc <= -notch; acc += notch)
+            notifyprev(NULL);
+        return 1;
+    }
+
+    if (!n)
+        return 0;
+    notifysync(n, hist);
+    if (hist >= 0)
+        notifyview_ms = notify_now();
+    notifybox(m, n, hist, 0, m->b.titlew, &b);
+    text = n->text;
+    for (hacc += delta; hacc >= step; hacc -= step)
+        if ((int)drwl_font_getwidth(m->drw, text + notifyoff) > b.textw)
             do
                 notifyoff++;
             while ((text[notifyoff] & 0xC0) == 0x80);
-    for (; acc <= -step; acc += step)
+    for (; hacc <= -step; hacc += step)
         while (notifyoff && (text[--notifyoff] & 0xC0) == 0x80)
             ;
     drawbars();
     return 1;
-}
-
-/* Reset the scroll offset for a new notification, or when the current one
- * got shorter than where we'd scrolled to. */
-static void notifysync(void)
-{
-    const char* text = notify_gettext();
-
-    if (notifyshownid != notify_getid() || !text || notifyoff >= strlen(text)) {
-        notifyshownid = notify_getid();
-        notifyoff = 0;
-    }
 }
 
 #endif /* NOTIFICATIONS */
