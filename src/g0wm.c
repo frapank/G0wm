@@ -384,6 +384,27 @@ static void handlesig(int signo)
     }
 }
 
+#ifdef NOTIFICATIONS
+static char notifytokentag; /* marks the tokens handed out below */
+
+const char* notifytoken(void)
+{
+    struct wlr_xdg_activation_token_v1* token =
+        wlr_xdg_activation_token_v1_create(activation);
+
+    if (!token)
+        return NULL;
+    token->data = &notifytokentag;
+    return wlr_xdg_activation_token_v1_get_name(token);
+}
+
+/* a window activating with one of these was asked for by the user */
+int notifytokenmine(const struct wlr_xdg_activation_token_v1* token)
+{
+    return token && token->data == &notifytokentag;
+}
+
+#endif /* NOTIFICATIONS */
 void quit(const Arg* arg)
 {
     wl_display_terminate(dpy);
@@ -698,8 +719,11 @@ static void setup(void)
 #endif
 #ifdef NOTIFICATIONS
             if (shownotifications)
-                notify_start(
-                    bus_conn, event_loop, notification_timeout, drawbars);
+                notify_start(bus_conn,
+                             event_loop,
+                             notification_timeout,
+                             drawbars,
+                             notifytoken);
 #endif
         } else
             fprintf(stderr,
