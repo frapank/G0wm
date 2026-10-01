@@ -305,17 +305,22 @@ static cJSON* jcolors(void)
 {
     /* the holes keep every name on its Scheme* index */
     static const char* const names[] = {
-        [SchemeNorm] = "norm",     [SchemeSel] = "sel",
+        [SchemeNorm] = "norm",
+        [SchemeSel] = "sel",
         [SchemeUrg] = "urg",
 #ifdef TITLEBAR
-        [SchemeTitle] = "title",   [SchemeTitleSel] = "titlesel",
+        [SchemeTitle] = "title",
+        [SchemeTitleSel] = "titlesel",
 #endif
         [SchemeStatus] = "status",
 #ifdef NOTIFICATIONS
         [SchemeNotify] = "notify",
+        [SchemeNotifyLow] = "notifylow",
+        [SchemeNotifyCrit] = "notifycrit",
 #endif
 #ifdef RUNNER
-        [SchemeRunner] = "runner", [SchemeRunnerSuggest] = "runnersuggest",
+        [SchemeRunner] = "runner",
+        [SchemeRunnerSuggest] = "runnersuggest",
 #endif
     };
     cJSON* o = cJSON_CreateObject();
@@ -417,6 +422,10 @@ static cJSON* jbar(void)
 #ifdef NOTIFICATIONS
     cJSON_AddBoolToObject(o, "shownotifications", shownotifications);
     cJSON_AddNumberToObject(o, "notification_timeout", notification_timeout);
+    cJSON_AddNumberToObject(
+        o, "notification_linewidth", notification_linewidth);
+    cJSON_AddNumberToObject(
+        o, "notification_lineradius", notification_lineradius);
 #endif
     return o;
 }
@@ -746,17 +755,22 @@ static void applycolors(const cJSON* o)
     const cJSON* s;
     size_t i;
     static const char* const names[] = {
-        [SchemeNorm] = "norm",     [SchemeSel] = "sel",
+        [SchemeNorm] = "norm",
+        [SchemeSel] = "sel",
         [SchemeUrg] = "urg",
 #ifdef TITLEBAR
-        [SchemeTitle] = "title",   [SchemeTitleSel] = "titlesel",
+        [SchemeTitle] = "title",
+        [SchemeTitleSel] = "titlesel",
 #endif
         [SchemeStatus] = "status",
 #ifdef NOTIFICATIONS
         [SchemeNotify] = "notify",
+        [SchemeNotifyLow] = "notifylow",
+        [SchemeNotifyCrit] = "notifycrit",
 #endif
 #ifdef RUNNER
-        [SchemeRunner] = "runner", [SchemeRunnerSuggest] = "runnersuggest",
+        [SchemeRunner] = "runner",
+        [SchemeRunnerSuggest] = "runnersuggest",
 #endif
     };
 
@@ -880,6 +894,10 @@ static void applybar(const cJSON* o)
     shownotifications = getbool(o, "shownotifications", shownotifications);
     notification_timeout =
         (unsigned int)getnum(o, "notification_timeout", notification_timeout);
+    notification_linewidth = (unsigned int)getnum(
+        o, "notification_linewidth", notification_linewidth);
+    notification_lineradius = (unsigned int)getnum(
+        o, "notification_lineradius", notification_lineradius);
 #endif
 }
 
