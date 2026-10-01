@@ -149,6 +149,8 @@ enum {
     SchemeTitleSel,
     SchemeStatus,
     SchemeNotify,
+    SchemeNotifyLow,
+    SchemeNotifyCrit,
     SchemeRunner,
     SchemeRunnerSuggest,
     NumSchemes
@@ -667,6 +669,8 @@ extern unsigned int systrayiconsize;
 #ifdef NOTIFICATIONS
 extern int shownotifications;
 extern unsigned int notification_timeout;
+extern unsigned int notification_linewidth;
+extern unsigned int notification_lineradius;
 #endif /* NOTIFICATIONS */
 extern int opacity_enabled;
 extern float opacity_focus;
