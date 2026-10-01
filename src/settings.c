@@ -411,6 +411,7 @@ static cJSON* jbar(void)
     cJSON_AddBoolToObject(o, "showbar", showbar);
     cJSON_AddBoolToObject(o, "topbar", topbar);
     cJSON_AddBoolToObject(o, "barwintitle", barwintitle);
+    cJSON_AddNumberToObject(o, "barboxradius", barboxradius);
     cJSON_AddNumberToObject(o, "barpadding", barpadding);
     cJSON_AddItemToObject(o, "barheight", jnum(barheight));
     cJSON_AddBoolToObject(o, "barsinglemon", barsinglemon);
@@ -883,6 +884,7 @@ static void applybar(const cJSON* o)
     showbar = getbool(o, "showbar", showbar);
     topbar = getbool(o, "topbar", topbar);
     barwintitle = getbool(o, "barwintitle", barwintitle);
+    barboxradius = (unsigned int)getnum(o, "barboxradius", barboxradius);
     barpadding = (unsigned int)getnum(o, "barpadding", barpadding);
     barheight = (float)getnum(o, "barheight", barheight);
     barsinglemon = getbool(o, "barsinglemon", barsinglemon);
