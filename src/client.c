@@ -672,6 +672,17 @@ void urgent(struct wl_listener* listener, void* data)
     if (!c || c == focustop(selmon))
         return;
 
+#ifdef NOTIFICATIONS
+    /* the user clicked a notification: focus instead of marking urgent */
+    if (notifytokenmine(event->token) && c->mon && client_surface(c)->mapped) {
+        selmon = c->mon;
+        if (!VISIBLEON(c, c->mon))
+            view(&(Arg){ .ui = c->tags });
+        focusclient(c, 1);
+        return;
+    }
+#endif
+
     c->isurgent = 1;
     drawbars();
 

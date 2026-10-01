@@ -23,6 +23,7 @@ static struct {
     struct wl_event_loop* loop;
     struct wl_event_source* timer;
     void (*redraw)(void);
+    const char* (*token)(void);
     unsigned int timeout_ms;
     dbus_uint32_t seq; /* handed out to clients that don't pick one */
     int active;
@@ -787,7 +788,8 @@ static const DBusObjectPathVTable notify_vtable = {
 void notify_start(DBusConnection* conn,
                   struct wl_event_loop* loop,
                   unsigned int timeout_secs,
-                  void (*redraw)(void))
+                  void (*redraw)(void),
+                  const char* (*token)(void))
 {
     int r;
 
@@ -799,6 +801,7 @@ void notify_start(DBusConnection* conn,
     notify.loop = loop;
     notify_settimeout(timeout_secs);
     notify.redraw = redraw;
+    notify.token = token;
 
     /* if another daemon (mako, dunst, swaync, ...) already owns the name,
      * don't fight it for it: just stay disabled */
@@ -917,10 +920,24 @@ void notify_dismissall(void)
 void notify_invoke(void)
 {
     DBusMessage* sig;
-    const char* key = "default";
+    const char *key = "default", *token;
 
     if (!notify.active)
         return;
+    /* the activation token goes first, as the spec asks, so the client can
+     * raise the right window itself */
+    if (notify.cur.hasdefault && notify.token && (token = notify.token()) &&
+        (sig = dbus_message_new_signal(
+             NOTIFY_OPATH, NOTIFY_IFACE, "ActivationToken"))) {
+        if (dbus_message_append_args(sig,
+                                     DBUS_TYPE_UINT32,
+                                     &notify.cur.id,
+                                     DBUS_TYPE_STRING,
+                                     &token,
+                                     DBUS_TYPE_INVALID))
+            dbus_connection_send(notify.conn, sig, NULL);
+        dbus_message_unref(sig);
+    }
     if (notify.cur.hasdefault &&
         (sig = dbus_message_new_signal(
              NOTIFY_OPATH, NOTIFY_IFACE, "ActionInvoked"))) {
