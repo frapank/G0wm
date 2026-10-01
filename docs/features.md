@@ -30,11 +30,15 @@ which publish only a name of an icon, have their first letter displayed.
 Most applications provide real pixel-based icon.
 
 #### **Notifications** 
-A small `org.freedesktop.Notifications` server. One
-notification at a time, a new one replaces the old one, and it goes away by
-itself after a few seconds. Click it to scroll through text that did not fit,
-right click to make it go away sooner. If mako or dunst is already running,
-g0wm stays out of the way.
+A small `org.freedesktop.Notifications` server. One notification at a time,
+the others wait in a queue (`+2` on the right). A coloured line shows the
+urgency and shortens as time runs out; critical ones stay until dismissed.
+Icons, progress bars and in-place updates (volume, brightness) are supported.
+
+Left click opens, right click dismisses, the wheel walks back through the
+recent ones. If a notification has actions, `[r]` appears: click it or press
+`MODKEY+a` to pick one. If mako or dunst is already running, g0wm stays out of
+the way.
 
 #### **Launcher** 
 Hit the key and the bar turns into a prompt. Type a few letters
