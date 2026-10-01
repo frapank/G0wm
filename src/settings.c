@@ -138,6 +138,7 @@ static const Action actions[] = {
     { moveresize, "moveresize", 'c' },
     { movestack, "movestack", 'i' },
 #ifdef NOTIFICATIONS
+    { notifyactions, "notifyactions", 0 },
     { notifydismiss, "notifydismiss", 0 },
     { notifydismissall, "notifydismissall", 0 },
     { notifynext, "notifynext", 0 },
@@ -426,6 +427,8 @@ static cJSON* jbar(void)
         o, "notification_linewidth", notification_linewidth);
     cJSON_AddNumberToObject(
         o, "notification_lineradius", notification_lineradius);
+    cJSON_AddStringToObject(
+        o, "notification_actionsign", notification_actionsign);
 #endif
     return o;
 }
@@ -898,6 +901,8 @@ static void applybar(const cJSON* o)
         o, "notification_linewidth", notification_linewidth);
     notification_lineradius = (unsigned int)getnum(
         o, "notification_lineradius", notification_lineradius);
+    notification_actionsign =
+        getstr(o, "notification_actionsign", notification_actionsign);
 #endif
 }
 

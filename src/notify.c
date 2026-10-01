@@ -28,7 +28,9 @@ static struct {
     dbus_uint32_t seq; /* handed out to clients that don't pick one */
     int active;
     int running;
-    Notification cur; /* valid when active */
+    int held;
+    unsigned int heldleft; /* time cur had left when held */
+    Notification cur;      /* valid when active */
     Notification queue[NOTIFY_QUEUEMAX];
     size_t nqueue;
     Notification hist[NOTIFY_HISTMAX]; /* newest first */
@@ -199,21 +201,32 @@ static int notify_arm(unsigned int ms)
 static int show(void)
 {
     notify.cur.shown_ms = notify_now();
+    notify.cur.seen = 1;
+    if (notify.held) {
+        notify.heldleft = notify.cur.timeout_ms;
+        notify.active = 1;
+        return 1;
+    }
     /* Without a timer the notification would sit in the bar forever, so the
      * caller is expected to drop it instead of showing it unexpirable. */
     notify.active = notify_arm(notify.cur.timeout_ms);
     return notify.active;
 }
 
-/* The ones that stay until dismissed go last, or the rest would wait behind
- * them forever. */
+/* An unseen critical goes first (it was held back by a pick); seen ones go
+ * last, or everything else would wait behind them forever. */
 static void shownext(void)
 {
     size_t i;
 
     while (!notify.active && notify.nqueue) {
-        for (i = 0; i < notify.nqueue && !notify.queue[i].timeout_ms; i++)
-            ;
+        for (i = 0; i < notify.nqueue; i++)
+            if (notify.queue[i].urgency == UrgencyCritical &&
+                !notify.queue[i].seen)
+                break;
+        if (i == notify.nqueue)
+            for (i = 0; i < notify.nqueue && !notify.queue[i].timeout_ms; i++)
+                ;
         unqueue(i < notify.nqueue ? i : 0, &notify.cur);
         if (!show()) {
             notify_closed(notify.cur.id, ClosedUndefined);
@@ -228,6 +241,7 @@ static void notify_clear(dbus_uint32_t reason)
     if (!notify.active)
         return;
     notify.active = 0;
+    notify.held = 0;
     notify_arm(0);
     notify_closed(notify.cur.id, reason);
     /* closed by the client: not worth keeping */
@@ -263,24 +277,34 @@ static int expire_timeout(DBusMessage* msg)
     return ms;
 }
 
-/* actions is a flat (key, label, ...) list; only "default", a click on the
- * notification itself, is of any use here. */
-static int has_default(DBusMessage* msg)
+/* actions is a flat (key, label, ...) list. Keys too long to store are
+ * skipped, not cut: they must go back to the client unchanged. */
+static void actions(DBusMessage* msg, Notification* n)
 {
     DBusMessageIter iter, arr;
-    const char* key;
-    int i;
+    const char *key, *label;
 
     if (!argat(msg, &iter, 5, DBUS_TYPE_ARRAY))
-        return 0;
+        return;
     dbus_message_iter_recurse(&iter, &arr);
-    for (i = 0; dbus_message_iter_get_arg_type(&arr) == DBUS_TYPE_STRING;
-         i++, dbus_message_iter_next(&arr)) {
+    while (dbus_message_iter_get_arg_type(&arr) == DBUS_TYPE_STRING) {
         dbus_message_iter_get_basic(&arr, &key);
-        if (!(i & 1) && !strcmp(key, "default"))
-            return 1;
+        dbus_message_iter_next(&arr);
+        if (dbus_message_iter_get_arg_type(&arr) != DBUS_TYPE_STRING)
+            break;
+        dbus_message_iter_get_basic(&arr, &label);
+        dbus_message_iter_next(&arr);
+        if (!strcmp(key, "default")) {
+            n->hasdefault = 1;
+        } else if (n->nact < NOTIFY_ACTMAX &&
+                   strlen(key) < sizeof(n->act[0].key)) {
+            memcpy(n->act[n->nact].key, key, strlen(key) + 1);
+            sanitize(n->act[n->nact].label,
+                     sizeof(n->act[0].label),
+                     *label ? label : key);
+            n->nact++;
+        }
     }
-    return 0;
 }
 
 static int hint(DBusMessage* msg,
@@ -595,7 +619,8 @@ static DBusHandlerResult handle_notify(DBusConnection* conn, DBusMessage* msg)
     n.urgency = urgency(msg);
     n.timeout_ms = n.urgency == UrgencyCritical ? 0 : (unsigned int)ms;
     n.transient = boolhint(msg, "transient");
-    n.hasdefault = has_default(msg);
+    n.resident = boolhint(msg, "resident");
+    actions(msg, &n);
 
     sanitize(capp, sizeof(capp), *app_name ? app_name : "?");
     sanitize(csummary, sizeof(csummary), summary);
@@ -644,6 +669,9 @@ static DBusHandlerResult handle_notify(DBusConnection* conn, DBusMessage* msg)
     } else if (i < notify.nqueue) {
         release(&notify.queue[i]);
         notify.queue[i] = n;
+    } else if (notify.held) {
+        /* the user is picking an action: nothing takes the box */
+        enqueue(&n, n.urgency == UrgencyCritical);
     } else if (!notify.active || !notify.cur.timeout_ms ||
                n.urgency == UrgencyCritical) {
         /* shown now if the box is free, sticky, or this one is critical;
@@ -917,16 +945,14 @@ void notify_dismissall(void)
         notify.redraw();
 }
 
-void notify_invoke(void)
+/* The activation token goes first, as the spec asks, so the client can
+ * raise the right window itself. */
+static void invoke(const char* key)
 {
     DBusMessage* sig;
-    const char *key = "default", *token;
+    const char* token;
 
-    if (!notify.active)
-        return;
-    /* the activation token goes first, as the spec asks, so the client can
-     * raise the right window itself */
-    if (notify.cur.hasdefault && notify.token && (token = notify.token()) &&
+    if (notify.token && (token = notify.token()) &&
         (sig = dbus_message_new_signal(
              NOTIFY_OPATH, NOTIFY_IFACE, "ActivationToken"))) {
         if (dbus_message_append_args(sig,
@@ -938,8 +964,7 @@ void notify_invoke(void)
             dbus_connection_send(notify.conn, sig, NULL);
         dbus_message_unref(sig);
     }
-    if (notify.cur.hasdefault &&
-        (sig = dbus_message_new_signal(
+    if ((sig = dbus_message_new_signal(
              NOTIFY_OPATH, NOTIFY_IFACE, "ActionInvoked"))) {
         if (dbus_message_append_args(sig,
                                      DBUS_TYPE_UINT32,
@@ -950,5 +975,76 @@ void notify_invoke(void)
             dbus_connection_send(notify.conn, sig, NULL);
         dbus_message_unref(sig);
     }
-    notify_clear(ClosedDismissed);
+    if (notify.cur.resident) {
+        notify_hold(0);
+        if (notify.redraw)
+            notify.redraw();
+    } else {
+        notify_clear(ClosedDismissed);
+    }
+}
+
+void notify_invoke(void)
+{
+    if (!notify.active)
+        return;
+    if (notify.cur.hasdefault)
+        invoke("default");
+    else
+        notify_clear(ClosedDismissed);
+}
+
+void notify_action(size_t i)
+{
+    if (notify.active && i < notify.cur.nact)
+        invoke(notify.cur.act[i].key);
+}
+
+void notify_hold(int on)
+{
+    Notification n;
+    uint64_t now = notify_now(), end;
+    size_t i;
+
+    if (!notify.active || !on == !notify.held)
+        return;
+    if (on) {
+        end = notify.cur.shown_ms + notify.cur.timeout_ms;
+        notify.heldleft = !notify.cur.timeout_ms ? 0
+                          : end > now            ? (unsigned int)(end - now)
+                                                 : 1;
+        notify_arm(0);
+        notify.held = 1;
+        return;
+    }
+
+    notify.held = 0;
+    /* a critical that arrived meanwhile takes the box now */
+    for (i = 0; i < notify.nqueue; i++)
+        if (notify.queue[i].urgency == UrgencyCritical && !notify.queue[i].seen)
+            break;
+    if (i < notify.nqueue && notify.cur.urgency != UrgencyCritical) {
+        unqueue(i, &n);
+        notify.active = 0;
+        enqueue(&notify.cur, 1);
+        notify.cur = n;
+        if (!show()) {
+            notify_closed(notify.cur.id, ClosedUndefined);
+            histpush(&notify.cur);
+            shownext();
+        }
+        return;
+    }
+    if (notify.cur.timeout_ms) {
+        notify.cur.shown_ms = now - (notify.cur.timeout_ms - notify.heldleft);
+        /* no redraw from here: the bar may be drawing */
+        notify_arm(notify.heldleft);
+    }
+}
+
+int notify_held(unsigned int* left_ms)
+{
+    if (notify.held && left_ms)
+        *left_ms = notify.heldleft;
+    return notify.held;
 }

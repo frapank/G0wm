@@ -16,6 +16,7 @@
 #define NOTIFY_HISTMAX 32
 /* icons are scaled down on arrival so a full history stays small */
 #define NOTIFY_ICONSIZE 64
+#define NOTIFY_ACTMAX 8 /* actions besides "default" */
 
 /* the urgency hint, as the spec numbers it */
 enum { UrgencyLow, UrgencyNormal, UrgencyCritical };
@@ -24,6 +25,8 @@ typedef struct {
     dbus_uint32_t id;
     int urgency;
     int hasdefault;
+    int resident; /* stays up after an action */
+    int seen;     /* has been on screen at least once */
     int transient;
     unsigned int timeout_ms; /* 0: stays until dismissed */
     uint64_t shown_ms;       /* CLOCK_MONOTONIC */
@@ -33,6 +36,11 @@ typedef struct {
     char tag[64]; /* stack tag */
     int value;    /* progress 0-100, -1 without one */
     Icon* icon;
+    struct {
+        char key[64];
+        char label[64];
+    } act[NOTIFY_ACTMAX];
+    size_t nact;
 } Notification;
 
 /* token hands out an xdg-activation token, sent to the client before an
@@ -56,8 +64,14 @@ void notify_histremove(size_t i);
 /* Drops the current one; the next queued takes its place. */
 void notify_dismiss(void);
 void notify_dismissall(void);
-/* Fires "default", if offered, and drops the notification. */
+/* Fires "default" (or action i) and drops the notification unless it is
+ * resident. */
 void notify_invoke(void);
+void notify_action(size_t i);
+/* While held (the user is picking an action) the timer stops and new
+ * notifications queue up instead of taking the box. */
+void notify_hold(int on);
+int notify_held(unsigned int* left_ms);
 
 /* CLOCK_MONOTONIC, in ms */
 uint64_t notify_now(void);
