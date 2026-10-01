@@ -98,7 +98,7 @@ GENHDR = $(GENDIR)/cursor-shape-v1-protocol.h \
 	$(GENDIR)/wlr-output-power-management-unstable-v1-protocol.h \
 	$(GENDIR)/xdg-shell-protocol.h
 
-.PHONY: all clean dist install uninstall remove format format-check test
+.PHONY: all clean dist install install-status uninstall remove format format-check test
 
 all: g0wm
 
@@ -224,10 +224,16 @@ dist: clean
 install: g0wm
 	@$(MESS) '[$(YELLOW)INSTALL$(RESET)] %s\n' 'Starting...'
 	mkdir -p $(BINDIR)
-	cp -f g0wm scripts/start-g0wm scripts/g0wm-status.sh $(BINDIR)
-	chmod 755 $(BINDIR)/g0wm $(BINDIR)/start-g0wm $(BINDIR)/g0wm-status.sh
+	cp -f g0wm scripts/start-g0wm $(BINDIR)
+	chmod 755 $(BINDIR)/g0wm $(BINDIR)/start-g0wm
 	./g0wm -c >/dev/null
 	@$(MESS) '[$(YELLOW)INSTALL$(RESET)] %s\n' 'Done!'
+
+# start-g0wm runs the status script only if it finds it in PATH
+install-status:
+	mkdir -p $(BINDIR)
+	cp -f scripts/g0wm-status.sh $(BINDIR)
+	chmod 755 $(BINDIR)/g0wm-status.sh
 
 uninstall remove:
 	@$(MESS) '[$(RED)UNINSTALL$(RESET)] %s\n' 'Removing G0wm'
