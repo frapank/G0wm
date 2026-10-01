@@ -24,6 +24,10 @@ typedef struct {
     int textx, textw;        /* the › included */
     int countx, countw;      /* queue or history position */
     char count[32];
+    int signx, signw; /* notification_actionsign */
+    /* while picking, the action labels shown in place of the text */
+    int chipx[NOTIFY_ACTMAX], chipw[NOTIFY_ACTMAX];
+    size_t chip0, nchip;
 } NotifyBox;
 
 static void drawnotify(Monitor* m,
@@ -35,6 +39,7 @@ static void drawnotifytext(Monitor* m,
                            const NotifyBox* b,
                            int x,
                            int w,
+                           const Notification* n,
                            const char* text,
                            uint32_t* scm);
 static void
@@ -47,6 +52,8 @@ static void notifybox(Monitor* m,
                       int w,
                       NotifyBox* b);
 static void notifybrowse(dbus_uint32_t id);
+static void notifypickclose(void);
+static void notifypickrun(size_t i);
 static const Notification* notifyshown(long* hist);
 static void notifysync(const Notification* n, long hist);
 static int notifytick(void* data);
@@ -65,7 +72,11 @@ static uint64_t notifyview_ms; /* last input, the view times out */
 static dbus_uint32_t notifyliveid;
 /* animates the line and times out the history view */
 static struct wl_event_source* notifytimer;
-#endif /* NOTIFICATIONS */
+/* picked action, -1 when closed; the picker belongs to notifypickid */
+static long notifypicksel = -1;
+static dbus_uint32_t notifypickid;
+static int notifyboxx; /* last drawn x, for hit testing */
+#endif                 /* NOTIFICATIONS */
 
 /* function implementations */
 bool baracceptsinput(struct wlr_scene_buffer* buffer, double* sx, double* sy)
@@ -497,16 +508,40 @@ static void drawnotifytext(Monitor* m,
                            const NotifyBox* b,
                            int x,
                            int w,
+                           const Notification* n,
                            const char* text,
                            uint32_t* scm)
 {
     char buf[NOTIFY_TEXTMAX];
-    size_t k;
+    size_t k, i;
     int aw;
 
     drwl_setscheme(m->drw, scm);
     drwl_rect(m->drw, x, 0, (unsigned int)w, m->b.height, 1, 1);
-    if (b->textw > 0 && (int)drwl_font_getwidth(m->drw, text) <= b->textw) {
+    if (b->nchip) {
+        for (i = b->chip0; i < b->chip0 + b->nchip; i++)
+            drwl_text(m->drw,
+                      b->chipx[i],
+                      0,
+                      b->chipw[i],
+                      m->b.height,
+                      m->lrpad / 2,
+                      n->act[i].label,
+                      (long)i == notifypicksel);
+        if (b->chip0 || b->chip0 + b->nchip < n->nact) {
+            aw = (int)drwl_font_getwidth(m->drw, notifymore);
+            if (aw <= b->textw)
+                drwl_text(m->drw,
+                          b->textx + b->textw - aw,
+                          0,
+                          aw,
+                          m->b.height,
+                          0,
+                          notifymore,
+                          0);
+        }
+    } else if (b->textw > 0 &&
+               (int)drwl_font_getwidth(m->drw, text) <= b->textw) {
         drwl_text(m->drw, b->textx, 0, b->textw, m->b.height, 0, text, 0);
     } else if (b->textw > 0) {
         /* our own › instead of drwl's …, which covers the last codepoint */
@@ -527,6 +562,15 @@ static void drawnotifytext(Monitor* m,
                       notifymore,
                       0);
     }
+    if (b->signw)
+        drwl_text(m->drw,
+                  b->signx,
+                  0,
+                  b->signw,
+                  m->b.height,
+                  0,
+                  notification_actionsign,
+                  0);
     if (b->countw)
         drwl_text(m->drw, b->countx, 0, b->countw, m->b.height, 0, b->count, 0);
 }
@@ -544,6 +588,7 @@ static void drawnotify(Monitor* m,
     int full = m->drw->font->height, len = full, top, fw, i;
     uint64_t now = notify_now(), wake = 0, end, left;
     uint32_t line = colors[scheme][ColBorder], filled[3], a, bg, tint;
+    unsigned int held;
     const char* text;
     pixman_image_t* img;
     pixman_transform_t t;
@@ -551,11 +596,13 @@ static void drawnotify(Monitor* m,
     NotifyBox b;
 
     notifysync(n, hist);
+    notifypicking();
+    notifyboxx = x;
     notifybox(m, n, hist, x, w, &b);
     text = n->text + (notifyoff < strlen(n->text) ? notifyoff : 0);
 
     if (n->value < 0) {
-        drawnotifytext(m, &b, x, w, text, colors[scheme]);
+        drawnotifytext(m, &b, x, w, n, text, colors[scheme]);
     } else {
         /* the fill's background is premixed: a tint drawn over would dye the
          * text too */
@@ -570,12 +617,12 @@ static void drawnotify(Monitor* m,
         pixman_region32_init_rect(&clip, x, 0, (unsigned int)fw, m->b.height);
         pixman_image_set_clip_region32(m->drw->image, &clip);
         pixman_region32_fini(&clip);
-        drawnotifytext(m, &b, x, w, text, filled);
+        drawnotifytext(m, &b, x, w, n, text, filled);
         pixman_region32_init_rect(
             &clip, x + fw, 0, (unsigned int)(w - fw), m->b.height);
         pixman_image_set_clip_region32(m->drw->image, &clip);
         pixman_region32_fini(&clip);
-        drawnotifytext(m, &b, x, w, text, colors[scheme]);
+        drawnotifytext(m, &b, x, w, n, text, colors[scheme]);
         pixman_region32_init_rect(&clip, 0, 0, m->b.width, m->b.height);
         pixman_image_set_clip_region32(m->drw->image, &clip);
         pixman_region32_fini(&clip);
@@ -584,7 +631,9 @@ static void drawnotify(Monitor* m,
     /* once, after both passes: they blend with OVER */
     if (b.linew) {
         /* full for sticky and history entries, the latter at half alpha */
-        if (hist < 0 && n->timeout_ms) {
+        if (hist < 0 && n->timeout_ms && notify_held(&held)) {
+            len = (int)((uint64_t)full * held / n->timeout_ms);
+        } else if (hist < 0 && n->timeout_ms) {
             end = n->shown_ms + n->timeout_ms;
             left = end > now ? end - now : 0;
             len = (int)((uint64_t)full * left / n->timeout_ms);
@@ -712,6 +761,8 @@ static void notifybox(Monitor* m,
                       NotifyBox* b)
 {
     int pad = m->lrpad / 2, size = m->drw->font->height, cx, end, iw, ih;
+    int picking;
+    size_t i;
 
     memset(b, 0, sizeof(*b));
     cx = x + pad;
@@ -744,8 +795,31 @@ static void notifybox(Monitor* m,
         b->countx = end - b->countw;
         end = b->countx - pad;
     }
+    picking = hist < 0 && notifypicksel >= 0 && n->id == notifypickid;
+    if (hist < 0 && n->nact && !picking && *notification_actionsign) {
+        b->signw = (int)drwl_font_getwidth(m->drw, notification_actionsign);
+        b->signx = end - b->signw;
+        end = b->signx - pad;
+    }
     b->textx = cx;
     b->textw = end > cx ? end - cx : 0;
+
+    if (!picking)
+        return;
+    /* scroll the chips until the picked one fits */
+    for (b->chip0 = 0;; b->chip0++) {
+        for (i = b->chip0, cx = b->textx; i < n->nact; i++) {
+            b->chipw[i] =
+                (int)drwl_font_getwidth(m->drw, n->act[i].label) + m->lrpad;
+            if (cx + b->chipw[i] > end)
+                break;
+            b->chipx[i] = cx;
+            cx += b->chipw[i] + pad;
+        }
+        b->nchip = i - b->chip0;
+        if (i > (size_t)notifypicksel || b->chip0 >= (size_t)notifypicksel)
+            break;
+    }
 }
 
 /* id 0 goes back to the live notification */
@@ -770,7 +844,8 @@ static const Notification* notifyshown(long* hist)
         notifyviewid = 0;
     }
     if (notifyviewid &&
-        notify_now() >= notifyview_ms + notification_timeout * 1000)
+        (notifypicksel >= 0 ||
+         notify_now() >= notifyview_ms + notification_timeout * 1000))
         notifyviewid = 0;
 
     for (i = 0; notifyviewid && (n = notify_history(i)); i++)
@@ -806,6 +881,94 @@ void notifyfini(void)
     if (notifytimer)
         wl_event_source_remove(notifytimer);
     notifytimer = NULL;
+}
+
+/* Also closes the picker once its notification is gone or has no actions. */
+int notifypicking(void)
+{
+    const Notification* cur;
+
+    if (notifypicksel < 0)
+        return 0;
+    cur = notify_current();
+    if (!cur || cur->id != notifypickid || !cur->nact) {
+        notifypickclose();
+        return 0;
+    }
+    if ((size_t)notifypicksel >= cur->nact) /* updated with fewer */
+        notifypicksel = (long)cur->nact - 1;
+    return 1;
+}
+
+static void notifypickclose(void)
+{
+    notifypicksel = -1;
+    notify_hold(0);
+}
+
+static void notifypickrun(size_t i)
+{
+    notifypicksel = -1;
+    notify_action(i); /* releases the hold */
+    drawbars();
+}
+
+/* Toggles the picker; while open it owns the keyboard (notifypickkey()). */
+void notifyactions(const Arg* arg)
+{
+    const Notification* cur;
+
+    if (!shownotifications)
+        return;
+    if (notifypicking()) {
+        notifypickclose();
+    } else if ((cur = notify_current()) && cur->nact) {
+        notifyviewid = 0;
+        notifypicksel = 0;
+        notifypickid = cur->id;
+        notify_hold(1);
+    } else {
+        return;
+    }
+    drawbars();
+}
+
+/* left/right, h/l or Tab move, Return or space runs, 1-9 run directly,
+ * Escape closes */
+void notifypickkey(xkb_keysym_t sym)
+{
+    const Notification* cur;
+    long n;
+
+    if (!notifypicking() || !(cur = notify_current()))
+        return;
+    n = (long)cur->nact;
+    switch (sym) {
+        case XKB_KEY_Left:
+        case XKB_KEY_h:
+        case XKB_KEY_ISO_Left_Tab:
+            notifypicksel = (notifypicksel + n - 1) % n;
+            break;
+        case XKB_KEY_Right:
+        case XKB_KEY_l:
+        case XKB_KEY_Tab:
+            notifypicksel = (notifypicksel + 1) % n;
+            break;
+        case XKB_KEY_Return:
+        case XKB_KEY_KP_Enter:
+        case XKB_KEY_space:
+            notifypickrun((size_t)notifypicksel);
+            return;
+        case XKB_KEY_Escape:
+            notifypickclose();
+            break;
+        default:
+            if (sym >= XKB_KEY_1 && sym <= XKB_KEY_9 &&
+                (long)(sym - XKB_KEY_1) < n)
+                notifypickrun((size_t)(sym - XKB_KEY_1));
+            return;
+    }
+    drawbars();
 }
 
 /* Scrolls the notification on by one screenful, wrapping to the start once
@@ -883,7 +1046,7 @@ void notifynext(const Arg* arg)
 }
 
 /* Puts the notification away early, giving the box back to the window title.
- * On a history entry, forgets it. */
+ * On a history entry, forgets it; with the picker open, closes the picker. */
 void notifydismiss(const Arg* arg)
 {
     const Notification* h;
@@ -891,6 +1054,11 @@ void notifydismiss(const Arg* arg)
 
     if (!shownotifications)
         return;
+    if (notifypicking()) {
+        notifypickclose();
+        drawbars();
+        return;
+    }
     notifyshown(&hist);
     if (hist < 0) {
         notify_dismiss();
@@ -918,16 +1086,39 @@ void notifydismissall(const Arg* arg)
 }
 
 /* Opens the notification: sends its default action and focuses the
- * sender's window, since it can't raise itself. */
+ * sender's window, since it can't raise itself. From the pointer (arg->ui is
+ * x + 1) a click on the action sign opens the picker, and with the picker
+ * open a click runs the action under it or closes the picker. */
 void notifyopen(const Arg* arg)
 {
     const Notification* n;
     const char* id;
+    Monitor* m = barmonitor();
+    NotifyBox b;
     Client* c;
-    long hist;
+    long hist, px = arg && arg->ui ? (long)arg->ui - 1 : -1;
+    size_t i;
 
     if (!shownotifications || !(n = notifyshown(&hist)))
         return;
+    if (px >= 0 && m && hist < 0) {
+        notifybox(m, n, hist, notifyboxx, m->b.titlew, &b);
+        if (notifypicking()) {
+            for (i = b.chip0; i < b.chip0 + b.nchip; i++)
+                if (px >= b.chipx[i] && px < b.chipx[i] + b.chipw[i]) {
+                    notifypickrun(i);
+                    return;
+                }
+            notifypickclose();
+            drawbars();
+            return;
+        }
+        if (b.signw && px >= b.signx - m->lrpad / 2 &&
+            px < b.signx + b.signw + m->lrpad / 2) {
+            notifyactions(NULL);
+            return;
+        }
+    }
     wl_list_for_each(c, &clients, link)
     {
         id = client_get_appid(c);
@@ -949,7 +1140,7 @@ void notifyopen(const Arg* arg)
     }
 }
 
-/* Vertical walks the history, horizontal scrolls the text.
+/* Vertical walks the history (or the picker), horizontal scrolls the text.
  * Returns whether the wheel was consumed. */
 int notifywheel(Monitor* pm, double delta, int horizontal)
 {
@@ -966,6 +1157,13 @@ int notifywheel(Monitor* pm, double delta, int horizontal)
         return 0;
     n = notifyshown(&hist);
 
+    if (!horizontal && notifypicking()) {
+        for (acc += delta; acc >= notch; acc -= notch)
+            notifypickkey(XKB_KEY_Right);
+        for (; acc <= -notch; acc += notch)
+            notifypickkey(XKB_KEY_Left);
+        return 1;
+    }
     if (!horizontal) {
         if (!n && !notify_histlen())
             return 0;
