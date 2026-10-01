@@ -128,6 +128,10 @@ int showbar     = 1; // 0 means no bar
 int topbar      = 1; // 0 means bottom bar
 int barwintitle = 0; // focused window title in the bar
 
+/* the little squares by the tag numbers, rounded like cornerpx rounds the
+ * windows; half their side makes a dot */
+unsigned int barboxradius = 2; // 0 for square corners
+
 /* Gap between the bar and the edges of its output, for a floating bar. The
  * layout leaves the same gap on the side the bar faces. */
 unsigned int barpadding = 0; // 0 puts the bar against the edges
