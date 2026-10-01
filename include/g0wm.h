@@ -474,6 +474,7 @@ void motionnotify(uint32_t time,
 void motionrelative(struct wl_listener* listener, void* data);
 void moveresize(const Arg* arg);
 #ifdef NOTIFICATIONS
+void notifyactions(const Arg* arg);
 void notifydismiss(const Arg* arg);
 void notifyfini(void);
 const char* notifytoken(void);
@@ -481,6 +482,8 @@ int notifytokenmine(const struct wlr_xdg_activation_token_v1* token);
 void notifydismissall(const Arg* arg);
 void notifynext(const Arg* arg);
 void notifyopen(const Arg* arg);
+int notifypicking(void);
+void notifypickkey(xkb_keysym_t sym);
 void notifyprev(const Arg* arg);
 void notifyscroll(const Arg* arg);
 int notifywheel(Monitor* pm, double delta, int horizontal);
@@ -673,6 +676,7 @@ extern int shownotifications;
 extern unsigned int notification_timeout;
 extern unsigned int notification_linewidth;
 extern unsigned int notification_lineradius;
+extern const char* notification_actionsign;
 #endif /* NOTIFICATIONS */
 extern int opacity_enabled;
 extern float opacity_focus;
