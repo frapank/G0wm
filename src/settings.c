@@ -139,7 +139,10 @@ static const Action actions[] = {
     { movestack, "movestack", 'i' },
 #ifdef NOTIFICATIONS
     { notifydismiss, "notifydismiss", 0 },
+    { notifydismissall, "notifydismissall", 0 },
+    { notifynext, "notifynext", 0 },
     { notifyopen, "notifyopen", 0 },
+    { notifyprev, "notifyprev", 0 },
     { notifyscroll, "notifyscroll", 0 },
 #endif
     { quit, "quit", 0 },
@@ -1411,5 +1414,8 @@ void reloadsettings(const Arg* arg)
     }
 
     reloadopacity();
+#ifdef NOTIFICATIONS
+    notify_settimeout(notification_timeout);
+#endif
     drawbars();
 }
