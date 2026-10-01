@@ -1,7 +1,9 @@
 #include "notify.h"
 
 #include <stdio.h>
+#include <stdlib.h>
 #include <string.h>
+#include <strings.h>
 #include <time.h>
 
 #define NOTIFY_NAME "org.freedesktop.Notifications"
@@ -105,8 +107,16 @@ static void release(Notification* n)
     n->icon = NULL;
 }
 
-/* Pushes n to the head of the history, taking over its icon. An update sent
- * after the notification closed replaces the entry it left. */
+/* same id, or same app and stack tag */
+static int sameslot(const Notification* a, const Notification* b)
+{
+    return a->id == b->id ||
+           (*a->tag && !strcmp(a->tag, b->tag) && !strcmp(a->app, b->app));
+}
+
+/* Pushes n to the head of the history, taking over its icon. An entry for
+ * the same id or stack tag is replaced, so ten volume key presses leave one
+ * entry. */
 static void histpush(Notification* n)
 {
     size_t i;
@@ -115,7 +125,7 @@ static void histpush(Notification* n)
         release(n);
         return;
     }
-    for (i = 0; i < notify.nhist && notify.hist[i].id != n->id; i++)
+    for (i = 0; i < notify.nhist && !sameslot(&notify.hist[i], n); i++)
         ;
     if (i == notify.nhist && notify.nhist == NOTIFY_HISTMAX)
         i = notify.nhist - 1; /* full: drop the oldest */
@@ -322,6 +332,20 @@ static int boolhint(DBusMessage* msg, const char* name)
     return b;
 }
 
+/* dunst's hint, then the older Ubuntu one */
+static void stack_tag(DBusMessage* msg, char* dst, size_t dstsz)
+{
+    DBusMessageIter var;
+    const char* val;
+
+    *dst = '\0';
+    if (!hint(msg, "x-dunst-stack-tag", DBUS_TYPE_STRING, &var) &&
+        !hint(msg, "x-canonical-private-synchronous", DBUS_TYPE_STRING, &var))
+        return;
+    dbus_message_iter_get_basic(&var, &val);
+    sanitize(dst, dstsz, val);
+}
+
 /* clients send it signed or unsigned */
 static int value(DBusMessage* msg)
 {
@@ -338,6 +362,92 @@ static int value(DBusMessage* msg)
         return -1;
     }
     return i < 0 ? 0 : i > 100 ? 100 : i;
+}
+
+/* UTF-8 encodes cp into dst, 0 if it doesn't fit or isn't valid */
+static size_t putcp(char* dst, size_t room, unsigned long cp)
+{
+    if (!cp || (cp >= 0xD800 && cp <= 0xDFFF) || cp > 0x10FFFF)
+        return 0;
+    if (cp < 0x80 && room > 1) {
+        dst[0] = (char)cp;
+        return 1;
+    } else if (cp < 0x800 && room > 2) {
+        dst[0] = (char)(0xC0 | cp >> 6);
+        dst[1] = (char)(0x80 | (cp & 0x3F));
+        return 2;
+    } else if (cp < 0x10000 && room > 3) {
+        dst[0] = (char)(0xE0 | cp >> 12);
+        dst[1] = (char)(0x80 | (cp >> 6 & 0x3F));
+        dst[2] = (char)(0x80 | (cp & 0x3F));
+        return 3;
+    } else if (cp >= 0x10000 && room > 4) {
+        dst[0] = (char)(0xF0 | cp >> 18);
+        dst[1] = (char)(0x80 | (cp >> 12 & 0x3F));
+        dst[2] = (char)(0x80 | (cp >> 6 & 0x3F));
+        dst[3] = (char)(0x80 | (cp & 0x3F));
+        return 4;
+    }
+    return 0;
+}
+
+/* Flattens body markup to plain text: entities are decoded, the tags the
+ * spec allows are dropped (<br> becomes a space), any other < is kept. */
+static void demarkup(char* dst, size_t dstsz, const char* src)
+{
+    static const struct {
+        const char* name;
+        char c;
+    } ents[] = { { "amp;", '&' },
+                 { "lt;", '<' },
+                 { "gt;", '>' },
+                 { "quot;", '"' },
+                 { "apos;", '\'' } };
+    static const char* const tags[] = { "b", "i", "u", "a", "img", "br" };
+    const char *p, *end;
+    unsigned long cp;
+    size_t i = 0, k, n;
+    char* stop;
+
+    if (!dstsz)
+        return;
+    for (p = src; *p && i + 1 < dstsz;) {
+        if (*p == '&') {
+            for (k = 0; k < sizeof(ents) / sizeof(*ents); k++)
+                if (!strncmp(p + 1, ents[k].name, strlen(ents[k].name)))
+                    break;
+            if (k < sizeof(ents) / sizeof(*ents)) {
+                dst[i++] = ents[k].c;
+                p += 1 + strlen(ents[k].name);
+                continue;
+            }
+            if (p[1] == '#') {
+                cp = p[2] == 'x' || p[2] == 'X' ? strtoul(p + 3, &stop, 16)
+                                                : strtoul(p + 2, &stop, 10);
+                if (*stop == ';' && stop > p + 2 &&
+                    (n = putcp(dst + i, dstsz - i, cp))) {
+                    i += n;
+                    p = stop + 1;
+                    continue;
+                }
+            }
+        } else if (*p == '<' && (end = strchr(p, '>'))) {
+            const char* name = p + 1 + (p[1] == '/');
+            for (n = 0; name[n] && !strchr(" \t\n/>", name[n]); n++)
+                ;
+            for (k = 0; k < sizeof(tags) / sizeof(*tags); k++)
+                if (strlen(tags[k]) == n && !strncasecmp(name, tags[k], n))
+                    break;
+            if (k < sizeof(tags) / sizeof(*tags)) {
+                if (!strcmp(tags[k], "br"))
+                    dst[i++] = ' ';
+                p = end + 1;
+                continue;
+            }
+        }
+        dst[i++] = *p++;
+    }
+    dst[i] = '\0';
 }
 
 static int urgency(DBusMessage* msg)
@@ -448,7 +558,7 @@ static DBusHandlerResult handle_notify(DBusConnection* conn, DBusMessage* msg)
     size_t i;
     int ms;
     /* bounded well under NOTIFY_TEXTMAX: snprintf() below can't truncate */
-    char capp[64], csummary[200], cbody[200];
+    char capp[64], csummary[200], cbody[200], plain[1024];
 
     /* actions/hints intentionally left unread; expire_timeout comes after
      * them and is picked up separately below */
@@ -488,7 +598,8 @@ static DBusHandlerResult handle_notify(DBusConnection* conn, DBusMessage* msg)
 
     sanitize(capp, sizeof(capp), *app_name ? app_name : "?");
     sanitize(csummary, sizeof(csummary), summary);
-    sanitize(cbody, sizeof(cbody), body);
+    demarkup(plain, sizeof(plain), body);
+    sanitize(cbody, sizeof(cbody), plain);
     if (*csummary && *cbody)
         snprintf(n.text, sizeof(n.text), "%s: %s - %s", capp, csummary, cbody);
     else
@@ -499,11 +610,22 @@ static DBusHandlerResult handle_notify(DBusConnection* conn, DBusMessage* msg)
                  *csummary ? csummary : cbody);
     snprintf(n.app, sizeof(n.app), "%s", capp);
     desktop_entry(msg, n.desktop, sizeof(n.desktop));
+    stack_tag(msg, n.tag, sizeof(n.tag));
     n.value = value(msg);
     n.icon = notify_icon(msg, app_icon);
 
-    /* An update keeps its id and its place on screen or in the queue. */
-    id = replaces_id ? replaces_id : ++notify.seq;
+    /* Updates, by id or by stack tag, keep their place on screen or in the
+     * queue. */
+    id = replaces_id;
+    if (!id && *n.tag) {
+        if (notify.active && sameslot(&notify.cur, &n))
+            id = notify.cur.id;
+        for (i = 0; !id && i < notify.nqueue; i++)
+            if (sameslot(&notify.queue[i], &n))
+                id = notify.queue[i].id;
+    }
+    if (!id)
+        id = ++notify.seq;
     if (!id) /* the counter wrapped; 0 means "no notification" */
         id = ++notify.seq;
     n.id = id;
@@ -586,7 +708,7 @@ static DBusHandlerResult handle_capabilities(DBusConnection* conn,
 {
     DBusMessage* reply = dbus_message_new_method_return(msg);
     DBusMessageIter iter, arr;
-    const char* caps[] = { "body", "actions", "icon-static" };
+    const char* caps[] = { "body", "body-markup", "actions", "icon-static" };
     size_t i;
     DBusHandlerResult res = DBUS_HANDLER_RESULT_HANDLED;
 
