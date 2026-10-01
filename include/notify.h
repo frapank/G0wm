@@ -30,7 +30,8 @@ typedef struct {
     char text[NOTIFY_TEXTMAX];
     char app[64];
     char desktop[64];
-    int value; /* progress 0-100, -1 without one */
+    char tag[64]; /* stack tag */
+    int value;    /* progress 0-100, -1 without one */
     Icon* icon;
 } Notification;
 
