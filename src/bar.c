@@ -19,8 +19,10 @@ static void drawtitle(Client* c);
 #endif /* TITLEBAR */
 #ifdef NOTIFICATIONS
 typedef struct {
-    int textx, textw;   /* the › included */
-    int countx, countw; /* queue or history position */
+    int linex, linew;
+    int iconx, iconw, iconh; /* iconw 0 without one */
+    int textx, textw;        /* the › included */
+    int countx, countw;      /* queue or history position */
     char count[32];
 } NotifyBox;
 
@@ -35,6 +37,8 @@ static void drawnotifytext(Monitor* m,
                            int w,
                            const char* text,
                            uint32_t* scm);
+static void
+drawpill(Monitor* m, int x, int y, int w, int h, double r, uint32_t rgba);
 static size_t fitprefix(Monitor* m, const char* s, int w);
 static void notifybox(Monitor* m,
                       const Notification* n,
@@ -59,7 +63,7 @@ static size_t notifyoff;
 static dbus_uint32_t notifyviewid;
 static uint64_t notifyview_ms; /* last input, the view times out */
 static dbus_uint32_t notifyliveid;
-/* times out the history view */
+/* animates the line and times out the history view */
 static struct wl_event_source* notifytimer;
 #endif /* NOTIFICATIONS */
 
@@ -487,7 +491,8 @@ static void drawtitle(Client* c)
 
 #endif /* TITLEBAR */
 #ifdef NOTIFICATIONS
-/* Background and text. */
+/* Background and text. drwl_text() paints its own background, so a progress
+ * fill is drawn by calling this twice under different clips. */
 static void drawnotifytext(Monitor* m,
                            const NotifyBox* b,
                            int x,
@@ -533,26 +538,145 @@ static void drawnotify(Monitor* m,
                        const Notification* n,
                        long hist)
 {
-    uint64_t now = notify_now(), end, left;
+    int scheme = n->urgency == UrgencyLow        ? SchemeNotifyLow
+                 : n->urgency == UrgencyCritical ? SchemeNotifyCrit
+                                                 : SchemeNotify;
+    int full = m->drw->font->height, len = full, top, fw, i;
+    uint64_t now = notify_now(), wake = 0, end, left;
+    uint32_t line = colors[scheme][ColBorder], filled[3], a, bg, tint;
+    const char* text;
+    pixman_image_t* img;
+    pixman_transform_t t;
+    pixman_region32_t clip;
     NotifyBox b;
 
     notifysync(n, hist);
     notifybox(m, n, hist, x, w, &b);
-    drawnotifytext(m,
-                   &b,
-                   x,
-                   w,
-                   n->text + (notifyoff < strlen(n->text) ? notifyoff : 0),
-                   colors[SchemeNotify]);
+    text = n->text + (notifyoff < strlen(n->text) ? notifyoff : 0);
 
-    if (!notifyviewid)
-        return;
-    end = notifyview_ms + notification_timeout * 1000;
-    left = end > now ? end - now : 1;
-    if (!notifytimer)
+    if (n->value < 0) {
+        drawnotifytext(m, &b, x, w, text, colors[scheme]);
+    } else {
+        /* the fill's background is premixed: a tint drawn over would dye the
+         * text too */
+        memcpy(filled, colors[scheme], sizeof(filled));
+        bg = colors[scheme][ColBg];
+        a = (line & 0xff) / 3;
+        for (filled[ColBg] = bg & 0xff, i = 8; i < 32; i += 8) {
+            tint = (bg >> i & 0xff) * (255 - a) + (line >> i & 0xff) * a;
+            filled[ColBg] |= (tint / 255) << i;
+        }
+        fw = w * n->value / 100;
+        pixman_region32_init_rect(&clip, x, 0, (unsigned int)fw, m->b.height);
+        pixman_image_set_clip_region32(m->drw->image, &clip);
+        pixman_region32_fini(&clip);
+        drawnotifytext(m, &b, x, w, text, filled);
+        pixman_region32_init_rect(
+            &clip, x + fw, 0, (unsigned int)(w - fw), m->b.height);
+        pixman_image_set_clip_region32(m->drw->image, &clip);
+        pixman_region32_fini(&clip);
+        drawnotifytext(m, &b, x, w, text, colors[scheme]);
+        pixman_region32_init_rect(&clip, 0, 0, m->b.width, m->b.height);
+        pixman_image_set_clip_region32(m->drw->image, &clip);
+        pixman_region32_fini(&clip);
+    }
+
+    /* once, after both passes: they blend with OVER */
+    if (b.linew) {
+        /* full for sticky and history entries, the latter at half alpha */
+        if (hist < 0 && n->timeout_ms) {
+            end = n->shown_ms + n->timeout_ms;
+            left = end > now ? end - now : 0;
+            len = (int)((uint64_t)full * left / n->timeout_ms);
+            wake = n->timeout_ms / (unsigned int)(full > 0 ? full : 1);
+            wake = wake < 16 ? 16 : wake;
+        }
+        if (hist >= 0)
+            line = (line & ~0xffu) | (line & 0xffu) / 2;
+        top = (m->b.height - full) / 2;
+        drawpill(m,
+                 b.linex,
+                 top + full - len,
+                 b.linew,
+                 len,
+                 notification_lineradius * m->wlr_output->scale,
+                 line);
+    }
+
+    if (b.iconw) {
+        img = n->icon->img;
+        pixman_transform_init_scale(
+            &t,
+            pixman_double_to_fixed((double)pixman_image_get_width(img) /
+                                   b.iconw),
+            pixman_double_to_fixed((double)pixman_image_get_height(img) /
+                                   b.iconh));
+        pixman_image_set_transform(img, &t);
+        pixman_image_set_filter(img, PIXMAN_FILTER_BILINEAR, NULL, 0);
+        pixman_image_composite32(PIXMAN_OP_OVER,
+                                 img,
+                                 NULL,
+                                 m->drw->image,
+                                 0,
+                                 0,
+                                 0,
+                                 0,
+                                 b.iconx,
+                                 (m->b.height - b.iconh) / 2,
+                                 b.iconw,
+                                 b.iconh);
+        pixman_image_set_transform(img, NULL);
+    }
+
+    if (notifyviewid) {
+        end = notifyview_ms + notification_timeout * 1000;
+        left = end > now ? end - now : 1;
+        wake = !wake || left < wake ? left : wake;
+    }
+    if (wake && !notifytimer)
         notifytimer = wl_event_loop_add_timer(event_loop, notifytick, NULL);
     if (notifytimer)
-        wl_event_source_timer_update(notifytimer, (int)left);
+        wl_event_source_timer_update(notifytimer, (int)wake);
+}
+
+/* Antialiased rounded rectangle, blended over the buffer. */
+static void
+drawpill(Monitor* m, int x, int y, int w, int h, double r, uint32_t rgba)
+{
+    pixman_image_t *mask, *src;
+    pixman_color_t clr;
+    uint8_t* data;
+    int stride, px, py, sx, sy, cov;
+    double fx, fy, dx, dy;
+
+    if (w <= 0 || h <= 0 ||
+        !(mask = pixman_image_create_bits(PIXMAN_a8, w, h, NULL, 0)))
+        return;
+    r = fmin(fmax(r, 0), fmin(w, h) / 2.0);
+    data = (uint8_t*)pixman_image_get_data(mask);
+    stride = pixman_image_get_stride(mask);
+
+    /* 4x4 supersampling */
+    for (py = 0; py < h; py++)
+        for (px = 0; px < w; px++) {
+            for (cov = 0, sy = 0; sy < 4; sy++)
+                for (sx = 0; sx < 4; sx++) {
+                    fx = px + (sx + 0.5) / 4;
+                    fy = py + (sy + 0.5) / 4;
+                    dx = fmax(fmax(r - fx, fx - (w - r)), 0);
+                    dy = fmax(fmax(r - fy, fy - (h - r)), 0);
+                    cov += dx * dx + dy * dy <= r * r;
+                }
+            data[py * stride + px] = (uint8_t)(cov * 255 / 16);
+        }
+
+    clr = convert_color(rgba);
+    if ((src = pixman_image_create_solid_fill(&clr))) {
+        pixman_image_composite32(
+            PIXMAN_OP_OVER, src, mask, m->drw->image, 0, 0, 0, 0, x, y, w, h);
+        pixman_image_unref(src);
+    }
+    pixman_image_unref(mask);
 }
 
 /* bytes of s, cut on a codepoint, that fit in w */
@@ -587,10 +711,27 @@ static void notifybox(Monitor* m,
                       int w,
                       NotifyBox* b)
 {
-    int pad = m->lrpad / 2, cx, end;
+    int pad = m->lrpad / 2, size = m->drw->font->height, cx, end, iw, ih;
 
     memset(b, 0, sizeof(*b));
     cx = x + pad;
+    if (notification_linewidth) {
+        b->linex = cx;
+        b->linew =
+            (int)roundf((float)notification_linewidth * m->wlr_output->scale);
+        b->linew = b->linew > 0 ? b->linew : 1;
+        cx += b->linew + pad;
+    }
+    if (n->icon && size > 0) {
+        iw = pixman_image_get_width(n->icon->img);
+        ih = pixman_image_get_height(n->icon->img);
+        if (iw > 0 && ih > 0) {
+            b->iconw = iw >= ih ? size : (iw * size / ih ? iw * size / ih : 1);
+            b->iconh = ih >= iw ? size : (ih * size / iw ? ih * size / iw : 1);
+            b->iconx = cx;
+            cx += b->iconw + pad;
+        }
+    }
 
     if (hist >= 0)
         snprintf(

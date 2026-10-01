@@ -10,6 +10,8 @@
 /* An unbounded expire_timeout would let one client hold the bar (and hide the
  * window title) for the rest of the session. */
 #define NOTIFY_TIMEOUT_MAX 60000
+/* image-data bigger than this on a side is refused rather than decoded */
+#define NOTIFY_IMAGEMAX 4096
 
 /* org.freedesktop.Notifications.NotificationClosed reasons */
 enum { ClosedExpired = 1, ClosedDismissed, ClosedByCall, ClosedUndefined };
@@ -96,19 +98,29 @@ static void notify_closed(dbus_uint32_t id, dbus_uint32_t reason)
     dbus_message_unref(sig);
 }
 
-/* Pushes n to the head of the history. An update sent after the
- * notification closed replaces the entry it left. */
+static void release(Notification* n)
+{
+    if (n->icon)
+        destroyicon(n->icon);
+    n->icon = NULL;
+}
+
+/* Pushes n to the head of the history, taking over its icon. An update sent
+ * after the notification closed replaces the entry it left. */
 static void histpush(Notification* n)
 {
     size_t i;
 
-    if (n->transient)
+    if (n->transient) {
+        release(n);
         return;
+    }
     for (i = 0; i < notify.nhist && notify.hist[i].id != n->id; i++)
         ;
     if (i == notify.nhist && notify.nhist == NOTIFY_HISTMAX)
         i = notify.nhist - 1; /* full: drop the oldest */
     if (i < notify.nhist) {
+        release(&notify.hist[i]);
         memmove(&notify.hist[i],
                 &notify.hist[i + 1],
                 (notify.nhist - i - 1) * sizeof(*notify.hist));
@@ -117,6 +129,7 @@ static void histpush(Notification* n)
     memmove(&notify.hist[1], &notify.hist[0], notify.nhist * sizeof(*n));
     notify.hist[0] = *n;
     notify.nhist++;
+    n->icon = NULL;
 }
 
 static void unqueue(size_t i, Notification* dst)
@@ -207,7 +220,9 @@ static void notify_clear(dbus_uint32_t reason)
     notify_arm(0);
     notify_closed(notify.cur.id, reason);
     /* closed by the client: not worth keeping */
-    if (reason != ClosedByCall)
+    if (reason == ClosedByCall)
+        release(&notify.cur);
+    else
         histpush(&notify.cur);
     shownext();
     if (notify.redraw)
@@ -307,6 +322,24 @@ static int boolhint(DBusMessage* msg, const char* name)
     return b;
 }
 
+/* clients send it signed or unsigned */
+static int value(DBusMessage* msg)
+{
+    DBusMessageIter var;
+    dbus_int32_t i;
+    dbus_uint32_t u;
+
+    if (hint(msg, "value", DBUS_TYPE_INT32, &var)) {
+        dbus_message_iter_get_basic(&var, &i);
+    } else if (hint(msg, "value", DBUS_TYPE_UINT32, &var)) {
+        dbus_message_iter_get_basic(&var, &u);
+        i = u > 100 ? 100 : (dbus_int32_t)u;
+    } else {
+        return -1;
+    }
+    return i < 0 ? 0 : i > 100 ? 100 : i;
+}
+
 static int urgency(DBusMessage* msg)
 {
     DBusMessageIter var;
@@ -316,6 +349,81 @@ static int urgency(DBusMessage* msg)
         return UrgencyNormal;
     dbus_message_iter_get_basic(&var, &u);
     return u <= UrgencyCritical ? u : UrgencyNormal;
+}
+
+/* (iiibiiay): width, height, rowstride, has_alpha, bits_per_sample,
+ * channels, data. Validated before any byte is read. */
+static Icon* image_data(DBusMessage* msg, const char* name)
+{
+    DBusMessageIter var, st, arr;
+    dbus_int32_t v[3], bps, ch;
+    dbus_bool_t alpha;
+    const uint8_t* data;
+    int i, len;
+
+    if (!hint(msg, name, DBUS_TYPE_STRUCT, &var))
+        return NULL;
+    dbus_message_iter_recurse(&var, &st);
+    for (i = 0; i < 3; i++, dbus_message_iter_next(&st)) {
+        if (dbus_message_iter_get_arg_type(&st) != DBUS_TYPE_INT32)
+            return NULL;
+        dbus_message_iter_get_basic(&st, &v[i]);
+    }
+    if (dbus_message_iter_get_arg_type(&st) != DBUS_TYPE_BOOLEAN)
+        return NULL;
+    dbus_message_iter_get_basic(&st, &alpha);
+    dbus_message_iter_next(&st);
+    if (dbus_message_iter_get_arg_type(&st) != DBUS_TYPE_INT32)
+        return NULL;
+    dbus_message_iter_get_basic(&st, &bps);
+    dbus_message_iter_next(&st);
+    if (dbus_message_iter_get_arg_type(&st) != DBUS_TYPE_INT32)
+        return NULL;
+    dbus_message_iter_get_basic(&st, &ch);
+    dbus_message_iter_next(&st);
+    if (dbus_message_iter_get_arg_type(&st) != DBUS_TYPE_ARRAY ||
+        dbus_message_iter_get_element_type(&st) != DBUS_TYPE_BYTE)
+        return NULL;
+    dbus_message_iter_recurse(&st, &arr);
+    dbus_message_iter_get_fixed_array(&arr, &data, &len);
+
+    if (v[0] <= 0 || v[1] <= 0 || v[0] > NOTIFY_IMAGEMAX ||
+        v[1] > NOTIFY_IMAGEMAX || bps != 8 || ch != (alpha ? 4 : 3) ||
+        v[2] < v[0] * ch ||
+        (int64_t)len < (int64_t)v[2] * (v[1] - 1) + (int64_t)v[0] * ch)
+        return NULL;
+    return createiconfromdata(data, v[0], v[1], v[2], alpha, NOTIFY_ICONSIZE);
+}
+
+/* a path, a file:// URI or an icon name */
+static Icon* image_named(const char* s)
+{
+    if (!s || !*s)
+        return NULL;
+    if (!strncmp(s, "file://", 7))
+        s += 7;
+    return createiconfromname(s, NULL, NOTIFY_ICONSIZE);
+}
+
+/* in the spec's order of precedence */
+static Icon* notify_icon(DBusMessage* msg, const char* app_icon)
+{
+    DBusMessageIter var;
+    const char* path;
+    Icon* icon;
+
+    if ((icon = image_data(msg, "image-data")) ||
+        (icon = image_data(msg, "image_data")))
+        return icon;
+    if (hint(msg, "image-path", DBUS_TYPE_STRING, &var) ||
+        hint(msg, "image_path", DBUS_TYPE_STRING, &var)) {
+        dbus_message_iter_get_basic(&var, &path);
+        if ((icon = image_named(path)))
+            return icon;
+    }
+    if ((icon = image_named(app_icon)))
+        return icon;
+    return image_data(msg, "icon_data");
 }
 
 static DBusHandlerResult reply_empty(DBusConnection* conn, DBusMessage* msg)
@@ -391,6 +499,8 @@ static DBusHandlerResult handle_notify(DBusConnection* conn, DBusMessage* msg)
                  *csummary ? csummary : cbody);
     snprintf(n.app, sizeof(n.app), "%s", capp);
     desktop_entry(msg, n.desktop, sizeof(n.desktop));
+    n.value = value(msg);
+    n.icon = notify_icon(msg, app_icon);
 
     /* An update keeps its id and its place on screen or in the queue. */
     id = replaces_id ? replaces_id : ++notify.seq;
@@ -401,6 +511,7 @@ static DBusHandlerResult handle_notify(DBusConnection* conn, DBusMessage* msg)
     for (i = 0; i < notify.nqueue && notify.queue[i].id != id; i++)
         ;
     if (notify.active && notify.cur.id == id) {
+        release(&notify.cur);
         notify.cur = n;
         if (!show()) {
             notify_closed(id, ClosedUndefined);
@@ -408,6 +519,7 @@ static DBusHandlerResult handle_notify(DBusConnection* conn, DBusMessage* msg)
             shownext();
         }
     } else if (i < notify.nqueue) {
+        release(&notify.queue[i]);
         notify.queue[i] = n;
     } else if (!notify.active || !notify.cur.timeout_ms ||
                n.urgency == UrgencyCritical) {
@@ -460,6 +572,7 @@ static DBusHandlerResult handle_close(DBusConnection* conn, DBusMessage* msg)
         notify_clear(ClosedByCall);
     } else if (id && i < notify.nqueue) {
         unqueue(i, &n);
+        release(&n);
         notify_closed(id, ClosedByCall);
         if (notify.redraw)
             notify.redraw();
@@ -473,7 +586,7 @@ static DBusHandlerResult handle_capabilities(DBusConnection* conn,
 {
     DBusMessage* reply = dbus_message_new_method_return(msg);
     DBusMessageIter iter, arr;
-    const char* caps[] = { "body", "actions" };
+    const char* caps[] = { "body", "actions", "icon-static" };
     size_t i;
     DBusHandlerResult res = DBUS_HANDLER_RESULT_HANDLED;
 
@@ -600,9 +713,11 @@ void notify_stop(void)
     while (notify.nqueue) {
         unqueue(0, &n);
         notify_closed(n.id, ClosedUndefined);
+        release(&n);
     }
     notify_clear(ClosedUndefined);
-    notify.nhist = 0;
+    while (notify.nhist)
+        release(&notify.hist[--notify.nhist]);
     if (notify.timer) {
         wl_event_source_remove(notify.timer);
         notify.timer = NULL;
@@ -643,6 +758,7 @@ void notify_histremove(size_t i)
 {
     if (i >= notify.nhist)
         return;
+    release(&notify.hist[i]);
     memmove(&notify.hist[i],
             &notify.hist[i + 1],
             (notify.nhist - i - 1) * sizeof(*notify.hist));

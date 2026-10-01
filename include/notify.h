@@ -6,12 +6,16 @@
 #include <stdint.h>
 #include <wayland-server-core.h>
 
+#include "icon.h"
+
 /* org.freedesktop.Notifications server: one notification on screen, the rest
  * queued behind it, the closed ones kept in a short history. */
 
 #define NOTIFY_TEXTMAX 512 /* the line of text, terminator included */
 #define NOTIFY_QUEUEMAX 32
 #define NOTIFY_HISTMAX 32
+/* icons are scaled down on arrival so a full history stays small */
+#define NOTIFY_ICONSIZE 64
 
 /* the urgency hint, as the spec numbers it */
 enum { UrgencyLow, UrgencyNormal, UrgencyCritical };
@@ -26,6 +30,8 @@ typedef struct {
     char text[NOTIFY_TEXTMAX];
     char app[64];
     char desktop[64];
+    int value; /* progress 0-100, -1 without one */
+    Icon* icon;
 } Notification;
 
 void notify_start(DBusConnection* conn,

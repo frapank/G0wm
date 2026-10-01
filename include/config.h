@@ -52,7 +52,10 @@ uint32_t colors[NumSchemes][3] = {
     [SchemeTitleSel]      = { 0xffffffff, 0x000000ff, 0x000000ff }, // ... focused
 
     [SchemeStatus]        = { 0xffffffff, 0x000000ff, 0x000000ff }, // status text, overridden by ^c#/^b#/^d^
-    [SchemeNotify]        = { 0x000000ff, 0xffffffff, 0xffffffff }, // notification
+    /* notifications by urgency; border colors the line and the progress fill */
+    [SchemeNotify]        = { 0x000000ff, 0xffffffff, 0xe5a50aff }, // normal: yellow line
+    [SchemeNotifyLow]     = { 0x000000ff, 0xffffffff, 0x2ec27eff }, // low: green line
+    [SchemeNotifyCrit]    = { 0x000000ff, 0xffffffff, 0xe01b24ff }, // critical: red line
 
     [SchemeRunner]        = { 0xffffffff, 0x000000ff, 0x000000ff }, // MODKEY+r prompt
     [SchemeRunnerSuggest] = { 0xaaaaaaff, 0x000000ff, 0x000000ff }, // ... its completion, same bg
@@ -151,6 +154,10 @@ unsigned int systrayiconsize = 16; // 0 fills the bar
 #ifdef NOTIFICATIONS
 int shownotifications             = 1;
 unsigned int notification_timeout = 5; // seconds one stays up
+
+/* the urgency line in front of a notification, shortening as it expires */
+unsigned int notification_linewidth  = 4; // 0 for no line
+unsigned int notification_lineradius = 2; // half the width makes a pill
 #endif
 /* --- end NOTIFICATIONS --- */
 

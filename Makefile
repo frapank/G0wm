@@ -68,11 +68,16 @@ endif
 ifneq ($(SYSTRAY),)
 SRC += $(SRCDIR)/traypopup.c \
 	$(SRCDIR)/systray/watcher.c $(SRCDIR)/systray/tray.c \
-	$(SRCDIR)/systray/item.c $(SRCDIR)/systray/icon.c \
+	$(SRCDIR)/systray/item.c \
 	$(SRCDIR)/systray/menu.c $(SRCDIR)/systray/helpers.c
 HDR += $(INCDIR)/systray/watcher.h $(INCDIR)/systray/tray.h \
-	$(INCDIR)/systray/item.h $(INCDIR)/systray/icon.h \
+	$(INCDIR)/systray/item.h \
 	$(INCDIR)/systray/menu.h $(INCDIR)/systray/helpers.h
+endif
+# the icon loader serves the tray and the notifications alike
+ifneq ($(SYSTRAY)$(NOTIFY),)
+SRC += $(SRCDIR)/systray/icon.c
+HDR += $(INCDIR)/systray/icon.h
 endif
 OBJ = $(SRC:$(SRCDIR)/%.c=$(BUILDDIR)/%.o)
 

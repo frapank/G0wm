@@ -191,31 +191,13 @@ static int iconfile(char* out,
     return 0;
 }
 
-/* Builds an icon from IconName. gdk pixbuf rows are rgb, createicon() argb. */
-Icon* createiconfromname(const char* name, const char* themepath, int size)
+static Icon* iconfrompixbuf(GdkPixbuf* pb)
 {
-    GError* err = NULL;
-    GdkPixbuf* pb;
-    Icon* icon = NULL;
-    char path[PATH_MAX];
     const guchar *src, *srow;
-    uint8_t* argb = NULL;
+    uint8_t* argb;
+    Icon* icon;
     int w, h, rowstride, nch, x, y;
     size_t i = 0;
-
-    if (!name || !*name || !iconfile(path, sizeof(path), name, themepath))
-        return NULL;
-
-    /* decoded at tray size, the pixman filter samples where this averages */
-    if (size > 0)
-        pb = gdk_pixbuf_new_from_file_at_scale(path, size, size, TRUE, &err);
-    else
-        pb = gdk_pixbuf_new_from_file(path, &err);
-    if (!pb) {
-        fprintf(stderr, "systray: %s: %s\n", path, err->message);
-        g_error_free(err);
-        return NULL;
-    }
 
     w = gdk_pixbuf_get_width(pb);
     h = gdk_pixbuf_get_height(pb);
@@ -223,7 +205,7 @@ Icon* createiconfromname(const char* name, const char* themepath, int size)
     nch = gdk_pixbuf_get_n_channels(pb);
     src = gdk_pixbuf_get_pixels(pb);
     if (w <= 0 || h <= 0 || nch < 3 || !(argb = malloc((size_t)w * h * 4)))
-        goto out;
+        return NULL;
 
     for (y = 0; y < h; y++) {
         srow = src + (size_t)y * rowstride;
@@ -236,9 +218,75 @@ Icon* createiconfromname(const char* name, const char* themepath, int size)
     }
 
     icon = createicon(argb, w, h, (int)((size_t)w * h * 4));
-
-out:
     free(argb);
+    return icon;
+}
+
+/* Builds an icon from IconName (or a path). */
+Icon* createiconfromname(const char* name, const char* themepath, int size)
+{
+    GError* err = NULL;
+    GdkPixbuf* pb;
+    Icon* icon;
+    char path[PATH_MAX];
+
+    if (!name || !*name || !iconfile(path, sizeof(path), name, themepath))
+        return NULL;
+
+    /* decoded at tray size, the pixman filter samples where this averages */
+    if (size > 0)
+        pb = gdk_pixbuf_new_from_file_at_scale(path, size, size, TRUE, &err);
+    else
+        pb = gdk_pixbuf_new_from_file(path, &err);
+    if (!pb) {
+        fprintf(stderr, "g0wm: %s: %s\n", path, err->message);
+        g_error_free(err);
+        return NULL;
+    }
+
+    icon = iconfrompixbuf(pb);
+    g_object_unref(pb);
+    return icon;
+}
+
+/* 8 bit rgb(a) rows, scaled down to fit size (0 keeps it) */
+Icon* createiconfromdata(const uint8_t* data,
+                         int width,
+                         int height,
+                         int rowstride,
+                         int alpha,
+                         int size)
+{
+    GdkPixbuf *pb, *scaled;
+    Icon* icon;
+    int w = width, h = height;
+
+    pb = gdk_pixbuf_new_from_data(data,
+                                  GDK_COLORSPACE_RGB,
+                                  alpha,
+                                  8,
+                                  width,
+                                  height,
+                                  rowstride,
+                                  NULL,
+                                  NULL);
+    if (!pb)
+        return NULL;
+    if (size > 0 && (w > size || h > size)) {
+        if (w >= h) {
+            h = h * size / w > 0 ? h * size / w : 1;
+            w = size;
+        } else {
+            w = w * size / h > 0 ? w * size / h : 1;
+            h = size;
+        }
+        scaled = gdk_pixbuf_scale_simple(pb, w, h, GDK_INTERP_BILINEAR);
+        g_object_unref(pb);
+        if (!(pb = scaled))
+            return NULL;
+    }
+
+    icon = iconfrompixbuf(pb);
     g_object_unref(pb);
     return icon;
 }
