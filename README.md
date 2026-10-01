@@ -52,7 +52,8 @@ X11 support also requires `libxcb`, `libxcb-icccm` and `Xwayland`.
 
 ```sh
 ./configure && make
-make install      # g0wm, start-g0wm and g0wm-status.sh into ~/.local/bin
+make install         # g0wm and start-g0wm into ~/.local/bin
+make install-status  # optional: g0wm-status.sh, the bar status text
 ```
 
 You can also just run `make`. It will use `config.def.mk` if no custom
