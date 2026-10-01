@@ -158,6 +158,8 @@ unsigned int notification_timeout = 5; // seconds one stays up
 /* the urgency line in front of a notification, shortening as it expires */
 unsigned int notification_linewidth  = 4; // 0 for no line
 unsigned int notification_lineradius = 2; // half the width makes a pill
+
+const char* notification_actionsign = "[r]"; // has actions, click or MODKEY+a
 #endif
 /* --- end NOTIFICATIONS --- */
 
@@ -306,13 +308,14 @@ static Key keys_def[] = {
 	/* --- end RUNNER --- */
 
 	/* --- NOTIFICATIONS: n scrolls, Shift+n opens, Ctrl+n next, Alt+n back in
-	 * the history, Ctrl+Shift+n clears all --- */
+	 * the history, Ctrl+Shift+n clears all, a picks an action --- */
 #ifdef NOTIFICATIONS
 	{ MODKEY,                                      XKB_KEY_n, notifyscroll,     {0} },
 	{ MODKEY|WLR_MODIFIER_SHIFT,                   XKB_KEY_n, notifyopen,       {0} },
 	{ MODKEY|WLR_MODIFIER_CTRL,                    XKB_KEY_n, notifynext,       {0} },
 	{ MODKEY|WLR_MODIFIER_ALT,                     XKB_KEY_n, notifyprev,       {0} },
 	{ MODKEY|WLR_MODIFIER_CTRL|WLR_MODIFIER_SHIFT, XKB_KEY_n, notifydismissall, {0} },
+	{ MODKEY,                                      XKB_KEY_a, notifyactions,    {0} },
 #endif
 	/* --- end NOTIFICATIONS --- */
 
