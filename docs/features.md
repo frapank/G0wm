@@ -31,8 +31,9 @@ Most applications provide real pixel-based icon.
 
 #### **Notifications** 
 A small `org.freedesktop.Notifications` server. One notification at a time,
-the others wait in a queue (`+2` on the right); critical ones stay until
-dismissed.
+the others wait in a queue (`+2` on the right). A coloured line shows the
+urgency and shortens as time runs out; critical ones stay until dismissed.
+Icons and progress bars are supported.
 
 Left click opens, right click dismisses, the wheel walks back through the
 recent ones. If mako or dunst is already running, g0wm stays out of the way.
