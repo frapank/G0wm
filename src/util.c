@@ -48,3 +48,30 @@ int fd_set_nonblock(int fd)
 
     return 0;
 }
+
+/* UTF-8 encodes cp into dst, 0 if it doesn't fit or isn't valid */
+size_t putcp(char* dst, size_t room, unsigned long cp)
+{
+    if (!cp || (cp >= 0xD800 && cp <= 0xDFFF) || cp > 0x10FFFF)
+        return 0;
+    if (cp < 0x80 && room > 1) {
+        dst[0] = (char)cp;
+        return 1;
+    } else if (cp < 0x800 && room > 2) {
+        dst[0] = (char)(0xC0 | cp >> 6);
+        dst[1] = (char)(0x80 | (cp & 0x3F));
+        return 2;
+    } else if (cp < 0x10000 && room > 3) {
+        dst[0] = (char)(0xE0 | cp >> 12);
+        dst[1] = (char)(0x80 | (cp >> 6 & 0x3F));
+        dst[2] = (char)(0x80 | (cp & 0x3F));
+        return 3;
+    } else if (cp >= 0x10000 && room > 4) {
+        dst[0] = (char)(0xF0 | cp >> 18);
+        dst[1] = (char)(0x80 | (cp >> 12 & 0x3F));
+        dst[2] = (char)(0x80 | (cp >> 6 & 0x3F));
+        dst[3] = (char)(0x80 | (cp & 0x3F));
+        return 4;
+    }
+    return 0;
+}
