@@ -301,6 +301,34 @@ int runnercalc(double* out)
     return 1;
 }
 
+/* runner_buf holds UTF-8, so the cursor steps over whole codepoints: it skips
+ * continuation bytes (10xxxxxx) and only ever rests on a character start. */
+static int runnerprev(int i)
+{
+    if (i > 0)
+        do
+            i--;
+        while (i > 0 && ((unsigned char)runner_buf[i] & 0xC0) == 0x80);
+    return i;
+}
+
+static int runnernext(int i)
+{
+    if (i < runner_len)
+        do
+            i++;
+        while (i < runner_len && ((unsigned char)runner_buf[i] & 0xC0) == 0x80);
+    return i;
+}
+
+/* removes the bytes [from, to) and leaves the cursor at from */
+static void runnercut(int from, int to)
+{
+    memmove(runner_buf + from, runner_buf + to, runner_len - to + 1);
+    runner_len -= to - from;
+    runner_cur = from;
+}
+
 void runnertoggle(const Arg* arg)
 {
     if (!selmon)
@@ -344,24 +372,21 @@ void runnerkey(xkb_keysym_t sym, uint32_t mods, uint32_t codepoint)
         runner_cur = runner_len;
     } else if (mods & WLR_MODIFIER_CTRL &&
                xkb_keysym_to_lower(sym) == XKB_KEY_f) {
-        if (runner_cur < runner_len)
-            runner_cur++;
+        runner_cur = runnernext(runner_cur);
     } else if (mods & WLR_MODIFIER_CTRL &&
                xkb_keysym_to_lower(sym) == XKB_KEY_b) {
-        if (runner_cur > 0)
-            runner_cur--;
+        runner_cur = runnerprev(runner_cur);
     } else if (mods & WLR_MODIFIER_CTRL &&
                xkb_keysym_to_lower(sym) == XKB_KEY_w) {
         /* delete the word behind the cursor: skip trailing spaces, then the
-         * run of non-spaces before them, same as a shell's line editor */
-        int end = runner_cur;
-        while (runner_cur > 0 && runner_buf[runner_cur - 1] == ' ')
-            runner_cur--;
-        while (runner_cur > 0 && runner_buf[runner_cur - 1] != ' ')
-            runner_cur--;
-        memmove(
-            runner_buf + runner_cur, runner_buf + end, runner_len - end + 1);
-        runner_len -= end - runner_cur;
+         * run of non-spaces before them, same as a shell's line editor.
+         * Byte-wise is safe here: no UTF-8 continuation byte is a space. */
+        int start = runner_cur;
+        while (start > 0 && runner_buf[start - 1] == ' ')
+            start--;
+        while (start > 0 && runner_buf[start - 1] != ' ')
+            start--;
+        runnercut(start, runner_cur);
     } else
         switch (sym) {
             case XKB_KEY_Escape:
@@ -387,13 +412,27 @@ void runnerkey(xkb_keysym_t sym, uint32_t mods, uint32_t codepoint)
                 break;
             }
             case XKB_KEY_BackSpace:
-                if (runner_cur) {
-                    memmove(runner_buf + runner_cur - 1,
-                            runner_buf + runner_cur,
-                            runner_len - runner_cur + 1);
-                    runner_cur--;
-                    runner_len--;
-                }
+                runnercut(runnerprev(runner_cur), runner_cur);
+                break;
+            case XKB_KEY_Delete:
+            case XKB_KEY_KP_Delete:
+                runnercut(runner_cur, runnernext(runner_cur));
+                break;
+            case XKB_KEY_Left:
+            case XKB_KEY_KP_Left:
+                runner_cur = runnerprev(runner_cur);
+                break;
+            case XKB_KEY_Right:
+            case XKB_KEY_KP_Right:
+                runner_cur = runnernext(runner_cur);
+                break;
+            case XKB_KEY_Home:
+            case XKB_KEY_KP_Home:
+                runner_cur = 0;
+                break;
+            case XKB_KEY_End:
+            case XKB_KEY_KP_End:
+                runner_cur = runner_len;
                 break;
             case XKB_KEY_Tab:
                 sug = runnersuggest();
@@ -414,17 +453,26 @@ void runnerkey(xkb_keysym_t sym, uint32_t mods, uint32_t codepoint)
                     }
                 }
                 break;
-            default:
-                if (codepoint >= 0x20 && codepoint < 0x7f &&
-                    runner_len < (int)sizeof(runner_buf) - 1) {
-                    memmove(runner_buf + runner_cur + 1,
+            default: {
+                /* any printable codepoint, stored as UTF-8: C0, DEL and C1
+                 * controls are what Ctrl combinations and the like produce,
+                 * and putcp() turns away surrogates and out-of-range values */
+                char enc[5];
+                int n;
+
+                if (codepoint < 0x20 || (codepoint >= 0x7f && codepoint < 0xa0))
+                    break;
+                n = (int)putcp(enc, sizeof enc, codepoint);
+                if (n && runner_len + n < (int)sizeof(runner_buf)) {
+                    memmove(runner_buf + runner_cur + n,
                             runner_buf + runner_cur,
                             runner_len - runner_cur + 1);
-                    runner_buf[runner_cur] = (char)codepoint;
-                    runner_cur++;
-                    runner_len++;
+                    memcpy(runner_buf + runner_cur, enc, n);
+                    runner_cur += n;
+                    runner_len += n;
                 }
                 break;
+            }
         }
     drawselbar();
 }
