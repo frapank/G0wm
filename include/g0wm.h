@@ -57,6 +57,7 @@
 #include <wlr/types/wlr_output_power_management_v1.h>
 #include <wlr/types/wlr_pointer.h>
 #include <wlr/types/wlr_pointer_constraints_v1.h>
+#include <wlr/types/wlr_pointer_gestures_v1.h>
 #include <wlr/types/wlr_presentation_time.h>
 #include <wlr/types/wlr_primary_selection.h>
 #include <wlr/types/wlr_primary_selection_v1.h>
@@ -160,6 +161,14 @@ enum { CurNormal, CurPressed, CurMove, CurResize }; /* cursor */
 enum { OpacityNormal, OpacityBlur };                /* opacity_type */
 enum { XDGShell, LayerShell, X11 };                 /* client types */
 enum {
+    SwipeLeft,
+    SwipeRight,
+    SwipeUp,
+    SwipeDown,
+    PinchIn,
+    PinchOut
+}; /* gesture motions */
+enum {
     LyrBg,
     LyrBottom,
     LyrTile,
@@ -194,6 +203,13 @@ typedef struct {
     void (*func)(const Arg*);
     Arg arg;
 } Button;
+
+typedef struct {
+    unsigned int motion;
+    unsigned int fingers;
+    void (*func)(const Arg*);
+    Arg arg;
+} Gesture;
 
 typedef struct {
     struct wlr_buffer base;
@@ -457,6 +473,8 @@ void focusstack(const Arg* arg);
 Client* focustop(Monitor* m);
 void fullscreennotify(struct wl_listener* listener, void* data);
 void incnmaster(const Arg* arg);
+void holdbegin(struct wl_listener* listener, void* data);
+void holdend(struct wl_listener* listener, void* data);
 void inputdevice(struct wl_listener* listener, void* data);
 void killclient(const Arg* arg);
 void locksession(struct wl_listener* listener, void* data);
@@ -492,6 +510,9 @@ int notifywheel(Monitor* pm, double delta, int horizontal);
 int opacityallowed(const char* appid);
 void outputmgrapply(struct wl_listener* listener, void* data);
 void outputmgrtest(struct wl_listener* listener, void* data);
+void pinchbegin(struct wl_listener* listener, void* data);
+void pinchend(struct wl_listener* listener, void* data);
+void pinchupdate(struct wl_listener* listener, void* data);
 void powermgrsetmode(struct wl_listener* listener, void* data);
 void quit(const Arg* arg);
 void reloadmons(void);
@@ -530,10 +551,15 @@ void setsel(struct wl_listener* listener, void* data);
 #ifdef INTEGRATED_BACKGROUND
 void setwallpaper(Monitor* m);
 #endif /* INTEGRATED_BACKGROUND */
+void shifttag(const Arg* arg);
+void shiftview(const Arg* arg);
 void spawn(const Arg* arg);
 void startdrag(struct wl_listener* listener, void* data);
 int statusin(int fd, unsigned int mask, void* data);
 void swapclients(Client* a, Client* b);
+void swipebegin(struct wl_listener* listener, void* data);
+void swipeend(struct wl_listener* listener, void* data);
+void swipeupdate(struct wl_listener* listener, void* data);
 void tag(const Arg* arg);
 void tabbed(Monitor* m);
 Client* tabtop(Monitor* m);
@@ -593,6 +619,7 @@ extern struct wl_list fstack;  /* focus order */
 extern struct wlr_idle_notifier_v1* idle_notifier;
 extern struct wlr_output_manager_v1* output_mgr;
 extern struct wlr_pointer_constraints_v1* pointer_constraints;
+extern struct wlr_pointer_gestures_v1* pointer_gestures;
 extern struct wlr_relative_pointer_manager_v1* relative_pointer_mgr;
 extern struct wlr_cursor* cursor;
 extern struct wlr_xcursor_manager* cursor_mgr;
@@ -720,6 +747,8 @@ extern Key* keys;
 extern size_t nkeys;
 extern Button* buttons;
 extern size_t nbuttons;
+extern Gesture* gestures;
+extern size_t ngestures;
 extern int log_level;
 extern int bypass_surface_visibility;
 
