@@ -41,8 +41,16 @@ static struct wl_event_source* bus_source;
 static struct wl_listener cursor_axis = { .notify = axisnotify };
 static struct wl_listener cursor_button = { .notify = buttonpress };
 static struct wl_listener cursor_frame = { .notify = cursorframe };
+static struct wl_listener cursor_hold_begin = { .notify = holdbegin };
+static struct wl_listener cursor_hold_end = { .notify = holdend };
 static struct wl_listener cursor_motion = { .notify = motionrelative };
 static struct wl_listener cursor_motion_absolute = { .notify = motionabsolute };
+static struct wl_listener cursor_pinch_begin = { .notify = pinchbegin };
+static struct wl_listener cursor_pinch_end = { .notify = pinchend };
+static struct wl_listener cursor_pinch_update = { .notify = pinchupdate };
+static struct wl_listener cursor_swipe_begin = { .notify = swipebegin };
+static struct wl_listener cursor_swipe_end = { .notify = swipeend };
+static struct wl_listener cursor_swipe_update = { .notify = swipeupdate };
 static struct wl_listener cursor_tablet_axis = { .notify = tabletaxis };
 static struct wl_listener cursor_tablet_tip = { .notify = tablettip };
 static struct wl_listener gpu_reset = { .notify = gpureset };
@@ -95,6 +103,7 @@ struct wl_list fstack;  /* focus order */
 struct wlr_idle_notifier_v1* idle_notifier;
 struct wlr_output_manager_v1* output_mgr;
 struct wlr_pointer_constraints_v1* pointer_constraints;
+struct wlr_pointer_gestures_v1* pointer_gestures;
 struct wlr_relative_pointer_manager_v1* relative_pointer_mgr;
 struct wlr_cursor* cursor;
 struct wlr_xcursor_manager* cursor_mgr;
@@ -250,8 +259,16 @@ static void cleanuplisteners(void)
     wl_list_remove(&cursor_axis.link);
     wl_list_remove(&cursor_button.link);
     wl_list_remove(&cursor_frame.link);
+    wl_list_remove(&cursor_hold_begin.link);
+    wl_list_remove(&cursor_hold_end.link);
     wl_list_remove(&cursor_motion.link);
     wl_list_remove(&cursor_motion_absolute.link);
+    wl_list_remove(&cursor_pinch_begin.link);
+    wl_list_remove(&cursor_pinch_end.link);
+    wl_list_remove(&cursor_pinch_update.link);
+    wl_list_remove(&cursor_swipe_begin.link);
+    wl_list_remove(&cursor_swipe_end.link);
+    wl_list_remove(&cursor_swipe_update.link);
     wl_list_remove(&cursor_tablet_axis.link);
     wl_list_remove(&cursor_tablet_tip.link);
     wl_list_remove(&gpu_reset.link);
@@ -672,6 +689,16 @@ static void setup(void)
     wl_signal_add(&cursor->events.button, &cursor_button);
     wl_signal_add(&cursor->events.axis, &cursor_axis);
     wl_signal_add(&cursor->events.frame, &cursor_frame);
+    wl_signal_add(&cursor->events.swipe_begin, &cursor_swipe_begin);
+    wl_signal_add(&cursor->events.swipe_update, &cursor_swipe_update);
+    wl_signal_add(&cursor->events.swipe_end, &cursor_swipe_end);
+    wl_signal_add(&cursor->events.pinch_begin, &cursor_pinch_begin);
+    wl_signal_add(&cursor->events.pinch_update, &cursor_pinch_update);
+    wl_signal_add(&cursor->events.pinch_end, &cursor_pinch_end);
+    wl_signal_add(&cursor->events.hold_begin, &cursor_hold_begin);
+    wl_signal_add(&cursor->events.hold_end, &cursor_hold_end);
+
+    pointer_gestures = wlr_pointer_gestures_v1_create(dpy);
 
     cursor_shape_mgr = wlr_cursor_shape_manager_v1_create(dpy, 1);
     wl_signal_add(&cursor_shape_mgr->events.request_set_shape,

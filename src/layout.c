@@ -7,6 +7,7 @@
 
 /* function declarations */
 static unsigned int tagindex(uint32_t tagset);
+static int tagshift(uint32_t set, int i);
 
 /* function implementations */
 void arrange(Monitor* m)
@@ -204,6 +205,38 @@ void setmfact(const Arg* arg)
         return;
     selmon->mfact = f;
     arrange(selmon);
+}
+
+/* tag next to set in direction i, -1 at the ends */
+static int tagshift(uint32_t set, int i)
+{
+    int t;
+
+    if (!(set & TAGMASK))
+        return -1;
+    t = i > 0 ? 31 - __builtin_clz(set & TAGMASK) : __builtin_ctz(set);
+    t += i;
+    return t < 0 || t >= (int)ntags ? -1 : t;
+}
+
+void shifttag(const Arg* arg)
+{
+    Client* sel = focustop(selmon);
+    int t;
+
+    if (!sel || (t = tagshift(sel->tags, arg->i)) < 0)
+        return;
+    tag(&(Arg){ .ui = 1u << t });
+    view(&(Arg){ .ui = 1u << t });
+}
+
+void shiftview(const Arg* arg)
+{
+    int t;
+
+    if (!selmon || (t = tagshift(selmon->tagset[selmon->seltags], arg->i)) < 0)
+        return;
+    view(&(Arg){ .ui = 1u << t });
 }
 
 /* Exchanges two clients in the tiling order, which is all a layout looks at. */
