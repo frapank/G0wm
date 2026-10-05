@@ -742,11 +742,14 @@ void motionnotify(uint32_t time,
 
         if (active_constraint && cursor_mode != CurResize &&
             cursor_mode != CurMove) {
-            toplevel_from_wlr_surface(active_constraint->surface, &c, NULL);
-            if (c && active_constraint->surface ==
-                         seat->pointer_state.focused_surface) {
-                sx = cursor->x - c->geom.x - c->bw;
-                sy = cursor->y - c->geom.y - c->bw;
+            /* own variable: c is the client under the cursor, and the
+             * constraint may sit on an unmapped one (gamescope) */
+            Client* cc = NULL;
+            toplevel_from_wlr_surface(active_constraint->surface, &cc, NULL);
+            if (cc && active_constraint->surface ==
+                          seat->pointer_state.focused_surface) {
+                sx = cursor->x - cc->geom.x - cc->bw;
+                sy = cursor->y - cc->geom.y - cc->bw;
                 if (wlr_region_confine(&active_constraint->region,
                                        sx,
                                        sy,
