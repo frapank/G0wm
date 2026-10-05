@@ -11,6 +11,7 @@ static void activatex11(struct wl_listener* listener, void* data);
 static void associatex11(struct wl_listener* listener, void* data);
 static void configurex11(struct wl_listener* listener, void* data);
 static void dissociatex11(struct wl_listener* listener, void* data);
+static void minimizex11(struct wl_listener* listener, void* data);
 static void sethints(struct wl_listener* listener, void* data);
 #endif /* XWAYLAND */
 
@@ -110,6 +111,7 @@ void createnotifyx11(struct wl_listener* listener, void* data)
     LISTEN(
         &xsurface->events.request_fullscreen, &c->fullscreen, fullscreennotify);
     LISTEN(&xsurface->events.set_hints, &c->set_hints, sethints);
+    LISTEN(&xsurface->events.request_minimize, &c->minimize, minimizex11);
     LISTEN(&xsurface->events.set_title, &c->set_title, updatetitle);
 }
 
@@ -118,6 +120,20 @@ static void dissociatex11(struct wl_listener* listener, void* data)
     Client* c = wl_container_of(listener, c, dissociate);
     wl_list_remove(&c->map.link);
     wl_list_remove(&c->unmap.link);
+}
+
+static void minimizex11(struct wl_listener* listener, void* data)
+{
+    Client* c = wl_container_of(listener, c, minimize);
+    struct wlr_xwayland_minimize_event* event = data;
+
+    /* There is nowhere to minimize to, but the client must hear back or it
+     * thinks it still is. Grant it only while unfocused: activation undoes
+     * it (client_activate_surface()). */
+    wlr_xwayland_surface_set_minimized(
+        c->surface.xwayland,
+        event->minimize &&
+            client_surface(c) != seat->keyboard_state.focused_surface);
 }
 
 static void sethints(struct wl_listener* listener, void* data)

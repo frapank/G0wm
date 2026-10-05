@@ -238,6 +238,7 @@ typedef struct {
     struct wl_listener dissociate;
     struct wl_listener configure;
     struct wl_listener set_hints;
+    struct wl_listener minimize;
 #endif
 #ifdef TITLEBAR
     struct wlr_scene_buffer* title;
