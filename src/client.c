@@ -203,6 +203,7 @@ void destroynotify(struct wl_listener* listener, void* data)
         wl_list_remove(&c->configure.link);
         wl_list_remove(&c->dissociate.link);
         wl_list_remove(&c->set_hints.link);
+        wl_list_remove(&c->minimize.link);
     } else
 #endif
     {
