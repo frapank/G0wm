@@ -717,7 +717,7 @@ static void drawtitle(Client* c)
     Monitor* m = c->mon;
     Buffer* buf;
     const char* title;
-    int w, h, sel, lead, tw;
+    int w, h, sel, tab, lead, tw;
 
     if (!c->title)
         return;
@@ -738,6 +738,8 @@ static void drawtitle(Client* c)
         return;
 
     sel = titlesel(c);
+    tab = m->lt[m->sellt]->arrange == tabbed && !c->isfloating &&
+          c->titlew < c->geom.width - 2 * (int)c->bw;
     title = client_get_title(c);
 
     lead = m->lrpad / 2;
@@ -751,6 +753,16 @@ static void drawtitle(Client* c)
     drwl_rect(m->drw, 0, 0, w, h, 1, 1);
     if (w > lead)
         drwl_text(m->drw, 0, 0, w, h, lead, title, 0);
+
+    if (tab && c->titlex)
+        drawpill(m,
+                 0,
+                 h / 4,
+                 (int)MAX(m->wlr_output->scale, 1),
+                 h - h / 2,
+                 0,
+                 0,
+                 fade(colors[SchemeTitle][ColFg]));
 
     wlr_scene_node_set_enabled(&c->title->node, 1);
     wlr_scene_buffer_set_opacity(c->title, decoopacity());
