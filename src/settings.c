@@ -388,6 +388,7 @@ static cJSON* jwindows(void)
 #ifdef TITLEBAR
     cJSON_AddBoolToObject(o, "titlebar", titlebar);
     cJSON_AddNumberToObject(o, "titlepadding", titlepadding);
+    cJSON_AddBoolToObject(o, "titlecenter", titlecenter);
 #endif
 
     a = cJSON_AddArrayToObject(o, "layouts");
@@ -913,6 +914,7 @@ static void applywindows(const cJSON* o)
 #ifdef TITLEBAR
     titlebar = getbool(o, "titlebar", titlebar);
     titlepadding = (unsigned int)getnum(o, "titlepadding", titlepadding);
+    titlecenter = getbool(o, "titlecenter", titlecenter);
 #endif
     applylayouts(item(o, "layouts"));
     applyrules(item(o, "rules"));

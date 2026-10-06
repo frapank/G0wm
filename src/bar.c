@@ -700,13 +700,24 @@ void traymenu(const Arg* arg)
 
 #endif /* SYSTRAY */
 #ifdef TITLEBAR
+/* the top tab, or the focused client */
+static int titlesel(Client* c)
+{
+    Monitor* m = c->mon;
+
+    return c == (m->lt[m->sellt]->arrange == tabbed && !c->isfloating
+                     ? tabtop(m)
+                     : focustop(m));
+}
+
 /* Renders the client's own title bar. In the tabbed layout every client of the
  * group shares one row, so these end up drawn side by side as tabs. */
 static void drawtitle(Client* c)
 {
     Monitor* m = c->mon;
     Buffer* buf;
-    int w;
+    const char* title;
+    int w, h, sel, lead, tw;
 
     if (!c->title)
         return;
@@ -718,29 +729,28 @@ static void drawtitle(Client* c)
     }
 
     w = (int)((float)c->titlew * m->wlr_output->scale);
+    h = m->t.height;
     if (w != c->titlebufw) {
         bufpooldrop(c->titlepool, LENGTH(c->titlepool));
         c->titlebufw = w;
     }
-    if (!(buf = bufget(c->titlepool, LENGTH(c->titlepool), w, m->t.height)))
+    if (!(buf = bufget(c->titlepool, LENGTH(c->titlepool), w, h)))
         return;
 
+    sel = titlesel(c);
+    title = client_get_title(c);
+
+    lead = m->lrpad / 2;
+    if (titlecenter) {
+        tw = (int)drwl_font_getwidth(m->drw, title);
+        lead = MAX(MIN((w - tw) / 2, w - m->lrpad / 2 - tw), lead);
+    }
+
     drwl_setimage(m->drw, buf->image);
-    drwl_setscheme(
-        m->drw,
-        colors[c == (m->lt[m->sellt]->arrange == tabbed && !c->isfloating
-                         ? tabtop(m)
-                         : focustop(m))
-                   ? SchemeTitleSel
-                   : SchemeTitle]);
-    drwl_text(m->drw,
-              0,
-              0,
-              (unsigned int)w,
-              m->t.height,
-              m->lrpad / 2,
-              client_get_title(c),
-              0);
+    drwl_setscheme(m->drw, colors[sel ? SchemeTitleSel : SchemeTitle]);
+    drwl_rect(m->drw, 0, 0, w, h, 1, 1);
+    if (w > lead)
+        drwl_text(m->drw, 0, 0, w, h, lead, title, 0);
 
     wlr_scene_node_set_enabled(&c->title->node, 1);
     wlr_scene_buffer_set_opacity(c->title, decoopacity());
