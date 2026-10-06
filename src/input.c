@@ -80,7 +80,7 @@ static unsigned int barclick(Monitor* pm, Arg* arg)
     if (i < ntags) {
         arg->ui = 1 << i;
         return ClkTagBar;
-    } else if (cx < x + TEXTW(pm, s->ltsymbol))
+    } else if (barltsymbol && cx < x + TEXTW(pm, s->ltsymbol))
         return ClkLtSymbol;
 #ifdef SYSTRAY
     else if (traywidth && cx > pm->b.width - traywidth) {

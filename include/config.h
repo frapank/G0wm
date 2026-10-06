@@ -105,6 +105,7 @@ int topbar      = 1;
 int barwintitle = 0;
 
 int bartagdots  = 1; // dots instead of the tag names
+int barltsymbol = 0;
 
 unsigned int barboxradius = 2;
 unsigned int barpadding   = 0;

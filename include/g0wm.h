@@ -696,6 +696,7 @@ extern int showbar;
 extern int topbar;
 extern int barwintitle;
 extern int bartagdots;
+extern int barltsymbol;
 extern unsigned int barboxradius;
 extern unsigned int barpadding;
 extern float barheight;
