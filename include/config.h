@@ -76,6 +76,9 @@ int smartgaps           = 0;
 #ifdef TITLEBAR
 int titlebar              = 1;
 unsigned int titlepadding = 6;
+int titlecenter           = 1;
+int titleclose            = 1; // shown with the pointer over it
+uint32_t titleclosecolor  = 0xff5f57ff;
 #endif
 
 static Layout layouts_def[] = {
@@ -104,6 +107,9 @@ int showbar     = 1;
 int topbar      = 1;
 int barwintitle = 0;
 
+int bartagdots  = 1; // dots instead of the tag names
+int barltsymbol = 0;
+
 unsigned int barboxradius = 2;
 unsigned int barpadding   = 0;
 float barheight           = 1.1f; // times the font height, 0 for automatic
@@ -126,6 +132,10 @@ unsigned int notification_linewidth  = 4;
 unsigned int notification_lineradius = 2;
 
 const char* notification_actionsign = "[r]";
+#endif
+
+#ifdef RUNNER
+const char* runner_placeholder = "Run..."; // shown while nothing is typed
 #endif
 
 int opacity_enabled = 1;

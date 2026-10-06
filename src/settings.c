@@ -388,6 +388,9 @@ static cJSON* jwindows(void)
 #ifdef TITLEBAR
     cJSON_AddBoolToObject(o, "titlebar", titlebar);
     cJSON_AddNumberToObject(o, "titlepadding", titlepadding);
+    cJSON_AddBoolToObject(o, "titlecenter", titlecenter);
+    cJSON_AddBoolToObject(o, "titleclose", titleclose);
+    cJSON_AddItemToObject(o, "titleclosecolor", jhex(titleclosecolor));
 #endif
 
     a = cJSON_AddArrayToObject(o, "layouts");
@@ -421,6 +424,8 @@ static cJSON* jbar(void)
     cJSON_AddBoolToObject(o, "showbar", showbar);
     cJSON_AddBoolToObject(o, "topbar", topbar);
     cJSON_AddBoolToObject(o, "barwintitle", barwintitle);
+    cJSON_AddBoolToObject(o, "bartagdots", bartagdots);
+    cJSON_AddBoolToObject(o, "barltsymbol", barltsymbol);
     cJSON_AddNumberToObject(o, "barboxradius", barboxradius);
     cJSON_AddNumberToObject(o, "barpadding", barpadding);
     cJSON_AddItemToObject(o, "barheight", jnum(barheight));
@@ -440,6 +445,9 @@ static cJSON* jbar(void)
         o, "notification_lineradius", notification_lineradius);
     cJSON_AddStringToObject(
         o, "notification_actionsign", notification_actionsign);
+#endif
+#ifdef RUNNER
+    cJSON_AddStringToObject(o, "runner_placeholder", runner_placeholder);
 #endif
     return o;
 }
@@ -908,6 +916,9 @@ static void applywindows(const cJSON* o)
 #ifdef TITLEBAR
     titlebar = getbool(o, "titlebar", titlebar);
     titlepadding = (unsigned int)getnum(o, "titlepadding", titlepadding);
+    titlecenter = getbool(o, "titlecenter", titlecenter);
+    titleclose = getbool(o, "titleclose", titleclose);
+    titleclosecolor = gethex(o, "titleclosecolor", titleclosecolor);
 #endif
     applylayouts(item(o, "layouts"));
     applyrules(item(o, "rules"));
@@ -920,6 +931,8 @@ static void applybar(const cJSON* o)
     showbar = getbool(o, "showbar", showbar);
     topbar = getbool(o, "topbar", topbar);
     barwintitle = getbool(o, "barwintitle", barwintitle);
+    bartagdots = getbool(o, "bartagdots", bartagdots);
+    barltsymbol = getbool(o, "barltsymbol", barltsymbol);
     barboxradius = (unsigned int)getnum(o, "barboxradius", barboxradius);
     barpadding = (unsigned int)getnum(o, "barpadding", barpadding);
     barheight = (float)getnum(o, "barheight", barheight);
@@ -941,6 +954,9 @@ static void applybar(const cJSON* o)
         o, "notification_lineradius", notification_lineradius);
     notification_actionsign =
         getstr(o, "notification_actionsign", notification_actionsign);
+#endif
+#ifdef RUNNER
+    runner_placeholder = getstr(o, "runner_placeholder", runner_placeholder);
 #endif
 }
 

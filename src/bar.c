@@ -83,6 +83,9 @@ static long notifypicksel = -1;
 static dbus_uint32_t notifypickid;
 static int notifyboxx; /* last drawn x, for hit testing */
 #endif                 /* NOTIFICATIONS */
+#ifdef TITLEBAR
+static Client* hovered; /* whose close button is under the pointer */
+#endif
 
 /* function implementations */
 bool baracceptsinput(struct wlr_scene_buffer* buffer, double* sx, double* sy)
@@ -181,6 +184,39 @@ static void drawpill(Monitor* m,
     pixman_image_unref(mask);
 }
 
+/* the same colour at a third of its alpha */
+static uint32_t fade(uint32_t rgba)
+{
+    return (rgba & ~0xffu) | (rgba & 0xffu) / 3;
+}
+
+/* the dot of tag i, a pill when selected; returns its cell's width */
+static int tagdot(Monitor* m,
+                  Monitor* s,
+                  uint32_t i,
+                  int* d,
+                  int* lead,
+                  int* sw)
+{
+    int gap;
+
+    *d = MAX(m->drw->font->height * 2 / 5, 4);
+    gap = *d * 3 / 2;
+    *sw = s->tagset[s->seltags] & 1 << i ? *d * 3 : *d;
+    *lead = i ? gap / 2 : m->lrpad / 2;
+    return *lead + *sw + (i == ntags - 1 ? m->lrpad / 2 : gap - gap / 2);
+}
+
+/* shared with barclick() */
+int tagwidth(Monitor* m, Monitor* s, uint32_t i)
+{
+    int d, lead, sw;
+
+    if (!bartagdots)
+        return (int)TEXTW(m, tags[i]);
+    return tagdot(m, s, i, &d, &lead, &sw);
+}
+
 void drawbar(Monitor* m)
 {
     int x, w, tw = 0, traywidth = 0;
@@ -235,7 +271,25 @@ void drawbar(Monitor* m)
     }
     x = 0;
     c = focustop(s);
-    for (i = 0; i < ntags; i++) {
+    for (i = 0; i < ntags && bartagdots; i++) {
+        int d, lead, sw;
+        uint32_t clr;
+
+        w = tagdot(m, s, i, &d, &lead, &sw);
+        drwl_setscheme(m->drw, colors[SchemeNorm]);
+        drwl_rect(m->drw, x, 0, w, m->b.height, 1, 1);
+        if (urg & 1 << i)
+            clr = colors[SchemeUrg][ColBorder];
+        else if (s->tagset[s->seltags] & 1 << i)
+            clr = colors[SchemeSel][ColFg];
+        else if (occ & 1 << i)
+            clr = colors[SchemeNorm][ColFg];
+        else /* empty */
+            clr = fade(colors[SchemeNorm][ColFg]);
+        drawpill(m, x + lead, (m->b.height - d) / 2, sw, d, d / 2.0, 0, clr);
+        x += w;
+    }
+    for (i = 0; i < ntags && !bartagdots; i++) {
         w = TEXTW(m, tags[i]);
         drwl_setscheme(
             m->drw,
@@ -253,9 +307,12 @@ void drawbar(Monitor* m)
                      m->drw->scheme[urg & 1 << i ? ColBg : ColFg]);
         x += w;
     }
-    w = TEXTW(m, s->ltsymbol);
-    drwl_setscheme(m->drw, colors[SchemeNorm]);
-    x = drwl_text(m->drw, x, 0, w, m->b.height, m->lrpad / 2, s->ltsymbol, 0);
+    if (barltsymbol) {
+        w = TEXTW(m, s->ltsymbol);
+        drwl_setscheme(m->drw, colors[SchemeNorm]);
+        x = drwl_text(
+            m->drw, x, 0, w, m->b.height, m->lrpad / 2, s->ltsymbol, 0);
+    }
 
     /* Remember the free box for notifyscroll(): the title and the notification
      * share it, so its geometry must be measured in exactly one place. */
@@ -270,7 +327,8 @@ void drawbar(Monitor* m)
             const char* sug = runnersuggest();
             /* the caret scales with the font, which is loaded at the output's
              * dpi, so it keeps its proportions on every monitor */
-            int tx, cx, cw = m->drw->font->height / 10 + 1;
+            int fh = m->drw->font->height, cw = MAX(fh / 12, 2);
+            int tx, cx, end = x + w;
             char save;
 
             drwl_setscheme(m->drw, colors[SchemeRunner]);
@@ -285,30 +343,37 @@ void drawbar(Monitor* m)
             cx = x + m->lrpad / 2 + drwl_font_getwidth(m->drw, runner_buf);
             runner_buf[runner_cur] = save;
 
-            /* Drawn before the suggestion so it keeps the prompt's own color,
-             * and unconditionally: with nothing typed yet it is the only thing
-             * telling the box apart from an empty title area. */
-            if (cx + cw <= x + w)
-                drwl_rect(m->drw,
-                          cx,
-                          boxy,
-                          cw,
-                          m->drw->font->height - 2 * boxs,
-                          1,
-                          0);
+            if (cx + cw <= end)
+                drawpill(m,
+                         cx,
+                         boxy,
+                         cw,
+                         fh - 2 * boxs,
+                         cw / 2.0,
+                         0,
+                         colors[SchemeRunner][ColFg]);
             tx += cw;
 
-            if (sug && (size_t)runner_len < strlen(sug) && tx < x + w) {
-                drwl_setscheme(m->drw, colors[SchemeRunnerSuggest]);
+            drwl_setscheme(m->drw, colors[SchemeRunnerSuggest]);
+            if (!runner_len && *runner_placeholder && tx < end) {
                 drwl_text(m->drw,
                           tx,
                           0,
-                          x + w - tx,
+                          end - tx,
+                          m->b.height,
+                          0,
+                          runner_placeholder,
+                          0);
+            } else if (sug && (size_t)runner_len < strlen(sug) && tx < end) {
+                drwl_text(m->drw,
+                          tx,
+                          0,
+                          end - tx,
                           m->b.height,
                           0,
                           sug + runner_len,
                           0);
-            } else if (!sug && tx < x + w) {
+            } else if (!sug && tx < end) {
                 /* Not a completion of what's typed, so it can't reuse the
                  * "sug + runner_len" tail above: it's an unrelated answer,
                  * appended rather than spliced in. */
@@ -316,9 +381,8 @@ void drawbar(Monitor* m)
                 char calcbuf[48];
                 if (runnercalc(&calcval)) {
                     snprintf(calcbuf, sizeof calcbuf, "= %.10g", calcval);
-                    drwl_setscheme(m->drw, colors[SchemeRunnerSuggest]);
                     drwl_text(
-                        m->drw, tx, 0, x + w - tx, m->b.height, 0, calcbuf, 0);
+                        m->drw, tx, 0, end - tx, m->b.height, 0, calcbuf, 0);
                 }
             }
         } else
@@ -639,13 +703,38 @@ void traymenu(const Arg* arg)
 
 #endif /* SYSTRAY */
 #ifdef TITLEBAR
+/* the top tab, or the focused client */
+static int titlesel(Client* c)
+{
+    Monitor* m = c->mon;
+
+    return c == (m->lt[m->sellt]->arrange == tabbed && !c->isfloating
+                     ? tabtop(m)
+                     : focustop(m));
+}
+
+/* x of the close button, w without one */
+static int titleclosex(Client* c, int w, int* d)
+{
+    Monitor* m = c->mon;
+    int x;
+
+    *d = MAX(m->drw->font->height * 3 / 5, 4);
+    if (!titleclose)
+        return w;
+    x = w - m->lrpad / 2 - *d;
+    return x > w / 2 ? x : w;
+}
+
 /* Renders the client's own title bar. In the tabbed layout every client of the
  * group shares one row, so these end up drawn side by side as tabs. */
 static void drawtitle(Client* c)
 {
     Monitor* m = c->mon;
     Buffer* buf;
-    int w;
+    const char* title;
+    int w, h, sel, tab, end, lead, tw, d, fd;
+    uint32_t fg;
 
     if (!c->title)
         return;
@@ -657,34 +746,88 @@ static void drawtitle(Client* c)
     }
 
     w = (int)((float)c->titlew * m->wlr_output->scale);
+    h = m->t.height;
     if (w != c->titlebufw) {
         bufpooldrop(c->titlepool, LENGTH(c->titlepool));
         c->titlebufw = w;
     }
-    if (!(buf = bufget(c->titlepool, LENGTH(c->titlepool), w, m->t.height)))
+    if (!(buf = bufget(c->titlepool, LENGTH(c->titlepool), w, h)))
         return;
 
+    sel = titlesel(c);
+    tab = m->lt[m->sellt]->arrange == tabbed && !c->isfloating &&
+          c->titlew < c->geom.width - 2 * (int)c->bw;
+    fg = colors[sel ? SchemeTitleSel : SchemeTitle][ColFg];
+    title = client_get_title(c);
+    end = titleclosex(c, w, &d);
+    fd = MAX(m->drw->font->height / 3, 3);
+
+    lead = m->lrpad / 2 + (c->isfloating ? fd + m->lrpad / 3 : 0);
+    if (titlecenter) {
+        tw = (int)drwl_font_getwidth(m->drw, title);
+        lead = MAX(MIN((w - tw) / 2, end - m->lrpad / 2 - tw), lead);
+    }
+
     drwl_setimage(m->drw, buf->image);
-    drwl_setscheme(
-        m->drw,
-        colors[c == (m->lt[m->sellt]->arrange == tabbed && !c->isfloating
-                         ? tabtop(m)
-                         : focustop(m))
-                   ? SchemeTitleSel
-                   : SchemeTitle]);
-    drwl_text(m->drw,
-              0,
-              0,
-              (unsigned int)w,
-              m->t.height,
-              m->lrpad / 2,
-              client_get_title(c),
-              0);
+    drwl_setscheme(m->drw, colors[sel ? SchemeTitleSel : SchemeTitle]);
+    drwl_rect(m->drw, 0, 0, w, h, 1, 1);
+    if (end > lead)
+        drwl_text(m->drw, 0, 0, end, h, lead, title, 0);
+
+    if (c->isfloating)
+        drawpill(
+            m, lead - fd - m->lrpad / 3, (h - fd) / 2, fd, fd, fd / 2.0, 0, fg);
+    if (tab && c->titlex)
+        drawpill(m,
+                 0,
+                 h / 4,
+                 (int)MAX(m->wlr_output->scale, 1),
+                 h - h / 2,
+                 0,
+                 0,
+                 fade(colors[SchemeTitle][ColFg]));
+    if (end < w && c == hovered)
+        drawpill(m, end, (h - d) / 2, d, d, d / 2.0, 0, titleclosecolor);
 
     wlr_scene_node_set_enabled(&c->title->node, 1);
     wlr_scene_buffer_set_opacity(c->title, decoopacity());
     wlr_scene_buffer_set_buffer(c->title, &buf->base);
     wlr_buffer_unlock(&buf->base);
+}
+
+/* whether (x, y) is on c's close button */
+static int onclose(Client* c, double x, double y)
+{
+    Monitor* m = c->mon;
+    int bx, d;
+    double lx, ly;
+
+    if (!m || !c->title || !c->title->node.enabled)
+        return 0;
+    lx = (x - c->geom.x - c->bw - c->titlex) * m->wlr_output->scale;
+    ly = (y - c->geom.y - c->bw) * m->wlr_output->scale;
+    bx = titleclosex(c, c->titlebufw, &d);
+    return bx < c->titlebufw && ly >= 0 && ly < m->t.height &&
+           lx >= bx - m->lrpad / 2 && lx < c->titlebufw;
+}
+
+int titleclick(Client* c, double x, double y)
+{
+    if (!onclose(c, x, y))
+        return 0;
+    client_send_close(c);
+    return 1;
+}
+
+void titlehover(Client* c, double x, double y)
+{
+    Client *h = c && onclose(c, x, y) ? c : NULL, *old = hovered, *w;
+
+    if (h == old)
+        return;
+    hovered = h;
+    /* old may be gone */
+    wl_list_for_each(w, &clients, link) if (w == old || w == h) drawtitle(w);
 }
 
 #endif /* TITLEBAR */
