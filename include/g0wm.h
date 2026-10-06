@@ -468,6 +468,7 @@ void drawbars(void);
 void drawcorners(Client* c);
 void drawselbar(void);
 int drawstatus(Monitor* m, const char* text, int x, int w, int render);
+int tagwidth(Monitor* m, Monitor* s, uint32_t i);
 void focusclient(Client* c, int lift);
 void focusmon(const Arg* arg);
 void focusstack(const Arg* arg);
@@ -542,6 +543,8 @@ void setlayout(const Arg* arg);
 void setmfact(const Arg* arg);
 #ifdef TITLEBAR
 void settitle(Client* c);
+int titleclick(Client* c, double x, double y);
+void titlehover(Client* c, double x, double y);
 int titleheight(Client* c);
 #endif /* TITLEBAR */
 void setmon(Client* c, Monitor* m, uint32_t newtags);
@@ -686,6 +689,9 @@ extern int smartgaps;
 #ifdef TITLEBAR
 extern int titlebar;
 extern unsigned int titlepadding;
+extern int titlecenter;
+extern int titleclose;
+extern uint32_t titleclosecolor;
 #endif /* TITLEBAR */
 extern Layout* layouts;
 extern size_t nlayouts;
@@ -694,6 +700,8 @@ extern size_t nrules;
 extern int showbar;
 extern int topbar;
 extern int barwintitle;
+extern int bartagdots;
+extern int barltsymbol;
 extern unsigned int barboxradius;
 extern unsigned int barpadding;
 extern float barheight;
@@ -711,6 +719,9 @@ extern unsigned int notification_linewidth;
 extern unsigned int notification_lineradius;
 extern const char* notification_actionsign;
 #endif /* NOTIFICATIONS */
+#ifdef RUNNER
+extern const char* runner_placeholder;
+#endif /* RUNNER */
 extern int opacity_enabled;
 extern float opacity_focus;
 extern float opacity_unfocus;
