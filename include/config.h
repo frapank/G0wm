@@ -104,6 +104,8 @@ int showbar     = 1;
 int topbar      = 1;
 int barwintitle = 0;
 
+int bartagdots  = 1; // dots instead of the tag names
+
 unsigned int barboxradius = 2;
 unsigned int barpadding   = 0;
 float barheight           = 1.1f; // times the font height, 0 for automatic

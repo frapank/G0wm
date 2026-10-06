@@ -75,7 +75,7 @@ static unsigned int barclick(Monitor* pm, Arg* arg)
 #endif
     statusw = STATUSW(pm);
     do
-        x += TEXTW(pm, tags[i]);
+        x += tagwidth(pm, s, i);
     while (cx >= x && ++i < ntags);
     if (i < ntags) {
         arg->ui = 1 << i;
