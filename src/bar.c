@@ -304,9 +304,12 @@ void drawbar(Monitor* m)
                      m->drw->scheme[urg & 1 << i ? ColBg : ColFg]);
         x += w;
     }
-    w = TEXTW(m, s->ltsymbol);
-    drwl_setscheme(m->drw, colors[SchemeNorm]);
-    x = drwl_text(m->drw, x, 0, w, m->b.height, m->lrpad / 2, s->ltsymbol, 0);
+    if (barltsymbol) {
+        w = TEXTW(m, s->ltsymbol);
+        drwl_setscheme(m->drw, colors[SchemeNorm]);
+        x = drwl_text(
+            m->drw, x, 0, w, m->b.height, m->lrpad / 2, s->ltsymbol, 0);
+    }
 
     /* Remember the free box for notifyscroll(): the title and the notification
      * share it, so its geometry must be measured in exactly one place. */
