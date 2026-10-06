@@ -46,6 +46,14 @@ static const Enum mousebuttons[] = { { BTN_LEFT, "left" },
                                      { BTN_RIGHT, "right" },
                                      { 0, NULL } };
 
+static const Enum gesturemotions[] = { { SwipeLeft, "swipe-left" },
+                                       { SwipeRight, "swipe-right" },
+                                       { SwipeUp, "swipe-up" },
+                                       { SwipeDown, "swipe-down" },
+                                       { PinchIn, "pinch-in" },
+                                       { PinchOut, "pinch-out" },
+                                       { 0, NULL } };
+
 static const Enum cornerstyles[] = { { CornerNormal, "normal" },
                                      { CornerSquircle, "squircle" },
                                      { 0, NULL } };
@@ -157,6 +165,8 @@ static const Action actions[] = {
     { setmfact, "setmfact", 'f' },
     { setopacityfocus, "setopacityfocus", 'f' },
     { setopacityunfocus, "setopacityunfocus", 'f' },
+    { shifttag, "shifttag", 'i' },
+    { shiftview, "shiftview", 'i' },
     { spawn, "spawn", 'v' },
     { tag, "tag", 'u' },
     { tagmon, "tagmon", 'i' },
@@ -592,6 +602,31 @@ static cJSON* jbuttons(void)
     return a;
 }
 
+static cJSON* jgestures(void)
+{
+    cJSON* a = cJSON_CreateArray();
+    size_t i;
+
+    for (i = 0; i < ngestures; i++) {
+        const Action* act = actionbyfunc(gestures[i].func);
+        cJSON* g;
+
+        if (!act) {
+            fprintf(
+                stderr, "g0wm: gesture %zu calls an action with no name\n", i);
+            continue;
+        }
+        g = cJSON_CreateObject();
+        cJSON_AddStringToObject(
+            g, "motion", enumname(gesturemotions, (int)gestures[i].motion));
+        cJSON_AddNumberToObject(g, "fingers", gestures[i].fingers);
+        cJSON_AddStringToObject(g, "action", act->name);
+        cJSON_AddItemToObject(g, "arg", jarg(act->arg, &gestures[i].arg));
+        cJSON_AddItemToArray(a, g);
+    }
+    return a;
+}
+
 static cJSON* jmisc(void)
 {
     cJSON* o = cJSON_CreateObject();
@@ -615,6 +650,7 @@ static cJSON* defaults(void)
     cJSON_AddItemToObject(o, "autostart", jautostart());
     cJSON_AddItemToObject(o, "keys", jkeys());
     cJSON_AddItemToObject(o, "buttons", jbuttons());
+    cJSON_AddItemToObject(o, "gestures", jgestures());
     cJSON_AddItemToObject(o, "misc", jmisc());
     return o;
 }
@@ -1104,6 +1140,32 @@ static void applybuttons(const cJSON* a)
     nbuttons = n;
 }
 
+static void applygestures(const cJSON* a)
+{
+    const cJSON* e;
+    Gesture* out;
+    size_t n = 0;
+
+    if (!cJSON_IsArray(a))
+        return;
+    out = ecalloc((size_t)cJSON_GetArraySize(a) + 1, sizeof *out);
+    cJSON_ArrayForEach(e, a)
+    {
+        const Action* act = actionbyname(getstr(e, "action", NULL));
+
+        if (!act)
+            continue;
+        out[n].motion = (unsigned int)getenum(
+            e, "motion", gesturemotions, SwipeLeft, "gesture motion");
+        out[n].fingers = (unsigned int)getnum(e, "fingers", 3);
+        out[n].func = act->func;
+        out[n].arg = getarg(act->arg, e);
+        n++;
+    }
+    gestures = out;
+    ngestures = n;
+}
+
 static void applymisc(const cJSON* o)
 {
     if (!o)
@@ -1125,6 +1187,7 @@ static void apply(const cJSON* o)
     applyautostart(item(o, "autostart"));
     applykeys(item(o, "keys"));
     applybuttons(item(o, "buttons"));
+    applygestures(item(o, "gestures"));
     applymisc(item(o, "misc"));
 }
 

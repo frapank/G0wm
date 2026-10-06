@@ -1,7 +1,7 @@
 /*
  * See LICENSE file for copyright and license details.
  *
- * keyboard, pointer, tablet and drag-and-drop handling
+ * keyboard, pointer, gesture, tablet and drag-and-drop handling
  */
 #include "g0wm.h"
 
@@ -10,6 +10,8 @@ static unsigned int barclick(Monitor* pm, Arg* arg);
 static void createkeyboard(struct wlr_keyboard* keyboard);
 static void createpointer(struct wlr_pointer* pointer);
 static void cursorconstrain(struct wlr_pointer_constraint_v1* constraint);
+static int gesturebound(int pinch, uint32_t fingers);
+static void gesturerun(unsigned int motion);
 static void cursorwarptohint(void);
 static void destroydragicon(struct wl_listener* listener, void* data);
 static void destroypointerconstraint(struct wl_listener* listener, void* data);
@@ -37,6 +39,12 @@ static void xytonode(double x,
 static struct wlr_pointer_constraint_v1* active_constraint;
 static bool cursor_hidden = false;
 static int grabcx, grabcy; /* client-relative */
+/* gesture taken by a binding */
+static struct {
+    int ours;
+    uint32_t fingers;
+    double dx, dy, scale;
+} gesture;
 #ifdef RUNNER
 static uint32_t runner_repeatcp; /* codepoint the armed key repeat types */
 #endif                           /* RUNNER */
@@ -80,8 +88,10 @@ static unsigned int barclick(Monitor* pm, Arg* arg)
         return ClkTray;
     }
 #endif
-    else if (cx > pm->b.width - (statusw + traywidth))
+    else if (cx > pm->b.width - (statusw + traywidth)) {
+        arg->i = (int)(cx - (pm->b.width - (statusw + traywidth)));
         return ClkStatus;
+    }
     /* x + 1, so 0 still means "from the keyboard" */
     arg->ui = (unsigned int)cx + 1;
     return ClkTitle;
@@ -111,6 +121,16 @@ void axisnotify(struct wl_listener* listener, void* data)
             return;
     }
 #endif
+    if (!locked && event->orientation == WL_POINTER_AXIS_VERTICAL_SCROLL) {
+        Client* c;
+        Arg arg;
+        Monitor* pm = xytomon(cursor->x, cursor->y);
+
+        xytonode(cursor->x, cursor->y, NULL, &c, NULL, NULL, NULL);
+        if (!c && barclick(pm, &arg) == ClkStatus &&
+            statusscroll(pm, arg.i, event->delta))
+            return;
+    }
     /* TODO: allow usage of scroll wheel for mousebindings, it can be
      * implemented by checking the event's orientation and the delta of the
      * event */
@@ -178,6 +198,15 @@ void buttonpress(struct wl_listener* listener, void* data)
             if (click == ClkClient &&
                 (!client_is_unmanaged(c) || client_wants_focus(c)))
                 focusclient(c, 1);
+
+            if (click == ClkStatus &&
+                statusclick(pm,
+                            arg.i,
+                            event->button == BTN_LEFT     ? 1
+                            : event->button == BTN_RIGHT  ? 2
+                            : event->button == BTN_MIDDLE ? 3
+                                                          : 0))
+                return;
 
             keyboard = wlr_seat_get_keyboard(seat);
             mods = keyboard ? wlr_keyboard_get_modifiers(keyboard) : 0;
@@ -345,6 +374,148 @@ void cursorframe(struct wl_listener* listener, void* data)
      * same time, in which case a frame event won't be sent in between. */
     /* Notify the client with pointer focus of the frame event. */
     wlr_seat_pointer_notify_frame(seat);
+}
+
+/* Gestures with a binding are not sent to the client, the binding runs when
+ * the fingers lift. */
+
+#define SWIPE_MIN 100.0
+#define PINCH_IN 0.8
+#define PINCH_OUT 1.25
+
+static int gesturebound(int pinch, uint32_t fingers)
+{
+    const Gesture* g;
+
+    if (locked)
+        return 0;
+    for (g = gestures; g < gestures + ngestures; g++)
+        if ((g->motion >= PinchIn) == pinch && g->fingers == fingers)
+            return 1;
+    return 0;
+}
+
+static void gesturerun(unsigned int motion)
+{
+    const Gesture* g;
+
+    for (g = gestures; g < gestures + ngestures; g++)
+        if (g->motion == motion && g->fingers == gesture.fingers && g->func)
+            g->func(&g->arg);
+}
+
+void swipebegin(struct wl_listener* listener, void* data)
+{
+    struct wlr_pointer_swipe_begin_event* event = data;
+
+    wlr_idle_notifier_v1_notify_activity(idle_notifier, seat);
+    if ((gesture.ours = gesturebound(0, event->fingers))) {
+        gesture.fingers = event->fingers;
+        gesture.dx = gesture.dy = 0;
+        return;
+    }
+    wlr_pointer_gestures_v1_send_swipe_begin(
+        pointer_gestures, seat, event->time_msec, event->fingers);
+}
+
+void swipeupdate(struct wl_listener* listener, void* data)
+{
+    struct wlr_pointer_swipe_update_event* event = data;
+
+    wlr_idle_notifier_v1_notify_activity(idle_notifier, seat);
+    if (gesture.ours) {
+        gesture.dx += event->dx;
+        gesture.dy += event->dy;
+        return;
+    }
+    wlr_pointer_gestures_v1_send_swipe_update(
+        pointer_gestures, seat, event->time_msec, event->dx, event->dy);
+}
+
+void swipeend(struct wl_listener* listener, void* data)
+{
+    struct wlr_pointer_swipe_end_event* event = data;
+
+    if (!gesture.ours) {
+        wlr_pointer_gestures_v1_send_swipe_end(
+            pointer_gestures, seat, event->time_msec, event->cancelled);
+        return;
+    }
+    gesture.ours = 0;
+    if (event->cancelled || locked ||
+        MAX(fabs(gesture.dx), fabs(gesture.dy)) < SWIPE_MIN)
+        return;
+    if (fabs(gesture.dx) >= fabs(gesture.dy))
+        gesturerun(gesture.dx < 0 ? SwipeLeft : SwipeRight);
+    else
+        gesturerun(gesture.dy < 0 ? SwipeUp : SwipeDown);
+}
+
+void pinchbegin(struct wl_listener* listener, void* data)
+{
+    struct wlr_pointer_pinch_begin_event* event = data;
+
+    wlr_idle_notifier_v1_notify_activity(idle_notifier, seat);
+    if ((gesture.ours = gesturebound(1, event->fingers))) {
+        gesture.fingers = event->fingers;
+        gesture.scale = 1.0;
+        return;
+    }
+    wlr_pointer_gestures_v1_send_pinch_begin(
+        pointer_gestures, seat, event->time_msec, event->fingers);
+}
+
+void pinchupdate(struct wl_listener* listener, void* data)
+{
+    struct wlr_pointer_pinch_update_event* event = data;
+
+    wlr_idle_notifier_v1_notify_activity(idle_notifier, seat);
+    if (gesture.ours) {
+        gesture.scale = event->scale;
+        return;
+    }
+    wlr_pointer_gestures_v1_send_pinch_update(pointer_gestures,
+                                              seat,
+                                              event->time_msec,
+                                              event->dx,
+                                              event->dy,
+                                              event->scale,
+                                              event->rotation);
+}
+
+void pinchend(struct wl_listener* listener, void* data)
+{
+    struct wlr_pointer_pinch_end_event* event = data;
+
+    if (!gesture.ours) {
+        wlr_pointer_gestures_v1_send_pinch_end(
+            pointer_gestures, seat, event->time_msec, event->cancelled);
+        return;
+    }
+    gesture.ours = 0;
+    if (event->cancelled || locked)
+        return;
+    if (gesture.scale <= PINCH_IN)
+        gesturerun(PinchIn);
+    else if (gesture.scale >= PINCH_OUT)
+        gesturerun(PinchOut);
+}
+
+void holdbegin(struct wl_listener* listener, void* data)
+{
+    struct wlr_pointer_hold_begin_event* event = data;
+
+    wlr_idle_notifier_v1_notify_activity(idle_notifier, seat);
+    wlr_pointer_gestures_v1_send_hold_begin(
+        pointer_gestures, seat, event->time_msec, event->fingers);
+}
+
+void holdend(struct wl_listener* listener, void* data)
+{
+    struct wlr_pointer_hold_end_event* event = data;
+
+    wlr_pointer_gestures_v1_send_hold_end(
+        pointer_gestures, seat, event->time_msec, event->cancelled);
 }
 
 static void cursorwarptohint(void)
