@@ -324,7 +324,7 @@ void drawbar(Monitor* m)
             const char* sug = runnersuggest();
             /* the caret scales with the font, which is loaded at the output's
              * dpi, so it keeps its proportions on every monitor */
-            int tx, cx, cw = m->drw->font->height / 10 + 1;
+            int tx, cx, cw = m->drw->font->height / 10 + 1, end = x + w;
             char save;
 
             drwl_setscheme(m->drw, colors[SchemeRunner]);
@@ -339,10 +339,8 @@ void drawbar(Monitor* m)
             cx = x + m->lrpad / 2 + drwl_font_getwidth(m->drw, runner_buf);
             runner_buf[runner_cur] = save;
 
-            /* Drawn before the suggestion so it keeps the prompt's own color,
-             * and unconditionally: with nothing typed yet it is the only thing
-             * telling the box apart from an empty title area. */
-            if (cx + cw <= x + w)
+            /* drawn before the suggestion so it keeps the prompt's own color */
+            if (cx + cw <= end)
                 drwl_rect(m->drw,
                           cx,
                           boxy,
@@ -352,17 +350,26 @@ void drawbar(Monitor* m)
                           0);
             tx += cw;
 
-            if (sug && (size_t)runner_len < strlen(sug) && tx < x + w) {
-                drwl_setscheme(m->drw, colors[SchemeRunnerSuggest]);
+            drwl_setscheme(m->drw, colors[SchemeRunnerSuggest]);
+            if (!runner_len && *runner_placeholder && tx < end) {
                 drwl_text(m->drw,
                           tx,
                           0,
-                          x + w - tx,
+                          end - tx,
+                          m->b.height,
+                          0,
+                          runner_placeholder,
+                          0);
+            } else if (sug && (size_t)runner_len < strlen(sug) && tx < end) {
+                drwl_text(m->drw,
+                          tx,
+                          0,
+                          end - tx,
                           m->b.height,
                           0,
                           sug + runner_len,
                           0);
-            } else if (!sug && tx < x + w) {
+            } else if (!sug && tx < end) {
                 /* Not a completion of what's typed, so it can't reuse the
                  * "sug + runner_len" tail above: it's an unrelated answer,
                  * appended rather than spliced in. */
@@ -370,9 +377,8 @@ void drawbar(Monitor* m)
                 char calcbuf[48];
                 if (runnercalc(&calcval)) {
                     snprintf(calcbuf, sizeof calcbuf, "= %.10g", calcval);
-                    drwl_setscheme(m->drw, colors[SchemeRunnerSuggest]);
                     drwl_text(
-                        m->drw, tx, 0, x + w - tx, m->b.height, 0, calcbuf, 0);
+                        m->drw, tx, 0, end - tx, m->b.height, 0, calcbuf, 0);
                 }
             }
         } else

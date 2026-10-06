@@ -443,6 +443,9 @@ static cJSON* jbar(void)
     cJSON_AddStringToObject(
         o, "notification_actionsign", notification_actionsign);
 #endif
+#ifdef RUNNER
+    cJSON_AddStringToObject(o, "runner_placeholder", runner_placeholder);
+#endif
     return o;
 }
 
@@ -945,6 +948,9 @@ static void applybar(const cJSON* o)
         o, "notification_lineradius", notification_lineradius);
     notification_actionsign =
         getstr(o, "notification_actionsign", notification_actionsign);
+#endif
+#ifdef RUNNER
+    runner_placeholder = getstr(o, "runner_placeholder", runner_placeholder);
 #endif
 }
 
