@@ -181,6 +181,39 @@ static void drawpill(Monitor* m,
     pixman_image_unref(mask);
 }
 
+/* the same colour at a third of its alpha */
+static uint32_t fade(uint32_t rgba)
+{
+    return (rgba & ~0xffu) | (rgba & 0xffu) / 3;
+}
+
+/* the dot of tag i, a pill when selected; returns its cell's width */
+static int tagdot(Monitor* m,
+                  Monitor* s,
+                  uint32_t i,
+                  int* d,
+                  int* lead,
+                  int* sw)
+{
+    int gap;
+
+    *d = MAX(m->drw->font->height * 2 / 5, 4);
+    gap = *d * 3 / 2;
+    *sw = s->tagset[s->seltags] & 1 << i ? *d * 3 : *d;
+    *lead = i ? gap / 2 : m->lrpad / 2;
+    return *lead + *sw + (i == ntags - 1 ? m->lrpad / 2 : gap - gap / 2);
+}
+
+/* shared with barclick() */
+int tagwidth(Monitor* m, Monitor* s, uint32_t i)
+{
+    int d, lead, sw;
+
+    if (!bartagdots)
+        return (int)TEXTW(m, tags[i]);
+    return tagdot(m, s, i, &d, &lead, &sw);
+}
+
 void drawbar(Monitor* m)
 {
     int x, w, tw = 0, traywidth = 0;
@@ -235,7 +268,25 @@ void drawbar(Monitor* m)
     }
     x = 0;
     c = focustop(s);
-    for (i = 0; i < ntags; i++) {
+    for (i = 0; i < ntags && bartagdots; i++) {
+        int d, lead, sw;
+        uint32_t clr;
+
+        w = tagdot(m, s, i, &d, &lead, &sw);
+        drwl_setscheme(m->drw, colors[SchemeNorm]);
+        drwl_rect(m->drw, x, 0, w, m->b.height, 1, 1);
+        if (urg & 1 << i)
+            clr = colors[SchemeUrg][ColBorder];
+        else if (s->tagset[s->seltags] & 1 << i)
+            clr = colors[SchemeSel][ColFg];
+        else if (occ & 1 << i)
+            clr = colors[SchemeNorm][ColFg];
+        else /* empty */
+            clr = fade(colors[SchemeNorm][ColFg]);
+        drawpill(m, x + lead, (m->b.height - d) / 2, sw, d, d / 2.0, 0, clr);
+        x += w;
+    }
+    for (i = 0; i < ntags && !bartagdots; i++) {
         w = TEXTW(m, tags[i]);
         drwl_setscheme(
             m->drw,
