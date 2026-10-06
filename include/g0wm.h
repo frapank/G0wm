@@ -138,6 +138,7 @@
         wl_signal_add((E), _l);                                                \
     } while (0)
 #define TEXTW(mon, text) (drwl_font_getwidth(mon->drw, text) + mon->lrpad)
+#define STATUS_BUTTONS 5
 /* the status box: drawbar() and buttonpress() agree on it to the pixel */
 #define STATUSW(mon) (drawstatus((mon), stext, 0, 0, 0) + 2)
 
@@ -556,6 +557,8 @@ void shiftview(const Arg* arg);
 void spawn(const Arg* arg);
 void startdrag(struct wl_listener* listener, void* data);
 int statusin(int fd, unsigned int mask, void* data);
+int statusclick(Monitor* pm, int x, int button);
+int statusscroll(Monitor* pm, int x, double delta);
 void swapclients(Client* a, Client* b);
 void swipebegin(struct wl_listener* listener, void* data);
 void swipeend(struct wl_listener* listener, void* data);

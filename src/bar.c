@@ -411,10 +411,12 @@ void drawselbar(void)
         drawbar(m);
 }
 
-/* One colour escape at p: ^c#RRGGBB^ and ^b#RRGGBB^ set the foreground and
- * the background of what follows (an eight digit form carries alpha too), ^d^
- * goes back to SchemeNorm. Returns the bytes it takes, and applies it to scm
- * when that is given; zero means p does not start one. */
+/* One escape at p: ^c#RRGGBB^ and ^b#RRGGBB^ set the foreground and the
+ * background of what follows (an eight digit form carries alpha too), ^d^
+ * goes back to SchemeNorm, ^sN!cmd^ opens a clickable area for button N
+ * (1 left, 2 right, 3 middle, 4/5 wheel up/down; ^s!^ is 1) and ^e^ closes
+ * it. Returns the bytes it takes, and applies a colour to scm when that is
+ * given; zero means p does not start one. */
 static int statusescape(const char* p, uint32_t* scm)
 {
     static const char hex[] = "0123456789abcdef";
@@ -424,6 +426,18 @@ static int statusescape(const char* p, uint32_t* scm)
 
     if (p[0] != '^')
         return 0;
+    if (p[1] == 's') {
+        i = p[2] >= '1' && p[2] <= '0' + STATUS_BUTTONS ? 3 : 2;
+        if (p[i++] != '!' || !p[i] || p[i] == '^')
+            return 0;
+        for (; p[i] && p[i] != '^'; i++)
+            ;
+        return p[i] == '^' ? i + 1 : 0;
+    }
+    if (p[1] == 'e' && p[2] == '^')
+        return 3;
+    if (p[1] == 'e' && p[2] == '!' && p[3] == '^')
+        return 4;
     if (p[1] == 'd' && p[2] == '^') {
         if (scm) {
             scm[ColFg] = colors[SchemeStatus][ColFg];
@@ -499,6 +513,104 @@ int drawstatus(Monitor* m, const char* text, int x, int w, int render)
     }
 
     return total;
+}
+
+/* Copies into cmd the command for button at x pixels into the status text.
+ * Must walk the text the same way drawstatus() does. */
+static int statusarea(Monitor* m,
+                      const char* text,
+                      int x,
+                      int button,
+                      char* cmd,
+                      size_t sz)
+{
+    char seg[sizeof(stext)];
+    const char* p = text;
+    const char* area[STATUS_BUTTONS] = { 0 };
+    int sx = 0, len;
+    size_t n;
+
+    while (*p) {
+        for (n = 0; *p && n + 1 < sizeof(seg);) {
+            if (*p == '^') {
+                if (p[1] == '^') {
+                    seg[n++] = *p;
+                    p += 2;
+                    continue;
+                }
+                if (statusescape(p, NULL))
+                    break;
+            }
+            seg[n++] = *p++;
+        }
+        seg[n] = '\0';
+
+        sx += (int)drwl_font_getwidth(m->drw, seg);
+        if (x < sx) {
+            if (!area[button - 1])
+                return 0;
+            n = strcspn(area[button - 1], "^");
+            if (n >= sz)
+                n = sz - 1;
+            memcpy(cmd, area[button - 1], n);
+            cmd[n] = '\0';
+            return 1;
+        }
+
+        if ((len = statusescape(p, NULL))) {
+            if (p[1] == 's' && p[2] == '!')
+                area[0] = p + 3;
+            else if (p[1] == 's')
+                area[p[2] - '1'] = p + 4;
+            else if (p[1] == 'e')
+                memset(area, 0, sizeof(area));
+            p += len;
+        }
+    }
+    return 0;
+}
+
+static int statuscmd(Monitor* pm, int x, int button, char* cmd, size_t sz)
+{
+    Monitor* m = barmonitor();
+
+    return m && m == pm && button >= 1 && button <= STATUS_BUTTONS &&
+           statusarea(m, stext, x, button, cmd, sz);
+}
+
+static void statusrun(char* cmd)
+{
+    char* argv[] = { "/bin/sh", "-c", cmd, NULL };
+
+    spawn(&(Arg){ .v = argv });
+}
+
+int statusclick(Monitor* pm, int x, int button)
+{
+    char cmd[sizeof(stext)];
+
+    if (!statuscmd(pm, x, button, cmd, sizeof(cmd)))
+        return 0;
+    statusrun(cmd);
+    return 1;
+}
+
+int statusscroll(Monitor* pm, int x, double delta)
+{
+    /* a mouse notch is 15; touchpads send it in slices */
+    static const double notch = 15;
+    static double acc;
+    char cmd[sizeof(stext)];
+
+    if (delta == 0 || !statuscmd(pm, x, delta < 0 ? 4 : 5, cmd, sizeof(cmd)))
+        return 0;
+    if ((acc < 0) != (delta < 0))
+        acc = 0;
+    for (acc += delta; acc >= notch; acc -= notch)
+        statusrun(cmd);
+    for (; acc <= -notch; acc += notch)
+        statusrun(cmd);
+    return 1;
 }
 
 #ifdef SYSTRAY
