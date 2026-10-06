@@ -717,7 +717,8 @@ static void drawtitle(Client* c)
     Monitor* m = c->mon;
     Buffer* buf;
     const char* title;
-    int w, h, sel, tab, lead, tw;
+    int w, h, sel, tab, lead, tw, fd;
+    uint32_t fg;
 
     if (!c->title)
         return;
@@ -740,9 +741,11 @@ static void drawtitle(Client* c)
     sel = titlesel(c);
     tab = m->lt[m->sellt]->arrange == tabbed && !c->isfloating &&
           c->titlew < c->geom.width - 2 * (int)c->bw;
+    fg = colors[sel ? SchemeTitleSel : SchemeTitle][ColFg];
     title = client_get_title(c);
+    fd = MAX(m->drw->font->height / 3, 3);
 
-    lead = m->lrpad / 2;
+    lead = m->lrpad / 2 + (c->isfloating ? fd + m->lrpad / 3 : 0);
     if (titlecenter) {
         tw = (int)drwl_font_getwidth(m->drw, title);
         lead = MAX(MIN((w - tw) / 2, w - m->lrpad / 2 - tw), lead);
@@ -754,6 +757,9 @@ static void drawtitle(Client* c)
     if (w > lead)
         drwl_text(m->drw, 0, 0, w, h, lead, title, 0);
 
+    if (c->isfloating)
+        drawpill(
+            m, lead - fd - m->lrpad / 3, (h - fd) / 2, fd, fd, fd / 2.0, 0, fg);
     if (tab && c->titlex)
         drawpill(m,
                  0,
