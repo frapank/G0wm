@@ -88,8 +88,10 @@ static unsigned int barclick(Monitor* pm, Arg* arg)
         return ClkTray;
     }
 #endif
-    else if (cx > pm->b.width - (statusw + traywidth))
+    else if (cx > pm->b.width - (statusw + traywidth)) {
+        arg->i = (int)(cx - (pm->b.width - (statusw + traywidth)));
         return ClkStatus;
+    }
     /* x + 1, so 0 still means "from the keyboard" */
     arg->ui = (unsigned int)cx + 1;
     return ClkTitle;
@@ -119,6 +121,16 @@ void axisnotify(struct wl_listener* listener, void* data)
             return;
     }
 #endif
+    if (!locked && event->orientation == WL_POINTER_AXIS_VERTICAL_SCROLL) {
+        Client* c;
+        Arg arg;
+        Monitor* pm = xytomon(cursor->x, cursor->y);
+
+        xytonode(cursor->x, cursor->y, NULL, &c, NULL, NULL, NULL);
+        if (!c && barclick(pm, &arg) == ClkStatus &&
+            statusscroll(pm, arg.i, event->delta))
+            return;
+    }
     /* TODO: allow usage of scroll wheel for mousebindings, it can be
      * implemented by checking the event's orientation and the delta of the
      * event */
@@ -186,6 +198,15 @@ void buttonpress(struct wl_listener* listener, void* data)
             if (click == ClkClient &&
                 (!client_is_unmanaged(c) || client_wants_focus(c)))
                 focusclient(c, 1);
+
+            if (click == ClkStatus &&
+                statusclick(pm,
+                            arg.i,
+                            event->button == BTN_LEFT     ? 1
+                            : event->button == BTN_RIGHT  ? 2
+                            : event->button == BTN_MIDDLE ? 3
+                                                          : 0))
+                return;
 
             keyboard = wlr_seat_get_keyboard(seat);
             mods = keyboard ? wlr_keyboard_get_modifiers(keyboard) : 0;
