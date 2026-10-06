@@ -22,9 +22,8 @@ programs for things like the bar, notifications and the application launcher.
 g0wm handles all of these directly, which makes it closer to a small desktop
 environment than to a plain compositor.
 
-A tour of what all of this looks like in use is in
-[docs/features.md](docs/features.md), the settings are documented in the
-comments of [`include/config.h`](include/config.h), and the man page is at
+The settings are documented in the comments of
+[`include/config.h`](include/config.h), and the man page is at
 [`docs/g0wm.1`](docs/g0wm.1).
 
 ## Screenshots
@@ -103,9 +102,8 @@ You can generate it with:
 
 `status_gen` creates a backup before replacing an existing file.
 
-The available modules are listed in the status text section of
-[docs/features.md](docs/features.md), and `status.conf` documents its own
-formats in the comments `./status_gen` writes into it.
+`status.conf` has a format, an icon and a colour for every available module,
+and documents the formats in the comments `./status_gen` writes into it.
 
 ## Run
 

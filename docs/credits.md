@@ -10,8 +10,8 @@ where those parts come from.
 
 g0wm is a fork of **[dwl]**, the dwm-inspired Wayland compositor by Devin J.
 Pohly and the dwl contributors, and inherits its GPL-3.0-or-later license.
-Everything that is not described in [features.md](features.md) as g0wm's own
-behaviour is, in one form or another, still dwl.
+Everything that is not g0wm's own behaviour is, in one form or another, still
+dwl.
 
 Through dwl, the tree also carries:
 
