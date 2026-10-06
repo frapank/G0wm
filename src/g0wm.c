@@ -121,7 +121,7 @@ struct wlr_output_layout* output_layout;
 struct wlr_box sgeom;
 struct wl_list mons;
 Monitor* selmon;
-char stext[256];
+char stext[STATUS_MAX];
 struct wl_event_source* status_event_source;
 #ifdef SYSTRAY
 Watcher watcher = { .running = 0 };
