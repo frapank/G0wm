@@ -543,6 +543,8 @@ void setlayout(const Arg* arg);
 void setmfact(const Arg* arg);
 #ifdef TITLEBAR
 void settitle(Client* c);
+int titleclick(Client* c, double x, double y);
+void titlehover(Client* c, double x, double y);
 int titleheight(Client* c);
 #endif /* TITLEBAR */
 void setmon(Client* c, Monitor* m, uint32_t newtags);
@@ -688,6 +690,8 @@ extern int smartgaps;
 extern int titlebar;
 extern unsigned int titlepadding;
 extern int titlecenter;
+extern int titleclose;
+extern uint32_t titleclosecolor;
 #endif /* TITLEBAR */
 extern Layout* layouts;
 extern size_t nlayouts;
