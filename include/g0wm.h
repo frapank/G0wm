@@ -687,6 +687,7 @@ extern int smartgaps;
 #ifdef TITLEBAR
 extern int titlebar;
 extern unsigned int titlepadding;
+extern int titlecenter;
 #endif /* TITLEBAR */
 extern Layout* layouts;
 extern size_t nlayouts;

@@ -76,6 +76,7 @@ int smartgaps           = 0;
 #ifdef TITLEBAR
 int titlebar              = 1;
 unsigned int titlepadding = 6;
+int titlecenter           = 1;
 #endif
 
 static Layout layouts_def[] = {
