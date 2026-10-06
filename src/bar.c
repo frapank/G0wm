@@ -83,6 +83,9 @@ static long notifypicksel = -1;
 static dbus_uint32_t notifypickid;
 static int notifyboxx; /* last drawn x, for hit testing */
 #endif                 /* NOTIFICATIONS */
+#ifdef TITLEBAR
+static Client* hovered; /* whose close button is under the pointer */
+#endif
 
 /* function implementations */
 bool baracceptsinput(struct wlr_scene_buffer* buffer, double* sx, double* sy)
@@ -710,6 +713,19 @@ static int titlesel(Client* c)
                      : focustop(m));
 }
 
+/* x of the close button, w without one */
+static int titleclosex(Client* c, int w, int* d)
+{
+    Monitor* m = c->mon;
+    int x;
+
+    *d = MAX(m->drw->font->height * 3 / 5, 4);
+    if (!titleclose)
+        return w;
+    x = w - m->lrpad / 2 - *d;
+    return x > w / 2 ? x : w;
+}
+
 /* Renders the client's own title bar. In the tabbed layout every client of the
  * group shares one row, so these end up drawn side by side as tabs. */
 static void drawtitle(Client* c)
@@ -717,7 +733,7 @@ static void drawtitle(Client* c)
     Monitor* m = c->mon;
     Buffer* buf;
     const char* title;
-    int w, h, sel, tab, lead, tw, fd;
+    int w, h, sel, tab, end, lead, tw, d, fd;
     uint32_t fg;
 
     if (!c->title)
@@ -743,19 +759,20 @@ static void drawtitle(Client* c)
           c->titlew < c->geom.width - 2 * (int)c->bw;
     fg = colors[sel ? SchemeTitleSel : SchemeTitle][ColFg];
     title = client_get_title(c);
+    end = titleclosex(c, w, &d);
     fd = MAX(m->drw->font->height / 3, 3);
 
     lead = m->lrpad / 2 + (c->isfloating ? fd + m->lrpad / 3 : 0);
     if (titlecenter) {
         tw = (int)drwl_font_getwidth(m->drw, title);
-        lead = MAX(MIN((w - tw) / 2, w - m->lrpad / 2 - tw), lead);
+        lead = MAX(MIN((w - tw) / 2, end - m->lrpad / 2 - tw), lead);
     }
 
     drwl_setimage(m->drw, buf->image);
     drwl_setscheme(m->drw, colors[sel ? SchemeTitleSel : SchemeTitle]);
     drwl_rect(m->drw, 0, 0, w, h, 1, 1);
-    if (w > lead)
-        drwl_text(m->drw, 0, 0, w, h, lead, title, 0);
+    if (end > lead)
+        drwl_text(m->drw, 0, 0, end, h, lead, title, 0);
 
     if (c->isfloating)
         drawpill(
@@ -769,11 +786,48 @@ static void drawtitle(Client* c)
                  0,
                  0,
                  fade(colors[SchemeTitle][ColFg]));
+    if (end < w && c == hovered)
+        drawpill(m, end, (h - d) / 2, d, d, d / 2.0, 0, titleclosecolor);
 
     wlr_scene_node_set_enabled(&c->title->node, 1);
     wlr_scene_buffer_set_opacity(c->title, decoopacity());
     wlr_scene_buffer_set_buffer(c->title, &buf->base);
     wlr_buffer_unlock(&buf->base);
+}
+
+/* whether (x, y) is on c's close button */
+static int onclose(Client* c, double x, double y)
+{
+    Monitor* m = c->mon;
+    int bx, d;
+    double lx, ly;
+
+    if (!m || !c->title || !c->title->node.enabled)
+        return 0;
+    lx = (x - c->geom.x - c->bw - c->titlex) * m->wlr_output->scale;
+    ly = (y - c->geom.y - c->bw) * m->wlr_output->scale;
+    bx = titleclosex(c, c->titlebufw, &d);
+    return bx < c->titlebufw && ly >= 0 && ly < m->t.height &&
+           lx >= bx - m->lrpad / 2 && lx < c->titlebufw;
+}
+
+int titleclick(Client* c, double x, double y)
+{
+    if (!onclose(c, x, y))
+        return 0;
+    client_send_close(c);
+    return 1;
+}
+
+void titlehover(Client* c, double x, double y)
+{
+    Client *h = c && onclose(c, x, y) ? c : NULL, *old = hovered, *w;
+
+    if (h == old)
+        return;
+    hovered = h;
+    /* old may be gone */
+    wl_list_for_each(w, &clients, link) if (w == old || w == h) drawtitle(w);
 }
 
 #endif /* TITLEBAR */

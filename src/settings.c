@@ -389,6 +389,8 @@ static cJSON* jwindows(void)
     cJSON_AddBoolToObject(o, "titlebar", titlebar);
     cJSON_AddNumberToObject(o, "titlepadding", titlepadding);
     cJSON_AddBoolToObject(o, "titlecenter", titlecenter);
+    cJSON_AddBoolToObject(o, "titleclose", titleclose);
+    cJSON_AddItemToObject(o, "titleclosecolor", jhex(titleclosecolor));
 #endif
 
     a = cJSON_AddArrayToObject(o, "layouts");
@@ -915,6 +917,8 @@ static void applywindows(const cJSON* o)
     titlebar = getbool(o, "titlebar", titlebar);
     titlepadding = (unsigned int)getnum(o, "titlepadding", titlepadding);
     titlecenter = getbool(o, "titlecenter", titlecenter);
+    titleclose = getbool(o, "titleclose", titleclose);
+    titleclosecolor = gethex(o, "titleclosecolor", titleclosecolor);
 #endif
     applylayouts(item(o, "layouts"));
     applyrules(item(o, "rules"));

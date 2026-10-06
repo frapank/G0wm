@@ -210,6 +210,12 @@ void buttonpress(struct wl_listener* listener, void* data)
 
             keyboard = wlr_seat_get_keyboard(seat);
             mods = keyboard ? wlr_keyboard_get_modifiers(keyboard) : 0;
+#ifdef TITLEBAR
+            if (click == ClkClient && !CLEANMASK(mods) &&
+                event->button == BTN_LEFT &&
+                titleclick(c, cursor->x, cursor->y))
+                return;
+#endif
             for (b = buttons; b < buttons + nbuttons; b++) {
                 if (CLEANMASK(mods) == CLEANMASK(b->mod) &&
                     event->button == b->button && click == b->click &&
@@ -886,6 +892,9 @@ void motionnotify(uint32_t time,
 
     /* Find the client under the pointer and send the event along. */
     xytonode(cursor->x, cursor->y, &surface, &c, NULL, &sx, &sy);
+#ifdef TITLEBAR
+    titlehover(c, cursor->x, cursor->y);
+#endif
 
     if (cursor_mode == CurPressed && !seat->drag &&
         surface != seat->pointer_state.focused_surface &&

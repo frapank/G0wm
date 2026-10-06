@@ -77,6 +77,8 @@ int smartgaps           = 0;
 int titlebar              = 1;
 unsigned int titlepadding = 6;
 int titlecenter           = 1;
+int titleclose            = 1; // shown with the pointer over it
+uint32_t titleclosecolor  = 0xff5f57ff;
 #endif
 
 static Layout layouts_def[] = {
