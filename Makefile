@@ -20,7 +20,7 @@ YELLOW      	:= \033[33m
 MAGENTA     	:= \033[35m
 CYAN        	:= \033[36m
 
-ifneq ($(TERM),dumb)
+ifneq ($(filter-out dumb,$(TERM)),)
   ifneq (, $(shell command -v tput 2>/dev/null))
     RESET  := $(shell tput sgr0)
     RED    := $(shell tput setaf 1)
