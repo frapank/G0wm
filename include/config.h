@@ -131,6 +131,10 @@ unsigned int notification_lineradius = 2;
 const char* notification_actionsign = "[r]";
 #endif
 
+#ifdef RUNNER
+const char* runner_placeholder = "Run..."; // shown while nothing is typed
+#endif
+
 int opacity_enabled = 1;
 
 float opacity_focus   = 1.00f;

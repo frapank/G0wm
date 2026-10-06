@@ -714,6 +714,9 @@ extern unsigned int notification_linewidth;
 extern unsigned int notification_lineradius;
 extern const char* notification_actionsign;
 #endif /* NOTIFICATIONS */
+#ifdef RUNNER
+extern const char* runner_placeholder;
+#endif /* RUNNER */
 extern int opacity_enabled;
 extern float opacity_focus;
 extern float opacity_unfocus;
