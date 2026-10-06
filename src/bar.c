@@ -1386,7 +1386,10 @@ int titleheight(Client* c)
 #endif /* TITLEBAR */
 int statusin(int fd, unsigned int mask, void* data)
 {
-    char status[256];
+    static char buf[STATUS_MAX];
+    static size_t len;
+    static int skip; /* in a line too long for buf, up to its newline */
+    char *p, *nl, *line = NULL;
     ssize_t n;
 
     if (mask & WL_EVENT_ERROR)
@@ -1396,7 +1399,7 @@ int statusin(int fd, unsigned int mask, void* data)
         return 0;
     }
 
-    n = read(fd, status, sizeof(status) - 1);
+    n = read(fd, buf + len, sizeof(buf) - 1 - len);
     if (n < 0) {
         if (errno == EWOULDBLOCK || errno == EAGAIN || errno == EINTR)
             return 0;
@@ -1410,11 +1413,27 @@ int statusin(int fd, unsigned int mask, void* data)
         return 0;
     }
 
-    status[n] = '\0';
-    status[strcspn(status, "\n")] = '\0';
+    len += (size_t)n;
+    buf[len] = '\0';
+    for (p = buf; (nl = strchr(p, '\n')); p = nl + 1) {
+        *nl = '\0';
+        if (skip)
+            skip = 0;
+        else
+            line = p;
+    }
+    if (line) {
+        snprintf(stext, sizeof(stext), "%s", line);
+        drawbars();
+    }
 
-    strncpy(stext, status, sizeof(stext));
-    drawbars();
+    /* keep the start of the next line */
+    len = strlen(p);
+    memmove(buf, p, len + 1);
+    if (len == sizeof(buf) - 1) {
+        len = 0;
+        skip = 1;
+    }
 
     return 0;
 }

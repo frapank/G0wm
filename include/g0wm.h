@@ -647,7 +647,8 @@ extern struct wlr_output_layout* output_layout;
 extern struct wlr_box sgeom;
 extern struct wl_list mons;
 extern Monitor* selmon;
-extern char stext[256];
+#define STATUS_MAX 4096
+extern char stext[STATUS_MAX];
 extern struct wl_event_source* status_event_source;
 #ifdef SYSTRAY
 extern Watcher watcher;
