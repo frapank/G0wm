@@ -324,7 +324,8 @@ void drawbar(Monitor* m)
             const char* sug = runnersuggest();
             /* the caret scales with the font, which is loaded at the output's
              * dpi, so it keeps its proportions on every monitor */
-            int tx, cx, cw = m->drw->font->height / 10 + 1, end = x + w;
+            int fh = m->drw->font->height, cw = MAX(fh / 12, 2);
+            int tx, cx, end = x + w;
             char save;
 
             drwl_setscheme(m->drw, colors[SchemeRunner]);
@@ -339,15 +340,15 @@ void drawbar(Monitor* m)
             cx = x + m->lrpad / 2 + drwl_font_getwidth(m->drw, runner_buf);
             runner_buf[runner_cur] = save;
 
-            /* drawn before the suggestion so it keeps the prompt's own color */
             if (cx + cw <= end)
-                drwl_rect(m->drw,
-                          cx,
-                          boxy,
-                          cw,
-                          m->drw->font->height - 2 * boxs,
-                          1,
-                          0);
+                drawpill(m,
+                         cx,
+                         boxy,
+                         cw,
+                         fh - 2 * boxs,
+                         cw / 2.0,
+                         0,
+                         colors[SchemeRunner][ColFg]);
             tx += cw;
 
             drwl_setscheme(m->drw, colors[SchemeRunnerSuggest]);
