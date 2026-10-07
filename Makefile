@@ -1,8 +1,17 @@
 # Pattern rules and $(@D) are GNU make extensions; the upstream .POSIX: Makefile
 # was dropped when the tree moved to src/ include/ external/.
 .SUFFIXES:
+.DELETE_ON_ERROR:
 
 include config.mk
+
+# expand once, not once per command
+VERSION  := $(VERSION)
+WLR_INCS := $(WLR_INCS)
+WLR_LIBS := $(WLR_LIBS)
+
+# make V=1 shows the full commands
+Q = $(if $(V),,@)
 
 # Layout
 SRCDIR   = src
@@ -35,7 +44,7 @@ export MESS RESET RED GREEN YELLOW MAGENTA CYAN
 # flags for compiling
 G0WMCPPFLAGS = -I$(INCDIR) -I$(INCDIR)/systray -I$(EXTDIR) -I$(GENDIR) \
 	-DWLR_USE_UNSTABLE -D_POSIX_C_SOURCE=200809L \
-	-DVERSION=\"$(VERSION)\" $(XWAYLAND) $(BACKGROUND)
+	-DVERSION=\"$(VERSION)\" $(XWAYLAND) $(BACKGROUND) -MMD -MP
 G0WMDEVCFLAGS = -g -Wpedantic -Wall -Wextra -Wdeclaration-after-statement \
 	-Wno-unused-parameter -Wshadow -Wunused-macros -Werror=strict-prototypes \
 	-Werror=implicit -Werror=return-type -Werror=incompatible-pointer-types \
@@ -44,8 +53,10 @@ G0WMDEVCFLAGS = -g -Wpedantic -Wall -Wextra -Wdeclaration-after-statement \
 # CFLAGS / LDFLAGS
 PKGS      = wayland-server xkbcommon libinput pixman-1 fcft dbus-1 gdk-pixbuf-2.0 \
 	$(XLIBS)
-G0WMCFLAGS = `$(PKG_CONFIG) --cflags $(PKGS)` $(WLR_INCS) $(G0WMCPPFLAGS) $(G0WMDEVCFLAGS) $(CFLAGS)
-LDLIBS    = `$(PKG_CONFIG) --libs $(PKGS)` $(WLR_LIBS) -lm $(LIBS)
+PKG_CFLAGS := $(shell $(PKG_CONFIG) --cflags $(PKGS))
+PKG_LIBS   := $(shell $(PKG_CONFIG) --libs $(PKGS))
+G0WMCFLAGS = $(PKG_CFLAGS) $(WLR_INCS) $(G0WMCPPFLAGS) $(G0WMDEVCFLAGS) $(CFLAGS)
+LDLIBS    = $(PKG_LIBS) $(WLR_LIBS) -lm $(LIBS)
 
 # Sources. The systray and its dbus glue come from the bar-systray patch.
 SRC = $(SRCDIR)/g0wm.c $(SRCDIR)/bar.c $(SRCDIR)/buffer.c $(SRCDIR)/client.c \
@@ -57,13 +68,6 @@ SRC = $(SRCDIR)/g0wm.c $(SRCDIR)/bar.c $(SRCDIR)/buffer.c $(SRCDIR)/client.c \
 	$(SRCDIR)/systray/watcher.c $(SRCDIR)/systray/tray.c \
 	$(SRCDIR)/systray/item.c $(SRCDIR)/systray/icon.c \
 	$(SRCDIR)/systray/menu.c $(SRCDIR)/systray/helpers.c
-HDR = $(INCDIR)/g0wm.h $(INCDIR)/config.h $(INCDIR)/client.h \
-	$(INCDIR)/util.h $(INCDIR)/dbus.h $(INCDIR)/settings.h \
-	$(INCDIR)/notify.h \
-	$(INCDIR)/systray/watcher.h $(INCDIR)/systray/tray.h \
-	$(INCDIR)/systray/item.h $(INCDIR)/systray/icon.h \
-	$(INCDIR)/systray/menu.h $(INCDIR)/systray/helpers.h \
-	$(EXTDIR)/drwl.h $(EXTDIR)/cJSON.h
 ifneq ($(XWAYLAND),)
 SRC += $(SRCDIR)/xwayland.c
 endif
@@ -76,65 +80,56 @@ EXTOBJ = $(EXTSRC:$(EXTDIR)/%.c=$(BUILDDIR)/external/%.o)
 # wayland-scanner is a tool which generates C headers and rigging for Wayland
 # protocols, which are specified in XML. wlroots requires you to rig these up
 # to your build system yourself and provide them in the include path.
-WAYLAND_SCANNER   = `$(PKG_CONFIG) --variable=wayland_scanner wayland-scanner`
-WAYLAND_PROTOCOLS = `$(PKG_CONFIG) --variable=pkgdatadir wayland-protocols`
+WAYLAND_SCANNER   := $(shell $(PKG_CONFIG) --variable=wayland_scanner wayland-scanner)
+WAYLAND_PROTOCOLS := $(shell $(PKG_CONFIG) --variable=pkgdatadir wayland-protocols)
 
-GENHDR = $(GENDIR)/cursor-shape-v1-protocol.h \
-	$(GENDIR)/ext-image-copy-capture-v1-protocol.h \
-	$(GENDIR)/pointer-constraints-unstable-v1-protocol.h \
-	$(GENDIR)/wlr-layer-shell-unstable-v1-protocol.h \
-	$(GENDIR)/wlr-output-power-management-unstable-v1-protocol.h \
-	$(GENDIR)/xdg-shell-protocol.h
+ENUMHDR = cursor-shape-v1 ext-image-copy-capture-v1 \
+	pointer-constraints-unstable-v1 wlr-layer-shell-unstable-v1
+SERVERHDR = wlr-output-power-management-unstable-v1 xdg-shell
+GENHDR = $(patsubst %,$(GENDIR)/%-protocol.h,$(ENUMHDR) $(SERVERHDR))
 
-.PHONY: all clean dist install uninstall remove format format-check test
+# local protocols/ first
+vpath %.xml protocols \
+	$(WAYLAND_PROTOCOLS)/stable/xdg-shell \
+	$(WAYLAND_PROTOCOLS)/staging/cursor-shape \
+	$(WAYLAND_PROTOCOLS)/staging/ext-image-copy-capture \
+	$(WAYLAND_PROTOCOLS)/unstable/pointer-constraints
+
+.PHONY: all clean dist install uninstall remove format format-check test FORCE
 
 all: g0wm
 
 g0wm: $(OBJ) $(EXTOBJ)
-	$(CC) $(OBJ) $(EXTOBJ) $(G0WMCFLAGS) $(LDFLAGS) $(LDLIBS) -o $@
+	@$(MESS) '[$(GREEN)LINKER$(RESET)] %s\n' 'Linking $@'
+	$(Q)$(CC) $(CFLAGS) $(LDFLAGS) $(OBJ) $(EXTOBJ) $(LDLIBS) -o $@
 
-# Every object waits on the generated headers: which of them a given source
-# needs is not worth tracking, and they are cheap to produce.
-$(BUILDDIR)/%.o: $(SRCDIR)/%.c $(HDR) $(GENHDR) config.mk
+# header deps come from the .d files, the generated headers just need to exist
+$(BUILDDIR)/%.o: $(SRCDIR)/%.c config.mk | $(GENHDR)
 	@$(MESS) '[$(GREEN)COMPILER$(RESET)] %s\n' 'Compiling $@'
 	@mkdir -p $(@D)
-	$(CC) $(CPPFLAGS) $(G0WMCFLAGS) -c $< -o $@
+	$(Q)$(CC) $(CPPFLAGS) $(G0WMCFLAGS) -c $< -o $@
 
-$(BUILDDIR)/external/%.o: $(EXTDIR)/%.c $(EXTDIR)/%.h config.mk
+$(BUILDDIR)/external/%.o: $(EXTDIR)/%.c config.mk
 	@$(MESS) '[$(GREEN)COMPILER$(RESET)] %s\n' 'Compiling $@'
 	@mkdir -p $(@D)
-	$(CC) $(CPPFLAGS) $(CFLAGS) -c $< -o $@
+	$(Q)$(CC) $(CPPFLAGS) $(CFLAGS) -MMD -MP -c $< -o $@
 
-$(GENDIR)/cursor-shape-v1-protocol.h:
-	@$(MESS) '[$(GREEN)COMPILER$(RESET)] %s\n' 'Compiling $@'
+-include $(OBJ:.o=.d) $(EXTOBJ:.o=.d)
+
+# rewritten only when the version changes
+$(BUILDDIR)/version: FORCE
 	@mkdir -p $(@D)
-	$(WAYLAND_SCANNER) enum-header \
-		$(WAYLAND_PROTOCOLS)/staging/cursor-shape/cursor-shape-v1.xml $@
-$(GENDIR)/ext-image-copy-capture-v1-protocol.h:
-	@$(MESS) '[$(GREEN)COMPILER$(RESET)] %s\n' 'Compiling $@'
+	@echo '$(VERSION)' | cmp -s - $@ || echo '$(VERSION)' >$@
+
+$(BUILDDIR)/g0wm.o $(BUILDDIR)/monitor.o: $(BUILDDIR)/version
+
+$(ENUMHDR:%=$(GENDIR)/%-protocol.h): SCANMODE = enum-header
+$(SERVERHDR:%=$(GENDIR)/%-protocol.h): SCANMODE = server-header
+
+$(GENDIR)/%-protocol.h: %.xml
+	@$(MESS) '[$(GREEN)SCANNER$(RESET)] %s\n' 'Generating $@'
 	@mkdir -p $(@D)
-	$(WAYLAND_SCANNER) enum-header \
-		$(WAYLAND_PROTOCOLS)/staging/ext-image-copy-capture/ext-image-copy-capture-v1.xml $@
-$(GENDIR)/pointer-constraints-unstable-v1-protocol.h:
-	@$(MESS) '[$(GREEN)COMPILER$(RESET)] %s\n' 'Compiling $@'
-	@mkdir -p $(@D)
-	$(WAYLAND_SCANNER) enum-header \
-		$(WAYLAND_PROTOCOLS)/unstable/pointer-constraints/pointer-constraints-unstable-v1.xml $@
-$(GENDIR)/wlr-layer-shell-unstable-v1-protocol.h:
-	@$(MESS) '[$(GREEN)COMPILER$(RESET)] %s\n' 'Compiling $@'
-	@mkdir -p $(@D)
-	$(WAYLAND_SCANNER) enum-header \
-		protocols/wlr-layer-shell-unstable-v1.xml $@
-$(GENDIR)/wlr-output-power-management-unstable-v1-protocol.h:
-	@$(MESS) '[$(GREEN)COMPILER$(RESET)] %s\n' 'Compiling $@'
-	@mkdir -p $(@D)
-	$(WAYLAND_SCANNER) server-header \
-		protocols/wlr-output-power-management-unstable-v1.xml $@
-$(GENDIR)/xdg-shell-protocol.h:
-	@$(MESS) '[$(GREEN)COMPILER$(RESET)] %s\n' 'Compiling $@'
-	@mkdir -p $(@D)
-	$(WAYLAND_SCANNER) server-header \
-		$(WAYLAND_PROTOCOLS)/stable/xdg-shell/xdg-shell.xml $@
+	$(Q)$(WAYLAND_SCANNER) $(SCANMODE) $< $@
 
 # ./configure writes this file; without it the defaults are used as-is.
 config.mk:
@@ -188,24 +183,23 @@ clean:
 	rm -rf g0wm $(BUILDDIR)
 	@$(MESS) '[$(RED)CLEANER$(RESET)] %s\n' 'Done!'
 
-dist: clean
-	mkdir -p g0wm-$(VERSION)
-	cp -R LICENSE license Makefile configure README.md \
-		config.def.mk .clang-format src include external protocols docs \
-		share g0wm-$(VERSION)
-	tar -caf g0wm-$(VERSION).tar.gz g0wm-$(VERSION)
-	rm -rf g0wm-$(VERSION)
+# the committed tree, not the working copy
+dist:
+	git archive --prefix=g0wm-$(VERSION)/ -o g0wm-$(VERSION).tar.gz HEAD
 
 # g0wm -c writes settings.json: only the binary knows which features it has.
+# not for a staged install or root, it would land in the wrong home
 install: g0wm
 	@$(MESS) '[$(YELLOW)INSTALL$(RESET)] %s\n' 'Starting...'
-	mkdir -p $(BINDIR)
-	cp -f g0wm $(BINDIR)
-	chmod 755 $(BINDIR)/g0wm
-	./g0wm -c >/dev/null
+	install -Dm755 g0wm $(DESTDIR)$(BINDIR)/g0wm
+	install -Dm644 docs/g0wm.1 $(DESTDIR)$(MANDIR)/man1/g0wm.1
+	install -Dm644 share/g0wm.desktop \
+		$(DESTDIR)$(DATADIR)/wayland-sessions/g0wm.desktop
+	@[ -n "$(DESTDIR)" ] || [ "`id -u`" = 0 ] || ./g0wm -c >/dev/null
 	@$(MESS) '[$(YELLOW)INSTALL$(RESET)] %s\n' 'Done!'
 
 uninstall remove:
 	@$(MESS) '[$(RED)UNINSTALL$(RESET)] %s\n' 'Removing G0wm'
-	rm -f $(BINDIR)/g0wm
+	rm -f $(DESTDIR)$(BINDIR)/g0wm $(DESTDIR)$(MANDIR)/man1/g0wm.1 \
+		$(DESTDIR)$(DATADIR)/wayland-sessions/g0wm.desktop
 	@$(MESS) '[$(RED)UNINSTALL$(RESET)] %s\n' 'Done!'
