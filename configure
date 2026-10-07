@@ -29,20 +29,8 @@ Features:
   --enable-xwayland       build X11 support (default)
   --disable-xwayland      build without X11 support
   --no-integrated-background
-                          build without the built-in wallpaper renderer
-                          (with --no-systray and --no-notify too, drops
-                          the gdk-pixbuf/glib dependency; the wallpaper
-                          setting in config.h is ignored)
-  --no-notify             build without the notification daemon (org.
-                          freedesktop.Notifications); the notification
-                          settings in config.h are ignored
-  --no-systray, --no-tray build without the StatusNotifierItem tray in the
-                          bar; showsystray, systrayiconsize and
-                          systrayspacing in config.h are ignored
-  --no-runner             build without the integrated app runner;
-                          MODKEY+r spawns menucmd instead
-  --no-titlebar           build without the per-window title bars; titlebar
-                          and titlepadding in config.h are ignored
+                          build without the built-in wallpaper renderer;
+                          the wallpaper setting in config.h is ignored
   --debug                 -O0 -g3, no frame pointer omission
   --release               -O2 (default)
   --enable-sanitizers     build with ASan and UBSan
@@ -77,10 +65,6 @@ defaults() {
 	wlroots_prefix=
 	xwayland=yes
 	integrated_background=yes
-	notify=yes
-	systray=yes
-	runner=yes
-	titlebar=yes
 	opt_cflags='-O2'
 	extra_cflags=
 	extra_ldflags=
@@ -124,10 +108,6 @@ options() { # "$@" -> every setting above, overridden from the command line
 		--enable-xwayland) xwayland=yes ;;
 		--disable-xwayland) xwayland=no ;;
 		--no-integrated-background) integrated_background=no ;;
-		--no-notify) notify=no ;;
-		--no-systray|--no-tray) systray=no ;;
-		--no-runner) runner=no ;;
-		--no-titlebar|--no-titlebars) titlebar=no ;;
 		--debug) opt_cflags='-O0 -g3 -fno-omit-frame-pointer' ;;
 		--release) opt_cflags='-O2' ;;
 		--enable-sanitizers) sanitize=yes ;;
@@ -145,11 +125,8 @@ options() { # "$@" -> every setting above, overridden from the command line
 
 configure_flags() { # package list and compiler/linker flags from the options
 	wlr_pkg=wlroots-$wlroots
-	pkgs="wayland-server xkbcommon libinput pixman-1 fcft dbus-1"
+	pkgs="wayland-server xkbcommon libinput pixman-1 fcft dbus-1 gdk-pixbuf-2.0"
 	[ "$xwayland" = yes ] && pkgs="$pkgs xcb xcb-icccm"
-	{ [ "$integrated_background" = yes ] || [ "$systray" = yes ] ||
-		[ "$notify" = yes ]; } &&
-		pkgs="$pkgs gdk-pixbuf-2.0"
 
 	[ "$sanitize" = yes ] && {
 		extra_cflags="$extra_cflags -fsanitize=address,undefined"
@@ -252,22 +229,13 @@ XWAYLAND = $([ "$xwayland" = yes ] && echo -DXWAYLAND)
 XLIBS = $([ "$xwayland" = yes ] && echo xcb xcb-icccm)
 
 BACKGROUND = $([ "$integrated_background" = yes ] && echo -DINTEGRATED_BACKGROUND)
-BGLIBS = $({ [ "$integrated_background" = yes ] || [ "$systray" = yes ] || [ "$notify" = yes ]; } && echo gdk-pixbuf-2.0)
-
-NOTIFY = $([ "$notify" = yes ] && echo -DNOTIFICATIONS)
-
-SYSTRAY = $([ "$systray" = yes ] && echo -DSYSTRAY)
-
-RUNNER = $([ "$runner" = yes ] && echo -DRUNNER)
-
-TITLEBAR = $([ "$titlebar" = yes ] && echo -DTITLEBAR)
 
 CFLAGS = $(trim "$opt_cflags$extra_cflags")
 LDFLAGS = $(trim "$extra_ldflags")
 LIBS = $(trim "$extra_libs")
 EOF
 
-	say "wrote config.mk: $cc, $wlr_pkg, xwayland $xwayland, integrated background $integrated_background, notify $notify, systray $systray, runner $runner, titlebar $titlebar, native $native, install to $bindir"
+	say "wrote config.mk: $cc, $wlr_pkg, xwayland $xwayland, integrated background $integrated_background, native $native, install to $bindir"
 	say "run 'make' to build"
 }
 

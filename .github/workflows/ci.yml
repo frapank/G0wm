@@ -51,14 +51,8 @@ jobs:
         include:
           - { name: no xwayland,   flags: "--disable-xwayland" }
           - { name: no background, flags: "--no-integrated-background" }
-          - { name: no notify,     flags: "--no-notify" }
-          - { name: no systray,    flags: "--no-systray" }
-          - { name: no runner,     flags: "--no-runner" }
-          - { name: no titlebar,   flags: "--no-titlebar" }
           - name: minimal
-            flags: >-
-              --disable-xwayland --no-integrated-background --no-notify
-              --no-systray --no-runner --no-titlebar
+            flags: --disable-xwayland --no-integrated-background
     steps:
       - name: Install git for the checkout
         run: pacman -Syu --noconfirm --needed git
@@ -85,8 +79,6 @@ jobs:
         run: |
           make install BINDIR="$PWD/_install"
           test -x _install/g0wm
-          test -x _install/start-g0wm
-          test ! -e _install/g0wm-status.sh
 
   format:
     name: clang-format
@@ -105,9 +97,7 @@ jobs:
     steps:
       - uses: actions/checkout@v5
       - run: |
-          shellcheck -S warning \
-            configure status_gen \
-            scripts/start-g0wm scripts/g0wm-status.sh
+          shellcheck -S warning configure
 
   manpage:
     name: man page

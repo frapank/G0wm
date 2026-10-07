@@ -5,8 +5,6 @@
  */
 #include "g0wm.h"
 
-#ifdef SYSTRAY
-
 /* function declarations */
 static void traypopup_draw(void);
 static int traypopup_row(double lx, double ly);
@@ -221,5 +219,3 @@ void traypopup_cleanup(void)
         wlr_scene_node_destroy(&popup.scene->node);
     popup.scene = NULL;
 }
-
-#endif /* SYSTRAY */

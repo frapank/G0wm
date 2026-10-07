@@ -132,11 +132,7 @@ static void blurbox(Client* c,
 void blurclient(Client* c)
 {
     Monitor* m = c->mon;
-#ifdef TITLEBAR
     int th, bw, x, w;
-#else
-    int th = 0;
-#endif
 
     if (!c->blur)
         return;
@@ -144,30 +140,23 @@ void blurclient(Client* c)
     /* the box covers the decorations too, so either letting light through is
      * enough; a fullscreen client is drawn opaque and never does */
     if (!m || !m->blurpool[0] || c->isfullscreen || !opacity_enabled ||
-        ((!c->hasopacity || c->opacity >= 1.0f) && !decotranslucent())) {
+        (c->opacity >= 1.0f && !decotranslucent())) {
         wlr_scene_node_set_enabled(&c->blur->node, 0);
-#ifdef TITLEBAR
         if (c->titleblur)
             wlr_scene_node_set_enabled(&c->titleblur->node, 0);
-#endif
         return;
     }
 
-#ifdef TITLEBAR
     th = titleheight(c);
     bw = (int)c->bw;
-#endif
 
     if (!th || m->lt[m->sellt]->arrange != tabbed || c->isfloating) {
         blurbox(c, c->blur, &c->blurbuf, 0, 0, c->geom.width, c->geom.height);
-#ifdef TITLEBAR
         if (c->titleblur)
             wlr_scene_node_set_enabled(&c->titleblur->node, 0);
-#endif
         return;
     }
 
-#ifdef TITLEBAR
     /* Tabs share one box and the ones under the top are drawn in lower trees,
      * so a backdrop over the whole box buries their title bars. Each tab backs
      * its own slice of the row, the top one backs the body below it. */
@@ -191,7 +180,6 @@ void blurclient(Client* c)
                 c->geom.height - bw - th);
     else
         wlr_scene_node_set_enabled(&c->blur->node, 0);
-#endif /* TITLEBAR */
 }
 
 /* One box blur along the rows: a 2r+1 window slides on a running sum, so a
@@ -332,12 +320,8 @@ static void blurwallpaper(Monitor* m)
 
     /* the nodes pick the new buffer up next frame; the pointer they compare
      * against has to go now, or a reused address would read as unchanged */
-#ifdef TITLEBAR
     wl_list_for_each(c, &clients, link) if (c->mon == m) c->blurbuf =
         c->titleblurbuf = NULL;
-#else
-    wl_list_for_each(c, &clients, link) if (c->mon == m) c->blurbuf = NULL;
-#endif
 
     if (opacity_type != OpacityBlur || !m->wallpaperpool[0] || w <= 0 || h <= 0)
         return;
@@ -502,18 +486,6 @@ void setwallpaper(Monitor* m)
 }
 
 #endif /* INTEGRATED_BACKGROUND */
-/* opacity_apps lists either the apps that get opacity or the ones that do not,
- * depending on opacity_exclusion_type; an empty list covers every app. */
-int opacityallowed(const char* appid)
-{
-    const char* const* a;
-
-    for (a = opacity_apps; *a; a++)
-        if (strstr(appid, *a))
-            return !opacity_exclusion_type;
-    return opacity_exclusion_type || !*opacity_apps;
-}
-
 /* opacity is (re)applied while rendering, and changing it damages nothing by
  * itself, so a frame has to be asked for everywhere */
 static void opacityrefresh(void)
@@ -542,9 +514,7 @@ void scenebuffersetopacity(struct wlr_scene_buffer* buffer,
     /* xdg-popups hang off Client.scene, not Client.scene_surface, so this
      * never touches them */
     wlr_scene_buffer_set_opacity(
-        buffer,
-        c->isfullscreen || !opacity_enabled || !c->hasopacity ? 1.0f
-                                                              : c->opacity);
+        buffer, c->isfullscreen || !opacity_enabled ? 1.0f : c->opacity);
 }
 
 /* Colours a client's border, remembering the scheme so the opacity toggle can

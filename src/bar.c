@@ -19,13 +19,8 @@ static void drawpill(Monitor* m,
                      double r,
                      int hollow,
                      uint32_t rgba);
-#ifdef SYSTRAY
 static void traynotify(void* data);
-#endif /* SYSTRAY */
-#ifdef TITLEBAR
 static void drawtitle(Client* c);
-#endif /* TITLEBAR */
-#ifdef NOTIFICATIONS
 typedef struct {
     int linex, linew;
     int iconx, iconw, iconh; /* iconw 0 without one */
@@ -63,11 +58,9 @@ static void notifypickrun(size_t i);
 static const Notification* notifyshown(long* hist);
 static void notifysync(const Notification* n, long hist);
 static int notifytick(void* data);
-#endif /* NOTIFICATIONS */
 static void stopstatus(void);
 
 /* variables */
-#ifdef NOTIFICATIONS
 static const char notifymore[] = "\xe2\x80\xba"; /* › */
 static dbus_uint32_t notifyshownid;              /* what notifyoff refers to */
 static int notifyshownhist;
@@ -81,11 +74,8 @@ static struct wl_event_source* notifytimer;
 /* picked action, -1 when closed; the picker belongs to notifypickid */
 static long notifypicksel = -1;
 static dbus_uint32_t notifypickid;
-static int notifyboxx; /* last drawn x, for hit testing */
-#endif                 /* NOTIFICATIONS */
-#ifdef TITLEBAR
+static int notifyboxx;  /* last drawn x, for hit testing */
 static Client* hovered; /* whose close button is under the pointer */
-#endif
 
 /* function implementations */
 bool baracceptsinput(struct wlr_scene_buffer* buffer, double* sx, double* sy)
@@ -234,10 +224,8 @@ void drawbar(Monitor* m)
     int sel = s == selmon;
     int r = (int)roundf((float)barcorner(m) * m->wlr_output->scale);
 
-#ifdef TITLEBAR
     /* Title bars are refreshed on the same events as the bar */
     wl_list_for_each(c, &clients, link) if (c->mon == m) drawtitle(c);
-#endif
 
     if (!m->scene_buffer->node.enabled) {
 #ifdef INTEGRATED_BACKGROUND
@@ -251,9 +239,7 @@ void drawbar(Monitor* m)
         return;
     drwl_setimage(m->drw, buf->image);
     cornerclear(buf->data, m->b.width, m->b.height, r);
-#ifdef SYSTRAY
     traywidth = tray_get_width(m->tray);
-#endif
 
     /* draw status first so it can be overdrawn by tags later */
     if (sel) { /* status is only drawn on selected monitor */
@@ -320,7 +306,6 @@ void drawbar(Monitor* m)
     m->b.titlew = w > m->b.height ? w : 0;
 
     if (m->b.titlew) {
-#ifdef RUNNER
         /* The prompt takes the box over the same way a notification does,
          * and outranks one if both would want it at once. */
         if (runner_active && sel) {
@@ -385,10 +370,7 @@ void drawbar(Monitor* m)
                         m->drw, tx, 0, end - tx, m->b.height, 0, calcbuf, 0);
                 }
             }
-        } else
-#endif
-        {
-#ifdef NOTIFICATIONS
+        } else {
             /* A notification takes the box over for as long as it lasts, so the
              * window title (if barwintitle is on) steps aside and comes back
              * once the notification expires or is dismissed. */
@@ -397,9 +379,7 @@ void drawbar(Monitor* m)
                 shownotifications && sel ? notifyshown(&hist) : NULL;
             if (n) {
                 drawnotify(m, x, w, n, hist);
-            } else
-#endif
-                if (barwintitle && c) {
+            } else if (barwintitle && c) {
                 drwl_setscheme(m->drw, colors[sel ? SchemeSel : SchemeNorm]);
                 drwl_text(m->drw,
                           x,
@@ -425,7 +405,6 @@ void drawbar(Monitor* m)
         }
     }
 
-#ifdef SYSTRAY
     if (traywidth > 0)
         pixman_image_composite32(PIXMAN_OP_SRC,
                                  m->tray->image,
@@ -439,7 +418,6 @@ void drawbar(Monitor* m)
                                  0,
                                  traywidth,
                                  m->b.height);
-#endif
 
     cornercut(buf->data, m->b.width, m->b.height, r);
 
@@ -677,7 +655,6 @@ int statusscroll(Monitor* pm, int x, double delta)
     return 1;
 }
 
-#ifdef SYSTRAY
 static void traynotify(void* data)
 {
     drawbar((Monitor*)data);
@@ -701,8 +678,6 @@ void traymenu(const Arg* arg)
     tray_rightclicked(m->tray, arg->ui, traypopup_present);
 }
 
-#endif /* SYSTRAY */
-#ifdef TITLEBAR
 /* the top tab, or the focused client */
 static int titlesel(Client* c)
 {
@@ -830,8 +805,6 @@ void titlehover(Client* c, double x, double y)
     wl_list_for_each(w, &clients, link) if (w == old || w == h) drawtitle(w);
 }
 
-#endif /* TITLEBAR */
-#ifdef NOTIFICATIONS
 /* Background and text. drwl_text() paints its own background, so a progress
  * fill is drawn by calling this twice under different clips. */
 static void drawnotifytext(Monitor* m,
@@ -1484,8 +1457,6 @@ int notifywheel(Monitor* pm, double delta, int horizontal)
     return 1;
 }
 
-#endif /* NOTIFICATIONS */
-#ifdef TITLEBAR
 /* Sizes and places the client's title bar. It spans the whole window, except
  * in the tabbed layout where each client of the group only gets its own slice
  * of the shared row - which is what turns the title bars into tabs. */
@@ -1526,7 +1497,6 @@ int titleheight(Client* c)
     return titlebar && c->mon && !c->isfullscreen ? c->mon->t.real_height : 0;
 }
 
-#endif /* TITLEBAR */
 int statusin(int fd, unsigned int mask, void* data)
 {
     static char buf[STATUS_MAX];
@@ -1604,7 +1574,6 @@ void togglebar(const Arg* arg)
     drawbars();
 }
 
-#ifdef TITLEBAR
 /* arrange() leaves floating clients alone, and no client redraws a title
  * bar, so both are done by hand here */
 void toggletitlebar(const Arg* arg)
@@ -1629,14 +1598,11 @@ void toggletitlebar(const Arg* arg)
     }
 }
 
-#endif /* TITLEBAR */
 void updatebar(Monitor* m)
 {
     int rw, rh;
     char fontattrs[12];
-#ifdef SYSTRAY
     int iconsize;
-#endif
 
     wlr_output_transformed_resolution(m->wlr_output, &rw, &rh);
     /* the bar is narrower than the output by its padding on both sides */
@@ -1666,12 +1632,9 @@ void updatebar(Monitor* m)
         m->b.height = MAX((int)((float)m->b.height * barheight + 0.5f),
                           m->drw->font->height);
     m->b.real_height = (int)((float)m->b.height / m->wlr_output->scale);
-#ifdef TITLEBAR
     m->t.height = m->drw->font->height + (int)titlepadding;
     m->t.real_height = (int)((float)m->t.height / m->wlr_output->scale);
-#endif
 
-#ifdef SYSTRAY
     if (showbar && showsystray && watcher.running) {
         if (m->tray)
             destroytray(m->tray);
@@ -1694,5 +1657,4 @@ void updatebar(Monitor* m)
             die("Couldn't create tray for monitor");
         wl_list_insert(&watcher.trays, &m->tray->link);
     }
-#endif /* SYSTRAY */
 }

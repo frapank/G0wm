@@ -8,10 +8,7 @@
 #ifdef INTEGRATED_BACKGROUND
 #include <gdk-pixbuf/gdk-pixbuf.h>
 #endif
-#ifdef RUNNER
 #include <dirent.h>
-#include <sys/stat.h>
-#endif
 #include <getopt.h>
 #include <libdrm/drm_fourcc.h>
 #include <libinput.h>
@@ -21,6 +18,7 @@
 #include <stdio.h>
 #include <stdlib.h>
 #include <string.h>
+#include <sys/stat.h>
 #include <sys/wait.h>
 #include <time.h>
 #include <unistd.h>
@@ -95,14 +93,10 @@
 #pragma GCC diagnostic ignored "-Wunused-function"
 #include "drwl.h"
 #pragma GCC diagnostic pop
-#ifdef NOTIFICATIONS
 #include "notify.h"
-#endif
-#ifdef SYSTRAY
 #include "systray/menu.h"
 #include "systray/tray.h"
 #include "systray/watcher.h"
-#endif
 #include "util.h"
 #include "xdg-shell-protocol.h"
 
@@ -117,10 +111,8 @@
 #define VISIBLEON(C, M)                                                        \
     ((M) && (C)->mon == (M) && ((C)->tags & (M)->tagset[(M)->seltags]))
 #define LENGTH(X) (sizeof X / sizeof X[0])
-#ifdef SYSTRAY
 /* Rows the tray menu shows at once, past which the tail is dropped. */
 #define TRAYPOPUP_ITEMS_MAX 64
-#endif /* SYSTRAY */
 /* 0xRRGGBBAA -> the float[4] wlroots wants (dwl issue #466) */
 #define COLOR(hex)                                                             \
     { ((hex >> 24) & 0xFF) / 255.0f,                                           \
@@ -257,22 +249,16 @@ typedef struct {
     struct wl_listener set_hints;
     struct wl_listener minimize;
 #endif
-#ifdef TITLEBAR
     struct wlr_scene_buffer* title;
-#endif
 #ifdef INTEGRATED_BACKGROUND
     struct wlr_scene_buffer* blur; /* frosted wallpaper, below the whole box */
     struct wlr_buffer* blurbuf;    /* what blur's node was last handed */
-#ifdef TITLEBAR
     struct wlr_scene_buffer* titleblur; /* the same, for the title bar */
     struct wlr_buffer* titleblurbuf;
 #endif
-#endif
-#ifdef TITLEBAR
     Buffer* titlepool[2];
     int titlex, titlew; /* title bar placement, relative to the border box */
     int titlebufw;      /* pixel width titlepool was allocated at */
-#endif
     Buffer* cornerpool[4][2];
     int cornerbufr, cornerbufbw; /* radius and border cornerpool was drawn at */
     uint32_t cornercolor;        /* and the colour it was drawn with */
@@ -282,7 +268,6 @@ typedef struct {
     float opacity;         /* the one in effect, focused or not */
     float opacity_focus;   /* used while the client holds focus */
     float opacity_unfocus; /* used while it does not */
-    int hasopacity;        /* the app passed the opacity_apps filter */
     int borderscheme;      /* scheme its border is drawn in, to redo it */
     uint32_t resize;       /* configure serial of a pending resize */
 } Client;
@@ -353,15 +338,11 @@ struct Monitor {
                      * notification, 0 when it doesn't fit */
         float scale;
     } b; /* bar area */
-#ifdef TITLEBAR
     struct {
         int height;
         int real_height; /* non-scaled */
     } t;                 /* per-client title bar */
-#endif
-#ifdef SYSTRAY
     Tray* tray;
-#endif
     struct wlr_box w;         /* window area, layout-relative */
     struct wl_list layers[4]; /* LayerSurface.link */
     const Layout* lt[2];
@@ -481,7 +462,6 @@ void inputdevice(struct wl_listener* listener, void* data);
 void killclient(const Arg* arg);
 void locksession(struct wl_listener* listener, void* data);
 void mapnotify(struct wl_listener* listener, void* data);
-void monocle(Monitor* m);
 void movestack(const Arg* arg);
 void motionabsolute(struct wl_listener* listener, void* data);
 void tabletaxis(struct wl_listener* listener, void* data);
@@ -494,7 +474,6 @@ void motionnotify(uint32_t time,
                   double sy_unaccel);
 void motionrelative(struct wl_listener* listener, void* data);
 void moveresize(const Arg* arg);
-#ifdef NOTIFICATIONS
 void notifyactions(const Arg* arg);
 void notifydismiss(const Arg* arg);
 void notifyfini(void);
@@ -508,8 +487,6 @@ void notifypickkey(xkb_keysym_t sym);
 void notifyprev(const Arg* arg);
 void notifyscroll(const Arg* arg);
 int notifywheel(Monitor* pm, double delta, int horizontal);
-#endif /* NOTIFICATIONS */
-int opacityallowed(const char* appid);
 void outputmgrapply(struct wl_listener* listener, void* data);
 void outputmgrtest(struct wl_listener* listener, void* data);
 void pinchbegin(struct wl_listener* listener, void* data);
@@ -524,13 +501,11 @@ void requeststartdrag(struct wl_listener* listener, void* data);
 void resize(Client* c, struct wlr_box geo, int interact);
 void resizeheight(const Arg* arg);
 void resizewidth(const Arg* arg);
-void run(char* startup_cmd);
-#ifdef RUNNER
+void run(void);
 int runnercalc(double* out);
 void runnerkey(xkb_keysym_t sym, uint32_t mods, uint32_t codepoint);
 const char* runnersuggest(void);
 void runnertoggle(const Arg* arg);
-#endif /* RUNNER */
 void scenebuffersetopacity(struct wlr_scene_buffer* buffer,
                            int sx,
                            int sy,
@@ -541,12 +516,10 @@ void setcursorshape(struct wl_listener* listener, void* data);
 void setfloating(Client* c, int floating);
 void setlayout(const Arg* arg);
 void setmfact(const Arg* arg);
-#ifdef TITLEBAR
 void settitle(Client* c);
 int titleclick(Client* c, double x, double y);
 void titlehover(Client* c, double x, double y);
 int titleheight(Client* c);
-#endif /* TITLEBAR */
 void setmon(Client* c, Monitor* m, uint32_t newtags);
 void setopacityfocus(const Arg* arg);
 void setopacityunfocus(const Arg* arg);
@@ -578,11 +551,8 @@ void togglegaps(const Arg* arg);
 void toggleopacity(const Arg* arg);
 void toggletabbed(const Arg* arg);
 void toggletag(const Arg* arg);
-#ifdef TITLEBAR
 void toggletitlebar(const Arg* arg);
-#endif /* TITLEBAR */
 void toggleview(const Arg* arg);
-#ifdef SYSTRAY
 void trayactivate(const Arg* arg);
 void traymenu(const Arg* arg);
 /* the tray context menu, drawn under the cursor */
@@ -592,7 +562,6 @@ void traypopup_click(double lx, double ly);
 void traypopup_dismiss(void);
 void traypopup_motion(double lx, double ly);
 void traypopup_present(const char* const* labels, int n, Menu* menu);
-#endif /* SYSTRAY */
 void unmapnotify(struct wl_listener* listener, void* data);
 void updatemons(struct wl_listener* listener, void* data);
 void updatebar(Monitor* m);
@@ -653,16 +622,12 @@ extern Monitor* selmon;
 #define STATUS_MAX 4096
 extern char stext[STATUS_MAX];
 extern struct wl_event_source* status_event_source;
-#ifdef SYSTRAY
 extern Watcher watcher;
-#endif /* SYSTRAY */
-#ifdef RUNNER
 extern int runner_active;
 extern char runner_buf[256];
 extern int runner_len;
 extern int runner_cur;       /* cursor offset into runner_buf, 0..runner_len */
 extern int runner_repeating; /* the armed repeat belongs to the prompt */
-#endif                       /* RUNNER */
 extern struct wl_listener request_activate;
 #ifdef XWAYLAND
 extern struct wlr_xwayland* xwayland;
@@ -686,13 +651,11 @@ extern unsigned int cornerpx;
 extern int gaps;
 extern unsigned int gappx;
 extern int smartgaps;
-#ifdef TITLEBAR
 extern int titlebar;
 extern unsigned int titlepadding;
 extern int titlecenter;
 extern int titleclose;
 extern uint32_t titleclosecolor;
-#endif /* TITLEBAR */
 extern Layout* layouts;
 extern size_t nlayouts;
 extern Rule* rules;
@@ -706,28 +669,20 @@ extern unsigned int barboxradius;
 extern unsigned int barpadding;
 extern float barheight;
 extern int barsinglemon;
-#ifdef SYSTRAY
 extern int showsystray;
 extern unsigned int systrayspacing;
 extern unsigned int systraypadding;
 extern unsigned int systrayiconsize;
-#endif /* SYSTRAY */
-#ifdef NOTIFICATIONS
 extern int shownotifications;
 extern unsigned int notification_timeout;
 extern unsigned int notification_linewidth;
 extern unsigned int notification_lineradius;
 extern const char* notification_actionsign;
-#endif /* NOTIFICATIONS */
-#ifdef RUNNER
 extern const char* runner_placeholder;
-#endif /* RUNNER */
 extern int opacity_enabled;
 extern float opacity_focus;
 extern float opacity_unfocus;
 extern float opacity_deco;
-extern int opacity_exclusion_type;
-extern const char** opacity_apps;
 #ifdef INTEGRATED_BACKGROUND
 extern int opacity_type;
 extern unsigned int blur_radius;

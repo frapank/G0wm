@@ -73,18 +73,15 @@ int gaps                = 1;
 unsigned int gappx      = 3;
 int smartgaps           = 0;
 
-#ifdef TITLEBAR
 int titlebar              = 1;
 unsigned int titlepadding = 6;
 int titlecenter           = 1;
 int titleclose            = 1; // shown with the pointer over it
 uint32_t titleclosecolor  = 0xff5f57ff;
-#endif
 
 static Layout layouts_def[] = {
     { "[ ]", tile },
     { "< >", NULL },
-    { "[M]", monocle },
     { "|||", tabbed },
 };
 Layout* layouts = layouts_def;
@@ -117,14 +114,11 @@ float barheight           = 1.1f; // times the font height, 0 for automatic
 /* one bar only, on the first monitor */
 int barsinglemon = 0;
 
-#ifdef SYSTRAY
 int showsystray              = 1;
 unsigned int systrayspacing  = 2;
 unsigned int systraypadding  = 2;
 unsigned int systrayiconsize = 16; // 0 fills the bar
-#endif
 
-#ifdef NOTIFICATIONS
 int shownotifications             = 1;
 unsigned int notification_timeout = 5; // seconds
 
@@ -132,24 +126,14 @@ unsigned int notification_linewidth  = 4;
 unsigned int notification_lineradius = 2;
 
 const char* notification_actionsign = "[r]";
-#endif
 
-#ifdef RUNNER
 const char* runner_placeholder = "Run..."; // shown while nothing is typed
-#endif
 
 int opacity_enabled = 1;
 
 float opacity_focus   = 1.00f;
 float opacity_unfocus = 1.00f;
 float opacity_deco    = 1.00f; // bar, title bars and borders
-
-/* empty means every app */
-int opacity_exclusion_type = 0; // 0 only these, 1 all but these
-static const char* opacity_apps_def[] = {
-    NULL
-};
-const char** opacity_apps = opacity_apps_def;
 
 #ifdef INTEGRATED_BACKGROUND
 int opacity_type = OpacityNormal; // or OpacityBlur
@@ -215,9 +199,6 @@ static const char* termcmd[]        = { "foot", NULL };
 static const char* filemanagercmd[] = { "thunar", NULL };
 static const char* browsercmd[]     = { "firefox", NULL };
 
-#ifndef RUNNER
-static const char* menucmd[]        = { "wmenu-run", NULL };
-#endif
 
 /* run without a shell */
 static const char* autostart_def[] = {
@@ -235,27 +216,19 @@ static Key keys_def[] = {
 	{ MODKEY|WLR_MODIFIER_SHIFT, XKB_KEY_v,           togglefloating,   {0} },
 	{ MODKEY|WLR_MODIFIER_SHIFT, XKB_KEY_g,           togglegaps,       {0} },
 	{ MODKEY|WLR_MODIFIER_SHIFT, XKB_KEY_b,           togglebar,        {0} },
-#ifdef TITLEBAR
 	{ MODKEY|WLR_MODIFIER_SHIFT, XKB_KEY_t,           toggletitlebar,   {0} },
-#endif
-	{ MODKEY,                    XKB_KEY_t,           toggletabbed,     {.v = &layouts_def[3]} },
+	{ MODKEY,                    XKB_KEY_t,           toggletabbed,     {.v = &layouts_def[2]} },
 	{ MODKEY|WLR_MODIFIER_SHIFT, XKB_KEY_f,           togglefullscreen, {0} },
 	{ MODKEY|WLR_MODIFIER_SHIFT, XKB_KEY_r,           reloadsettings,   {0} },
 
-#ifdef RUNNER
 	{ MODKEY,                    XKB_KEY_r,           runnertoggle,     {0} },
-#else
-	{ MODKEY,                    XKB_KEY_r,           spawn,            {.v = menucmd} },
-#endif
 
-#ifdef NOTIFICATIONS
 	{ MODKEY,                                      XKB_KEY_n, notifyscroll,     {0} },
 	{ MODKEY|WLR_MODIFIER_SHIFT,                   XKB_KEY_n, notifyopen,       {0} },
 	{ MODKEY|WLR_MODIFIER_CTRL,                    XKB_KEY_n, notifynext,       {0} },
 	{ MODKEY|WLR_MODIFIER_ALT,                     XKB_KEY_n, notifyprev,       {0} },
 	{ MODKEY|WLR_MODIFIER_CTRL|WLR_MODIFIER_SHIFT, XKB_KEY_n, notifydismissall, {0} },
 	{ MODKEY,                                      XKB_KEY_a, notifyactions,    {0} },
-#endif
 
 	{ MODKEY,                    XKB_KEY_h,           focusstack,       {.i = -1} },
 	{ MODKEY,                    XKB_KEY_j,           focusstack,       {.i = +1} },
@@ -293,7 +266,6 @@ static Key keys_def[] = {
 	{ MODKEY,                    XKB_KEY_d,           incnmaster,       {.i = -1} },
 	{ MODKEY,                    XKB_KEY_Return,      zoom,             {0} },
 	{ MODKEY,                    XKB_KEY_Tab,         view,             {0} },
-	{ MODKEY,                    XKB_KEY_m,           setlayout,        {.v = &layouts_def[2]} },
 	{ MODKEY,                    XKB_KEY_space,       setlayout,        {0} },
 	{ MODKEY,                    XKB_KEY_0,           view,             {.ui = ~0} },
 	{ MODKEY|WLR_MODIFIER_SHIFT, XKB_KEY_parenright,  tag,              {.ui = ~0} },
@@ -324,17 +296,13 @@ static Button buttons_def[] = {
 	{ ClkLtSymbol, 0,      BTN_RIGHT,  setlayout,      {.v = &layouts_def[2]} },
 
 	{ ClkTitle,    0,      BTN_MIDDLE, zoom,           {0} },
-#ifdef NOTIFICATIONS
 	{ ClkTitle,    0,      BTN_LEFT,   notifyopen,     {0} },
 	{ ClkTitle,    0,      BTN_RIGHT,  notifydismiss,  {0} },
-#endif
 
 	{ ClkStatus,   0,      BTN_MIDDLE, spawn,          {.v = termcmd} },
 
-#ifdef SYSTRAY
 	{ ClkTray,     0,      BTN_LEFT,   trayactivate,   {0} },
 	{ ClkTray,     0,      BTN_RIGHT,  traymenu,       {0} },
-#endif
 
 	{ ClkTagBar,   0,      BTN_LEFT,   view,           {0} },
 	{ ClkTagBar,   0,      BTN_RIGHT,  toggleview,     {0} },
