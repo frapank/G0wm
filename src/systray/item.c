@@ -341,6 +341,10 @@ Item* createitem(const char* busname, const char* busobj, Watcher* watcher)
     char* busobj_dup = NULL;
     char match_rule[RULEBSIZE];
 
+    if (snprintf(match_rule, sizeof(match_rule), match_string, busname) >=
+        RULEBSIZE)
+        return NULL;
+
     item = calloc(1, sizeof(Item));
     busname_dup = strdup(busname);
     busobj_dup = strdup(busobj);
@@ -351,6 +355,10 @@ Item* createitem(const char* busname, const char* busobj, Watcher* watcher)
     item->busname = busname_dup;
     item->busobj = busobj_dup;
     item->watcher = watcher;
+
+    if (!dbus_connection_add_filter(conn, filter_bus, item, NULL))
+        goto fail;
+    dbus_bus_add_match(conn, match_rule, NULL);
 
     request_property(conn,
                      busname,
@@ -366,20 +374,12 @@ Item* createitem(const char* busname, const char* busobj, Watcher* watcher)
     request_property(
         conn, busname, busobj, "Menu", SNI_IFACE, menupath_ready_handler, item);
 
-    if (snprintf(match_rule, sizeof(match_rule), match_string, busname) >=
-        RULEBSIZE) {
-        goto fail;
-    }
-
-    if (!dbus_connection_add_filter(conn, filter_bus, item, NULL))
-        goto fail;
-    dbus_bus_add_match(conn, match_rule, NULL);
-
     return item;
 
 fail:
     free(busname_dup);
     free(busobj_dup);
+    free(item);
     return NULL;
 }
 
