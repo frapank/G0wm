@@ -80,7 +80,6 @@ jobs:
           make install BINDIR="$PWD/_install"
           test -x _install/g0wm
           test -x _install/start-g0wm
-          test ! -e _install/g0wm-status.sh
 
   format:
     name: clang-format
@@ -100,8 +99,7 @@ jobs:
       - uses: actions/checkout@v5
       - run: |
           shellcheck -S warning \
-            configure status_gen \
-            scripts/start-g0wm scripts/g0wm-status.sh
+            configure scripts/start-g0wm
 
   manpage:
     name: man page
