@@ -58,10 +58,6 @@ static const Enum cornerstyles[] = { { CornerNormal, "normal" },
                                      { CornerSquircle, "squircle" },
                                      { 0, NULL } };
 
-static const Enum exclusiontypes[] = { { 0, "only-listed" },
-                                       { 1, "all-but-listed" },
-                                       { 0, NULL } };
-
 #ifdef INTEGRATED_BACKGROUND
 static const Enum opacitykinds[] = { { OpacityNormal, "normal" },
                                      { OpacityBlur, "blur" },
@@ -438,10 +434,6 @@ static cJSON* jopacity(void)
     cJSON_AddItemToObject(o, "opacity_focus", jnum(opacity_focus));
     cJSON_AddItemToObject(o, "opacity_unfocus", jnum(opacity_unfocus));
     cJSON_AddItemToObject(o, "opacity_deco", jnum(opacity_deco));
-    cJSON_AddStringToObject(o,
-                            "opacity_exclusion_type",
-                            enumname(exclusiontypes, opacity_exclusion_type));
-    cJSON_AddItemToObject(o, "opacity_apps", jargv(opacity_apps));
 #ifdef INTEGRATED_BACKGROUND
     cJSON_AddStringToObject(
         o, "opacity_type", enumname(opacitykinds, opacity_type));
@@ -926,21 +918,12 @@ static void applybar(const cJSON* o)
 
 static void applyopacity(const cJSON* o)
 {
-    const char** list;
-
     if (!o)
         return;
     opacity_enabled = getbool(o, "opacity_enabled", opacity_enabled);
     opacity_focus = (float)getnum(o, "opacity_focus", opacity_focus);
     opacity_unfocus = (float)getnum(o, "opacity_unfocus", opacity_unfocus);
     opacity_deco = (float)getnum(o, "opacity_deco", opacity_deco);
-    opacity_exclusion_type = getenum(o,
-                                     "opacity_exclusion_type",
-                                     exclusiontypes,
-                                     opacity_exclusion_type,
-                                     "kind of exclusion");
-    if ((list = strlist(item(o, "opacity_apps"), NULL)))
-        opacity_apps = list;
 #ifdef INTEGRATED_BACKGROUND
     opacity_type = getenum(
         o, "opacity_type", opacitykinds, opacity_type, "kind of opacity");
@@ -1455,13 +1438,12 @@ void reloadsettings(const Arg* arg)
             m->tagset[m->seltags] = 1;
         wlr_scene_rect_set_color(m->fullscreen_bg, fullscreen_bg);
     }
-    /* what a client copied out of the settings when it was mapped: the
-     * filter it was measured against, its border and its own opacity */
+    /* what a client copied out of the settings when it was mapped: its
+     * border and its own opacity */
     wl_list_for_each(c, &clients, link)
     {
         if (!(c->tags & TAGMASK))
             c->tags = 1;
-        c->hasopacity = opacityallowed(client_get_appid(c));
         c->opacity = c->opacity_unfocus = opacity_unfocus;
         c->opacity_focus = opacity_focus;
         if (!c->isfullscreen)

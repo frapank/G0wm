@@ -136,13 +136,6 @@ float opacity_focus   = 1.00f;
 float opacity_unfocus = 1.00f;
 float opacity_deco    = 1.00f; // bar, title bars and borders
 
-/* empty means every app */
-int opacity_exclusion_type = 0; // 0 only these, 1 all but these
-static const char* opacity_apps_def[] = {
-    NULL
-};
-const char** opacity_apps = opacity_apps_def;
-
 #ifdef INTEGRATED_BACKGROUND
 int opacity_type = OpacityNormal; // or OpacityBlur
 
