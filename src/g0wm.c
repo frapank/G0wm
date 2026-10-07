@@ -96,6 +96,8 @@ struct wlr_scene_tree* drag_icon;
 struct wlr_renderer* drw;
 struct wlr_allocator* alloc;
 struct wlr_compositor* compositor;
+struct wlr_content_type_manager_v1* content_type_mgr;
+struct wlr_tearing_control_manager_v1* tearing_mgr;
 struct wl_list clients; /* tiling order */
 struct wl_list fstack;  /* focus order */
 struct wlr_idle_notifier_v1* idle_notifier;
@@ -543,6 +545,8 @@ static void setup(void)
     wlr_fractional_scale_manager_v1_create(dpy, 1);
     wlr_presentation_create(dpy, backend, 2);
     wlr_alpha_modifier_v1_create(dpy);
+    content_type_mgr = wlr_content_type_manager_v1_create(dpy, 1);
+    tearing_mgr = wlr_tearing_control_manager_v1_create(dpy, 1);
     security_context_mgr = wlr_security_context_manager_v1_create(dpy);
     wl_display_set_global_filter(dpy, globalfilter, NULL);
 

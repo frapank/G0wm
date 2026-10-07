@@ -328,3 +328,9 @@ int log_level = WLR_ERROR;
 
 /* let a hidden fullscreen window keep the screen awake */
 int bypass_surface_visibility = 0;
+
+/* tearing for fullscreen windows that ask for it */
+int allow_tearing = 1;
+
+/* VRR for fullscreen games and videos */
+int auto_vrr = 1;
