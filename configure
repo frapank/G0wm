@@ -57,8 +57,8 @@ defaults() {
 	cc=cc
 	linker=
 	pkg_config=pkg-config
-	prefix=/usr/local
-	bindir='$(HOME)/.local/bin'
+	prefix='$(HOME)/.local'
+	bindir='$(PREFIX)/bin'
 	mandir='$(PREFIX)/share/man'
 	datadir='$(PREFIX)/share'
 	wlroots=0.20
@@ -198,8 +198,8 @@ resolve_wlroots_flags() {
 		wlr_libdir=$($pkg_config --variable=libdir "$wlr_pkg")
 		wlr_libs="-Wl,-rpath,${wlr_libdir:-$wlroots_prefix/lib} $wlr_libs"
 	else
-		wlr_incs="\`\$(PKG_CONFIG) --cflags $wlr_pkg\`"
-		wlr_libs="\`\$(PKG_CONFIG) --libs $wlr_pkg\`"
+		wlr_incs="\$(shell \$(PKG_CONFIG) --cflags $wlr_pkg)"
+		wlr_libs="\$(shell \$(PKG_CONFIG) --libs $wlr_pkg)"
 	fi
 }
 
@@ -211,7 +211,7 @@ write_config() {
 # Edit configure or re-run it; this file is overwritten.
 
 _VERSION = $_version
-VERSION  = \`git describe --tags --dirty 2>/dev/null || echo \$(_VERSION)\`
+VERSION  = \$(shell git describe --tags --dirty 2>/dev/null || echo \$(_VERSION))
 
 CC = $cc
 PKG_CONFIG = $pkg_config
