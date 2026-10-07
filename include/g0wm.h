@@ -47,6 +47,7 @@
 #include <wlr/types/wlr_input_device.h>
 #include <wlr/types/wlr_keyboard.h>
 #include <wlr/types/wlr_keyboard_group.h>
+#include <wlr/types/wlr_keyboard_shortcuts_inhibit_v1.h>
 #include <wlr/types/wlr_layer_shell_v1.h>
 #include <wlr/types/wlr_linux_dmabuf_v1.h>
 #include <wlr/types/wlr_linux_drm_syncobj_v1.h>
@@ -438,6 +439,7 @@ void chvt(const Arg* arg);
 void checkidleinhibitor(struct wlr_surface* exclude);
 void closemon(Monitor* m);
 void createdecoration(struct wl_listener* listener, void* data);
+void createkbinhibitor(struct wl_listener* listener, void* data);
 KeyboardGroup* createkeyboardgroup(void);
 void createlayersurface(struct wl_listener* listener, void* data);
 void createmon(struct wl_listener* listener, void* data);
@@ -557,6 +559,7 @@ void togglebar(const Arg* arg);
 void togglefloating(const Arg* arg);
 void togglefullscreen(const Arg* arg);
 void togglegaps(const Arg* arg);
+void toggleinhibit(const Arg* arg);
 void toggleopacity(const Arg* arg);
 void toggletabbed(const Arg* arg);
 void toggletag(const Arg* arg);
@@ -603,6 +606,7 @@ extern struct wlr_tearing_control_manager_v1* tearing_mgr;
 extern struct wl_list clients; /* tiling order */
 extern struct wl_list fstack;  /* focus order */
 extern struct wlr_idle_notifier_v1* idle_notifier;
+extern struct wlr_keyboard_shortcuts_inhibit_manager_v1* kb_inhibit_mgr;
 extern struct wlr_output_manager_v1* output_mgr;
 extern struct wlr_pointer_constraints_v1* pointer_constraints;
 extern struct wlr_pointer_gestures_v1* pointer_gestures;

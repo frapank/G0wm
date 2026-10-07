@@ -163,6 +163,7 @@ static const Action actions[] = {
     { togglefloating, "togglefloating", 0 },
     { togglefullscreen, "togglefullscreen", 0 },
     { togglegaps, "togglegaps", 0 },
+    { toggleinhibit, "toggleinhibit", 0 },
     { toggleopacity, "toggleopacity", 0 },
     { toggletabbed, "toggletabbed", 'l' },
     { toggletag, "toggletag", 'u' },
