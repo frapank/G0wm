@@ -187,7 +187,11 @@ static DBusHandlerResult respond_register_item(Watcher* watcher,
         goto send;
     }
 
-    item = createitem(registree_name, busobj, watcher);
+    if (!(item = createitem(registree_name, busobj, watcher))) {
+        reply = dbus_message_new_error_printf(
+            msg, DBUS_ERROR_FAILED, "Cannot track %s", registree_name);
+        goto send;
+    }
     wl_list_insert(&watcher->items, &item->link);
     watcher_update_trays(watcher);
 
