@@ -57,6 +57,7 @@ static struct wl_listener layout_change = { .notify = updatemons };
 static struct wl_listener new_idle_inhibitor = { .notify =
                                                      createidleinhibitor };
 static struct wl_listener new_input_device = { .notify = inputdevice };
+static struct wl_listener new_kb_inhibitor = { .notify = createkbinhibitor };
 static struct wl_listener new_virtual_keyboard = { .notify = virtualkeyboard };
 static struct wl_listener new_virtual_pointer = { .notify = virtualpointer };
 static struct wl_listener new_pointer_constraint = {
@@ -103,6 +104,7 @@ struct wlr_tearing_control_manager_v1* tearing_mgr;
 struct wl_list clients; /* tiling order */
 struct wl_list fstack;  /* focus order */
 struct wlr_idle_notifier_v1* idle_notifier;
+struct wlr_keyboard_shortcuts_inhibit_manager_v1* kb_inhibit_mgr;
 struct wlr_output_manager_v1* output_mgr;
 struct wlr_pointer_constraints_v1* pointer_constraints;
 struct wlr_pointer_gestures_v1* pointer_gestures;
@@ -268,6 +270,7 @@ static void cleanuplisteners(void)
     wl_list_remove(&new_virtual_keyboard.link);
     wl_list_remove(&new_virtual_pointer.link);
     wl_list_remove(&new_pointer_constraint.link);
+    wl_list_remove(&new_kb_inhibitor.link);
     wl_list_remove(&new_output.link);
     wl_list_remove(&new_xdg_toplevel.link);
     wl_list_remove(&new_xdg_decoration.link);
@@ -625,6 +628,9 @@ static void setup(void)
                   &new_pointer_constraint);
 
     relative_pointer_mgr = wlr_relative_pointer_manager_v1_create(dpy);
+
+    kb_inhibit_mgr = wlr_keyboard_shortcuts_inhibit_v1_create(dpy);
+    wl_signal_add(&kb_inhibit_mgr->events.new_inhibitor, &new_kb_inhibitor);
 
     /*
      * Creates a cursor, which is a wlroots utility for tracking the cursor
