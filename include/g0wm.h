@@ -30,6 +30,7 @@
 #include <wlr/render/wlr_renderer.h>
 #include <wlr/types/wlr_alpha_modifier_v1.h>
 #include <wlr/types/wlr_compositor.h>
+#include <wlr/types/wlr_content_type_v1.h>
 #include <wlr/types/wlr_cursor.h>
 #include <wlr/types/wlr_cursor_shape_v1.h>
 #include <wlr/types/wlr_data_control_v1.h>
@@ -69,6 +70,7 @@
 #include <wlr/types/wlr_single_pixel_buffer_v1.h>
 #include <wlr/types/wlr_subcompositor.h>
 #include <wlr/types/wlr_tablet_tool.h>
+#include <wlr/types/wlr_tearing_control_v1.h>
 #include <wlr/types/wlr_viewporter.h>
 #include <wlr/types/wlr_virtual_keyboard_v1.h>
 #include <wlr/types/wlr_virtual_pointer_v1.h>
@@ -357,6 +359,7 @@ struct Monitor {
     int nmaster;
     char ltsymbol[16];
     int asleep;
+    int autovrr; /* 1 turned on by gamemode(), -1 refused */
     Drwl* drw;
     Buffer* pool[2];
 #ifdef INTEGRATED_BACKGROUND
@@ -589,6 +592,8 @@ extern struct wlr_scene_tree* drag_icon;
 extern struct wlr_renderer* drw;
 extern struct wlr_allocator* alloc;
 extern struct wlr_compositor* compositor;
+extern struct wlr_content_type_manager_v1* content_type_mgr;
+extern struct wlr_tearing_control_manager_v1* tearing_mgr;
 extern struct wl_list clients; /* tiling order */
 extern struct wl_list fstack;  /* focus order */
 extern struct wlr_idle_notifier_v1* idle_notifier;
@@ -721,6 +726,8 @@ extern Gesture* gestures;
 extern size_t ngestures;
 extern int log_level;
 extern int bypass_surface_visibility;
+extern int allow_tearing;
+extern int auto_vrr;
 
 /* attempt to encapsulate suck into one file */
 #include "client.h"
