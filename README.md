@@ -49,7 +49,7 @@ X11 support also requires `libxcb`, `libxcb-icccm` and `Xwayland`.
 
 ```sh
 ./configure && make
-make install         # g0wm and start-g0wm into ~/.local/bin
+make install         # g0wm into ~/.local/bin
 ```
 
 You can also just run `make`. It will use `config.def.mk` if no custom
@@ -86,25 +86,13 @@ changing it needs a rebuild, and a `settings.json` that is already there wins
 over it.
 
 The status text shown in the bar is read from standard input, one line at a
-time. No status script ships with g0wm: `start-g0wm` pipes in
-`g0wm-status.sh` when it finds one in `PATH`.
+time. No status script ships with g0wm.
 
 ## Run
 
-Run `start-g0wm` from a VT.
-
-It sets up the session environment, starts PipeWire, runs the status script
-and stores logs in `~/.local/state/g0wm/`, kept small by svlogd when runit
-is installed. With `G0WM_AUDIO=0` it leaves
-PipeWire alone, for when something else runs it. It refuses to start while
-g0wm already runs for the same user.
-
-The file `share/g0wm.desktop` can be used as a session entry for display
-managers. It is not installed automatically by `make install`.
-
-The desktop entry starts g0wm directly instead of using `start-g0wm`. If you
-want to use it, copy it to `/usr/share/wayland-sessions/` and set `Exec` to
-whichever startup method you prefer.
+Copy `share/g0wm.desktop` to `/usr/share/wayland-sessions/` and pick g0wm in
+your display manager, or run `g0wm` from a VT. To feed the bar, pipe a status
+script into it: `my-status | g0wm`.
 
 ## License
 
