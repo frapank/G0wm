@@ -76,6 +76,7 @@ static struct wl_listener request_set_psel = { .notify = setpsel };
 static struct wl_listener request_set_sel = { .notify = setsel };
 static struct wl_listener request_set_cursor_shape = { .notify =
                                                            setcursorshape };
+static struct wl_listener ring_bell = { .notify = ringbell };
 static struct wl_listener request_start_drag = { .notify = requeststartdrag };
 static struct wl_listener start_drag = { .notify = startdrag };
 static struct wl_listener new_session_lock = { .notify = locksession };
@@ -281,6 +282,7 @@ static void cleanuplisteners(void)
     wl_list_remove(&request_set_sel.link);
     wl_list_remove(&request_set_cursor_shape.link);
     wl_list_remove(&request_start_drag.link);
+    wl_list_remove(&ring_bell.link);
     wl_list_remove(&start_drag.link);
     wl_list_remove(&new_session_lock.link);
 #ifdef XWAYLAND
@@ -554,6 +556,9 @@ static void setup(void)
     /* Initializes the interface used to implement urgency hints */
     activation = wlr_xdg_activation_v1_create(dpy);
     wl_signal_add(&activation->events.request_activate, &request_activate);
+
+    wl_signal_add(&wlr_xdg_system_bell_v1_create(dpy, 1)->events.ring,
+                  &ring_bell);
 
     foreign_registry = wlr_xdg_foreign_registry_create(dpy);
     wlr_xdg_foreign_v1_create(dpy, foreign_registry);
