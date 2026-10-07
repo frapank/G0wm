@@ -85,7 +85,7 @@ GENHDR = $(GENDIR)/cursor-shape-v1-protocol.h \
 	$(GENDIR)/wlr-output-power-management-unstable-v1-protocol.h \
 	$(GENDIR)/xdg-shell-protocol.h
 
-.PHONY: all clean dist install install-status uninstall remove format format-check test
+.PHONY: all clean dist install uninstall remove format format-check test
 
 all: g0wm
 
@@ -201,7 +201,7 @@ clean:
 
 dist: clean
 	mkdir -p g0wm-$(VERSION)
-	cp -R LICENSE license Makefile configure status_gen README.md \
+	cp -R LICENSE license Makefile configure README.md \
 		config.def.mk .clang-format src include external protocols docs \
 		scripts share g0wm-$(VERSION)
 	tar -caf g0wm-$(VERSION).tar.gz g0wm-$(VERSION)
@@ -216,13 +216,7 @@ install: g0wm
 	./g0wm -c >/dev/null
 	@$(MESS) '[$(YELLOW)INSTALL$(RESET)] %s\n' 'Done!'
 
-# start-g0wm runs the status script only if it finds it in PATH
-install-status:
-	mkdir -p $(BINDIR)
-	cp -f scripts/g0wm-status.sh $(BINDIR)
-	chmod 755 $(BINDIR)/g0wm-status.sh
-
 uninstall remove:
 	@$(MESS) '[$(RED)UNINSTALL$(RESET)] %s\n' 'Removing G0wm'
-	rm -f $(BINDIR)/g0wm $(BINDIR)/start-g0wm $(BINDIR)/g0wm-status.sh
+	rm -f $(BINDIR)/g0wm $(BINDIR)/start-g0wm
 	@$(MESS) '[$(RED)UNINSTALL$(RESET)] %s\n' 'Done!'

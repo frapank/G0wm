@@ -50,7 +50,6 @@ X11 support also requires `libxcb`, `libxcb-icccm` and `Xwayland`.
 ```sh
 ./configure && make
 make install         # g0wm and start-g0wm into ~/.local/bin
-make install-status  # optional: g0wm-status.sh, the bar status text
 ```
 
 You can also just run `make`. It will use `config.def.mk` if no custom
@@ -86,19 +85,9 @@ read the header at the top of it before changing anything. Edit it by hand:
 changing it needs a rebuild, and a `settings.json` that is already there wins
 over it.
 
-The status text shown in the bar comes from `scripts/g0wm-status.sh`. Its
-configuration is stored in `~/.config/g0wm/status.conf`.
-
-You can generate it with:
-
-```sh
-./status_gen        # choose the modules, order and format
-```
-
-`status_gen` creates a backup before replacing an existing file.
-
-`status.conf` has a format, an icon and a colour for every available module,
-and documents the formats in the comments `./status_gen` writes into it.
+The status text shown in the bar is read from standard input, one line at a
+time. No status script ships with g0wm: `start-g0wm` pipes in
+`g0wm-status.sh` when it finds one in `PATH`.
 
 ## Run
 
