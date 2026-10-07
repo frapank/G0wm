@@ -17,6 +17,7 @@ static void destroydragicon(struct wl_listener* listener, void* data);
 static void destroypointerconstraint(struct wl_listener* listener, void* data);
 static void handlecursoractivity(void);
 static int hidecursor(void* data);
+static struct wlr_keyboard_shortcuts_inhibitor_v1* focusedinhibitor(void);
 static int keybinding(uint32_t mods, xkb_keysym_t sym);
 static void keypress(struct wl_listener* listener, void* data);
 static void keypressmod(struct wl_listener* listener, void* data);
@@ -286,6 +287,11 @@ KeyboardGroup* createkeyboardgroup(void)
      */
     wlr_seat_set_keyboard(seat, &group->wlr_group->keyboard);
     return group;
+}
+
+void createkbinhibitor(struct wl_listener* listener, void* data)
+{
+    wlr_keyboard_shortcuts_inhibitor_v1_activate(data);
 }
 
 static void createpointer(struct wlr_pointer* pointer)
@@ -621,6 +627,19 @@ void inputdevice(struct wl_listener* listener, void* data)
     wlr_seat_set_capabilities(seat, caps);
 }
 
+static struct wlr_keyboard_shortcuts_inhibitor_v1* focusedinhibitor(void)
+{
+    struct wlr_keyboard_shortcuts_inhibitor_v1* inhibitor;
+
+    wl_list_for_each(inhibitor, &kb_inhibit_mgr->inhibitors, link)
+    {
+        if (inhibitor->seat == seat &&
+            inhibitor->surface == seat->keyboard_state.focused_surface)
+            return inhibitor;
+    }
+    return NULL;
+}
+
 static int keybinding(uint32_t mods, xkb_keysym_t sym)
 {
     /*
@@ -629,10 +648,13 @@ static int keybinding(uint32_t mods, xkb_keysym_t sym)
      * processing.
      */
     const Key* k;
+    struct wlr_keyboard_shortcuts_inhibitor_v1* inhibitor = focusedinhibitor();
+    int inhibited = inhibitor && inhibitor->active;
+
     for (k = keys; k < keys + nkeys; k++) {
         if (CLEANMASK(mods) == CLEANMASK(k->mod) &&
             xkb_keysym_to_lower(sym) == xkb_keysym_to_lower(k->keysym) &&
-            k->func) {
+            k->func && (!inhibited || k->func == toggleinhibit)) {
             k->func(&k->arg);
             return 1;
         }
@@ -1173,6 +1195,18 @@ void startdrag(struct wl_listener* listener, void* data)
 
     drag->icon->data = &wlr_scene_drag_icon_create(drag_icon, drag->icon)->node;
     LISTEN_STATIC(&drag->icon->events.destroy, destroydragicon);
+}
+
+void toggleinhibit(const Arg* arg)
+{
+    struct wlr_keyboard_shortcuts_inhibitor_v1* inhibitor = focusedinhibitor();
+
+    if (!inhibitor)
+        return;
+    if (inhibitor->active)
+        wlr_keyboard_shortcuts_inhibitor_v1_deactivate(inhibitor);
+    else
+        wlr_keyboard_shortcuts_inhibitor_v1_activate(inhibitor);
 }
 
 void virtualkeyboard(struct wl_listener* listener, void* data)

@@ -163,6 +163,7 @@ static const Action actions[] = {
     { togglefloating, "togglefloating", 0 },
     { togglefullscreen, "togglefullscreen", 0 },
     { togglegaps, "togglegaps", 0 },
+    { toggleinhibit, "toggleinhibit", 0 },
     { toggleopacity, "toggleopacity", 0 },
     { toggletabbed, "toggletabbed", 'l' },
     { toggletag, "toggletag", 'u' },
@@ -609,6 +610,8 @@ static cJSON* jmisc(void)
     cJSON_AddStringToObject(o, "log_level", enumname(loglevels, log_level));
     cJSON_AddBoolToObject(
         o, "bypass_surface_visibility", bypass_surface_visibility);
+    cJSON_AddBoolToObject(o, "allow_tearing", allow_tearing);
+    cJSON_AddBoolToObject(o, "auto_vrr", auto_vrr);
     return o;
 }
 
@@ -1139,6 +1142,8 @@ static void applymisc(const cJSON* o)
     log_level = getenum(o, "log_level", loglevels, log_level, "log level");
     bypass_surface_visibility =
         getbool(o, "bypass_surface_visibility", bypass_surface_visibility);
+    allow_tearing = getbool(o, "allow_tearing", allow_tearing);
+    auto_vrr = getbool(o, "auto_vrr", auto_vrr);
 }
 
 /* windows first: the layouts it builds are what the rest names by symbol */

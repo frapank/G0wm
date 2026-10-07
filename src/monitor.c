@@ -14,6 +14,8 @@ static void cleanupmon(struct wl_listener* listener, void* data);
 static void commitlayersurfacenotify(struct wl_listener* listener, void* data);
 static void destroylayersurfacenotify(struct wl_listener* listener, void* data);
 static Monitor* dirtomon(enum wlr_direction dir);
+static Client* fullscreentop(Monitor* m);
+static void gamemode(Monitor* m, struct wlr_output_state* state);
 static void outputmgrapplyortest(struct wlr_output_configuration_v1* config,
                                  int test);
 static void rendermon(struct wl_listener* listener, void* data);
@@ -466,6 +468,57 @@ void focusmon(const Arg* arg)
     focusclient(focustop(selmon), 1);
 }
 
+static Client* fullscreentop(Monitor* m)
+{
+    Client* c;
+
+    if (locked)
+        return NULL;
+    wl_list_for_each(c, &fstack, flink)
+    {
+        if (VISIBLEON(c, m) && c->isfullscreen && client_surface(c))
+            return c;
+    }
+    return NULL;
+}
+
+static void gamemode(Monitor* m, struct wlr_output_state* state)
+{
+    Client* c = fullscreentop(m);
+    struct wlr_output* o = m->wlr_output;
+    enum wp_content_type_v1_type type = WP_CONTENT_TYPE_V1_TYPE_NONE;
+    int vrr;
+
+    if (c)
+        type = wlr_surface_get_content_type_v1(content_type_mgr,
+                                               client_surface(c));
+    vrr = auto_vrr && (type == WP_CONTENT_TYPE_V1_TYPE_GAME ||
+                       type == WP_CONTENT_TYPE_V1_TYPE_VIDEO);
+
+    /* never undo a wlr-randr choice */
+    if (vrr && !m->autovrr && o->adaptive_sync_supported &&
+        o->adaptive_sync_status == WLR_OUTPUT_ADAPTIVE_SYNC_DISABLED) {
+        wlr_output_state_set_adaptive_sync_enabled(state, true);
+        if (!wlr_output_test_state(o, state)) {
+            state->committed &= ~WLR_OUTPUT_STATE_ADAPTIVE_SYNC_ENABLED;
+            m->autovrr = -1; /* don't retry every frame */
+        }
+    } else if (!vrr && m->autovrr > 0) {
+        wlr_output_state_set_adaptive_sync_enabled(state, false);
+    } else if (!vrr) {
+        m->autovrr = 0;
+    }
+
+    /* needs direct scanout */
+    state->tearing_page_flip =
+        allow_tearing && c &&
+        wlr_tearing_control_manager_v1_surface_hint_from_surface(
+            tearing_mgr, client_surface(c)) ==
+            WP_TEARING_CONTROL_V1_PRESENTATION_HINT_ASYNC;
+    if (state->tearing_page_flip && !wlr_output_test_state(o, state))
+        state->tearing_page_flip = false;
+}
+
 void outputmgrapply(struct wl_listener* listener, void* data)
 {
     struct wlr_output_configuration_v1* config = data;
@@ -493,6 +546,7 @@ static void outputmgrapplyortest(struct wlr_output_configuration_v1* config,
         /* Ensure displays previously disabled by wlr-output-power-management-v1
          * are properly handled*/
         m->asleep = 0;
+        m->autovrr = 0;
 
         wlr_output_state_init(&state);
         wlr_output_state_set_enabled(&state, config_head->state.enabled);
@@ -579,8 +633,10 @@ static void rendermon(struct wl_listener* listener, void* data)
      * generally at the output's refresh rate (e.g. 60Hz). */
     Monitor* m = wl_container_of(listener, m, frame);
     Client* c;
-    struct wlr_output_state pending = { 0 };
+    struct wlr_output_state pending;
     struct timespec now;
+
+    wlr_output_state_init(&pending);
 
     /* Render if no XDG clients have an outstanding resize and are visible on
      * this monitor. */
@@ -602,7 +658,13 @@ static void rendermon(struct wl_listener* listener, void* data)
             goto skip;
     }
 
-    wlr_scene_output_commit(m->scene_output, NULL);
+    if (!wlr_scene_output_needs_frame(m->scene_output) ||
+        !wlr_scene_output_build_state(m->scene_output, &pending, NULL))
+        goto skip;
+    gamemode(m, &pending);
+    if (wlr_output_commit_state(m->wlr_output, &pending) &&
+        (pending.committed & WLR_OUTPUT_STATE_ADAPTIVE_SYNC_ENABLED))
+        m->autovrr = pending.adaptive_sync_enabled;
 
 skip:
     /* Let clients know a frame has been rendered */
