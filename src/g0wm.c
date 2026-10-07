@@ -563,6 +563,7 @@ static void setup(void)
     foreign_registry = wlr_xdg_foreign_registry_create(dpy);
     wlr_xdg_foreign_v1_create(dpy, foreign_registry);
     wlr_xdg_foreign_v2_create(dpy, foreign_registry);
+    wlr_xdg_wm_dialog_v1_create(dpy, 1);
 
     wlr_scene_set_gamma_control_manager_v1(
         scene, wlr_gamma_control_manager_v1_create(dpy));

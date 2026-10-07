@@ -13,6 +13,7 @@ static void commitnotify(struct wl_listener* listener, void* data);
 static void commitpopup(struct wl_listener* listener, void* data);
 static void destroydecoration(struct wl_listener* listener, void* data);
 static void maximizenotify(struct wl_listener* listener, void* data);
+static Client* modaltop(Client* c);
 static void requestdecorationmode(struct wl_listener* listener, void* data);
 static void setfullscreen(Client* c, int fullscreen);
 static void seturgent(Client* c);
@@ -225,6 +226,9 @@ void focusclient(Client* c, int lift)
 
     if (locked)
         return;
+
+    if (c && !client_is_unmanaged(c))
+        c = modaltop(c);
 
     /* Warp cursor to center of client if it is outside */
     if (lift)
@@ -453,6 +457,25 @@ static void maximizenotify(struct wl_listener* listener, void* data)
         wl_resource_get_version(c->surface.xdg->toplevel->resource) <
             XDG_TOPLEVEL_WM_CAPABILITIES_SINCE_VERSION)
         wlr_xdg_surface_schedule_configure(c->surface.xdg);
+}
+
+/* innermost modal dialog of c, or c */
+static Client* modaltop(Client* c)
+{
+    struct wlr_xdg_dialog_v1* dialog;
+    Client* d;
+
+    wl_list_for_each(d, &fstack, flink)
+    {
+        if (d == c || client_is_x11(d) || !VISIBLEON(d, d->mon) ||
+            client_get_parent(d) != c)
+            continue;
+        dialog = wlr_xdg_dialog_v1_try_from_wlr_xdg_toplevel(
+            d->surface.xdg->toplevel);
+        if (dialog && dialog->modal)
+            return modaltop(d);
+    }
+    return c;
 }
 
 static void requestdecorationmode(struct wl_listener* listener, void* data)
