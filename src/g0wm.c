@@ -33,6 +33,7 @@ static struct wlr_cursor_shape_manager_v1* cursor_shape_mgr;
 static struct wlr_output_power_manager_v1* power_mgr;
 static struct wlr_session_lock_manager_v1* session_lock_mgr;
 static struct wlr_security_context_manager_v1* security_context_mgr;
+static struct wlr_xdg_foreign_registry* foreign_registry;
 static DBusConnection* bus_conn;
 static struct wl_event_source* bus_source;
 /* global event handlers */
@@ -553,6 +554,10 @@ static void setup(void)
     /* Initializes the interface used to implement urgency hints */
     activation = wlr_xdg_activation_v1_create(dpy);
     wl_signal_add(&activation->events.request_activate, &request_activate);
+
+    foreign_registry = wlr_xdg_foreign_registry_create(dpy);
+    wlr_xdg_foreign_v1_create(dpy, foreign_registry);
+    wlr_xdg_foreign_v2_create(dpy, foreign_registry);
 
     wlr_scene_set_gamma_control_manager_v1(
         scene, wlr_gamma_control_manager_v1_create(dpy));
