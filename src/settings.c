@@ -119,10 +119,7 @@ static const Enum loglevels[] = { { WLR_SILENT, "silent" },
 static const struct {
     const char* name;
     void (*arrange)(Monitor*);
-} arranges[] = { { "tile", tile },
-                 { "float", NULL },
-                 { "monocle", monocle },
-                 { "tabbed", tabbed } };
+} arranges[] = { { "tile", tile }, { "float", NULL }, { "tabbed", tabbed } };
 
 /* which member of the Arg a binding uses: 'i' int, 'u' unsigned, 'f' float,
  * 'v' an execvp() list, 'l' a layout symbol, 'c' a drag mode, 0 none */
@@ -835,7 +832,13 @@ static void applylayouts(const cJSON* a)
         out[n].symbol = getstr(e, "symbol", "[ ]");
         for (i = 0; i < LENGTH(arranges); i++)
             if (!strcmp(arranges[i].name, name))
-                out[n].arrange = arranges[i].arrange;
+                break;
+        if (i < LENGTH(arranges))
+            out[n].arrange = arranges[i].arrange;
+        else
+            fprintf(stderr,
+                    "g0wm: settings.json: %s is not a layout, using float\n",
+                    name);
         n++;
     }
     layouts = out;

@@ -462,7 +462,6 @@ void inputdevice(struct wl_listener* listener, void* data);
 void killclient(const Arg* arg);
 void locksession(struct wl_listener* listener, void* data);
 void mapnotify(struct wl_listener* listener, void* data);
-void monocle(Monitor* m);
 void movestack(const Arg* arg);
 void motionabsolute(struct wl_listener* listener, void* data);
 void tabletaxis(struct wl_listener* listener, void* data);

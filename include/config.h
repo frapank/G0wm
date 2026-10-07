@@ -82,7 +82,6 @@ uint32_t titleclosecolor  = 0xff5f57ff;
 static Layout layouts_def[] = {
     { "[ ]", tile },
     { "< >", NULL },
-    { "[M]", monocle },
     { "|||", tabbed },
 };
 Layout* layouts = layouts_def;
@@ -218,7 +217,7 @@ static Key keys_def[] = {
 	{ MODKEY|WLR_MODIFIER_SHIFT, XKB_KEY_g,           togglegaps,       {0} },
 	{ MODKEY|WLR_MODIFIER_SHIFT, XKB_KEY_b,           togglebar,        {0} },
 	{ MODKEY|WLR_MODIFIER_SHIFT, XKB_KEY_t,           toggletitlebar,   {0} },
-	{ MODKEY,                    XKB_KEY_t,           toggletabbed,     {.v = &layouts_def[3]} },
+	{ MODKEY,                    XKB_KEY_t,           toggletabbed,     {.v = &layouts_def[2]} },
 	{ MODKEY|WLR_MODIFIER_SHIFT, XKB_KEY_f,           togglefullscreen, {0} },
 	{ MODKEY|WLR_MODIFIER_SHIFT, XKB_KEY_r,           reloadsettings,   {0} },
 
@@ -267,7 +266,6 @@ static Key keys_def[] = {
 	{ MODKEY,                    XKB_KEY_d,           incnmaster,       {.i = -1} },
 	{ MODKEY,                    XKB_KEY_Return,      zoom,             {0} },
 	{ MODKEY,                    XKB_KEY_Tab,         view,             {0} },
-	{ MODKEY,                    XKB_KEY_m,           setlayout,        {.v = &layouts_def[2]} },
 	{ MODKEY,                    XKB_KEY_space,       setlayout,        {0} },
 	{ MODKEY,                    XKB_KEY_0,           view,             {.ui = ~0} },
 	{ MODKEY|WLR_MODIFIER_SHIFT, XKB_KEY_parenright,  tag,              {.ui = ~0} },
