@@ -82,6 +82,7 @@
 #include <wlr/types/wlr_xdg_foreign_v2.h>
 #include <wlr/types/wlr_xdg_output_v1.h>
 #include <wlr/types/wlr_xdg_shell.h>
+#include <wlr/types/wlr_xdg_system_bell_v1.h>
 #include <wlr/util/log.h>
 #include <wlr/util/region.h>
 #include <xkbcommon/xkbcommon.h>
@@ -504,6 +505,7 @@ void reloadmons(void);
 void reloadopacity(void);
 void reloadsettings(const Arg* arg);
 void requeststartdrag(struct wl_listener* listener, void* data);
+void ringbell(struct wl_listener* listener, void* data);
 void resize(Client* c, struct wlr_box geo, int interact);
 void resizeheight(const Arg* arg);
 void resizewidth(const Arg* arg);

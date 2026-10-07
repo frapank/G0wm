@@ -15,6 +15,7 @@ static void destroydecoration(struct wl_listener* listener, void* data);
 static void maximizenotify(struct wl_listener* listener, void* data);
 static void requestdecorationmode(struct wl_listener* listener, void* data);
 static void setfullscreen(Client* c, int fullscreen);
+static void seturgent(Client* c);
 
 /* function implementations */
 static void applybounds(Client* c, struct wlr_box* bbox)
@@ -508,6 +509,18 @@ void resize(Client* c, struct wlr_box geo, int interact)
     settitle(c);
 }
 
+void ringbell(struct wl_listener* listener, void* data)
+{
+    struct wlr_xdg_system_bell_v1_ring_event* event = data;
+    Client* c = NULL;
+
+    if (event->surface)
+        toplevel_from_wlr_surface(event->surface, &c, NULL);
+    if (!c || c == focustop(selmon))
+        return;
+    seturgent(c);
+}
+
 void setfloating(Client* c, int floating)
 {
     Client* p = client_get_parent(c);
@@ -573,6 +586,15 @@ void setmon(Client* c, Monitor* m, uint32_t newtags)
         setfloating(c, c->isfloating);
     }
     focusclient(focustop(selmon), 1);
+}
+
+static void seturgent(Client* c)
+{
+    c->isurgent = 1;
+    drawbars();
+
+    if (client_surface(c)->mapped)
+        setbordercolor(c, SchemeUrg);
 }
 
 void togglefloating(const Arg* arg)
@@ -661,9 +683,5 @@ void urgent(struct wl_listener* listener, void* data)
         return;
     }
 
-    c->isurgent = 1;
-    drawbars();
-
-    if (client_surface(c)->mapped)
-        setbordercolor(c, SchemeUrg);
+    seturgent(c);
 }
