@@ -501,7 +501,7 @@ void requeststartdrag(struct wl_listener* listener, void* data);
 void resize(Client* c, struct wlr_box geo, int interact);
 void resizeheight(const Arg* arg);
 void resizewidth(const Arg* arg);
-void run(char* startup_cmd);
+void run(void);
 int runnercalc(double* out);
 void runnerkey(xkb_keysym_t sym, uint32_t mods, uint32_t codepoint);
 const char* runnersuggest(void);

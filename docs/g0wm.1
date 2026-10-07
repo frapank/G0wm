@@ -9,7 +9,6 @@
 .Op Fl v
 .Op Fl d
 .Op Fl c
-.Op Fl s Ar startup command
 .Sh DESCRIPTION
 .Nm
 is a Wayland compositor based on wlroots.
@@ -39,17 +38,6 @@ and exits.
 An existing file is kept and checked instead: every setting this build has
 must be in it, and anything else in it is reported.
 The same check runs at startup.
-.Pp
-When given the
-.Fl s
-option,
-.Nm
-starts a shell process running
-.Ar command
-when starting.
-When stopping, it sends
-.Dv SIGTERM
-to the child process group and waits for it to exit.
 .Pp
 Users are encouraged to customize
 .Nm
@@ -275,11 +263,6 @@ when it is not there yet; the values it starts out with come from
 It holds only the sections this build was configured with, so a build without
 the integrated background has no wallpaper or blur settings in it.
 .El
-.Sh EXAMPLES
-Start
-.Nm
-with s6 in the background:
-.Dl g0wm \-s \(aqs6\-svscan <&\-\(aq
 .Sh SEE ALSO
 .Xr dwm 1 ,
 .Xr foot 1 ,
