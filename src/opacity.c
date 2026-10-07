@@ -140,7 +140,7 @@ void blurclient(Client* c)
     /* the box covers the decorations too, so either letting light through is
      * enough; a fullscreen client is drawn opaque and never does */
     if (!m || !m->blurpool[0] || c->isfullscreen || !opacity_enabled ||
-        ((!c->hasopacity || c->opacity >= 1.0f) && !decotranslucent())) {
+        (c->opacity >= 1.0f && !decotranslucent())) {
         wlr_scene_node_set_enabled(&c->blur->node, 0);
         if (c->titleblur)
             wlr_scene_node_set_enabled(&c->titleblur->node, 0);
@@ -486,18 +486,6 @@ void setwallpaper(Monitor* m)
 }
 
 #endif /* INTEGRATED_BACKGROUND */
-/* opacity_apps lists either the apps that get opacity or the ones that do not,
- * depending on opacity_exclusion_type; an empty list covers every app. */
-int opacityallowed(const char* appid)
-{
-    const char* const* a;
-
-    for (a = opacity_apps; *a; a++)
-        if (strstr(appid, *a))
-            return !opacity_exclusion_type;
-    return opacity_exclusion_type || !*opacity_apps;
-}
-
 /* opacity is (re)applied while rendering, and changing it damages nothing by
  * itself, so a frame has to be asked for everywhere */
 static void opacityrefresh(void)
@@ -526,9 +514,7 @@ void scenebuffersetopacity(struct wlr_scene_buffer* buffer,
     /* xdg-popups hang off Client.scene, not Client.scene_surface, so this
      * never touches them */
     wlr_scene_buffer_set_opacity(
-        buffer,
-        c->isfullscreen || !opacity_enabled || !c->hasopacity ? 1.0f
-                                                              : c->opacity);
+        buffer, c->isfullscreen || !opacity_enabled ? 1.0f : c->opacity);
 }
 
 /* Colours a client's border, remembering the scheme so the opacity toggle can

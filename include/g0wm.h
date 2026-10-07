@@ -268,7 +268,6 @@ typedef struct {
     float opacity;         /* the one in effect, focused or not */
     float opacity_focus;   /* used while the client holds focus */
     float opacity_unfocus; /* used while it does not */
-    int hasopacity;        /* the app passed the opacity_apps filter */
     int borderscheme;      /* scheme its border is drawn in, to redo it */
     uint32_t resize;       /* configure serial of a pending resize */
 } Client;
@@ -489,7 +488,6 @@ void notifypickkey(xkb_keysym_t sym);
 void notifyprev(const Arg* arg);
 void notifyscroll(const Arg* arg);
 int notifywheel(Monitor* pm, double delta, int horizontal);
-int opacityallowed(const char* appid);
 void outputmgrapply(struct wl_listener* listener, void* data);
 void outputmgrtest(struct wl_listener* listener, void* data);
 void pinchbegin(struct wl_listener* listener, void* data);
@@ -686,8 +684,6 @@ extern int opacity_enabled;
 extern float opacity_focus;
 extern float opacity_unfocus;
 extern float opacity_deco;
-extern int opacity_exclusion_type;
-extern const char** opacity_apps;
 #ifdef INTEGRATED_BACKGROUND
 extern int opacity_type;
 extern unsigned int blur_radius;

@@ -406,9 +406,6 @@ void mapnotify(struct wl_listener* listener, void* data)
                    &c->link); /* attach at the bottom of the stack */
     wl_list_insert(&fstack, &c->flink);
 
-    /* done here rather than in applyrules(): clients with a parent skip it */
-    c->hasopacity = opacityallowed(client_get_appid(c));
-
     /* Set initial monitor, tags, floating status, and focus:
      * we always consider floating, clients that have parent and thus
      * we set the same tags and monitor as its parent.
