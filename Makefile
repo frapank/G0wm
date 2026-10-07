@@ -203,7 +203,7 @@ dist: clean
 	mkdir -p g0wm-$(VERSION)
 	cp -R LICENSE license Makefile configure README.md \
 		config.def.mk .clang-format src include external protocols docs \
-		scripts share g0wm-$(VERSION)
+		share g0wm-$(VERSION)
 	tar -caf g0wm-$(VERSION).tar.gz g0wm-$(VERSION)
 	rm -rf g0wm-$(VERSION)
 
@@ -211,12 +211,12 @@ dist: clean
 install: g0wm
 	@$(MESS) '[$(YELLOW)INSTALL$(RESET)] %s\n' 'Starting...'
 	mkdir -p $(BINDIR)
-	cp -f g0wm scripts/start-g0wm $(BINDIR)
-	chmod 755 $(BINDIR)/g0wm $(BINDIR)/start-g0wm
+	cp -f g0wm $(BINDIR)
+	chmod 755 $(BINDIR)/g0wm
 	./g0wm -c >/dev/null
 	@$(MESS) '[$(YELLOW)INSTALL$(RESET)] %s\n' 'Done!'
 
 uninstall remove:
 	@$(MESS) '[$(RED)UNINSTALL$(RESET)] %s\n' 'Removing G0wm'
-	rm -f $(BINDIR)/g0wm $(BINDIR)/start-g0wm
+	rm -f $(BINDIR)/g0wm
 	@$(MESS) '[$(RED)UNINSTALL$(RESET)] %s\n' 'Done!'

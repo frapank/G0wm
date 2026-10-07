@@ -79,7 +79,6 @@ jobs:
         run: |
           make install BINDIR="$PWD/_install"
           test -x _install/g0wm
-          test -x _install/start-g0wm
 
   format:
     name: clang-format
@@ -98,8 +97,7 @@ jobs:
     steps:
       - uses: actions/checkout@v5
       - run: |
-          shellcheck -S warning \
-            configure scripts/start-g0wm
+          shellcheck -S warning configure
 
   manpage:
     name: man page
