@@ -33,6 +33,7 @@ static struct wlr_cursor_shape_manager_v1* cursor_shape_mgr;
 static struct wlr_output_power_manager_v1* power_mgr;
 static struct wlr_session_lock_manager_v1* session_lock_mgr;
 static struct wlr_security_context_manager_v1* security_context_mgr;
+static struct wlr_xdg_foreign_registry* foreign_registry;
 static DBusConnection* bus_conn;
 static struct wl_event_source* bus_source;
 /* global event handlers */
@@ -53,9 +54,11 @@ static struct wl_listener cursor_tablet_axis = { .notify = tabletaxis };
 static struct wl_listener cursor_tablet_tip = { .notify = tablettip };
 static struct wl_listener gpu_reset = { .notify = gpureset };
 static struct wl_listener layout_change = { .notify = updatemons };
+static struct wl_listener new_capture_request = { .notify = capturetoplevel };
 static struct wl_listener new_idle_inhibitor = { .notify =
                                                      createidleinhibitor };
 static struct wl_listener new_input_device = { .notify = inputdevice };
+static struct wl_listener new_kb_inhibitor = { .notify = createkbinhibitor };
 static struct wl_listener new_virtual_keyboard = { .notify = virtualkeyboard };
 static struct wl_listener new_virtual_pointer = { .notify = virtualpointer };
 static struct wl_listener new_pointer_constraint = {
@@ -75,6 +78,7 @@ static struct wl_listener request_set_psel = { .notify = setpsel };
 static struct wl_listener request_set_sel = { .notify = setsel };
 static struct wl_listener request_set_cursor_shape = { .notify =
                                                            setcursorshape };
+static struct wl_listener ring_bell = { .notify = ringbell };
 static struct wl_listener request_start_drag = { .notify = requeststartdrag };
 static struct wl_listener start_drag = { .notify = startdrag };
 static struct wl_listener new_session_lock = { .notify = locksession };
@@ -96,9 +100,14 @@ struct wlr_scene_tree* drag_icon;
 struct wlr_renderer* drw;
 struct wlr_allocator* alloc;
 struct wlr_compositor* compositor;
+struct wlr_content_type_manager_v1* content_type_mgr;
+struct wlr_tearing_control_manager_v1* tearing_mgr;
 struct wl_list clients; /* tiling order */
 struct wl_list fstack;  /* focus order */
+struct wlr_ext_foreign_toplevel_list_v1* ext_toplevel_list;
+struct wlr_foreign_toplevel_manager_v1* foreign_toplevel_mgr;
 struct wlr_idle_notifier_v1* idle_notifier;
+struct wlr_keyboard_shortcuts_inhibit_manager_v1* kb_inhibit_mgr;
 struct wlr_output_manager_v1* output_mgr;
 struct wlr_pointer_constraints_v1* pointer_constraints;
 struct wlr_pointer_gestures_v1* pointer_gestures;
@@ -264,6 +273,8 @@ static void cleanuplisteners(void)
     wl_list_remove(&new_virtual_keyboard.link);
     wl_list_remove(&new_virtual_pointer.link);
     wl_list_remove(&new_pointer_constraint.link);
+    wl_list_remove(&new_capture_request.link);
+    wl_list_remove(&new_kb_inhibitor.link);
     wl_list_remove(&new_output.link);
     wl_list_remove(&new_xdg_toplevel.link);
     wl_list_remove(&new_xdg_decoration.link);
@@ -278,6 +289,7 @@ static void cleanuplisteners(void)
     wl_list_remove(&request_set_sel.link);
     wl_list_remove(&request_set_cursor_shape.link);
     wl_list_remove(&request_start_drag.link);
+    wl_list_remove(&ring_bell.link);
     wl_list_remove(&start_drag.link);
     wl_list_remove(&new_session_lock.link);
 #ifdef XWAYLAND
@@ -543,12 +555,29 @@ static void setup(void)
     wlr_fractional_scale_manager_v1_create(dpy, 1);
     wlr_presentation_create(dpy, backend, 2);
     wlr_alpha_modifier_v1_create(dpy);
+    content_type_mgr = wlr_content_type_manager_v1_create(dpy, 1);
+    tearing_mgr = wlr_tearing_control_manager_v1_create(dpy, 1);
     security_context_mgr = wlr_security_context_manager_v1_create(dpy);
     wl_display_set_global_filter(dpy, globalfilter, NULL);
 
     /* Initializes the interface used to implement urgency hints */
     activation = wlr_xdg_activation_v1_create(dpy);
     wl_signal_add(&activation->events.request_activate, &request_activate);
+
+    wl_signal_add(&wlr_xdg_system_bell_v1_create(dpy, 1)->events.ring,
+                  &ring_bell);
+
+    foreign_registry = wlr_xdg_foreign_registry_create(dpy);
+    wlr_xdg_foreign_v1_create(dpy, foreign_registry);
+    wlr_xdg_foreign_v2_create(dpy, foreign_registry);
+    wlr_xdg_wm_dialog_v1_create(dpy, 1);
+
+    foreign_toplevel_mgr = wlr_foreign_toplevel_manager_v1_create(dpy);
+    ext_toplevel_list = wlr_ext_foreign_toplevel_list_v1_create(dpy, 1);
+    wl_signal_add(
+        &wlr_ext_foreign_toplevel_image_capture_source_manager_v1_create(dpy, 1)
+             ->events.new_request,
+        &new_capture_request);
 
     wlr_scene_set_gamma_control_manager_v1(
         scene, wlr_gamma_control_manager_v1_create(dpy));
@@ -610,6 +639,9 @@ static void setup(void)
                   &new_pointer_constraint);
 
     relative_pointer_mgr = wlr_relative_pointer_manager_v1_create(dpy);
+
+    kb_inhibit_mgr = wlr_keyboard_shortcuts_inhibit_v1_create(dpy);
+    wl_signal_add(&kb_inhibit_mgr->events.new_inhibitor, &new_kb_inhibitor);
 
     /*
      * Creates a cursor, which is a wlroots utility for tracking the cursor

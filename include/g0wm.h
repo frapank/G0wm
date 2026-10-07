@@ -30,6 +30,7 @@
 #include <wlr/render/wlr_renderer.h>
 #include <wlr/types/wlr_alpha_modifier_v1.h>
 #include <wlr/types/wlr_compositor.h>
+#include <wlr/types/wlr_content_type_v1.h>
 #include <wlr/types/wlr_cursor.h>
 #include <wlr/types/wlr_cursor_shape_v1.h>
 #include <wlr/types/wlr_data_control_v1.h>
@@ -37,8 +38,10 @@
 #include <wlr/types/wlr_drm.h>
 #include <wlr/types/wlr_export_dmabuf_v1.h>
 #include <wlr/types/wlr_ext_data_control_v1.h>
+#include <wlr/types/wlr_ext_foreign_toplevel_list_v1.h>
 #include <wlr/types/wlr_ext_image_capture_source_v1.h>
 #include <wlr/types/wlr_ext_image_copy_capture_v1.h>
+#include <wlr/types/wlr_foreign_toplevel_management_v1.h>
 #include <wlr/types/wlr_fractional_scale_v1.h>
 #include <wlr/types/wlr_gamma_control_v1.h>
 #include <wlr/types/wlr_idle_inhibit_v1.h>
@@ -46,6 +49,7 @@
 #include <wlr/types/wlr_input_device.h>
 #include <wlr/types/wlr_keyboard.h>
 #include <wlr/types/wlr_keyboard_group.h>
+#include <wlr/types/wlr_keyboard_shortcuts_inhibit_v1.h>
 #include <wlr/types/wlr_layer_shell_v1.h>
 #include <wlr/types/wlr_linux_dmabuf_v1.h>
 #include <wlr/types/wlr_linux_drm_syncobj_v1.h>
@@ -69,14 +73,20 @@
 #include <wlr/types/wlr_single_pixel_buffer_v1.h>
 #include <wlr/types/wlr_subcompositor.h>
 #include <wlr/types/wlr_tablet_tool.h>
+#include <wlr/types/wlr_tearing_control_v1.h>
 #include <wlr/types/wlr_viewporter.h>
 #include <wlr/types/wlr_virtual_keyboard_v1.h>
 #include <wlr/types/wlr_virtual_pointer_v1.h>
 #include <wlr/types/wlr_xcursor_manager.h>
 #include <wlr/types/wlr_xdg_activation_v1.h>
 #include <wlr/types/wlr_xdg_decoration_v1.h>
+#include <wlr/types/wlr_xdg_dialog_v1.h>
+#include <wlr/types/wlr_xdg_foreign_registry.h>
+#include <wlr/types/wlr_xdg_foreign_v1.h>
+#include <wlr/types/wlr_xdg_foreign_v2.h>
 #include <wlr/types/wlr_xdg_output_v1.h>
 #include <wlr/types/wlr_xdg_shell.h>
+#include <wlr/types/wlr_xdg_system_bell_v1.h>
 #include <wlr/util/log.h>
 #include <wlr/util/region.h>
 #include <xkbcommon/xkbcommon.h>
@@ -270,6 +280,12 @@ typedef struct {
     float opacity_unfocus; /* used while it does not */
     int borderscheme;      /* scheme its border is drawn in, to redo it */
     uint32_t resize;       /* configure serial of a pending resize */
+    struct wlr_foreign_toplevel_handle_v1* ftl;
+    struct wlr_ext_foreign_toplevel_handle_v1* eftl;
+    struct wlr_ext_image_capture_source_v1* capture;
+    struct wl_listener ftl_activate;
+    struct wl_listener ftl_close;
+    struct wl_listener ftl_fullscreen;
 } Client;
 
 typedef struct {
@@ -357,6 +373,7 @@ struct Monitor {
     int nmaster;
     char ltsymbol[16];
     int asleep;
+    int autovrr; /* 1 turned on by gamemode(), -1 refused */
     Drwl* drw;
     Buffer* pool[2];
 #ifdef INTEGRATED_BACKGROUND
@@ -405,6 +422,7 @@ typedef struct {
 } SessionLock;
 
 /* function declarations */
+void activateclient(Client* c);
 void arrange(Monitor* m);
 void arrangelayers(Monitor* m);
 void applymonrules(Monitor* m, struct wlr_output_state* state);
@@ -426,10 +444,12 @@ Buffer* bufget(Buffer** pool, size_t poollen, int width, int height);
 void bufpooldrop(Buffer** pool, size_t poollen);
 unsigned int borderwidth(void);
 void buttonpress(struct wl_listener* listener, void* data);
+void capturetoplevel(struct wl_listener* listener, void* data);
 void chvt(const Arg* arg);
 void checkidleinhibitor(struct wlr_surface* exclude);
 void closemon(Monitor* m);
 void createdecoration(struct wl_listener* listener, void* data);
+void createkbinhibitor(struct wl_listener* listener, void* data);
 KeyboardGroup* createkeyboardgroup(void);
 void createlayersurface(struct wl_listener* listener, void* data);
 void createmon(struct wl_listener* listener, void* data);
@@ -498,6 +518,7 @@ void reloadmons(void);
 void reloadopacity(void);
 void reloadsettings(const Arg* arg);
 void requeststartdrag(struct wl_listener* listener, void* data);
+void ringbell(struct wl_listener* listener, void* data);
 void resize(Client* c, struct wlr_box geo, int interact);
 void resizeheight(const Arg* arg);
 void resizewidth(const Arg* arg);
@@ -514,6 +535,7 @@ void setbordercolor(Client* c, int scheme);
 void setcursor(struct wl_listener* listener, void* data);
 void setcursorshape(struct wl_listener* listener, void* data);
 void setfloating(Client* c, int floating);
+void setfullscreen(Client* c, int fullscreen);
 void setlayout(const Arg* arg);
 void setmfact(const Arg* arg);
 void settitle(Client* c);
@@ -548,6 +570,7 @@ void togglebar(const Arg* arg);
 void togglefloating(const Arg* arg);
 void togglefullscreen(const Arg* arg);
 void togglegaps(const Arg* arg);
+void toggleinhibit(const Arg* arg);
 void toggleopacity(const Arg* arg);
 void toggletabbed(const Arg* arg);
 void toggletag(const Arg* arg);
@@ -562,6 +585,10 @@ void traypopup_click(double lx, double ly);
 void traypopup_dismiss(void);
 void traypopup_motion(double lx, double ly);
 void traypopup_present(const char* const* labels, int n, Menu* menu);
+void toplevelfocus(Client* c);
+void toplevelmap(Client* c);
+void toplevelunmap(Client* c);
+void toplevelupdate(Client* c);
 void unmapnotify(struct wl_listener* listener, void* data);
 void updatemons(struct wl_listener* listener, void* data);
 void updatebar(Monitor* m);
@@ -589,9 +616,14 @@ extern struct wlr_scene_tree* drag_icon;
 extern struct wlr_renderer* drw;
 extern struct wlr_allocator* alloc;
 extern struct wlr_compositor* compositor;
+extern struct wlr_content_type_manager_v1* content_type_mgr;
+extern struct wlr_tearing_control_manager_v1* tearing_mgr;
 extern struct wl_list clients; /* tiling order */
 extern struct wl_list fstack;  /* focus order */
+extern struct wlr_ext_foreign_toplevel_list_v1* ext_toplevel_list;
+extern struct wlr_foreign_toplevel_manager_v1* foreign_toplevel_mgr;
 extern struct wlr_idle_notifier_v1* idle_notifier;
+extern struct wlr_keyboard_shortcuts_inhibit_manager_v1* kb_inhibit_mgr;
 extern struct wlr_output_manager_v1* output_mgr;
 extern struct wlr_pointer_constraints_v1* pointer_constraints;
 extern struct wlr_pointer_gestures_v1* pointer_gestures;
@@ -721,6 +753,8 @@ extern Gesture* gestures;
 extern size_t ngestures;
 extern int log_level;
 extern int bypass_surface_visibility;
+extern int allow_tearing;
+extern int auto_vrr;
 
 /* attempt to encapsulate suck into one file */
 #include "client.h"
