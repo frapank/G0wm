@@ -20,8 +20,6 @@ static void handlesig(int signo);
 static void setup(void);
 
 /* variables */
-/* variables */
-static pid_t child_pid = -1;
 static struct wl_display* dpy;
 static struct wlr_session* session;
 static struct wlr_xdg_shell* xdg_shell;
@@ -209,10 +207,6 @@ static void cleanup(void)
         }
     }
 
-    if (child_pid > 0) {
-        kill(-child_pid, SIGTERM);
-        waitpid(child_pid, NULL, 0);
-    }
     wlr_xcursor_manager_destroy(cursor_mgr);
 
     destroykeyboardgroup(&kb_group->destroy, NULL);
@@ -388,8 +382,6 @@ static void handlesig(int signo)
     if (signo == SIGCHLD) {
         pid_t pid, *p, *lim;
         while ((pid = waitpid(-1, NULL, WNOHANG)) > 0) {
-            if (pid == child_pid)
-                child_pid = -1;
             if (!(p = autostart_pids))
                 continue;
             lim = &p[autostart_len];
@@ -430,7 +422,7 @@ void quit(const Arg* arg)
     wl_display_terminate(dpy);
 }
 
-void run(char* startup_cmd)
+void run(void)
 {
     /* Add a Unix socket to the Wayland display. */
     const char* socket = wl_display_add_socket_auto(dpy);
@@ -443,26 +435,8 @@ void run(char* startup_cmd)
     if (!wlr_backend_start(backend))
         die("startup: backend_start");
 
-    /* Now that the socket exists and the backend is started, run the startup
-     * command */
+    /* the socket exists and the backend is started */
     autostartexec();
-    if (startup_cmd) {
-        if ((child_pid = fork()) < 0)
-            die("startup: fork:");
-        if (child_pid == 0) {
-            close(STDIN_FILENO);
-            setsid();
-            execl("/bin/sh", "/bin/sh", "-c", startup_cmd, NULL);
-            die("startup: execl:");
-        }
-    }
-
-    /* Mark stdout as non-blocking to avoid the startup script
-     * causing g0wm to freeze when a user neither closes stdin
-     * nor consumes standard input in his startup script */
-
-    if (fd_set_nonblock(STDOUT_FILENO) < 0)
-        close(STDOUT_FILENO);
 
     drawbars();
 
@@ -787,14 +761,11 @@ void spawn(const Arg* arg)
 
 int main(int argc, char* argv[])
 {
-    char* startup_cmd = NULL;
     int debug = 0;
     int c;
 
-    while ((c = getopt(argc, argv, "s:hdvc")) != -1) {
-        if (c == 's')
-            startup_cmd = optarg;
-        else if (c == 'd')
+    while ((c = getopt(argc, argv, "hdvc")) != -1) {
+        if (c == 'd')
             debug = 1;
         else if (c == 'v')
             die("g0wm " VERSION);
@@ -814,10 +785,10 @@ int main(int argc, char* argv[])
     if (debug)
         log_level = WLR_DEBUG;
     setup();
-    run(startup_cmd);
+    run();
     cleanup();
     return EXIT_SUCCESS;
 
 usage:
-    die("Usage: %s [-v] [-d] [-c] [-s startup command]", argv[0]);
+    die("Usage: %s [-v] [-d] [-c]", argv[0]);
 }
