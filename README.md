@@ -43,16 +43,13 @@ The settings are documented in the comments of
 
 The required dependencies are `wlroots` 0.20 with the libinput backend,
 `wayland`, `wayland-protocols`, `libinput`, `xkbcommon`, `pixman`, `fcft`,
-`libdbus` and `pkg-config`.
+`libdbus`, `gdk-pixbuf` and `pkg-config`.
 
 X11 support also requires `libxcb`, `libxcb-icccm` and `Xwayland`.
 
-`gdk-pixbuf` is only needed if you want to use the built in wallpaper support.
-
 ```sh
 ./configure && make
-make install         # g0wm and start-g0wm into ~/.local/bin
-make install-status  # optional: g0wm-status.sh, the bar status text
+make install         # g0wm into ~/.local/bin
 ```
 
 You can also just run `make`. It will use `config.def.mk` if no custom
@@ -63,11 +60,7 @@ Some features can be disabled during the build:
 | Flag | Disables |
 | --- | --- |
 | `--disable-xwayland` | X11 support (`libxcb`) |
-| `--no-systray` | the tray in the bar |
-| `--no-notify` | the notification server |
-| `--no-runner` | the bar runner, `MODKEY+r` starts `menucmd` instead |
-| `--no-titlebar` | the per-window title bars and the tabs drawn in them |
-| `--no-integrated-background` | the wallpaper renderer (`gdk-pixbuf`) |
+| `--no-integrated-background` | the wallpaper renderer and the blur |
 
 Run `./configure --help` to see the other available options such as
 toolchain settings, `--debug` and `--native`.
@@ -76,7 +69,8 @@ toolchain settings, `--debug` and `--native`.
 
 Every setting lives in `~/.config/g0wm/settings.json`, which `make install`
 writes and g0wm reads at startup. Only the sections the build was configured
-with go in it: a `--no-systray` build has no tray settings.
+with go in it: a `--no-integrated-background` build has no wallpaper or blur
+settings.
 
 ```sh
 g0wm -c             # write it if it is not there, then print what g0wm reads
@@ -91,36 +85,14 @@ read the header at the top of it before changing anything. Edit it by hand:
 changing it needs a rebuild, and a `settings.json` that is already there wins
 over it.
 
-The status text shown in the bar comes from `scripts/g0wm-status.sh`. Its
-configuration is stored in `~/.config/g0wm/status.conf`.
-
-You can generate it with:
-
-```sh
-./status_gen        # choose the modules, order and format
-```
-
-`status_gen` creates a backup before replacing an existing file.
-
-`status.conf` has a format, an icon and a colour for every available module,
-and documents the formats in the comments `./status_gen` writes into it.
+The status text shown in the bar is read from standard input, one line at a
+time. No status script ships with g0wm.
 
 ## Run
 
-Run `start-g0wm` from a VT.
-
-It sets up the session environment, starts PipeWire, runs the status script
-and stores logs in `~/.local/state/g0wm/`, kept small by svlogd when runit
-is installed. With `G0WM_AUDIO=0` it leaves
-PipeWire alone, for when something else runs it. It refuses to start while
-g0wm already runs for the same user.
-
-The file `share/g0wm.desktop` can be used as a session entry for display
-managers. It is not installed automatically by `make install`.
-
-The desktop entry starts g0wm directly instead of using `start-g0wm`. If you
-want to use it, copy it to `/usr/share/wayland-sessions/` and set `Exec` to
-whichever startup method you prefer.
+Copy `share/g0wm.desktop` to `/usr/share/wayland-sessions/` and pick g0wm in
+your display manager, or run `g0wm` from a VT. To feed the bar, pipe a status
+script into it: `my-status | g0wm`.
 
 ## License
 

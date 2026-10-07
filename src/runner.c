@@ -6,22 +6,17 @@
 #include "g0wm.h"
 
 /* function declarations */
-#ifdef RUNNER
 static void runnerbuildcache(void);
 static void runnerfreecache(void);
 static int runnerpathstale(void);
-#endif /* RUNNER */
 
 /* variables */
-#ifdef RUNNER
 static char** runner_cmds;
 static int runner_ncmds;
 static struct timespec runner_stamp; /* newest PATH mtime the cache was built
                                         from */
-#endif                               /* RUNNER */
 
 /* function implementations */
-#ifdef RUNNER
 static int runnercmp(const void* a, const void* b)
 {
     return strcmp(*(char* const*)a, *(char* const*)b);
@@ -476,5 +471,3 @@ void runnerkey(xkb_keysym_t sym, uint32_t mods, uint32_t codepoint)
         }
     drawselbar();
 }
-
-#endif /* RUNNER */

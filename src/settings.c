@@ -58,10 +58,6 @@ static const Enum cornerstyles[] = { { CornerNormal, "normal" },
                                      { CornerSquircle, "squircle" },
                                      { 0, NULL } };
 
-static const Enum exclusiontypes[] = { { 0, "only-listed" },
-                                       { 1, "all-but-listed" },
-                                       { 0, NULL } };
-
 #ifdef INTEGRATED_BACKGROUND
 static const Enum opacitykinds[] = { { OpacityNormal, "normal" },
                                      { OpacityBlur, "blur" },
@@ -123,10 +119,7 @@ static const Enum loglevels[] = { { WLR_SILENT, "silent" },
 static const struct {
     const char* name;
     void (*arrange)(Monitor*);
-} arranges[] = { { "tile", tile },
-                 { "float", NULL },
-                 { "monocle", monocle },
-                 { "tabbed", tabbed } };
+} arranges[] = { { "tile", tile }, { "float", NULL }, { "tabbed", tabbed } };
 
 /* which member of the Arg a binding uses: 'i' int, 'u' unsigned, 'f' float,
  * 'v' an execvp() list, 'l' a layout symbol, 'c' a drag mode, 0 none */
@@ -145,7 +138,6 @@ static const Action actions[] = {
     { killclient, "killclient", 0 },
     { moveresize, "moveresize", 'c' },
     { movestack, "movestack", 'i' },
-#ifdef NOTIFICATIONS
     { notifyactions, "notifyactions", 0 },
     { notifydismiss, "notifydismiss", 0 },
     { notifydismissall, "notifydismissall", 0 },
@@ -153,14 +145,11 @@ static const Action actions[] = {
     { notifyopen, "notifyopen", 0 },
     { notifyprev, "notifyprev", 0 },
     { notifyscroll, "notifyscroll", 0 },
-#endif
     { quit, "quit", 0 },
     { reloadsettings, "reloadsettings", 0 },
     { resizeheight, "resizeheight", 'i' },
     { resizewidth, "resizewidth", 'i' },
-#ifdef RUNNER
     { runnertoggle, "runnertoggle", 0 },
-#endif
     { setlayout, "setlayout", 'l' },
     { setmfact, "setmfact", 'f' },
     { setopacityfocus, "setopacityfocus", 'f' },
@@ -177,14 +166,10 @@ static const Action actions[] = {
     { toggleopacity, "toggleopacity", 0 },
     { toggletabbed, "toggletabbed", 'l' },
     { toggletag, "toggletag", 'u' },
-#ifdef TITLEBAR
     { toggletitlebar, "toggletitlebar", 0 },
-#endif
     { toggleview, "toggleview", 'u' },
-#ifdef SYSTRAY
     { trayactivate, "trayactivate", 0 },
     { traymenu, "traymenu", 0 },
-#endif
     { view, "view", 'u' },
     { zoom, "zoom", 0 },
 };
@@ -319,20 +304,14 @@ static cJSON* jcolors(void)
         [SchemeNorm] = "norm",
         [SchemeSel] = "sel",
         [SchemeUrg] = "urg",
-#ifdef TITLEBAR
         [SchemeTitle] = "title",
         [SchemeTitleSel] = "titlesel",
-#endif
         [SchemeStatus] = "status",
-#ifdef NOTIFICATIONS
         [SchemeNotify] = "notify",
         [SchemeNotifyLow] = "notifylow",
         [SchemeNotifyCrit] = "notifycrit",
-#endif
-#ifdef RUNNER
         [SchemeRunner] = "runner",
         [SchemeRunnerSuggest] = "runnersuggest",
-#endif
     };
     cJSON* o = cJSON_CreateObject();
     size_t i;
@@ -385,13 +364,11 @@ static cJSON* jwindows(void)
     cJSON_AddNumberToObject(o, "gaps", gaps);
     cJSON_AddNumberToObject(o, "gappx", gappx);
     cJSON_AddBoolToObject(o, "smartgaps", smartgaps);
-#ifdef TITLEBAR
     cJSON_AddBoolToObject(o, "titlebar", titlebar);
     cJSON_AddNumberToObject(o, "titlepadding", titlepadding);
     cJSON_AddBoolToObject(o, "titlecenter", titlecenter);
     cJSON_AddBoolToObject(o, "titleclose", titleclose);
     cJSON_AddItemToObject(o, "titleclosecolor", jhex(titleclosecolor));
-#endif
 
     a = cJSON_AddArrayToObject(o, "layouts");
     for (i = 0; i < nlayouts; i++) {
@@ -430,13 +407,10 @@ static cJSON* jbar(void)
     cJSON_AddNumberToObject(o, "barpadding", barpadding);
     cJSON_AddItemToObject(o, "barheight", jnum(barheight));
     cJSON_AddBoolToObject(o, "barsinglemon", barsinglemon);
-#ifdef SYSTRAY
     cJSON_AddBoolToObject(o, "showsystray", showsystray);
     cJSON_AddNumberToObject(o, "systrayspacing", systrayspacing);
     cJSON_AddNumberToObject(o, "systraypadding", systraypadding);
     cJSON_AddNumberToObject(o, "systrayiconsize", systrayiconsize);
-#endif
-#ifdef NOTIFICATIONS
     cJSON_AddBoolToObject(o, "shownotifications", shownotifications);
     cJSON_AddNumberToObject(o, "notification_timeout", notification_timeout);
     cJSON_AddNumberToObject(
@@ -445,10 +419,7 @@ static cJSON* jbar(void)
         o, "notification_lineradius", notification_lineradius);
     cJSON_AddStringToObject(
         o, "notification_actionsign", notification_actionsign);
-#endif
-#ifdef RUNNER
     cJSON_AddStringToObject(o, "runner_placeholder", runner_placeholder);
-#endif
     return o;
 }
 
@@ -460,10 +431,6 @@ static cJSON* jopacity(void)
     cJSON_AddItemToObject(o, "opacity_focus", jnum(opacity_focus));
     cJSON_AddItemToObject(o, "opacity_unfocus", jnum(opacity_unfocus));
     cJSON_AddItemToObject(o, "opacity_deco", jnum(opacity_deco));
-    cJSON_AddStringToObject(o,
-                            "opacity_exclusion_type",
-                            enumname(exclusiontypes, opacity_exclusion_type));
-    cJSON_AddItemToObject(o, "opacity_apps", jargv(opacity_apps));
 #ifdef INTEGRATED_BACKGROUND
     cJSON_AddStringToObject(
         o, "opacity_type", enumname(opacitykinds, opacity_type));
@@ -806,20 +773,14 @@ static void applycolors(const cJSON* o)
         [SchemeNorm] = "norm",
         [SchemeSel] = "sel",
         [SchemeUrg] = "urg",
-#ifdef TITLEBAR
         [SchemeTitle] = "title",
         [SchemeTitleSel] = "titlesel",
-#endif
         [SchemeStatus] = "status",
-#ifdef NOTIFICATIONS
         [SchemeNotify] = "notify",
         [SchemeNotifyLow] = "notifylow",
         [SchemeNotifyCrit] = "notifycrit",
-#endif
-#ifdef RUNNER
         [SchemeRunner] = "runner",
         [SchemeRunnerSuggest] = "runnersuggest",
-#endif
     };
 
     for (i = 0; i < LENGTH(names); i++) {
@@ -871,7 +832,13 @@ static void applylayouts(const cJSON* a)
         out[n].symbol = getstr(e, "symbol", "[ ]");
         for (i = 0; i < LENGTH(arranges); i++)
             if (!strcmp(arranges[i].name, name))
-                out[n].arrange = arranges[i].arrange;
+                break;
+        if (i < LENGTH(arranges))
+            out[n].arrange = arranges[i].arrange;
+        else
+            fprintf(stderr,
+                    "g0wm: settings.json: %s is not a layout, using float\n",
+                    name);
         n++;
     }
     layouts = out;
@@ -913,13 +880,11 @@ static void applywindows(const cJSON* o)
     gaps = (int)getnum(o, "gaps", gaps);
     gappx = (unsigned int)getnum(o, "gappx", gappx);
     smartgaps = getbool(o, "smartgaps", smartgaps);
-#ifdef TITLEBAR
     titlebar = getbool(o, "titlebar", titlebar);
     titlepadding = (unsigned int)getnum(o, "titlepadding", titlepadding);
     titlecenter = getbool(o, "titlecenter", titlecenter);
     titleclose = getbool(o, "titleclose", titleclose);
     titleclosecolor = gethex(o, "titleclosecolor", titleclosecolor);
-#endif
     applylayouts(item(o, "layouts"));
     applyrules(item(o, "rules"));
 }
@@ -937,14 +902,11 @@ static void applybar(const cJSON* o)
     barpadding = (unsigned int)getnum(o, "barpadding", barpadding);
     barheight = (float)getnum(o, "barheight", barheight);
     barsinglemon = getbool(o, "barsinglemon", barsinglemon);
-#ifdef SYSTRAY
     showsystray = getbool(o, "showsystray", showsystray);
     systrayspacing = (unsigned int)getnum(o, "systrayspacing", systrayspacing);
     systraypadding = (unsigned int)getnum(o, "systraypadding", systraypadding);
     systrayiconsize =
         (unsigned int)getnum(o, "systrayiconsize", systrayiconsize);
-#endif
-#ifdef NOTIFICATIONS
     shownotifications = getbool(o, "shownotifications", shownotifications);
     notification_timeout =
         (unsigned int)getnum(o, "notification_timeout", notification_timeout);
@@ -954,29 +916,17 @@ static void applybar(const cJSON* o)
         o, "notification_lineradius", notification_lineradius);
     notification_actionsign =
         getstr(o, "notification_actionsign", notification_actionsign);
-#endif
-#ifdef RUNNER
     runner_placeholder = getstr(o, "runner_placeholder", runner_placeholder);
-#endif
 }
 
 static void applyopacity(const cJSON* o)
 {
-    const char** list;
-
     if (!o)
         return;
     opacity_enabled = getbool(o, "opacity_enabled", opacity_enabled);
     opacity_focus = (float)getnum(o, "opacity_focus", opacity_focus);
     opacity_unfocus = (float)getnum(o, "opacity_unfocus", opacity_unfocus);
     opacity_deco = (float)getnum(o, "opacity_deco", opacity_deco);
-    opacity_exclusion_type = getenum(o,
-                                     "opacity_exclusion_type",
-                                     exclusiontypes,
-                                     opacity_exclusion_type,
-                                     "kind of exclusion");
-    if ((list = strlist(item(o, "opacity_apps"), NULL)))
-        opacity_apps = list;
 #ifdef INTEGRATED_BACKGROUND
     opacity_type = getenum(
         o, "opacity_type", opacitykinds, opacity_type, "kind of opacity");
@@ -1491,13 +1441,12 @@ void reloadsettings(const Arg* arg)
             m->tagset[m->seltags] = 1;
         wlr_scene_rect_set_color(m->fullscreen_bg, fullscreen_bg);
     }
-    /* what a client copied out of the settings when it was mapped: the
-     * filter it was measured against, its border and its own opacity */
+    /* what a client copied out of the settings when it was mapped: its
+     * border and its own opacity */
     wl_list_for_each(c, &clients, link)
     {
         if (!(c->tags & TAGMASK))
             c->tags = 1;
-        c->hasopacity = opacityallowed(client_get_appid(c));
         c->opacity = c->opacity_unfocus = opacity_unfocus;
         c->opacity_focus = opacity_focus;
         if (!c->isfullscreen)
@@ -1518,8 +1467,6 @@ void reloadsettings(const Arg* arg)
     }
 
     reloadopacity();
-#ifdef NOTIFICATIONS
     notify_settimeout(notification_timeout);
-#endif
     drawbars();
 }

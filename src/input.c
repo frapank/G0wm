@@ -45,9 +45,7 @@ static struct {
     uint32_t fingers;
     double dx, dy, scale;
 } gesture;
-#ifdef RUNNER
 static uint32_t runner_repeatcp; /* codepoint the armed key repeat types */
-#endif                           /* RUNNER */
 
 /* function implementations */
 /* The part of pm's bar the cursor is over, ClkRoot if it is not over it.
@@ -70,9 +68,7 @@ static unsigned int barclick(Monitor* pm, Arg* arg)
         return ClkRoot;
 
     cx = (cursor->x - pm->m.x - barpadding) * pm->wlr_output->scale;
-#ifdef SYSTRAY
     traywidth = tray_get_width(pm->tray);
-#endif
     statusw = STATUSW(pm);
     do
         x += tagwidth(pm, s, i);
@@ -82,13 +78,10 @@ static unsigned int barclick(Monitor* pm, Arg* arg)
         return ClkTagBar;
     } else if (barltsymbol && cx < x + TEXTW(pm, s->ltsymbol))
         return ClkLtSymbol;
-#ifdef SYSTRAY
     else if (traywidth && cx > pm->b.width - traywidth) {
         arg->ui = tray_index_at(pm->tray, cx - (pm->b.width - traywidth));
         return ClkTray;
-    }
-#endif
-    else if (cx > pm->b.width - (statusw + traywidth)) {
+    } else if (cx > pm->b.width - (statusw + traywidth)) {
         arg->i = (int)(cx - (pm->b.width - (statusw + traywidth)));
         return ClkStatus;
     }
@@ -104,7 +97,6 @@ void axisnotify(struct wl_listener* listener, void* data)
     struct wlr_pointer_axis_event* event = data;
     wlr_idle_notifier_v1_notify_activity(idle_notifier, seat);
     handlecursoractivity();
-#ifdef NOTIFICATIONS
     {
         Client* c;
         Arg arg;
@@ -120,7 +112,6 @@ void axisnotify(struct wl_listener* listener, void* data)
             notifywheel(pm, event->delta, horizontal))
             return;
     }
-#endif
     if (!locked && event->orientation == WL_POINTER_AXIS_VERTICAL_SCROLL) {
         Client* c;
         Arg arg;
@@ -160,14 +151,12 @@ void buttonpress(struct wl_listener* listener, void* data)
     wlr_idle_notifier_v1_notify_activity(idle_notifier, seat);
     handlecursoractivity();
 
-#ifdef SYSTRAY
     /* the open menu owns the pointer, nothing under it sees the click */
     if (!locked && traypopup_active()) {
         if (event->state == WL_POINTER_BUTTON_STATE_PRESSED)
             traypopup_click(cursor->x, cursor->y);
         return;
     }
-#endif
 
     click = ClkRoot;
     xytonode(cursor->x, cursor->y, NULL, &c, NULL, NULL, NULL);
@@ -210,12 +199,10 @@ void buttonpress(struct wl_listener* listener, void* data)
 
             keyboard = wlr_seat_get_keyboard(seat);
             mods = keyboard ? wlr_keyboard_get_modifiers(keyboard) : 0;
-#ifdef TITLEBAR
             if (click == ClkClient && !CLEANMASK(mods) &&
                 event->button == BTN_LEFT &&
                 titleclick(c, cursor->x, cursor->y))
                 return;
-#endif
             for (b = buttons; b < buttons + nbuttons; b++) {
                 if (CLEANMASK(mods) == CLEANMASK(b->mod) &&
                     event->button == b->button && click == b->click &&
@@ -677,7 +664,6 @@ static void keypress(struct wl_listener* listener, void* data)
         event->state == WL_KEYBOARD_KEY_STATE_PRESSED)
         hidecursor(NULL);
 
-#ifdef RUNNER
     /* While the prompt is open, every key belongs to it: swallow press and
      * release instead of matching keybindings or forwarding to the client.
      * Returning early skips the repeat bookkeeping below, so disarm here what
@@ -715,9 +701,7 @@ static void keypress(struct wl_listener* listener, void* data)
         wl_event_source_timer_update(group->key_repeat_source, 0);
         return;
     }
-#endif
 
-#ifdef SYSTRAY
     /* the open menu holds the keyboard, Escape closes it */
     if (!locked && traypopup_active()) {
         if (nsyms > 0 && event->state == WL_KEYBOARD_KEY_STATE_PRESSED &&
@@ -727,9 +711,7 @@ static void keypress(struct wl_listener* listener, void* data)
         wl_event_source_timer_update(group->key_repeat_source, 0);
         return;
     }
-#endif
 
-#ifdef NOTIFICATIONS
     if (!locked && notifypicking()) {
         if (nsyms > 0 && event->state == WL_KEYBOARD_KEY_STATE_PRESSED)
             notifypickkey(syms[0]);
@@ -737,7 +719,6 @@ static void keypress(struct wl_listener* listener, void* data)
         wl_event_source_timer_update(group->key_repeat_source, 0);
         return;
     }
-#endif
 
     /* On _press_ if there is no active screen locker,
      * attempt to process a compositor keybinding. */
@@ -785,12 +766,9 @@ static int keyrepeat(void* data)
     int i;
     if (!group->nsyms || group->wlr_group->keyboard.repeat_info.rate <= 0)
         return 0;
-#ifdef NOTIFICATIONS
     /* the repeat of the key that opened the picker would close it */
     if (notifypicking())
         return 0;
-#endif
-#ifdef RUNNER
     if (runner_active) {
         /* Holding the binding down past the repeat delay would replay it
          * while the prompt it just opened is up, closing it again: only a
@@ -807,7 +785,6 @@ static int keyrepeat(void* data)
             group->nsyms = 0;
         return 0;
     }
-#endif
 
     wl_event_source_timer_update(
         group->key_repeat_source,
@@ -892,9 +869,7 @@ void motionnotify(uint32_t time,
 
     /* Find the client under the pointer and send the event along. */
     xytonode(cursor->x, cursor->y, &surface, &c, NULL, &sx, &sy);
-#ifdef TITLEBAR
     titlehover(c, cursor->x, cursor->y);
-#endif
 
     if (cursor_mode == CurPressed && !seat->drag &&
         surface != seat->pointer_state.focused_surface &&
@@ -965,7 +940,6 @@ void motionnotify(uint32_t time,
     wlr_scene_node_set_position(
         &drag_icon->node, (int)round(cursor->x), (int)round(cursor->y));
 
-#ifdef SYSTRAY
     /* hovering the open menu, so nothing below it takes focus */
     if (!locked && traypopup_active()) {
         traypopup_motion(cursor->x, cursor->y);
@@ -973,7 +947,6 @@ void motionnotify(uint32_t time,
             wlr_cursor_set_xcursor(cursor, cursor_mgr, "default");
         return;
     }
-#endif
 
     /* If we are currently grabbing the mouse, handle and return */
     if (cursor_mode == CurMove) {
