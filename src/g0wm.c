@@ -54,6 +54,7 @@ static struct wl_listener cursor_tablet_axis = { .notify = tabletaxis };
 static struct wl_listener cursor_tablet_tip = { .notify = tablettip };
 static struct wl_listener gpu_reset = { .notify = gpureset };
 static struct wl_listener layout_change = { .notify = updatemons };
+static struct wl_listener new_capture_request = { .notify = capturetoplevel };
 static struct wl_listener new_idle_inhibitor = { .notify =
                                                      createidleinhibitor };
 static struct wl_listener new_input_device = { .notify = inputdevice };
@@ -103,6 +104,8 @@ struct wlr_content_type_manager_v1* content_type_mgr;
 struct wlr_tearing_control_manager_v1* tearing_mgr;
 struct wl_list clients; /* tiling order */
 struct wl_list fstack;  /* focus order */
+struct wlr_ext_foreign_toplevel_list_v1* ext_toplevel_list;
+struct wlr_foreign_toplevel_manager_v1* foreign_toplevel_mgr;
 struct wlr_idle_notifier_v1* idle_notifier;
 struct wlr_keyboard_shortcuts_inhibit_manager_v1* kb_inhibit_mgr;
 struct wlr_output_manager_v1* output_mgr;
@@ -270,6 +273,7 @@ static void cleanuplisteners(void)
     wl_list_remove(&new_virtual_keyboard.link);
     wl_list_remove(&new_virtual_pointer.link);
     wl_list_remove(&new_pointer_constraint.link);
+    wl_list_remove(&new_capture_request.link);
     wl_list_remove(&new_kb_inhibitor.link);
     wl_list_remove(&new_output.link);
     wl_list_remove(&new_xdg_toplevel.link);
@@ -567,6 +571,13 @@ static void setup(void)
     wlr_xdg_foreign_v1_create(dpy, foreign_registry);
     wlr_xdg_foreign_v2_create(dpy, foreign_registry);
     wlr_xdg_wm_dialog_v1_create(dpy, 1);
+
+    foreign_toplevel_mgr = wlr_foreign_toplevel_manager_v1_create(dpy);
+    ext_toplevel_list = wlr_ext_foreign_toplevel_list_v1_create(dpy, 1);
+    wl_signal_add(
+        &wlr_ext_foreign_toplevel_image_capture_source_manager_v1_create(dpy, 1)
+             ->events.new_request,
+        &new_capture_request);
 
     wlr_scene_set_gamma_control_manager_v1(
         scene, wlr_gamma_control_manager_v1_create(dpy));

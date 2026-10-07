@@ -15,10 +15,19 @@ static void destroydecoration(struct wl_listener* listener, void* data);
 static void maximizenotify(struct wl_listener* listener, void* data);
 static Client* modaltop(Client* c);
 static void requestdecorationmode(struct wl_listener* listener, void* data);
-static void setfullscreen(Client* c, int fullscreen);
 static void seturgent(Client* c);
 
 /* function implementations */
+void activateclient(Client* c)
+{
+    if (!c->mon || !client_surface(c)->mapped)
+        return;
+    selmon = c->mon;
+    if (!VISIBLEON(c, c->mon))
+        view(&(Arg){ .ui = c->tags });
+    focusclient(c, 1);
+}
+
 static void applybounds(Client* c, struct wlr_box* bbox)
 {
     /* set minimum possible */
@@ -294,6 +303,7 @@ void focusclient(Client* c, int lift)
 
     if (!c) {
         /* With no client, all we have left is to clear focus */
+        toplevelfocus(NULL);
         wlr_seat_keyboard_notify_clear_focus(seat);
         return;
     }
@@ -306,6 +316,7 @@ void focusclient(Client* c, int lift)
 
     /* Activate the new client */
     client_activate_surface(client_surface(c), 1);
+    toplevelfocus(c);
 }
 
 /* We probably should change the name of this: it sounds like it
@@ -431,6 +442,7 @@ void mapnotify(struct wl_listener* listener, void* data)
     }
 
     drawbars();
+    toplevelmap(c);
 
 unset_fullscreen:
     m = c->mon ? c->mon : xytomon(c->geom.x, c->geom.y);
@@ -561,9 +573,10 @@ void setfloating(Client* c, int floating)
     drawbars();
 }
 
-static void setfullscreen(Client* c, int fullscreen)
+void setfullscreen(Client* c, int fullscreen)
 {
     c->isfullscreen = fullscreen;
+    toplevelupdate(c);
     if (!c->mon || !client_surface(c)->mapped)
         return;
     c->bw = fullscreen ? 0 : borderwidth();
@@ -608,6 +621,7 @@ void setmon(Client* c, Monitor* m, uint32_t newtags)
         setfullscreen(c, c->isfullscreen); /* This will call arrange(c->mon) */
         setfloating(c, c->isfloating);
     }
+    toplevelupdate(c);
     focusclient(focustop(selmon), 1);
 }
 
@@ -641,6 +655,7 @@ void unmapnotify(struct wl_listener* listener, void* data)
     Client* c = wl_container_of(listener, c, unmap);
     int i;
 
+    toplevelunmap(c);
     if (c == grabc) {
         cursor_mode = CurNormal;
         grabc = NULL;
@@ -685,6 +700,7 @@ void unmapnotify(struct wl_listener* listener, void* data)
 void updatetitle(struct wl_listener* listener, void* data)
 {
     Client* c = wl_container_of(listener, c, set_title);
+    toplevelupdate(c);
     if (c == focustop(c->mon))
         drawbars();
 }
@@ -699,10 +715,7 @@ void urgent(struct wl_listener* listener, void* data)
 
     /* the user clicked a notification: focus instead of marking urgent */
     if (notifytokenmine(event->token) && c->mon && client_surface(c)->mapped) {
-        selmon = c->mon;
-        if (!VISIBLEON(c, c->mon))
-            view(&(Arg){ .ui = c->tags });
-        focusclient(c, 1);
+        activateclient(c);
         return;
     }
 
