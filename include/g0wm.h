@@ -38,8 +38,10 @@
 #include <wlr/types/wlr_drm.h>
 #include <wlr/types/wlr_export_dmabuf_v1.h>
 #include <wlr/types/wlr_ext_data_control_v1.h>
+#include <wlr/types/wlr_ext_foreign_toplevel_list_v1.h>
 #include <wlr/types/wlr_ext_image_capture_source_v1.h>
 #include <wlr/types/wlr_ext_image_copy_capture_v1.h>
+#include <wlr/types/wlr_foreign_toplevel_management_v1.h>
 #include <wlr/types/wlr_fractional_scale_v1.h>
 #include <wlr/types/wlr_gamma_control_v1.h>
 #include <wlr/types/wlr_idle_inhibit_v1.h>
@@ -278,6 +280,12 @@ typedef struct {
     float opacity_unfocus; /* used while it does not */
     int borderscheme;      /* scheme its border is drawn in, to redo it */
     uint32_t resize;       /* configure serial of a pending resize */
+    struct wlr_foreign_toplevel_handle_v1* ftl;
+    struct wlr_ext_foreign_toplevel_handle_v1* eftl;
+    struct wlr_ext_image_capture_source_v1* capture;
+    struct wl_listener ftl_activate;
+    struct wl_listener ftl_close;
+    struct wl_listener ftl_fullscreen;
 } Client;
 
 typedef struct {
@@ -414,6 +422,7 @@ typedef struct {
 } SessionLock;
 
 /* function declarations */
+void activateclient(Client* c);
 void arrange(Monitor* m);
 void arrangelayers(Monitor* m);
 void applymonrules(Monitor* m, struct wlr_output_state* state);
@@ -435,6 +444,7 @@ Buffer* bufget(Buffer** pool, size_t poollen, int width, int height);
 void bufpooldrop(Buffer** pool, size_t poollen);
 unsigned int borderwidth(void);
 void buttonpress(struct wl_listener* listener, void* data);
+void capturetoplevel(struct wl_listener* listener, void* data);
 void chvt(const Arg* arg);
 void checkidleinhibitor(struct wlr_surface* exclude);
 void closemon(Monitor* m);
@@ -525,6 +535,7 @@ void setbordercolor(Client* c, int scheme);
 void setcursor(struct wl_listener* listener, void* data);
 void setcursorshape(struct wl_listener* listener, void* data);
 void setfloating(Client* c, int floating);
+void setfullscreen(Client* c, int fullscreen);
 void setlayout(const Arg* arg);
 void setmfact(const Arg* arg);
 void settitle(Client* c);
@@ -574,6 +585,10 @@ void traypopup_click(double lx, double ly);
 void traypopup_dismiss(void);
 void traypopup_motion(double lx, double ly);
 void traypopup_present(const char* const* labels, int n, Menu* menu);
+void toplevelfocus(Client* c);
+void toplevelmap(Client* c);
+void toplevelunmap(Client* c);
+void toplevelupdate(Client* c);
 void unmapnotify(struct wl_listener* listener, void* data);
 void updatemons(struct wl_listener* listener, void* data);
 void updatebar(Monitor* m);
@@ -605,6 +620,8 @@ extern struct wlr_content_type_manager_v1* content_type_mgr;
 extern struct wlr_tearing_control_manager_v1* tearing_mgr;
 extern struct wl_list clients; /* tiling order */
 extern struct wl_list fstack;  /* focus order */
+extern struct wlr_ext_foreign_toplevel_list_v1* ext_toplevel_list;
+extern struct wlr_foreign_toplevel_manager_v1* foreign_toplevel_mgr;
 extern struct wlr_idle_notifier_v1* idle_notifier;
 extern struct wlr_keyboard_shortcuts_inhibit_manager_v1* kb_inhibit_mgr;
 extern struct wlr_output_manager_v1* output_mgr;
