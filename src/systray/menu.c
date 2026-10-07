@@ -169,8 +169,7 @@ static void createmenuitem(MenuItem* mi,
                            int toggle_state,
                            int has_submenu)
 {
-    char* tok;
-    char temp[LABEL_MAX];
+    char* out;
 
     if (toggle_state == 0)
         strcpy(mi->label, "☐ ");
@@ -180,11 +179,11 @@ static void createmenuitem(MenuItem* mi,
         strcpy(mi->label, "  ");
 
     /* Remove "mnemonics" (underscores which mark keyboard shortcuts) */
-    strcpy(temp, label);
-    tok = strtok(temp, "_");
-    do {
-        strcat(mi->label, tok);
-    } while ((tok = strtok(NULL, "_")));
+    out = mi->label + strlen(mi->label);
+    for (; *label; label++)
+        if (*label != '_')
+            *out++ = *label;
+    *out = '\0';
 
     if (has_submenu) {
         mi->has_submenu = 1;
@@ -530,11 +529,10 @@ static void about_to_show_handle(DBusPendingCall* pending, void* data)
     if (!reply)
         goto fail;
 
-    if (request_layout(menu) < 0)
-        goto fail;
-
     dbus_message_unref(reply);
     dbus_pending_call_unref(pending);
+    /* destroys the menu itself on failure */
+    request_layout(menu);
     return;
 
 fail:
