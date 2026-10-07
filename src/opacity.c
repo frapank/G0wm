@@ -132,11 +132,7 @@ static void blurbox(Client* c,
 void blurclient(Client* c)
 {
     Monitor* m = c->mon;
-#ifdef TITLEBAR
     int th, bw, x, w;
-#else
-    int th = 0;
-#endif
 
     if (!c->blur)
         return;
@@ -146,28 +142,21 @@ void blurclient(Client* c)
     if (!m || !m->blurpool[0] || c->isfullscreen || !opacity_enabled ||
         ((!c->hasopacity || c->opacity >= 1.0f) && !decotranslucent())) {
         wlr_scene_node_set_enabled(&c->blur->node, 0);
-#ifdef TITLEBAR
         if (c->titleblur)
             wlr_scene_node_set_enabled(&c->titleblur->node, 0);
-#endif
         return;
     }
 
-#ifdef TITLEBAR
     th = titleheight(c);
     bw = (int)c->bw;
-#endif
 
     if (!th || m->lt[m->sellt]->arrange != tabbed || c->isfloating) {
         blurbox(c, c->blur, &c->blurbuf, 0, 0, c->geom.width, c->geom.height);
-#ifdef TITLEBAR
         if (c->titleblur)
             wlr_scene_node_set_enabled(&c->titleblur->node, 0);
-#endif
         return;
     }
 
-#ifdef TITLEBAR
     /* Tabs share one box and the ones under the top are drawn in lower trees,
      * so a backdrop over the whole box buries their title bars. Each tab backs
      * its own slice of the row, the top one backs the body below it. */
@@ -191,7 +180,6 @@ void blurclient(Client* c)
                 c->geom.height - bw - th);
     else
         wlr_scene_node_set_enabled(&c->blur->node, 0);
-#endif /* TITLEBAR */
 }
 
 /* One box blur along the rows: a 2r+1 window slides on a running sum, so a
@@ -332,12 +320,8 @@ static void blurwallpaper(Monitor* m)
 
     /* the nodes pick the new buffer up next frame; the pointer they compare
      * against has to go now, or a reused address would read as unchanged */
-#ifdef TITLEBAR
     wl_list_for_each(c, &clients, link) if (c->mon == m) c->blurbuf =
         c->titleblurbuf = NULL;
-#else
-    wl_list_for_each(c, &clients, link) if (c->mon == m) c->blurbuf = NULL;
-#endif
 
     if (opacity_type != OpacityBlur || !m->wallpaperpool[0] || w <= 0 || h <= 0)
         return;

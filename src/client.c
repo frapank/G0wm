@@ -337,9 +337,7 @@ void mapnotify(struct wl_listener* listener, void* data)
     Client *w, *c = wl_container_of(listener, c, map);
     Monitor* m;
     int i;
-#ifdef TITLEBAR
     int th;
-#endif
 
     /* Create scene tree for this client and its border */
     c->scene = client_surface(c)->data = wlr_scene_tree_create(layers[LyrTile]);
@@ -378,11 +376,9 @@ void mapnotify(struct wl_listener* listener, void* data)
     /* the colour comes from here, once all four exist */
     setbordercolor(c, c->isurgent ? SchemeUrg : SchemeNorm);
 
-#ifdef TITLEBAR
     c->title = wlr_scene_buffer_create(c->scene, NULL);
     c->title->node.data = c;
     wlr_scene_node_set_enabled(&c->title->node, 0);
-#endif
 
 #ifdef INTEGRATED_BACKGROUND
     /* the frosted backdrop goes under the lot: the surface, which is what it
@@ -392,13 +388,11 @@ void mapnotify(struct wl_listener* listener, void* data)
     wlr_scene_node_set_enabled(&c->blur->node, 0);
     wlr_scene_node_lower_to_bottom(&c->blur->node);
 
-#ifdef TITLEBAR
     /* backs the title bar alone, which is what tabs need */
     c->titleblur = wlr_scene_buffer_create(c->scene, NULL);
     c->titleblur->node.data = c;
     wlr_scene_node_set_enabled(&c->titleblur->node, 0);
     wlr_scene_node_lower_to_bottom(&c->titleblur->node);
-#endif
 #endif
 
     /* Initialize client geometry with room for border */
@@ -426,7 +420,6 @@ void mapnotify(struct wl_listener* listener, void* data)
         applyrules(c);
     }
 
-#ifdef TITLEBAR
     if ((th = titleheight(c)) > 0 &&
         (c->isfloating || !c->mon->lt[c->mon->sellt]->arrange)) {
         c->geom.height += th;
@@ -434,7 +427,6 @@ void mapnotify(struct wl_listener* listener, void* data)
         c->prev.y -= th / 2;
         resize(c, c->geom, c->isfloating && !c->isfullscreen);
     }
-#endif
 
     drawbars();
 
@@ -482,9 +474,7 @@ void resize(Client* c, struct wlr_box geo, int interact)
     if (!c->mon || !client_surface(c)->mapped)
         return;
 
-#ifdef TITLEBAR
     th = titleheight(c);
-#endif
 
     bbox = interact ? &sgeom : &c->mon->w;
 
@@ -518,9 +508,7 @@ void resize(Client* c, struct wlr_box geo, int interact)
     clip.height -= th;
     wlr_scene_subsurface_tree_set_clip(&c->scene_surface->node, &clip);
 
-#ifdef TITLEBAR
     settitle(c);
-#endif
 }
 
 void setfloating(Client* c, int floating)
@@ -634,21 +622,15 @@ void unmapnotify(struct wl_listener* listener, void* data)
     if (client_surface(c))
         client_surface(c)->data = NULL;
     wlr_scene_node_destroy(&c->scene->node);
-#ifdef TITLEBAR
     c->title = NULL;
-#endif
 #ifdef INTEGRATED_BACKGROUND
     c->blur = NULL;
     c->blurbuf = NULL;
-#ifdef TITLEBAR
     c->titleblur = NULL;
     c->titleblurbuf = NULL;
 #endif
-#endif
-#ifdef TITLEBAR
     bufpooldrop(c->titlepool, LENGTH(c->titlepool));
     c->titlebufw = 0;
-#endif
     for (i = 0; i < 4; i++) {
         c->corner[i] = NULL;
         bufpooldrop(c->cornerpool[i], LENGTH(c->cornerpool[i]));
@@ -673,7 +655,6 @@ void urgent(struct wl_listener* listener, void* data)
     if (!c || c == focustop(selmon))
         return;
 
-#ifdef NOTIFICATIONS
     /* the user clicked a notification: focus instead of marking urgent */
     if (notifytokenmine(event->token) && c->mon && client_surface(c)->mapped) {
         selmon = c->mon;
@@ -682,7 +663,6 @@ void urgent(struct wl_listener* listener, void* data)
         focusclient(c, 1);
         return;
     }
-#endif
 
     c->isurgent = 1;
     drawbars();

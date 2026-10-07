@@ -43,11 +43,9 @@ The settings are documented in the comments of
 
 The required dependencies are `wlroots` 0.20 with the libinput backend,
 `wayland`, `wayland-protocols`, `libinput`, `xkbcommon`, `pixman`, `fcft`,
-`libdbus` and `pkg-config`.
+`libdbus`, `gdk-pixbuf` and `pkg-config`.
 
 X11 support also requires `libxcb`, `libxcb-icccm` and `Xwayland`.
-
-`gdk-pixbuf` is only needed if you want to use the built in wallpaper support.
 
 ```sh
 ./configure && make
@@ -63,11 +61,7 @@ Some features can be disabled during the build:
 | Flag | Disables |
 | --- | --- |
 | `--disable-xwayland` | X11 support (`libxcb`) |
-| `--no-systray` | the tray in the bar |
-| `--no-notify` | the notification server |
-| `--no-runner` | the bar runner, `MODKEY+r` starts `menucmd` instead |
-| `--no-titlebar` | the per-window title bars and the tabs drawn in them |
-| `--no-integrated-background` | the wallpaper renderer (`gdk-pixbuf`) |
+| `--no-integrated-background` | the wallpaper renderer and the blur |
 
 Run `./configure --help` to see the other available options such as
 toolchain settings, `--debug` and `--native`.
@@ -76,7 +70,8 @@ toolchain settings, `--debug` and `--native`.
 
 Every setting lives in `~/.config/g0wm/settings.json`, which `make install`
 writes and g0wm reads at startup. Only the sections the build was configured
-with go in it: a `--no-systray` build has no tray settings.
+with go in it: a `--no-integrated-background` build has no wallpaper or blur
+settings.
 
 ```sh
 g0wm -c             # write it if it is not there, then print what g0wm reads

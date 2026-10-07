@@ -117,10 +117,8 @@ static void cleanupmon(struct wl_listener* listener, void* data)
     bufpooldrop(m->blurpool, LENGTH(m->blurpool));
 #endif
 
-#ifdef SYSTRAY
     if (m->tray)
         destroytray(m->tray);
-#endif
 
     drwl_setimage(m->drw, NULL);
     drwl_destroy(m->drw);

@@ -29,15 +29,6 @@ XWAYLAND = -DXWAYLAND
 XLIBS = xcb xcb-icccm
 
 BACKGROUND = -DINTEGRATED_BACKGROUND
-BGLIBS = gdk-pixbuf-2.0
-
-NOTIFY = -DNOTIFICATIONS
-
-SYSTRAY = -DSYSTRAY
-
-RUNNER = -DRUNNER
-
-TITLEBAR = -DTITLEBAR
 
 # g0wm itself only uses C99 features, but wlroots' headers use anonymous unions (C11).
 # To avoid warnings about them, we do not use -std=c99 and instead of using the

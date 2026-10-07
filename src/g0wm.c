@@ -123,16 +123,12 @@ struct wl_list mons;
 Monitor* selmon;
 char stext[STATUS_MAX];
 struct wl_event_source* status_event_source;
-#ifdef SYSTRAY
 Watcher watcher = { .running = 0 };
-#endif /* SYSTRAY */
-#ifdef RUNNER
 int runner_active;
 char runner_buf[256];
 int runner_len;
 int runner_cur;       /* cursor offset into runner_buf, 0..runner_len */
 int runner_repeating; /* the armed repeat belongs to the prompt */
-#endif                /* RUNNER */
 struct wl_listener request_activate = { .notify = urgent };
 #ifdef XWAYLAND
 struct wlr_xwayland* xwayland;
@@ -221,17 +217,13 @@ static void cleanup(void)
 
     destroykeyboardgroup(&kb_group->destroy, NULL);
 
-#ifdef SYSTRAY
     /* before the watcher, an open menu still holds a bus connection */
     traypopup_cleanup();
     if (watcher.running)
         watcher_stop(&watcher);
-#endif
-#ifdef NOTIFICATIONS
     notifyfini();
     if (shownotifications)
         notify_stop();
-#endif
     if (bus_conn) {
         stopbus(bus_conn, bus_source);
         dbus_connection_unref(bus_conn);
@@ -414,7 +406,6 @@ static void handlesig(int signo)
     }
 }
 
-#ifdef NOTIFICATIONS
 static char notifytokentag; /* marks the tokens handed out below */
 
 const char* notifytoken(void)
@@ -434,7 +425,6 @@ int notifytokenmine(const struct wlr_xdg_activation_token_v1* token)
     return token && token->data == &notifytokentag;
 }
 
-#endif /* NOTIFICATIONS */
 void quit(const Arg* arg)
 {
     wl_display_terminate(dpy);
@@ -743,28 +733,17 @@ static void setup(void)
 
     /* Missing the session bus is not fatal: g0wm comes up without a tray
      * and/or bar notifications. */
-    if (showbar && (0
-#ifdef SYSTRAY
-                    || showsystray
-#endif
-#ifdef NOTIFICATIONS
-                    || shownotifications
-#endif
-                    )) {
+    if (showbar && (showsystray || shownotifications)) {
         if ((bus_conn = dbus_bus_get(DBUS_BUS_SESSION, NULL)) &&
             (bus_source = startbus(bus_conn, event_loop))) {
-#ifdef SYSTRAY
             if (showsystray)
                 watcher_start(&watcher, bus_conn, event_loop);
-#endif
-#ifdef NOTIFICATIONS
             if (shownotifications)
                 notify_start(bus_conn,
                              event_loop,
                              notification_timeout,
                              drawbars,
                              notifytoken);
-#endif
         } else
             fprintf(stderr,
                     "Couldn't connect to the session bus, "

@@ -35,15 +35,15 @@ export MESS RESET RED GREEN YELLOW MAGENTA CYAN
 # flags for compiling
 G0WMCPPFLAGS = -I$(INCDIR) -I$(INCDIR)/systray -I$(EXTDIR) -I$(GENDIR) \
 	-DWLR_USE_UNSTABLE -D_POSIX_C_SOURCE=200809L \
-	-DVERSION=\"$(VERSION)\" $(XWAYLAND) $(BACKGROUND) $(NOTIFY) $(SYSTRAY) \
-	$(RUNNER) $(TITLEBAR)
+	-DVERSION=\"$(VERSION)\" $(XWAYLAND) $(BACKGROUND)
 G0WMDEVCFLAGS = -g -Wpedantic -Wall -Wextra -Wdeclaration-after-statement \
 	-Wno-unused-parameter -Wshadow -Wunused-macros -Werror=strict-prototypes \
 	-Werror=implicit -Werror=return-type -Werror=incompatible-pointer-types \
 	-Wfloat-conversion
 
 # CFLAGS / LDFLAGS
-PKGS      = wayland-server xkbcommon libinput pixman-1 fcft dbus-1 $(XLIBS) $(BGLIBS)
+PKGS      = wayland-server xkbcommon libinput pixman-1 fcft dbus-1 gdk-pixbuf-2.0 \
+	$(XLIBS)
 G0WMCFLAGS = `$(PKG_CONFIG) --cflags $(PKGS)` $(WLR_INCS) $(G0WMCPPFLAGS) $(G0WMDEVCFLAGS) $(CFLAGS)
 LDLIBS    = `$(PKG_CONFIG) --libs $(PKGS)` $(WLR_LIBS) -lm $(LIBS)
 
@@ -51,33 +51,20 @@ LDLIBS    = `$(PKG_CONFIG) --libs $(PKGS)` $(WLR_LIBS) -lm $(LIBS)
 SRC = $(SRCDIR)/g0wm.c $(SRCDIR)/bar.c $(SRCDIR)/buffer.c $(SRCDIR)/client.c \
 	$(SRCDIR)/corner.c $(SRCDIR)/input.c $(SRCDIR)/layout.c $(SRCDIR)/lock.c \
 	$(SRCDIR)/monitor.c $(SRCDIR)/opacity.c \
-	$(SRCDIR)/util.c $(SRCDIR)/dbus.c $(SRCDIR)/settings.c
+	$(SRCDIR)/util.c $(SRCDIR)/dbus.c $(SRCDIR)/settings.c \
+	$(SRCDIR)/notify.c $(SRCDIR)/runner.c $(SRCDIR)/traypopup.c \
+	$(SRCDIR)/systray/watcher.c $(SRCDIR)/systray/tray.c \
+	$(SRCDIR)/systray/item.c $(SRCDIR)/systray/icon.c \
+	$(SRCDIR)/systray/menu.c $(SRCDIR)/systray/helpers.c
 HDR = $(INCDIR)/g0wm.h $(INCDIR)/config.h $(INCDIR)/client.h \
 	$(INCDIR)/util.h $(INCDIR)/dbus.h $(INCDIR)/settings.h \
+	$(INCDIR)/notify.h \
+	$(INCDIR)/systray/watcher.h $(INCDIR)/systray/tray.h \
+	$(INCDIR)/systray/item.h $(INCDIR)/systray/icon.h \
+	$(INCDIR)/systray/menu.h $(INCDIR)/systray/helpers.h \
 	$(EXTDIR)/drwl.h $(EXTDIR)/cJSON.h
-ifneq ($(NOTIFY),)
-SRC += $(SRCDIR)/notify.c
-HDR += $(INCDIR)/notify.h
-endif
-ifneq ($(RUNNER),)
-SRC += $(SRCDIR)/runner.c
-endif
 ifneq ($(XWAYLAND),)
 SRC += $(SRCDIR)/xwayland.c
-endif
-ifneq ($(SYSTRAY),)
-SRC += $(SRCDIR)/traypopup.c \
-	$(SRCDIR)/systray/watcher.c $(SRCDIR)/systray/tray.c \
-	$(SRCDIR)/systray/item.c \
-	$(SRCDIR)/systray/menu.c $(SRCDIR)/systray/helpers.c
-HDR += $(INCDIR)/systray/watcher.h $(INCDIR)/systray/tray.h \
-	$(INCDIR)/systray/item.h \
-	$(INCDIR)/systray/menu.h $(INCDIR)/systray/helpers.h
-endif
-# the icon loader serves the tray and the notifications alike
-ifneq ($(SYSTRAY)$(NOTIFY),)
-SRC += $(SRCDIR)/systray/icon.c
-HDR += $(INCDIR)/systray/icon.h
 endif
 OBJ = $(SRC:$(SRCDIR)/%.c=$(BUILDDIR)/%.o)
 
