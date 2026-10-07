@@ -145,7 +145,6 @@ static const Action actions[] = {
     { killclient, "killclient", 0 },
     { moveresize, "moveresize", 'c' },
     { movestack, "movestack", 'i' },
-#ifdef NOTIFICATIONS
     { notifyactions, "notifyactions", 0 },
     { notifydismiss, "notifydismiss", 0 },
     { notifydismissall, "notifydismissall", 0 },
@@ -153,14 +152,11 @@ static const Action actions[] = {
     { notifyopen, "notifyopen", 0 },
     { notifyprev, "notifyprev", 0 },
     { notifyscroll, "notifyscroll", 0 },
-#endif
     { quit, "quit", 0 },
     { reloadsettings, "reloadsettings", 0 },
     { resizeheight, "resizeheight", 'i' },
     { resizewidth, "resizewidth", 'i' },
-#ifdef RUNNER
     { runnertoggle, "runnertoggle", 0 },
-#endif
     { setlayout, "setlayout", 'l' },
     { setmfact, "setmfact", 'f' },
     { setopacityfocus, "setopacityfocus", 'f' },
@@ -177,14 +173,10 @@ static const Action actions[] = {
     { toggleopacity, "toggleopacity", 0 },
     { toggletabbed, "toggletabbed", 'l' },
     { toggletag, "toggletag", 'u' },
-#ifdef TITLEBAR
     { toggletitlebar, "toggletitlebar", 0 },
-#endif
     { toggleview, "toggleview", 'u' },
-#ifdef SYSTRAY
     { trayactivate, "trayactivate", 0 },
     { traymenu, "traymenu", 0 },
-#endif
     { view, "view", 'u' },
     { zoom, "zoom", 0 },
 };
@@ -319,20 +311,14 @@ static cJSON* jcolors(void)
         [SchemeNorm] = "norm",
         [SchemeSel] = "sel",
         [SchemeUrg] = "urg",
-#ifdef TITLEBAR
         [SchemeTitle] = "title",
         [SchemeTitleSel] = "titlesel",
-#endif
         [SchemeStatus] = "status",
-#ifdef NOTIFICATIONS
         [SchemeNotify] = "notify",
         [SchemeNotifyLow] = "notifylow",
         [SchemeNotifyCrit] = "notifycrit",
-#endif
-#ifdef RUNNER
         [SchemeRunner] = "runner",
         [SchemeRunnerSuggest] = "runnersuggest",
-#endif
     };
     cJSON* o = cJSON_CreateObject();
     size_t i;
@@ -385,13 +371,11 @@ static cJSON* jwindows(void)
     cJSON_AddNumberToObject(o, "gaps", gaps);
     cJSON_AddNumberToObject(o, "gappx", gappx);
     cJSON_AddBoolToObject(o, "smartgaps", smartgaps);
-#ifdef TITLEBAR
     cJSON_AddBoolToObject(o, "titlebar", titlebar);
     cJSON_AddNumberToObject(o, "titlepadding", titlepadding);
     cJSON_AddBoolToObject(o, "titlecenter", titlecenter);
     cJSON_AddBoolToObject(o, "titleclose", titleclose);
     cJSON_AddItemToObject(o, "titleclosecolor", jhex(titleclosecolor));
-#endif
 
     a = cJSON_AddArrayToObject(o, "layouts");
     for (i = 0; i < nlayouts; i++) {
@@ -430,13 +414,10 @@ static cJSON* jbar(void)
     cJSON_AddNumberToObject(o, "barpadding", barpadding);
     cJSON_AddItemToObject(o, "barheight", jnum(barheight));
     cJSON_AddBoolToObject(o, "barsinglemon", barsinglemon);
-#ifdef SYSTRAY
     cJSON_AddBoolToObject(o, "showsystray", showsystray);
     cJSON_AddNumberToObject(o, "systrayspacing", systrayspacing);
     cJSON_AddNumberToObject(o, "systraypadding", systraypadding);
     cJSON_AddNumberToObject(o, "systrayiconsize", systrayiconsize);
-#endif
-#ifdef NOTIFICATIONS
     cJSON_AddBoolToObject(o, "shownotifications", shownotifications);
     cJSON_AddNumberToObject(o, "notification_timeout", notification_timeout);
     cJSON_AddNumberToObject(
@@ -445,10 +426,7 @@ static cJSON* jbar(void)
         o, "notification_lineradius", notification_lineradius);
     cJSON_AddStringToObject(
         o, "notification_actionsign", notification_actionsign);
-#endif
-#ifdef RUNNER
     cJSON_AddStringToObject(o, "runner_placeholder", runner_placeholder);
-#endif
     return o;
 }
 
@@ -806,20 +784,14 @@ static void applycolors(const cJSON* o)
         [SchemeNorm] = "norm",
         [SchemeSel] = "sel",
         [SchemeUrg] = "urg",
-#ifdef TITLEBAR
         [SchemeTitle] = "title",
         [SchemeTitleSel] = "titlesel",
-#endif
         [SchemeStatus] = "status",
-#ifdef NOTIFICATIONS
         [SchemeNotify] = "notify",
         [SchemeNotifyLow] = "notifylow",
         [SchemeNotifyCrit] = "notifycrit",
-#endif
-#ifdef RUNNER
         [SchemeRunner] = "runner",
         [SchemeRunnerSuggest] = "runnersuggest",
-#endif
     };
 
     for (i = 0; i < LENGTH(names); i++) {
@@ -913,13 +885,11 @@ static void applywindows(const cJSON* o)
     gaps = (int)getnum(o, "gaps", gaps);
     gappx = (unsigned int)getnum(o, "gappx", gappx);
     smartgaps = getbool(o, "smartgaps", smartgaps);
-#ifdef TITLEBAR
     titlebar = getbool(o, "titlebar", titlebar);
     titlepadding = (unsigned int)getnum(o, "titlepadding", titlepadding);
     titlecenter = getbool(o, "titlecenter", titlecenter);
     titleclose = getbool(o, "titleclose", titleclose);
     titleclosecolor = gethex(o, "titleclosecolor", titleclosecolor);
-#endif
     applylayouts(item(o, "layouts"));
     applyrules(item(o, "rules"));
 }
@@ -937,14 +907,11 @@ static void applybar(const cJSON* o)
     barpadding = (unsigned int)getnum(o, "barpadding", barpadding);
     barheight = (float)getnum(o, "barheight", barheight);
     barsinglemon = getbool(o, "barsinglemon", barsinglemon);
-#ifdef SYSTRAY
     showsystray = getbool(o, "showsystray", showsystray);
     systrayspacing = (unsigned int)getnum(o, "systrayspacing", systrayspacing);
     systraypadding = (unsigned int)getnum(o, "systraypadding", systraypadding);
     systrayiconsize =
         (unsigned int)getnum(o, "systrayiconsize", systrayiconsize);
-#endif
-#ifdef NOTIFICATIONS
     shownotifications = getbool(o, "shownotifications", shownotifications);
     notification_timeout =
         (unsigned int)getnum(o, "notification_timeout", notification_timeout);
@@ -954,10 +921,7 @@ static void applybar(const cJSON* o)
         o, "notification_lineradius", notification_lineradius);
     notification_actionsign =
         getstr(o, "notification_actionsign", notification_actionsign);
-#endif
-#ifdef RUNNER
     runner_placeholder = getstr(o, "runner_placeholder", runner_placeholder);
-#endif
 }
 
 static void applyopacity(const cJSON* o)
@@ -1518,8 +1482,6 @@ void reloadsettings(const Arg* arg)
     }
 
     reloadopacity();
-#ifdef NOTIFICATIONS
     notify_settimeout(notification_timeout);
-#endif
     drawbars();
 }
