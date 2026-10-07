@@ -141,21 +141,9 @@ config.mk:
 
 # Formatting, per .clang-format. external/ is vendored and config*.h are
 # alignment-sensitive tables, so neither is reformatted.
-FMT_SRC = $(SRCDIR)/g0wm.c $(SRCDIR)/bar.c $(SRCDIR)/buffer.c \
-	$(SRCDIR)/client.c $(SRCDIR)/corner.c $(SRCDIR)/input.c \
-	$(SRCDIR)/layout.c $(SRCDIR)/lock.c $(SRCDIR)/monitor.c \
-	$(SRCDIR)/opacity.c $(SRCDIR)/runner.c $(SRCDIR)/xwayland.c \
-	$(SRCDIR)/util.c $(SRCDIR)/dbus.c $(SRCDIR)/notify.c \
-	$(SRCDIR)/settings.c $(SRCDIR)/traypopup.c \
-	$(SRCDIR)/systray/watcher.c $(SRCDIR)/systray/tray.c \
-	$(SRCDIR)/systray/item.c $(SRCDIR)/systray/icon.c \
-	$(SRCDIR)/systray/menu.c $(SRCDIR)/systray/helpers.c \
-	$(INCDIR)/g0wm.h \
-	$(INCDIR)/client.h $(INCDIR)/util.h $(INCDIR)/dbus.h $(INCDIR)/notify.h \
-	$(INCDIR)/settings.h \
-	$(INCDIR)/systray/watcher.h $(INCDIR)/systray/tray.h \
-	$(INCDIR)/systray/item.h $(INCDIR)/systray/icon.h \
-	$(INCDIR)/systray/menu.h $(INCDIR)/systray/helpers.h
+FMT_SRC = $(filter-out $(INCDIR)/config.h, \
+	$(wildcard $(SRCDIR)/*.c $(SRCDIR)/systray/*.c \
+	$(INCDIR)/*.h $(INCDIR)/systray/*.h))
 
 format:
 	@$(MESS) '[$(CYAN)FORMAT$(RESET)] %s\n' 'Formatting...'
