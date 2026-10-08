@@ -5,22 +5,19 @@
 **A personal desktop environment designed to my liking**
 
 [![C](https://img.shields.io/badge/C-99%2B-A8B9CC?style=flat-square&logo=c)](https://en.wikipedia.org/wiki/C_(programming_language))
-![Status](https://img.shields.io/badge/status-early%20development-orange?style=flat-square)
+![Status](https://img.shields.io/badge/status-stable-green?style=flat-square)
 [![License](https://img.shields.io/badge/license-GPL--3.0-blue?style=flat-square)](LICENSE)
 
 </div>
 
 ## What this is
 
-This is my own build of [dwl], kept here so I can pull it onto whatever machine
-I happen to be using. It started as a fork and has changed quite a bit since
-then. It is not meant to replace dwl or to pass itself off as a separate
-project.
-
-The original dwl is a minimal Wayland compositor that relies on external
-programs for things like the bar, notifications and the application launcher.
-g0wm handles all of these directly, which makes it closer to a small desktop
-environment than to a plain compositor.
+g0wm is a minimal Wayland compositor built on dwl and reworked from the ground
+up. It is designed to feel more like a complete desktop environment.
+Its status bar includes features such as notifications, a runner, a calculator,
+and a customizable status bar. It also includes the tabbed mode from i3,
+with window titles and close buttons that appear on the right side of the bar
+when hovered.
 
 The settings are documented in the comments of
 [`include/config.h`](include/config.h), and the man page is at
@@ -41,58 +38,34 @@ The settings are documented in the comments of
 
 ## Build
 
-The required dependencies are `wlroots` 0.20 with the libinput backend,
-`wayland`, `wayland-protocols`, `libinput`, `xkbcommon`, `pixman`, `fcft`,
-`libdbus`, `gdk-pixbuf` and `pkg-config`.
+The required dependencies are: wlroots 0.20 (with the libinput backend),
+wayland, wayland-protocols, libinput, xkbcommon, pixman, fcft,
+libdbus, gdk-pixbuf and pkg-config.
 
-X11 support also requires `libxcb`, `libxcb-icccm` and `Xwayland`.
+X11 support also requires: libxcb, libxcb-icccm and Xwayland.
 
 ```sh
 ./configure && make
 make install         # g0wm into ~/.local/bin
 ```
 
-You can also just run `make`. It will use `config.def.mk` if no custom
-configuration exists yet.
-
-Some features can be disabled during the build:
-
-| Flag | Disables |
-| --- | --- |
-| `--disable-xwayland` | X11 support (`libxcb`) |
-| `--no-integrated-background` | the wallpaper renderer and the blur |
-
 Run `./configure --help` to see the other available options such as
 toolchain settings, `--debug` and `--native`.
 
-## Configure
+## Configure & Run
 
 Every setting lives in `~/.config/g0wm/settings.json`, which `make install`
-writes and g0wm reads at startup. Only the sections the build was configured
-with go in it: a `--no-integrated-background` build has no wallpaper or blur
-settings.
+writes and g0wm reads at startup. 
 
 ```sh
-g0wm -c             # write it if it is not there, then print what g0wm reads
+g0wm -c             # write it if it is not there
 ```
-
-An existing file is never overwritten. Startup checks it and reports anything
-missing, mistyped or unknown, and keeps the built-in value for it.
-
-[`include/config.h`](include/config.h) holds those built-in values, divided
-into numbered sections; it is what a fresh `settings.json` is written from, so
-read the header at the top of it before changing anything. Edit it by hand:
-changing it needs a rebuild, and a `settings.json` that is already there wins
-over it.
 
 The status text shown in the bar is read from standard input, one line at a
 time. No status script ships with g0wm.
 
-## Run
-
-Copy `share/g0wm.desktop` to `/usr/share/wayland-sessions/` and pick g0wm in
-your display manager, or run `g0wm` from a VT. To feed the bar, pipe a status
-script into it: `my-status | g0wm`.
+To run G0wm `share/g0wm.desktop` to `/usr/share/wayland-sessions/` and pick g0wm in
+your display manager, or run `g0wm` from a VT.
 
 ## License
 
