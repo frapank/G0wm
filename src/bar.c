@@ -786,11 +786,27 @@ static int onclose(Client* c, double x, double y)
            lx >= bx - m->lrpad / 2 && lx < c->titlebufw;
 }
 
+/* whether (x, y) is on c's title bar */
+static int ontitle(Client* c, double x, double y)
+{
+    Monitor* m = c->mon;
+    double lx, ly;
+
+    if (!m || !c->title || !c->title->node.enabled)
+        return 0;
+    lx = (x - c->geom.x - c->bw - c->titlex) * m->wlr_output->scale;
+    ly = (y - c->geom.y - c->bw) * m->wlr_output->scale;
+    return lx >= 0 && lx < c->titlebufw && ly >= 0 && ly < m->t.height;
+}
+
 int titleclick(Client* c, double x, double y)
 {
-    if (!onclose(c, x, y))
+    if (onclose(c, x, y))
+        client_send_close(c);
+    else if (ontitle(c, x, y))
+        titlegrab(c);
+    else
         return 0;
-    client_send_close(c);
     return 1;
 }
 
