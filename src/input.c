@@ -15,6 +15,7 @@ static void gesturerun(unsigned int motion);
 static void cursorwarptohint(void);
 static void destroydragicon(struct wl_listener* listener, void* data);
 static void destroypointerconstraint(struct wl_listener* listener, void* data);
+static void grab(Client* c, unsigned int mode);
 static void handlecursoractivity(void);
 static int hidecursor(void* data);
 static struct wlr_keyboard_shortcuts_inhibitor_v1* focusedinhibitor(void);
@@ -22,6 +23,8 @@ static int keybinding(uint32_t mods, xkb_keysym_t sym);
 static void keypress(struct wl_listener* listener, void* data);
 static void keypressmod(struct wl_listener* listener, void* data);
 static int keyrepeat(void* data);
+static void magnet(struct wlr_box* b);
+static void magnetedge(int pos, int size, int edge, int* dist, int* to);
 static void pointerfocus(Client* c,
                          struct wlr_surface* surface,
                          double sx,
@@ -40,6 +43,7 @@ static void xytonode(double x,
 static struct wlr_pointer_constraint_v1* active_constraint;
 static bool cursor_hidden = false;
 static int grabcx, grabcy; /* client-relative */
+static double pressx, pressy;
 /* gesture taken by a binding */
 static struct {
     int ours;
@@ -232,6 +236,7 @@ void buttonpress(struct wl_listener* listener, void* data)
                 return;
             }
             cursor_mode = CurNormal;
+            grabc = NULL;
             break;
     }
     /* If the event wasn't handled by the compositor, notify the client with
@@ -888,6 +893,7 @@ void motionnotify(uint32_t time,
     LayerSurface* l = NULL;
     struct wlr_surface* surface = NULL;
     struct wlr_pointer_constraint_v1* constraint;
+    struct wlr_box box;
 
     /* Find the client under the pointer and send the event along. */
     xytonode(cursor->x, cursor->y, &surface, &c, NULL, &sx, &sy);
@@ -970,6 +976,12 @@ void motionnotify(uint32_t time,
         return;
     }
 
+    if (cursor_mode == CurPressed && grabc && time && !locked &&
+        (cursor->x - pressx) * (cursor->x - pressx) +
+                (cursor->y - pressy) * (cursor->y - pressy) >=
+            movethreshold * movethreshold)
+        grab(grabc, CurMove);
+
     /* If we are currently grabbing the mouse, handle and return */
     if (cursor_mode == CurMove) {
         /* A tiled client keeps its slot in the layout: dragging it just swaps
@@ -983,12 +995,12 @@ void motionnotify(uint32_t time,
             return;
         }
         /* Move the grabbed client to the new position. */
-        resize(grabc,
-               (struct wlr_box){ .x = (int)round(cursor->x) - grabcx,
-                                 .y = (int)round(cursor->y) - grabcy,
-                                 .width = grabc->geom.width,
-                                 .height = grabc->geom.height },
-               1);
+        box = (struct wlr_box){ .x = (int)round(cursor->x) - grabcx,
+                                .y = (int)round(cursor->y) - grabcy,
+                                .width = grabc->geom.width,
+                                .height = grabc->geom.height };
+        magnet(&box);
+        resize(grabc, box, 1);
         return;
     } else if (cursor_mode == CurResize) {
         resize(
@@ -1030,31 +1042,52 @@ void motionrelative(struct wl_listener* listener, void* data)
 
 void moveresize(const Arg* arg)
 {
+    Client* c;
+
     if (cursor_mode != CurNormal && cursor_mode != CurPressed)
         return;
-    xytonode(cursor->x, cursor->y, NULL, &grabc, NULL, NULL, NULL);
-    if (!grabc || client_is_unmanaged(grabc) || grabc->isfullscreen)
+    xytonode(cursor->x, cursor->y, NULL, &c, NULL, NULL, NULL);
+    pressx = cursor->x;
+    pressy = cursor->y;
+    grab(c, arg->ui);
+}
+
+/* Moving c from the title bar waits for movethreshold of motion, so a plain
+ * click stays a click: until then grabc is set but cursor_mode is CurPressed.
+ */
+void titlegrab(Client* c)
+{
+    grabc = c;
+    pressx = cursor->x;
+    pressy = cursor->y;
+}
+
+static void grab(Client* c, unsigned int mode)
+{
+    grabc = NULL;
+    if (!c || client_is_unmanaged(c) || c->isfullscreen)
         return;
+    grabc = c;
 
     /* Float the window and tell motionnotify to grab it - except when moving a
      * tiled client under a real layout, which stays tiled and is swapped with
      * the tile it is dragged onto instead. */
-    if (arg->ui != CurMove || grabc->isfloating || !grabc->mon ||
-        !grabc->mon->lt[grabc->mon->sellt]->arrange)
-        setfloating(grabc, 1);
-    switch (cursor_mode = arg->ui) {
+    if (mode != CurMove || c->isfloating || !c->mon ||
+        !c->mon->lt[c->mon->sellt]->arrange)
+        setfloating(c, 1);
+    switch (cursor_mode = mode) {
         case CurMove:
-            grabcx = (int)round(cursor->x) - grabc->geom.x;
-            grabcy = (int)round(cursor->y) - grabc->geom.y;
-            wlr_cursor_set_xcursor(cursor, cursor_mgr, "all-scroll");
+            grabcx = (int)round(pressx) - c->geom.x;
+            grabcy = (int)round(pressy) - c->geom.y;
+            wlr_cursor_set_xcursor(cursor, cursor_mgr, "grabbing");
             break;
         case CurResize:
             /* Doesn't work for X11 output - the next absolute motion event
              * returns the cursor to where it started */
             wlr_cursor_warp_closest(cursor,
                                     NULL,
-                                    grabc->geom.x + grabc->geom.width,
-                                    grabc->geom.y + grabc->geom.height);
+                                    c->geom.x + c->geom.width,
+                                    c->geom.y + c->geom.height);
             wlr_cursor_set_xcursor(cursor, cursor_mgr, "se-resize");
             break;
     }
@@ -1232,6 +1265,50 @@ void virtualpointer(struct wl_listener* listener, void* data)
     wlr_cursor_attach_input_device(cursor, device);
     if (event->suggested_output)
         wlr_cursor_map_input_to_output(cursor, device, event->suggested_output);
+}
+
+/* Sticks a moved floating window to the nearby edges of the window area and
+ * of the floating windows beside it */
+static void magnet(struct wlr_box* b)
+{
+    Monitor* m = xytomon(cursor->x, cursor->y);
+    Client* c;
+    int dx = movesnap + 1, dy = movesnap + 1, x = b->x, y = b->y;
+
+    if (!m || movesnap <= 0)
+        return;
+    magnetedge(b->x, b->width, m->w.x, &dx, &x);
+    magnetedge(b->x, b->width, m->w.x + m->w.width, &dx, &x);
+    magnetedge(b->y, b->height, m->w.y, &dy, &y);
+    magnetedge(b->y, b->height, m->w.y + m->w.height, &dy, &y);
+    wl_list_for_each(c, &clients, link)
+    {
+        if (c == grabc || !c->isfloating || c->isfullscreen || !VISIBLEON(c, m))
+            continue;
+        if (b->y < c->geom.y + c->geom.height && c->geom.y < b->y + b->height) {
+            magnetedge(b->x, b->width, c->geom.x, &dx, &x);
+            magnetedge(b->x, b->width, c->geom.x + c->geom.width, &dx, &x);
+        }
+        if (b->x < c->geom.x + c->geom.width && c->geom.x < b->x + b->width) {
+            magnetedge(b->y, b->height, c->geom.y, &dy, &y);
+            magnetedge(b->y, b->height, c->geom.y + c->geom.height, &dy, &y);
+        }
+    }
+    b->x = x;
+    b->y = y;
+}
+
+/* Either side of [pos, pos + size) onto edge, if closer than *dist */
+static void magnetedge(int pos, int size, int edge, int* dist, int* to)
+{
+    if (abs(edge - pos) < *dist) {
+        *dist = abs(edge - pos);
+        *to = edge;
+    }
+    if (abs(edge - pos - size) < *dist) {
+        *dist = abs(edge - pos - size);
+        *to = edge - size;
+    }
 }
 
 void warpcursor(const Client* c)
