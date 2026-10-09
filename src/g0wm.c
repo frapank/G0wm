@@ -363,6 +363,19 @@ static void gpureset(struct wl_listener* listener, void* data)
         gpu_reset_idle = wl_event_loop_add_idle(event_loop, gpurecreate, NULL);
 }
 
+/* Scene buffers cache the texture made from our own (shm) buffers, and it dies
+ * with the old renderer. Re-handing the same buffer drops it, so the next
+ * frame re-uploads. Client buffers carry their texture themselves. */
+static void droptexture(struct wlr_scene_buffer* sb, int sx, int sy, void* data)
+{
+    struct wlr_buffer* b = sb->buffer;
+    if (!b || wlr_client_buffer_get(b))
+        return;
+    wlr_buffer_lock(b);
+    wlr_scene_buffer_set_buffer(sb, b);
+    wlr_buffer_unlock(b);
+}
+
 static void gpurecreate(void* data)
 {
     struct wlr_renderer* old_drw = drw;
@@ -384,6 +397,9 @@ static void gpurecreate(void* data)
     {
         wlr_output_init_render(m->wlr_output, alloc, drw);
     }
+
+    /* before the old renderer goes, so the textures are freed while it lives */
+    wlr_scene_node_for_each_buffer(&scene->tree.node, droptexture, NULL);
 
     wlr_allocator_destroy(old_alloc);
     wlr_renderer_destroy(old_drw);
