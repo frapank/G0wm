@@ -163,6 +163,9 @@ size_t nmonrules      = LENGTH(monrules_def);
 
 int sloppyfocus = 1;
 
+int movethreshold = 4;     // px dragged on a title before the window moves
+int movesnap      = 12;    // px at which a moved floating window sticks, 0 off
+
 struct xkb_rule_names xkb_rules = {
     .options = NULL,
 };
