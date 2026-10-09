@@ -1053,7 +1053,8 @@ void moveresize(const Arg* arg)
 }
 
 /* Moving c from the title bar waits for movethreshold of motion, so a plain
- * click stays a click: until then grabc is set but cursor_mode is CurPressed. */
+ * click stays a click: until then grabc is set but cursor_mode is CurPressed.
+ */
 void titlegrab(Client* c)
 {
     grabc = c;
@@ -1282,16 +1283,13 @@ static void magnet(struct wlr_box* b)
     magnetedge(b->y, b->height, m->w.y + m->w.height, &dy, &y);
     wl_list_for_each(c, &clients, link)
     {
-        if (c == grabc || !c->isfloating || c->isfullscreen ||
-            !VISIBLEON(c, m))
+        if (c == grabc || !c->isfloating || c->isfullscreen || !VISIBLEON(c, m))
             continue;
-        if (b->y < c->geom.y + c->geom.height &&
-            c->geom.y < b->y + b->height) {
+        if (b->y < c->geom.y + c->geom.height && c->geom.y < b->y + b->height) {
             magnetedge(b->x, b->width, c->geom.x, &dx, &x);
             magnetedge(b->x, b->width, c->geom.x + c->geom.width, &dx, &x);
         }
-        if (b->x < c->geom.x + c->geom.width &&
-            c->geom.x < b->x + b->width) {
+        if (b->x < c->geom.x + c->geom.width && c->geom.x < b->x + b->width) {
             magnetedge(b->y, b->height, c->geom.y, &dy, &y);
             magnetedge(b->y, b->height, c->geom.y + c->geom.height, &dy, &y);
         }
