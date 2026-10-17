@@ -41,10 +41,11 @@ static const Enum clickareas[] = {
     { ClkTray, "tray" },     { 0, NULL }
 };
 
-static const Enum mousebuttons[] = { { BTN_LEFT, "left" },
-                                     { BTN_MIDDLE, "middle" },
-                                     { BTN_RIGHT, "right" },
-                                     { 0, NULL } };
+static const Enum mousebuttons[] = {
+    { BTN_LEFT, "left" },        { BTN_MIDDLE, "middle" },
+    { BTN_RIGHT, "right" },      { WheelUp, "wheel-up" },
+    { WheelDown, "wheel-down" }, { 0, NULL }
+};
 
 static const Enum gesturemotions[] = { { SwipeLeft, "swipe-left" },
                                        { SwipeRight, "swipe-right" },
@@ -136,6 +137,7 @@ static const Action actions[] = {
     { focusstack, "focusstack", 'i' },
     { incnmaster, "incnmaster", 'i' },
     { killclient, "killclient", 0 },
+    { magnify, "magnify", 'f' },
     { moveresize, "moveresize", 'c' },
     { movestack, "movestack", 'i' },
     { notifyactions, "notifyactions", 0 },

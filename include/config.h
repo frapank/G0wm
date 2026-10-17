@@ -259,6 +259,10 @@ static Key keys_def[] = {
 	{ MODKEY|WLR_MODIFIER_CTRL|WLR_MODIFIER_ALT, XKB_KEY_o, setopacityunfocus, {.f = -0.05f} },
 	{ MODKEY|WLR_MODIFIER_SHIFT,                 XKB_KEY_o, toggleopacity,     {0} },
 
+	{ MODKEY|WLR_MODIFIER_ALT,   XKB_KEY_equal,       magnify,          {.f = +0.25f} },
+	{ MODKEY|WLR_MODIFIER_ALT,   XKB_KEY_minus,       magnify,          {.f = -0.25f} },
+	{ MODKEY|WLR_MODIFIER_ALT,   XKB_KEY_0,           magnify,          {.f = 0} },
+
 	{ 0, XKB_KEY_XF86AudioRaiseVolume,  spawn, SHCMD("wpctl set-volume @DEFAULT_AUDIO_SINK@ 5%+") },
 	{ 0, XKB_KEY_XF86AudioLowerVolume,  spawn, SHCMD("wpctl set-volume @DEFAULT_AUDIO_SINK@ 5%-") },
 	{ 0, XKB_KEY_XF86AudioMute,         spawn, SHCMD("wpctl set-mute @DEFAULT_AUDIO_SINK@ toggle") },
@@ -321,6 +325,11 @@ static Button buttons_def[] = {
 	{ ClkClient,   MODKEY, BTN_LEFT,   moveresize,     {.ui = CurMove} },
 	{ ClkClient,   MODKEY, BTN_MIDDLE, togglefloating, {0} },
 	{ ClkClient,   MODKEY, BTN_RIGHT,  moveresize,     {.ui = CurResize} },
+
+	{ ClkClient,   MODKEY, WheelUp,    magnify,        {.f = +0.25f} },
+	{ ClkClient,   MODKEY, WheelDown,  magnify,        {.f = -0.25f} },
+	{ ClkRoot,     MODKEY, WheelUp,    magnify,        {.f = +0.25f} },
+	{ ClkRoot,     MODKEY, WheelDown,  magnify,        {.f = -0.25f} },
 };
 Button* buttons = buttons_def;
 size_t nbuttons = LENGTH(buttons_def);

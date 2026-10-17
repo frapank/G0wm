@@ -366,6 +366,7 @@ void createmon(struct wl_listener* listener, void* data)
 
     wlr_output_state_init(&state);
     m->tagset[0] = m->tagset[1] = 1;
+    m->zoom = 1;
     applymonrules(m, &state);
 
     /* Set up event listeners */

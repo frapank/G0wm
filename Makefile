@@ -61,7 +61,7 @@ LDLIBS    = $(PKG_LIBS) $(WLR_LIBS) -lm $(LIBS)
 # Sources. The systray and its dbus glue come from the bar-systray patch.
 SRC = $(SRCDIR)/g0wm.c $(SRCDIR)/bar.c $(SRCDIR)/buffer.c $(SRCDIR)/client.c \
 	$(SRCDIR)/corner.c $(SRCDIR)/input.c $(SRCDIR)/layout.c $(SRCDIR)/lock.c \
-	$(SRCDIR)/monitor.c $(SRCDIR)/opacity.c \
+	$(SRCDIR)/magnifier.c $(SRCDIR)/monitor.c $(SRCDIR)/opacity.c \
 	$(SRCDIR)/util.c $(SRCDIR)/dbus.c $(SRCDIR)/settings.c \
 	$(SRCDIR)/notify.c $(SRCDIR)/runner.c $(SRCDIR)/tablet.c \
 	$(SRCDIR)/toplevel.c $(SRCDIR)/traypopup.c \

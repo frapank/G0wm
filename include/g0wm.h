@@ -194,6 +194,7 @@ enum {
     ClkRoot,
     ClkTray
 }; /* clicks */
+enum { WheelUp = 0x10000, WheelDown }; /* Button.button for a wheel notch */
 
 typedef union {
     int i;
@@ -383,6 +384,7 @@ struct Monitor {
     char ltsymbol[16];
     int asleep;
     int autovrr; /* 1 turned on by gamemode(), -1 refused */
+    float zoom;  /* magnifier level, 1 is off */
     Drwl* drw;
     Buffer* pool[2];
 #ifdef INTEGRATED_BACKGROUND
@@ -495,6 +497,7 @@ void holdend(struct wl_listener* listener, void* data);
 void inputdevice(struct wl_listener* listener, void* data);
 void killclient(const Arg* arg);
 void locksession(struct wl_listener* listener, void* data);
+void magnify(const Arg* arg);
 void mapnotify(struct wl_listener* listener, void* data);
 void movestack(const Arg* arg);
 void motionabsolute(struct wl_listener* listener, void* data);
