@@ -89,7 +89,7 @@ method connects.
 
 Zooms the screen around the pointer, for low vision.
 
-- [ ] Add a zoom action and a per-monitor zoom level (e.g. MODKEY+scroll),
+- [x] Add a zoom action and a per-monitor zoom level (e.g. MODKEY+scroll),
   with a key to reset it.
 - [ ] While zoomed, render the scene to an offscreen buffer and draw the
   region around the pointer scaled onto the output.
