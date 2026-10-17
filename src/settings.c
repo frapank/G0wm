@@ -506,6 +506,9 @@ static cJSON* jinput(void)
         o, "accel_profile", enumname(accelprofiles, accel_profile));
     cJSON_AddItemToObject(o, "accel_speed", jnum(accel_speed));
     cJSON_AddStringToObject(o, "button_map", enumname(buttonmaps, button_map));
+    cJSON_AddItemToObject(o, "tablet_output", jstr(tablet_output));
+    cJSON_AddBoolToObject(o, "tablet_left_handed", tablet_left_handed);
+    cJSON_AddItemToObject(o, "touch_output", jstr(touch_output));
     return o;
 }
 
@@ -603,6 +606,30 @@ static cJSON* jgestures(void)
     return a;
 }
 
+static cJSON* jpadbuttons(void)
+{
+    cJSON* a = cJSON_CreateArray();
+    size_t i;
+
+    for (i = 0; i < npadbuttons; i++) {
+        const Action* act = actionbyfunc(padbuttons[i].func);
+        cJSON* b;
+
+        if (!act) {
+            fprintf(stderr,
+                    "g0wm: pad button %zu calls an action with no name\n",
+                    i);
+            continue;
+        }
+        b = cJSON_CreateObject();
+        cJSON_AddNumberToObject(b, "button", padbuttons[i].button);
+        cJSON_AddStringToObject(b, "action", act->name);
+        cJSON_AddItemToObject(b, "arg", jarg(act->arg, &padbuttons[i].arg));
+        cJSON_AddItemToArray(a, b);
+    }
+    return a;
+}
+
 static cJSON* jmisc(void)
 {
     cJSON* o = cJSON_CreateObject();
@@ -629,6 +656,7 @@ static cJSON* defaults(void)
     cJSON_AddItemToObject(o, "keys", jkeys());
     cJSON_AddItemToObject(o, "buttons", jbuttons());
     cJSON_AddItemToObject(o, "gestures", jgestures());
+    cJSON_AddItemToObject(o, "padbuttons", jpadbuttons());
     cJSON_AddItemToObject(o, "misc", jmisc());
     return o;
 }
@@ -1022,6 +1050,9 @@ static void applyinput(const cJSON* o)
     accel_speed = getnum(o, "accel_speed", accel_speed);
     button_map = (enum libinput_config_tap_button_map)getenum(
         o, "button_map", buttonmaps, button_map, "button map");
+    tablet_output = getstr(o, "tablet_output", tablet_output);
+    tablet_left_handed = getbool(o, "tablet_left_handed", tablet_left_handed);
+    touch_output = getstr(o, "touch_output", touch_output);
 }
 
 /* back to one flat run of arguments per command, each NULL terminated */
@@ -1135,6 +1166,30 @@ static void applygestures(const cJSON* a)
     ngestures = n;
 }
 
+static void applypadbuttons(const cJSON* a)
+{
+    const cJSON* e;
+    PadButton* out;
+    size_t n = 0;
+
+    if (!cJSON_IsArray(a))
+        return;
+    out = ecalloc((size_t)cJSON_GetArraySize(a) + 1, sizeof *out);
+    cJSON_ArrayForEach(e, a)
+    {
+        const Action* act = actionbyname(getstr(e, "action", NULL));
+
+        if (!act)
+            continue;
+        out[n].button = (unsigned int)getnum(e, "button", 0);
+        out[n].func = act->func;
+        out[n].arg = getarg(act->arg, e);
+        n++;
+    }
+    padbuttons = out;
+    npadbuttons = n;
+}
+
 static void applymisc(const cJSON* o)
 {
     if (!o)
@@ -1159,6 +1214,7 @@ static void apply(const cJSON* o)
     applykeys(item(o, "keys"));
     applybuttons(item(o, "buttons"));
     applygestures(item(o, "gestures"));
+    applypadbuttons(item(o, "padbuttons"));
     applymisc(item(o, "misc"));
 }
 
@@ -1460,6 +1516,7 @@ void reloadsettings(const Arg* arg)
     wlr_scene_rect_set_color(root_bg, rootcolor);
 
     reloadkeyboard();
+    tabletremap();
     reloadmons();
     updatemons(NULL, NULL);
 

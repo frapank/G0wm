@@ -198,6 +198,11 @@ double accel_speed = 0.0;
 
 enum libinput_config_tap_button_map button_map = LIBINPUT_CONFIG_TAP_MAP_LRM;
 
+/* output names as wlr-randr shows them, NULL for all of them */
+const char* tablet_output = NULL;
+int tablet_left_handed    = 0; // buttons on the right
+const char* touch_output  = NULL; // NULL: the one udev reports
+
 static const char* termcmd[]        = { "foot", NULL };
 static const char* filemanagercmd[] = { "thunar", NULL };
 static const char* browsercmd[]     = { "firefox", NULL };
@@ -327,6 +332,11 @@ static Gesture gestures_def[] = {
 };
 Gesture* gestures = gestures_def;
 size_t ngestures  = LENGTH(gestures_def);
+
+/* tablet pad buttons, counted from 0: a bound one is not sent to the app.
+ * e.g. { 0, spawn, SHCMD("wtype -M ctrl z -m ctrl") } */
+PadButton* padbuttons = NULL;
+size_t npadbuttons    = 0;
 
 int log_level = WLR_ERROR;
 

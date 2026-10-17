@@ -72,8 +72,11 @@
 #include <wlr/types/wlr_session_lock_v1.h>
 #include <wlr/types/wlr_single_pixel_buffer_v1.h>
 #include <wlr/types/wlr_subcompositor.h>
+#include <wlr/types/wlr_tablet_pad.h>
 #include <wlr/types/wlr_tablet_tool.h>
+#include <wlr/types/wlr_tablet_v2.h>
 #include <wlr/types/wlr_tearing_control_v1.h>
+#include <wlr/types/wlr_touch.h>
 #include <wlr/types/wlr_viewporter.h>
 #include <wlr/types/wlr_virtual_keyboard_v1.h>
 #include <wlr/types/wlr_virtual_pointer_v1.h>
@@ -213,6 +216,12 @@ typedef struct {
     void (*func)(const Arg*);
     Arg arg;
 } Gesture;
+
+typedef struct {
+    unsigned int button; /* counted from 0, as libinput does */
+    void (*func)(const Arg*);
+    Arg arg;
+} PadButton;
 
 typedef struct {
     struct wlr_buffer base;
@@ -456,10 +465,14 @@ void createmon(struct wl_listener* listener, void* data);
 void createnotify(struct wl_listener* listener, void* data);
 void createpointerconstraint(struct wl_listener* listener, void* data);
 void createpopup(struct wl_listener* listener, void* data);
+void createtablet(struct wlr_tablet* wlr_tablet);
+void createtabletpad(struct wlr_tablet_pad* wlr_pad);
+void createtouch(struct wlr_touch* wlr_touch);
 void cornerclear(uint32_t* px, int w, int h, int r);
 void cornercut(uint32_t* px, int w, int h, int r);
 int cornerradius(Client* c);
 void cursorframe(struct wl_listener* listener, void* data);
+void cursormoved(void);
 float decoopacity(void);
 void destroylocksurface(struct wl_listener* listener, void* data);
 void destroynotify(struct wl_listener* listener, void* data);
@@ -475,6 +488,7 @@ void focusmon(const Arg* arg);
 void focusstack(const Arg* arg);
 Client* focustop(Monitor* m);
 void fullscreennotify(struct wl_listener* listener, void* data);
+int hastouch(void);
 void incnmaster(const Arg* arg);
 void holdbegin(struct wl_listener* listener, void* data);
 void holdend(struct wl_listener* listener, void* data);
@@ -484,8 +498,6 @@ void locksession(struct wl_listener* listener, void* data);
 void mapnotify(struct wl_listener* listener, void* data);
 void movestack(const Arg* arg);
 void motionabsolute(struct wl_listener* listener, void* data);
-void tabletaxis(struct wl_listener* listener, void* data);
-void tablettip(struct wl_listener* listener, void* data);
 void motionnotify(uint32_t time,
                   struct wlr_input_device* device,
                   double sx,
@@ -509,6 +521,7 @@ void notifyscroll(const Arg* arg);
 int notifywheel(Monitor* pm, double delta, int horizontal);
 void outputmgrapply(struct wl_listener* listener, void* data);
 void outputmgrtest(struct wl_listener* listener, void* data);
+void padkeyboardfocus(struct wl_listener* listener, void* data);
 void pinchbegin(struct wl_listener* listener, void* data);
 void pinchend(struct wl_listener* listener, void* data);
 void pinchupdate(struct wl_listener* listener, void* data);
@@ -527,11 +540,13 @@ int runnercalc(double* out);
 void runnerkey(xkb_keysym_t sym, uint32_t mods, uint32_t codepoint);
 const char* runnersuggest(void);
 void runnertoggle(const Arg* arg);
+void seatcaps(void);
 void scenebuffersetopacity(struct wlr_scene_buffer* buffer,
                            int sx,
                            int sy,
                            void* data);
 void setbordercolor(Client* c, int scheme);
+void setclientcursor(struct wlr_surface* surface, int hotspot_x, int hotspot_y);
 void setcursor(struct wl_listener* listener, void* data);
 void setcursorshape(struct wl_listener* listener, void* data);
 void setfloating(Client* c, int floating);
@@ -562,6 +577,11 @@ void swapclients(Client* a, Client* b);
 void swipebegin(struct wl_listener* listener, void* data);
 void swipeend(struct wl_listener* listener, void* data);
 void swipeupdate(struct wl_listener* listener, void* data);
+void tabletaxis(struct wl_listener* listener, void* data);
+void tabletbutton(struct wl_listener* listener, void* data);
+void tabletproximity(struct wl_listener* listener, void* data);
+void tabletremap(void);
+void tablettip(struct wl_listener* listener, void* data);
 void tag(const Arg* arg);
 void tabbed(Monitor* m);
 Client* tabtop(Monitor* m);
@@ -586,10 +606,17 @@ void traypopup_click(double lx, double ly);
 void traypopup_dismiss(void);
 void traypopup_motion(double lx, double ly);
 void traypopup_present(const char* const* labels, int n, Menu* menu);
+int toolfocusedby(struct wlr_tablet_v2_tablet_tool* tool,
+                  struct wlr_seat_client* client);
 void toplevelfocus(Client* c);
 void toplevelmap(Client* c);
 void toplevelunmap(Client* c);
 void toplevelupdate(Client* c);
+void touchcancel(struct wl_listener* listener, void* data);
+void touchdown(struct wl_listener* listener, void* data);
+void touchframe(struct wl_listener* listener, void* data);
+void touchmotion(struct wl_listener* listener, void* data);
+void touchup(struct wl_listener* listener, void* data);
 void unmapnotify(struct wl_listener* listener, void* data);
 void updatemons(struct wl_listener* listener, void* data);
 void updatebar(Monitor* m);
@@ -600,6 +627,13 @@ void virtualkeyboard(struct wl_listener* listener, void* data);
 void virtualpointer(struct wl_listener* listener, void* data);
 void warpcursor(const Client* c);
 Monitor* xytomon(double x, double y);
+void xytonode(double x,
+              double y,
+              struct wlr_surface** psurface,
+              Client** pc,
+              LayerSurface** pl,
+              double* nx,
+              double* ny);
 void zoom(const Arg* arg);
 #ifdef XWAYLAND
 void createnotifyx11(struct wl_listener* listener, void* data);
@@ -629,6 +663,7 @@ extern struct wlr_output_manager_v1* output_mgr;
 extern struct wlr_pointer_constraints_v1* pointer_constraints;
 extern struct wlr_pointer_gestures_v1* pointer_gestures;
 extern struct wlr_relative_pointer_manager_v1* relative_pointer_mgr;
+extern struct wlr_tablet_manager_v2* tablet_mgr;
 extern struct wlr_cursor* cursor;
 extern struct wlr_xcursor_manager* cursor_mgr;
 extern struct last_cursor_state {
@@ -747,6 +782,9 @@ extern uint32_t send_events_mode;
 extern enum libinput_config_accel_profile accel_profile;
 extern double accel_speed;
 extern enum libinput_config_tap_button_map button_map;
+extern const char* tablet_output;
+extern int tablet_left_handed;
+extern const char* touch_output;
 extern const char** autostart;
 extern Key* keys;
 extern size_t nkeys;
@@ -754,6 +792,8 @@ extern Button* buttons;
 extern size_t nbuttons;
 extern Gesture* gestures;
 extern size_t ngestures;
+extern PadButton* padbuttons;
+extern size_t npadbuttons;
 extern int log_level;
 extern int bypass_surface_visibility;
 extern int allow_tearing;

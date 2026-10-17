@@ -799,6 +799,8 @@ void updatemons(struct wl_listener* listener, void* data)
         }
     }
 
+    tabletremap();
+
     if (selmon && selmon->wlr_output->enabled) {
         wl_list_for_each(c, &clients, link)
         {

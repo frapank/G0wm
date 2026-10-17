@@ -1,7 +1,7 @@
 /*
  * See LICENSE file for copyright and license details.
  *
- * keyboard, pointer, gesture, tablet and drag-and-drop handling
+ * keyboard, pointer, gesture and drag-and-drop handling
  */
 #include "g0wm.h"
 
@@ -31,13 +31,6 @@ static void pointerfocus(Client* c,
                          double sy,
                          uint32_t time);
 static void unlastcursor(struct wl_listener* listener, void* data);
-static void xytonode(double x,
-                     double y,
-                     struct wlr_surface** psurface,
-                     Client** pc,
-                     LayerSurface** pl,
-                     double* nx,
-                     double* ny);
 
 /* variables */
 static struct wlr_pointer_constraint_v1* active_constraint;
@@ -605,7 +598,6 @@ void inputdevice(struct wl_listener* listener, void* data)
     /* This event is raised by the backend when a new input device becomes
      * available. */
     struct wlr_input_device* device = data;
-    uint32_t caps;
 
     switch (device->type) {
         case WLR_INPUT_DEVICE_KEYBOARD:
@@ -615,20 +607,34 @@ void inputdevice(struct wl_listener* listener, void* data)
             createpointer(wlr_pointer_from_input_device(device));
             break;
         case WLR_INPUT_DEVICE_TABLET:
-            wlr_cursor_attach_input_device(cursor, device);
+            createtablet(wlr_tablet_from_input_device(device));
+            break;
+        case WLR_INPUT_DEVICE_TABLET_PAD:
+            createtabletpad(wlr_tablet_pad_from_input_device(device));
+            break;
+        case WLR_INPUT_DEVICE_TOUCH:
+            createtouch(wlr_touch_from_input_device(device));
             break;
         default:
-            /* TODO handle other input device types */
+            /* switches are ignored */
             break;
     }
+    seatcaps();
+}
 
+void seatcaps(void)
+{
     /* We need to let the wlr_seat know what our capabilities are, which is
      * communiciated to the client. In g0wm we always have a cursor, even if
      * there are no pointer devices, so we always include that capability. */
     /* TODO do we actually require a cursor? */
-    caps = WL_SEAT_CAPABILITY_POINTER;
+    uint32_t caps = WL_SEAT_CAPABILITY_POINTER;
+    if (!kb_group) /* shutting down */
+        return;
     if (!wl_list_empty(&kb_group->wlr_group->devices))
         caps |= WL_SEAT_CAPABILITY_KEYBOARD;
+    if (hastouch())
+        caps |= WL_SEAT_CAPABILITY_TOUCH;
     wlr_seat_set_capabilities(seat, caps);
 }
 
@@ -845,40 +851,20 @@ void motionabsolute(struct wl_listener* listener, void* data)
     motionnotify(event->time_msec, &event->pointer->base, dx, dy, dx, dy);
 }
 
-void tabletaxis(struct wl_listener* listener, void* data)
+void cursormoved(void)
 {
-    struct wlr_tablet_tool_axis_event* event = data;
-    double lx, ly, dx, dy, x, y;
+    wlr_idle_notifier_v1_notify_activity(idle_notifier, seat);
+    handlecursoractivity();
 
-    /* An axis event only carries the axes it actually updated; NAN tells
-     * wlroots to keep the current coordinate for the others. */
-    x = event->updated_axes & WLR_TABLET_TOOL_AXIS_X ? event->x : NAN;
-    y = event->updated_axes & WLR_TABLET_TOOL_AXIS_Y ? event->y : NAN;
-    if (isnan(x) && isnan(y))
-        return;
-
-    wlr_cursor_absolute_to_layout_coords(
-        cursor, &event->tablet->base, x, y, &lx, &ly);
-    dx = lx - cursor->x;
-    dy = ly - cursor->y;
-    motionnotify(event->time_msec, &event->tablet->base, dx, dy, dx, dy);
-    /* Tablets emit no frame event of their own, and clients hold pointer
-     * events back until one arrives. */
-    wlr_seat_pointer_notify_frame(seat);
-}
-
-void tablettip(struct wl_listener* listener, void* data)
-{
-    struct wlr_tablet_tool_tip_event* event = data;
-    struct wlr_pointer_button_event synth = {
-        .time_msec = event->time_msec,
-        .button = BTN_LEFT,
-        .state = event->state == WLR_TABLET_TOOL_TIP_DOWN
-                     ? WL_POINTER_BUTTON_STATE_PRESSED
-                     : WL_POINTER_BUTTON_STATE_RELEASED,
-    };
-    buttonpress(NULL, &synth);
-    wlr_seat_pointer_notify_frame(seat);
+    /* Update selmon (even while dragging a window) */
+    if (sloppyfocus) {
+        Monitor* old = selmon;
+        selmon = xytomon(cursor->x, cursor->y);
+        /* the single bar follows the focus, and crossing into empty
+         * space changes it without going through focusclient() */
+        if (barsinglemon && selmon != old)
+            drawbars();
+    }
 }
 
 void motionnotify(uint32_t time,
@@ -950,18 +936,7 @@ void motionnotify(uint32_t time,
         }
 
         wlr_cursor_move(cursor, device, dx, dy);
-        wlr_idle_notifier_v1_notify_activity(idle_notifier, seat);
-        handlecursoractivity();
-
-        /* Update selmon (even while dragging a window) */
-        if (sloppyfocus) {
-            Monitor* old = selmon;
-            selmon = xytomon(cursor->x, cursor->y);
-            /* the single bar follows the focus, and crossing into empty
-             * space changes it without going through focusclient() */
-            if (barsinglemon && selmon != old)
-                drawbars();
-        }
+        cursormoved();
     }
 
     /* Update drag icon's position */
@@ -1128,10 +1103,14 @@ static void pointerfocus(Client* c,
 void requeststartdrag(struct wl_listener* listener, void* data)
 {
     struct wlr_seat_request_start_drag_event* event = data;
+    struct wlr_touch_point* point;
 
     if (wlr_seat_validate_pointer_grab_serial(
             seat, event->origin, event->serial))
         wlr_seat_start_pointer_drag(seat, event->drag, event->serial);
+    else if (wlr_seat_validate_touch_grab_serial(
+                 seat, event->origin, event->serial, &point))
+        wlr_seat_start_touch_drag(seat, event->drag, event->serial, point);
     else
         wlr_data_source_destroy(event->drag->source);
 }
@@ -1159,25 +1138,27 @@ void setcursor(struct wl_listener* listener, void* data)
      * use the provided surface as the cursor image. It will set the
      * hardware cursor on the output that it's currently on and continue to
      * do so as the cursor moves between outputs. */
-    if (event->seat_client == seat->pointer_state.focused_client) {
-        last_cursor.shape = 0;
-        last_cursor.surface = event->surface;
-        last_cursor.has_client_cursor = true;
-        last_cursor.hotspot_x = event->hotspot_x;
-        last_cursor.hotspot_y = event->hotspot_y;
+    if (event->seat_client == seat->pointer_state.focused_client)
+        setclientcursor(event->surface, event->hotspot_x, event->hotspot_y);
+}
 
-        wl_list_remove(&last_cursor.destroy.link);
-        wl_list_init(&last_cursor.destroy.link);
-        if (event->surface) {
-            last_cursor.destroy.notify = unlastcursor;
-            wl_signal_add(&event->surface->events.destroy,
-                          &last_cursor.destroy);
-        }
+void setclientcursor(struct wlr_surface* surface, int hotspot_x, int hotspot_y)
+{
+    last_cursor.shape = 0;
+    last_cursor.surface = surface;
+    last_cursor.has_client_cursor = true;
+    last_cursor.hotspot_x = hotspot_x;
+    last_cursor.hotspot_y = hotspot_y;
 
-        if (!cursor_hidden)
-            wlr_cursor_set_surface(
-                cursor, event->surface, event->hotspot_x, event->hotspot_y);
+    wl_list_remove(&last_cursor.destroy.link);
+    wl_list_init(&last_cursor.destroy.link);
+    if (surface) {
+        last_cursor.destroy.notify = unlastcursor;
+        wl_signal_add(&surface->events.destroy, &last_cursor.destroy);
     }
+
+    if (!cursor_hidden)
+        wlr_cursor_set_surface(cursor, surface, hotspot_x, hotspot_y);
 }
 
 void setcursorshape(struct wl_listener* listener, void* data)
@@ -1186,9 +1167,12 @@ void setcursorshape(struct wl_listener* listener, void* data)
     if (cursor_mode != CurNormal && cursor_mode != CurPressed)
         return;
     /* This can be sent by any client, so we check to make sure this one
-     * actually has pointer focus first. If so, we can tell the cursor to
-     * use the provided cursor shape. */
-    if (event->seat_client == seat->pointer_state.focused_client) {
+     * actually has pointer (or pen) focus first. If so, we can tell the
+     * cursor to use the provided cursor shape. */
+    if (event->device_type ==
+                WLR_CURSOR_SHAPE_MANAGER_V1_DEVICE_TYPE_TABLET_TOOL
+            ? toolfocusedby(event->tablet_tool, event->seat_client)
+            : event->seat_client == seat->pointer_state.focused_client) {
         last_cursor.shape = event->shape;
         last_cursor.surface = NULL;
 
@@ -1332,13 +1316,13 @@ void warpcursor(const Client* c)
     }
 }
 
-static void xytonode(double x,
-                     double y,
-                     struct wlr_surface** psurface,
-                     Client** pc,
-                     LayerSurface** pl,
-                     double* nx,
-                     double* ny)
+void xytonode(double x,
+              double y,
+              struct wlr_surface** psurface,
+              Client** pc,
+              LayerSurface** pl,
+              double* nx,
+              double* ny)
 {
     struct wlr_scene_node *node, *pnode;
     struct wlr_surface* surface = NULL;
