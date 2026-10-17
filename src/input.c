@@ -854,8 +854,14 @@ void motionabsolute(struct wl_listener* listener, void* data)
 
 void cursormoved(void)
 {
+    Monitor* m = xytomon(cursor->x, cursor->y);
+
     wlr_idle_notifier_v1_notify_activity(idle_notifier, seat);
     handlecursoractivity();
+
+    /* the part of a zoomed monitor on show follows the pointer */
+    if (m && m->zoom > 1)
+        wlr_output_schedule_frame(m->wlr_output);
 
     /* Update selmon (even while dragging a window) */
     if (sloppyfocus) {

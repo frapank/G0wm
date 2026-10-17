@@ -31,6 +31,7 @@ int magnifierframe(Monitor* m, struct wlr_output_state* state)
     struct wlr_scene_output_state_options opts = { 0 };
     struct wlr_render_pass* pass;
     struct wlr_fbox src;
+    double fx, fy;
     int tw, th;
 
     if (m->zoom <= 1) {
@@ -56,12 +57,15 @@ int magnifierframe(Monitor* m, struct wlr_output_state* state)
     }
 
     /* the part on show, worked out upright and then turned the way the
-     * output's buffers are */
+     * output's buffers are. It is placed in proportion to the pointer, which
+     * so stays over what it is over unzoomed: input needs no remapping. */
     wlr_output_transformed_resolution(o, &tw, &th);
+    fx = (cursor->x - m->m.x) / m->m.width;
+    fy = (cursor->y - m->m.y) / m->m.height;
     src.width = tw / m->zoom;
     src.height = th / m->zoom;
-    src.x = (tw - src.width) / 2;
-    src.y = (th - src.height) / 2;
+    src.x = (fx < 0 ? 0 : fx > 1 ? 1 : fx) * (tw - src.width);
+    src.y = (fy < 0 ? 0 : fy > 1 ? 1 : fy) * (th - src.height);
     wlr_fbox_transform(
         &src, &src, wlr_output_transform_invert(o->transform), tw, th);
 
