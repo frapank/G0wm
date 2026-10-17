@@ -95,5 +95,5 @@ Zooms the screen around the pointer, for low vision.
   region around the pointer scaled onto the output.
 - [x] Move that region with the pointer: placed proportionally, the pointer
   stays where it really is, so input needs no remapping.
-- [ ] Use the software cursor while zoomed so it gets magnified too, and turn
+- [x] Use the software cursor while zoomed so it gets magnified too, and turn
   off direct scanout and tearing while zoomed.

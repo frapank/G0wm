@@ -125,6 +125,12 @@ void magnify(const Arg* arg)
     if (z == m->zoom)
         return;
 
+    /* while zoomed the pointer is drawn into the frame, to be zoomed with it,
+     * and no window may go straight to the screen past the zoom */
+    if ((z > 1) != (m->zoom > 1)) {
+        wlr_output_lock_software_cursors(m->wlr_output, z > 1);
+        wlr_output_lock_attach_render(m->wlr_output, z > 1);
+    }
     m->zoom = z;
     wlr_output_schedule_frame(m->wlr_output);
 }
