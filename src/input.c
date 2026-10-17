@@ -31,6 +31,7 @@ static void pointerfocus(Client* c,
                          double sy,
                          uint32_t time);
 static void unlastcursor(struct wl_listener* listener, void* data);
+static int wheelbinding(const struct wlr_pointer_axis_event* event);
 
 /* variables */
 static struct wlr_pointer_constraint_v1* active_constraint;
@@ -120,9 +121,9 @@ void axisnotify(struct wl_listener* listener, void* data)
             statusscroll(pm, arg.i, event->delta))
             return;
     }
-    /* TODO: allow usage of scroll wheel for mousebindings, it can be
-     * implemented by checking the event's orientation and the delta of the
-     * event */
+    if (!locked && event->orientation == WL_POINTER_AXIS_VERTICAL_SCROLL &&
+        wheelbinding(event))
+        return;
     /* Notify the client with pointer focus of the axis event. */
     wlr_seat_pointer_notify_axis(seat,
                                  event->time_msec,
@@ -853,8 +854,14 @@ void motionabsolute(struct wl_listener* listener, void* data)
 
 void cursormoved(void)
 {
+    Monitor* m = xytomon(cursor->x, cursor->y);
+
     wlr_idle_notifier_v1_notify_activity(idle_notifier, seat);
     handlecursoractivity();
+
+    /* the part of a zoomed monitor on show follows the pointer */
+    if (m && m->zoom > 1)
+        wlr_output_schedule_frame(m->wlr_output);
 
     /* Update selmon (even while dragging a window) */
     if (sloppyfocus) {
@@ -1314,6 +1321,38 @@ void warpcursor(const Client* c)
                                 c->geom.x + c->geom.width / 2.0,
                                 c->geom.y + c->geom.height / 2.0);
     }
+}
+
+/* Runs the button bound to the wheel, if any. A notch is 120 in value120,
+ * smooth scrolling without notches counts one every 15 units, the angle
+ * libinput gives a notch, so a touchpad steps at about a wheel's pace. */
+static int wheelbinding(const struct wlr_pointer_axis_event* event)
+{
+    static double notches;
+    double step = event->delta_discrete ? event->delta_discrete / 120.0
+                                        : event->delta / 15.0;
+    struct wlr_keyboard* keyboard = wlr_seat_get_keyboard(seat);
+    uint32_t mods = keyboard ? wlr_keyboard_get_modifiers(keyboard) : 0;
+    unsigned int wheel = event->delta < 0 ? WheelUp : WheelDown;
+    unsigned int click;
+    const Button* b;
+    Client* c;
+    Arg arg;
+
+    xytonode(cursor->x, cursor->y, NULL, &c, NULL, NULL, NULL);
+    click = c ? ClkClient : barclick(xytomon(cursor->x, cursor->y), &arg);
+    for (b = buttons; b < buttons + nbuttons; b++) {
+        if (CLEANMASK(mods) != CLEANMASK(b->mod) || b->button != wheel ||
+            b->click != click || !b->func)
+            continue;
+        if ((notches < 0) != (step < 0))
+            notches = 0;
+        for (notches += step; fabs(notches) >= 1;
+             notches -= notches < 0 ? -1 : 1)
+            b->func(&b->arg);
+        return 1;
+    }
+    return 0;
 }
 
 void xytonode(double x,

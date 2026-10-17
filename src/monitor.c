@@ -122,6 +122,8 @@ static void cleanupmon(struct wl_listener* listener, void* data)
     if (m->tray)
         destroytray(m->tray);
 
+    magnifierdrop(m);
+
     drwl_setimage(m->drw, NULL);
     drwl_destroy(m->drw);
 
@@ -366,6 +368,7 @@ void createmon(struct wl_listener* listener, void* data)
 
     wlr_output_state_init(&state);
     m->tagset[0] = m->tagset[1] = 1;
+    m->zoom = 1;
     applymonrules(m, &state);
 
     /* Set up event listeners */
@@ -509,9 +512,9 @@ static void gamemode(Monitor* m, struct wlr_output_state* state)
         m->autovrr = 0;
     }
 
-    /* needs direct scanout */
+    /* needs direct scanout, which the magnifier holds back */
     state->tearing_page_flip =
-        allow_tearing && c &&
+        allow_tearing && c && m->zoom <= 1 &&
         wlr_tearing_control_manager_v1_surface_hint_from_surface(
             tearing_mgr, client_surface(c)) ==
             WP_TEARING_CONTROL_V1_PRESENTATION_HINT_ASYNC;
@@ -658,9 +661,13 @@ static void rendermon(struct wl_listener* listener, void* data)
             goto skip;
     }
 
-    if (!wlr_scene_output_needs_frame(m->scene_output) ||
-        !wlr_scene_output_build_state(m->scene_output, &pending, NULL))
+    if (m->zoom > 1 || m->zoomchain) {
+        if (!magnifierframe(m, &pending))
+            goto skip;
+    } else if (!wlr_scene_output_needs_frame(m->scene_output) ||
+               !wlr_scene_output_build_state(m->scene_output, &pending, NULL)) {
         goto skip;
+    }
     gamemode(m, &pending);
     if (wlr_output_commit_state(m->wlr_output, &pending) &&
         (pending.committed & WLR_OUTPUT_STATE_ADAPTIVE_SYNC_ENABLED))
