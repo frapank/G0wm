@@ -51,8 +51,18 @@ static struct wl_listener cursor_swipe_begin = { .notify = swipebegin };
 static struct wl_listener cursor_swipe_end = { .notify = swipeend };
 static struct wl_listener cursor_swipe_update = { .notify = swipeupdate };
 static struct wl_listener cursor_tablet_axis = { .notify = tabletaxis };
+static struct wl_listener cursor_tablet_button = { .notify = tabletbutton };
+static struct wl_listener cursor_tablet_proximity = { .notify =
+                                                          tabletproximity };
 static struct wl_listener cursor_tablet_tip = { .notify = tablettip };
+static struct wl_listener cursor_touch_cancel = { .notify = touchcancel };
+static struct wl_listener cursor_touch_down = { .notify = touchdown };
+static struct wl_listener cursor_touch_frame = { .notify = touchframe };
+static struct wl_listener cursor_touch_motion = { .notify = touchmotion };
+static struct wl_listener cursor_touch_up = { .notify = touchup };
 static struct wl_listener gpu_reset = { .notify = gpureset };
+static struct wl_listener keyboard_focus_change = { .notify =
+                                                        padkeyboardfocus };
 static struct wl_listener layout_change = { .notify = updatemons };
 static struct wl_listener new_capture_request = { .notify = capturetoplevel };
 static struct wl_listener new_idle_inhibitor = { .notify =
@@ -219,6 +229,7 @@ static void cleanup(void)
     wlr_xcursor_manager_destroy(cursor_mgr);
 
     destroykeyboardgroup(&kb_group->destroy, NULL);
+    kb_group = NULL; /* seatcaps() runs as the backend drops the devices */
 
     /* before the watcher, an open menu still holds a bus connection */
     traypopup_cleanup();
@@ -265,8 +276,16 @@ static void cleanuplisteners(void)
     wl_list_remove(&cursor_swipe_end.link);
     wl_list_remove(&cursor_swipe_update.link);
     wl_list_remove(&cursor_tablet_axis.link);
+    wl_list_remove(&cursor_tablet_button.link);
+    wl_list_remove(&cursor_tablet_proximity.link);
     wl_list_remove(&cursor_tablet_tip.link);
+    wl_list_remove(&cursor_touch_cancel.link);
+    wl_list_remove(&cursor_touch_down.link);
+    wl_list_remove(&cursor_touch_frame.link);
+    wl_list_remove(&cursor_touch_motion.link);
+    wl_list_remove(&cursor_touch_up.link);
     wl_list_remove(&gpu_reset.link);
+    wl_list_remove(&keyboard_focus_change.link);
     wl_list_remove(&new_idle_inhibitor.link);
     wl_list_remove(&layout_change.link);
     wl_list_remove(&new_input_device.link);
@@ -697,7 +716,15 @@ static void setup(void)
     wl_signal_add(&cursor->events.motion, &cursor_motion);
     wl_signal_add(&cursor->events.motion_absolute, &cursor_motion_absolute);
     wl_signal_add(&cursor->events.tablet_tool_axis, &cursor_tablet_axis);
+    wl_signal_add(&cursor->events.tablet_tool_button, &cursor_tablet_button);
+    wl_signal_add(&cursor->events.tablet_tool_proximity,
+                  &cursor_tablet_proximity);
     wl_signal_add(&cursor->events.tablet_tool_tip, &cursor_tablet_tip);
+    wl_signal_add(&cursor->events.touch_cancel, &cursor_touch_cancel);
+    wl_signal_add(&cursor->events.touch_down, &cursor_touch_down);
+    wl_signal_add(&cursor->events.touch_frame, &cursor_touch_frame);
+    wl_signal_add(&cursor->events.touch_motion, &cursor_touch_motion);
+    wl_signal_add(&cursor->events.touch_up, &cursor_touch_up);
     wl_signal_add(&cursor->events.button, &cursor_button);
     wl_signal_add(&cursor->events.axis, &cursor_axis);
     wl_signal_add(&cursor->events.frame, &cursor_frame);
@@ -713,6 +740,7 @@ static void setup(void)
     pointer_gestures = wlr_pointer_gestures_v1_create(dpy);
 
     cursor_shape_mgr = wlr_cursor_shape_manager_v1_create(dpy, 1);
+    tablet_mgr = wlr_tablet_v2_create(dpy);
     wl_signal_add(&cursor_shape_mgr->events.request_set_shape,
                   &request_set_cursor_shape);
 
@@ -737,6 +765,8 @@ static void setup(void)
                   &request_set_psel);
     wl_signal_add(&seat->events.request_start_drag, &request_start_drag);
     wl_signal_add(&seat->events.start_drag, &start_drag);
+    wl_signal_add(&seat->keyboard_state.events.focus_change,
+                  &keyboard_focus_change);
 
     kb_group = createkeyboardgroup();
     wl_list_init(&kb_group->destroy.link);
