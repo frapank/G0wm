@@ -512,9 +512,9 @@ static void gamemode(Monitor* m, struct wlr_output_state* state)
         m->autovrr = 0;
     }
 
-    /* needs direct scanout */
+    /* needs direct scanout, which the magnifier holds back */
     state->tearing_page_flip =
-        allow_tearing && c &&
+        allow_tearing && c && m->zoom <= 1 &&
         wlr_tearing_control_manager_v1_surface_hint_from_surface(
             tearing_mgr, client_surface(c)) ==
             WP_TEARING_CONTROL_V1_PRESENTATION_HINT_ASYNC;
