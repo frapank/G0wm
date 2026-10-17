@@ -67,6 +67,12 @@ time. No status script ships with g0wm.
 To run G0wm `share/g0wm.desktop` to `/usr/share/wayland-sessions/` and pick g0wm in
 your display manager, or run `g0wm` from a VT.
 
+## Roadmap
+
+What is planned next (color management and HDR, input methods and the
+on-screen keyboard, the magnifier) is listed step by step in
+[`ROADMAP.md`](ROADMAP.md).
+
 ## License
 
 g0wm is licensed under **GPL-3.0-or-later**.
