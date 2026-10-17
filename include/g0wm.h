@@ -27,6 +27,7 @@
 #include <wlr/backend/libinput.h>
 #include <wlr/interfaces/wlr_buffer.h>
 #include <wlr/render/allocator.h>
+#include <wlr/render/swapchain.h>
 #include <wlr/render/wlr_renderer.h>
 #include <wlr/types/wlr_alpha_modifier_v1.h>
 #include <wlr/types/wlr_compositor.h>
@@ -92,6 +93,7 @@
 #include <wlr/types/wlr_xdg_system_bell_v1.h>
 #include <wlr/util/log.h>
 #include <wlr/util/region.h>
+#include <wlr/util/transform.h>
 #include <xkbcommon/xkbcommon.h>
 #ifdef XWAYLAND
 #include <wlr/xwayland.h>
@@ -383,8 +385,12 @@ struct Monitor {
     int nmaster;
     char ltsymbol[16];
     int asleep;
-    int autovrr; /* 1 turned on by gamemode(), -1 refused */
-    float zoom;  /* magnifier level, 1 is off */
+    int autovrr;                     /* 1 turned on by gamemode(), -1 refused */
+    float zoom;                      /* magnifier level, 1 is off */
+    struct wlr_swapchain* zoomchain; /* the frames, rendered unzoomed */
+    struct wlr_buffer* zoombuf;      /* the latest of them */
+    struct wlr_texture* zoomtex;     /* zoombuf, to draw from */
+    struct wlr_fbox zoomsrc;         /* the part of it on show */
     Drwl* drw;
     Buffer* pool[2];
 #ifdef INTEGRATED_BACKGROUND
@@ -497,6 +503,8 @@ void holdend(struct wl_listener* listener, void* data);
 void inputdevice(struct wl_listener* listener, void* data);
 void killclient(const Arg* arg);
 void locksession(struct wl_listener* listener, void* data);
+void magnifierdrop(Monitor* m);
+int magnifierframe(Monitor* m, struct wlr_output_state* state);
 void magnify(const Arg* arg);
 void mapnotify(struct wl_listener* listener, void* data);
 void movestack(const Arg* arg);

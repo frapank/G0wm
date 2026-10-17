@@ -122,6 +122,8 @@ static void cleanupmon(struct wl_listener* listener, void* data)
     if (m->tray)
         destroytray(m->tray);
 
+    magnifierdrop(m);
+
     drwl_setimage(m->drw, NULL);
     drwl_destroy(m->drw);
 
@@ -659,9 +661,13 @@ static void rendermon(struct wl_listener* listener, void* data)
             goto skip;
     }
 
-    if (!wlr_scene_output_needs_frame(m->scene_output) ||
-        !wlr_scene_output_build_state(m->scene_output, &pending, NULL))
+    if (m->zoom > 1 || m->zoomchain) {
+        if (!magnifierframe(m, &pending))
+            goto skip;
+    } else if (!wlr_scene_output_needs_frame(m->scene_output) ||
+               !wlr_scene_output_build_state(m->scene_output, &pending, NULL)) {
         goto skip;
+    }
     gamemode(m, &pending);
     if (wlr_output_commit_state(m->wlr_output, &pending) &&
         (pending.committed & WLR_OUTPUT_STATE_ADAPTIVE_SYNC_ENABLED))
