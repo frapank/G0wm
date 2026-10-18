@@ -194,7 +194,8 @@ enum {
     ClkTitle,
     ClkClient,
     ClkRoot,
-    ClkTray
+    ClkTray,
+    ClkWinTitle /* a window's title bar, only for the wheel */
 }; /* clicks */
 enum { WheelUp = 0x10000, WheelDown }; /* Button.button for a wheel notch */
 
@@ -567,6 +568,7 @@ void setlayout(const Arg* arg);
 void setmfact(const Arg* arg);
 void settitle(Client* c);
 int titleclick(Client* c, double x, double y);
+int ontitle(Client* c, double x, double y);
 void titlehover(Client* c, double x, double y);
 int titleheight(Client* c);
 void titlegrab(Client* c);

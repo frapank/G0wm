@@ -327,6 +327,11 @@ static Button buttons_def[] = {
 	{ ClkTagBar,   0,      BTN_RIGHT,  toggleview,     {0} },
 	{ ClkTagBar,   MODKEY, BTN_LEFT,   tag,            {0} },
 	{ ClkTagBar,   MODKEY, BTN_RIGHT,  toggletag,      {0} },
+	{ ClkTagBar,   0,      WheelUp,    shiftview,      {.i = -1} },
+	{ ClkTagBar,   0,      WheelDown,  shiftview,      {.i = +1} },
+
+	{ ClkWinTitle, 0,      WheelUp,    focusstack,     {.i = -1} },
+	{ ClkWinTitle, 0,      WheelDown,  focusstack,     {.i = +1} },
 
 	{ ClkClient,   MODKEY, BTN_LEFT,   moveresize,     {.ui = CurMove} },
 	{ ClkClient,   MODKEY, BTN_MIDDLE, togglefloating, {0} },
