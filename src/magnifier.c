@@ -121,6 +121,11 @@ void magnify(const Arg* arg)
         z = m->zoom * (1 + arg->f);
     else
         z = m->zoom / (1 - arg->f);
+    magnifierzoom(m, z);
+}
+
+void magnifierzoom(Monitor* m, float z)
+{
     z = z < 1.01f ? 1 : z > ZOOMMAX ? ZOOMMAX : z;
     if (z == m->zoom)
         return;
