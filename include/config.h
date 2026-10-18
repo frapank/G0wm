@@ -196,6 +196,12 @@ enum libinput_config_accel_profile accel_profile =
     LIBINPUT_CONFIG_ACCEL_PROFILE_ADAPTIVE;
 double accel_speed = 0.0;
 
+/* natural_scrolling, accel_profile and accel_speed for touchpads */
+int touchpad_natural_scrolling = 0;
+enum libinput_config_accel_profile touchpad_accel_profile =
+    LIBINPUT_CONFIG_ACCEL_PROFILE_ADAPTIVE;
+double touchpad_accel_speed = 0.0;
+
 enum libinput_config_tap_button_map button_map = LIBINPUT_CONFIG_TAP_MAP_LRM;
 
 /* output names as wlr-randr shows them, NULL for all of them */

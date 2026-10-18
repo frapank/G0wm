@@ -296,10 +296,13 @@ void createkbinhibitor(struct wl_listener* listener, void* data)
 static void createpointer(struct wlr_pointer* pointer)
 {
     struct libinput_device* device;
+    int touchpad;
     if (wlr_input_device_is_libinput(&pointer->base) &&
         (device = wlr_libinput_get_device_handle(&pointer->base))) {
 
-        if (libinput_device_config_tap_get_finger_count(device)) {
+        /* only touchpads can tap */
+        touchpad = libinput_device_config_tap_get_finger_count(device) > 0;
+        if (touchpad) {
             libinput_device_config_tap_set_enabled(device, tap_to_click);
             libinput_device_config_tap_set_drag_enabled(device, tap_and_drag);
             libinput_device_config_tap_set_drag_lock_enabled(device, drag_lock);
@@ -308,7 +311,8 @@ static void createpointer(struct wlr_pointer* pointer)
 
         if (libinput_device_config_scroll_has_natural_scroll(device))
             libinput_device_config_scroll_set_natural_scroll_enabled(
-                device, natural_scrolling);
+                device,
+                touchpad ? touchpad_natural_scrolling : natural_scrolling);
 
         if (libinput_device_config_dwt_is_available(device))
             libinput_device_config_dwt_set_enabled(device,
@@ -334,8 +338,10 @@ static void createpointer(struct wlr_pointer* pointer)
                                                         send_events_mode);
 
         if (libinput_device_config_accel_is_available(device)) {
-            libinput_device_config_accel_set_profile(device, accel_profile);
-            libinput_device_config_accel_set_speed(device, accel_speed);
+            libinput_device_config_accel_set_profile(
+                device, touchpad ? touchpad_accel_profile : accel_profile);
+            libinput_device_config_accel_set_speed(
+                device, touchpad ? touchpad_accel_speed : accel_speed);
         }
     }
 
