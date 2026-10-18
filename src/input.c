@@ -38,11 +38,12 @@ static struct wlr_pointer_constraint_v1* active_constraint;
 static bool cursor_hidden = false;
 static int grabcx, grabcy; /* client-relative */
 static double pressx, pressy;
-/* gesture taken by a binding */
+/* gesture taken by a binding or by the magnifier */
 static struct {
     int ours;
     uint32_t fingers;
     double dx, dy, scale;
+    float zoom; /* magnifier level the pinch began at, 0 if not zooming */
 } gesture;
 static uint32_t runner_repeatcp; /* codepoint the armed key repeat types */
 
@@ -458,8 +459,17 @@ void swipeend(struct wl_listener* listener, void* data)
 void pinchbegin(struct wl_listener* listener, void* data)
 {
     struct wlr_pointer_pinch_begin_event* event = data;
+    struct wlr_keyboard* keyboard = wlr_seat_get_keyboard(seat);
+    uint32_t mods = keyboard ? wlr_keyboard_get_modifiers(keyboard) : 0;
+    Monitor* m;
 
     wlr_idle_notifier_v1_notify_activity(idle_notifier, seat);
+    if (!locked && pinchzoom_mod &&
+        CLEANMASK(mods) == CLEANMASK(pinchzoom_mod) &&
+        (m = xytomon(cursor->x, cursor->y))) {
+        gesture.zoom = m->zoom;
+        return;
+    }
     if ((gesture.ours = gesturebound(1, event->fingers))) {
         gesture.fingers = event->fingers;
         gesture.scale = 1.0;
@@ -472,8 +482,15 @@ void pinchbegin(struct wl_listener* listener, void* data)
 void pinchupdate(struct wl_listener* listener, void* data)
 {
     struct wlr_pointer_pinch_update_event* event = data;
+    Monitor* m;
 
     wlr_idle_notifier_v1_notify_activity(idle_notifier, seat);
+    if (gesture.zoom) {
+        /* the zoom follows the fingers */
+        if ((m = xytomon(cursor->x, cursor->y)))
+            magnifierzoom(m, gesture.zoom * (float)event->scale);
+        return;
+    }
     if (gesture.ours) {
         gesture.scale = event->scale;
         return;
@@ -491,6 +508,10 @@ void pinchend(struct wl_listener* listener, void* data)
 {
     struct wlr_pointer_pinch_end_event* event = data;
 
+    if (gesture.zoom) {
+        gesture.zoom = 0;
+        return;
+    }
     if (!gesture.ours) {
         wlr_pointer_gestures_v1_send_pinch_end(
             pointer_gestures, seat, event->time_msec, event->cancelled);
