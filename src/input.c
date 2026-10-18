@@ -38,11 +38,12 @@ static struct wlr_pointer_constraint_v1* active_constraint;
 static bool cursor_hidden = false;
 static int grabcx, grabcy; /* client-relative */
 static double pressx, pressy;
-/* gesture taken by a binding */
+/* gesture taken by a binding or by the magnifier */
 static struct {
     int ours;
     uint32_t fingers;
     double dx, dy, scale;
+    float zoom; /* magnifier level the pinch began at, 0 if not zooming */
 } gesture;
 static uint32_t runner_repeatcp; /* codepoint the armed key repeat types */
 
@@ -296,10 +297,13 @@ void createkbinhibitor(struct wl_listener* listener, void* data)
 static void createpointer(struct wlr_pointer* pointer)
 {
     struct libinput_device* device;
+    int touchpad;
     if (wlr_input_device_is_libinput(&pointer->base) &&
         (device = wlr_libinput_get_device_handle(&pointer->base))) {
 
-        if (libinput_device_config_tap_get_finger_count(device)) {
+        /* only touchpads can tap */
+        touchpad = libinput_device_config_tap_get_finger_count(device) > 0;
+        if (touchpad) {
             libinput_device_config_tap_set_enabled(device, tap_to_click);
             libinput_device_config_tap_set_drag_enabled(device, tap_and_drag);
             libinput_device_config_tap_set_drag_lock_enabled(device, drag_lock);
@@ -308,7 +312,8 @@ static void createpointer(struct wlr_pointer* pointer)
 
         if (libinput_device_config_scroll_has_natural_scroll(device))
             libinput_device_config_scroll_set_natural_scroll_enabled(
-                device, natural_scrolling);
+                device,
+                touchpad ? touchpad_natural_scrolling : natural_scrolling);
 
         if (libinput_device_config_dwt_is_available(device))
             libinput_device_config_dwt_set_enabled(device,
@@ -334,8 +339,10 @@ static void createpointer(struct wlr_pointer* pointer)
                                                         send_events_mode);
 
         if (libinput_device_config_accel_is_available(device)) {
-            libinput_device_config_accel_set_profile(device, accel_profile);
-            libinput_device_config_accel_set_speed(device, accel_speed);
+            libinput_device_config_accel_set_profile(
+                device, touchpad ? touchpad_accel_profile : accel_profile);
+            libinput_device_config_accel_set_speed(
+                device, touchpad ? touchpad_accel_speed : accel_speed);
         }
     }
 
@@ -452,8 +459,17 @@ void swipeend(struct wl_listener* listener, void* data)
 void pinchbegin(struct wl_listener* listener, void* data)
 {
     struct wlr_pointer_pinch_begin_event* event = data;
+    struct wlr_keyboard* keyboard = wlr_seat_get_keyboard(seat);
+    uint32_t mods = keyboard ? wlr_keyboard_get_modifiers(keyboard) : 0;
+    Monitor* m;
 
     wlr_idle_notifier_v1_notify_activity(idle_notifier, seat);
+    if (!locked && pinchzoom_mod &&
+        CLEANMASK(mods) == CLEANMASK(pinchzoom_mod) &&
+        (m = xytomon(cursor->x, cursor->y))) {
+        gesture.zoom = m->zoom;
+        return;
+    }
     if ((gesture.ours = gesturebound(1, event->fingers))) {
         gesture.fingers = event->fingers;
         gesture.scale = 1.0;
@@ -466,8 +482,15 @@ void pinchbegin(struct wl_listener* listener, void* data)
 void pinchupdate(struct wl_listener* listener, void* data)
 {
     struct wlr_pointer_pinch_update_event* event = data;
+    Monitor* m;
 
     wlr_idle_notifier_v1_notify_activity(idle_notifier, seat);
+    if (gesture.zoom) {
+        /* the zoom follows the fingers */
+        if ((m = xytomon(cursor->x, cursor->y)))
+            magnifierzoom(m, gesture.zoom * (float)event->scale);
+        return;
+    }
     if (gesture.ours) {
         gesture.scale = event->scale;
         return;
@@ -485,6 +508,10 @@ void pinchend(struct wl_listener* listener, void* data)
 {
     struct wlr_pointer_pinch_end_event* event = data;
 
+    if (gesture.zoom) {
+        gesture.zoom = 0;
+        return;
+    }
     if (!gesture.ours) {
         wlr_pointer_gestures_v1_send_pinch_end(
             pointer_gestures, seat, event->time_msec, event->cancelled);
@@ -1334,22 +1361,30 @@ static int wheelbinding(const struct wlr_pointer_axis_event* event)
     struct wlr_keyboard* keyboard = wlr_seat_get_keyboard(seat);
     uint32_t mods = keyboard ? wlr_keyboard_get_modifiers(keyboard) : 0;
     unsigned int wheel = event->delta < 0 ? WheelUp : WheelDown;
-    unsigned int click;
+    unsigned int click, mode;
+    int title;
     const Button* b;
     Client* c;
     Arg arg;
 
     xytonode(cursor->x, cursor->y, NULL, &c, NULL, NULL, NULL);
     click = c ? ClkClient : barclick(xytomon(cursor->x, cursor->y), &arg);
+    title = c && ontitle(c, cursor->x, cursor->y);
     for (b = buttons; b < buttons + nbuttons; b++) {
         if (CLEANMASK(mods) != CLEANMASK(b->mod) || b->button != wheel ||
-            b->click != click || !b->func)
+            (b->click != click && !(b->click == ClkWinTitle && title)) ||
+            !b->func)
             continue;
         if ((notches < 0) != (step < 0))
             notches = 0;
+        /* pressed, as for a click, so focusing does not warp the pointer
+         * away from where it scrolls */
+        mode = cursor_mode;
+        cursor_mode = CurPressed;
         for (notches += step; fabs(notches) >= 1;
              notches -= notches < 0 ? -1 : 1)
             b->func(&b->arg);
+        cursor_mode = mode;
         return 1;
     }
     return 0;

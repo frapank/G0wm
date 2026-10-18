@@ -35,10 +35,15 @@ static const Enum dragmodes[] = { { CurMove, "move" },
                                   { 0, NULL } };
 
 static const Enum clickareas[] = {
-    { ClkTagBar, "tagbar" }, { ClkLtSymbol, "ltsymbol" },
-    { ClkStatus, "status" }, { ClkTitle, "title" },
-    { ClkClient, "client" }, { ClkRoot, "root" },
-    { ClkTray, "tray" },     { 0, NULL }
+    { ClkTagBar, "tagbar" },
+    { ClkLtSymbol, "ltsymbol" },
+    { ClkStatus, "status" },
+    { ClkTitle, "title" },
+    { ClkClient, "client" },
+    { ClkRoot, "root" },
+    { ClkTray, "tray" },
+    { ClkWinTitle, "wintitle" },
+    { 0, NULL },
 };
 
 static const Enum mousebuttons[] = {
@@ -507,6 +512,13 @@ static cJSON* jinput(void)
     cJSON_AddStringToObject(
         o, "accel_profile", enumname(accelprofiles, accel_profile));
     cJSON_AddItemToObject(o, "accel_speed", jnum(accel_speed));
+    cJSON_AddBoolToObject(
+        o, "touchpad_natural_scrolling", touchpad_natural_scrolling);
+    cJSON_AddStringToObject(o,
+                            "touchpad_accel_profile",
+                            enumname(accelprofiles, touchpad_accel_profile));
+    cJSON_AddItemToObject(
+        o, "touchpad_accel_speed", jnum(touchpad_accel_speed));
     cJSON_AddStringToObject(o, "button_map", enumname(buttonmaps, button_map));
     cJSON_AddItemToObject(o, "tablet_output", jstr(tablet_output));
     cJSON_AddBoolToObject(o, "tablet_left_handed", tablet_left_handed);
@@ -1050,6 +1062,16 @@ static void applyinput(const cJSON* o)
                                                     accel_profile,
                                                     "acceleration profile");
     accel_speed = getnum(o, "accel_speed", accel_speed);
+    touchpad_natural_scrolling =
+        getbool(o, "touchpad_natural_scrolling", touchpad_natural_scrolling);
+    touchpad_accel_profile =
+        (enum libinput_config_accel_profile)getenum(o,
+                                                    "touchpad_accel_profile",
+                                                    accelprofiles,
+                                                    touchpad_accel_profile,
+                                                    "acceleration profile");
+    touchpad_accel_speed =
+        getnum(o, "touchpad_accel_speed", touchpad_accel_speed);
     button_map = (enum libinput_config_tap_button_map)getenum(
         o, "button_map", buttonmaps, button_map, "button map");
     tablet_output = getstr(o, "tablet_output", tablet_output);

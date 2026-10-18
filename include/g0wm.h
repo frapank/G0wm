@@ -194,7 +194,8 @@ enum {
     ClkTitle,
     ClkClient,
     ClkRoot,
-    ClkTray
+    ClkTray,
+    ClkWinTitle /* a window's title bar, only for the wheel */
 }; /* clicks */
 enum { WheelUp = 0x10000, WheelDown }; /* Button.button for a wheel notch */
 
@@ -505,6 +506,7 @@ void killclient(const Arg* arg);
 void locksession(struct wl_listener* listener, void* data);
 void magnifierdrop(Monitor* m);
 int magnifierframe(Monitor* m, struct wlr_output_state* state);
+void magnifierzoom(Monitor* m, float z);
 void magnify(const Arg* arg);
 void mapnotify(struct wl_listener* listener, void* data);
 void movestack(const Arg* arg);
@@ -566,6 +568,7 @@ void setlayout(const Arg* arg);
 void setmfact(const Arg* arg);
 void settitle(Client* c);
 int titleclick(Client* c, double x, double y);
+int ontitle(Client* c, double x, double y);
 void titlehover(Client* c, double x, double y);
 int titleheight(Client* c);
 void titlegrab(Client* c);
@@ -792,6 +795,9 @@ extern enum libinput_config_click_method click_method;
 extern uint32_t send_events_mode;
 extern enum libinput_config_accel_profile accel_profile;
 extern double accel_speed;
+extern int touchpad_natural_scrolling;
+extern enum libinput_config_accel_profile touchpad_accel_profile;
+extern double touchpad_accel_speed;
 extern enum libinput_config_tap_button_map button_map;
 extern const char* tablet_output;
 extern int tablet_left_handed;
@@ -802,6 +808,7 @@ extern size_t nkeys;
 extern Button* buttons;
 extern size_t nbuttons;
 extern Gesture* gestures;
+extern unsigned int pinchzoom_mod;
 extern size_t ngestures;
 extern PadButton* padbuttons;
 extern size_t npadbuttons;

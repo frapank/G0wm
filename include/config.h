@@ -196,6 +196,12 @@ enum libinput_config_accel_profile accel_profile =
     LIBINPUT_CONFIG_ACCEL_PROFILE_ADAPTIVE;
 double accel_speed = 0.0;
 
+/* natural_scrolling, accel_profile and accel_speed for touchpads */
+int touchpad_natural_scrolling = 0;
+enum libinput_config_accel_profile touchpad_accel_profile =
+    LIBINPUT_CONFIG_ACCEL_PROFILE_ADAPTIVE;
+double touchpad_accel_speed = 0.0;
+
 enum libinput_config_tap_button_map button_map = LIBINPUT_CONFIG_TAP_MAP_LRM;
 
 /* output names as wlr-randr shows them, NULL for all of them */
@@ -321,6 +327,11 @@ static Button buttons_def[] = {
 	{ ClkTagBar,   0,      BTN_RIGHT,  toggleview,     {0} },
 	{ ClkTagBar,   MODKEY, BTN_LEFT,   tag,            {0} },
 	{ ClkTagBar,   MODKEY, BTN_RIGHT,  toggletag,      {0} },
+	{ ClkTagBar,   0,      WheelUp,    shiftview,      {.i = -1} },
+	{ ClkTagBar,   0,      WheelDown,  shiftview,      {.i = +1} },
+
+	{ ClkWinTitle, 0,      WheelUp,    focusstack,     {.i = -1} },
+	{ ClkWinTitle, 0,      WheelDown,  focusstack,     {.i = +1} },
 
 	{ ClkClient,   MODKEY, BTN_LEFT,   moveresize,     {.ui = CurMove} },
 	{ ClkClient,   MODKEY, BTN_MIDDLE, togglefloating, {0} },
@@ -341,6 +352,9 @@ static Gesture gestures_def[] = {
 };
 Gesture* gestures = gestures_def;
 size_t ngestures  = LENGTH(gestures_def);
+
+/* held while pinching on a touchpad to zoom the magnifier, 0 for off */
+unsigned int pinchzoom_mod = MODKEY;
 
 /* tablet pad buttons, counted from 0: a bound one is not sent to the app.
  * e.g. { 0, spawn, SHCMD("wtype -M ctrl z -m ctrl") } */
