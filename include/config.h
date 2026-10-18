@@ -348,6 +348,9 @@ static Gesture gestures_def[] = {
 Gesture* gestures = gestures_def;
 size_t ngestures  = LENGTH(gestures_def);
 
+/* held while pinching on a touchpad to zoom the magnifier, 0 for off */
+unsigned int pinchzoom_mod = MODKEY;
+
 /* tablet pad buttons, counted from 0: a bound one is not sent to the app.
  * e.g. { 0, spawn, SHCMD("wtype -M ctrl z -m ctrl") } */
 PadButton* padbuttons = NULL;
