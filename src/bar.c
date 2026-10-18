@@ -787,7 +787,7 @@ static int onclose(Client* c, double x, double y)
 }
 
 /* whether (x, y) is on c's title bar */
-static int ontitle(Client* c, double x, double y)
+int ontitle(Client* c, double x, double y)
 {
     Monitor* m = c->mon;
     double lx, ly;

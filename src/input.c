@@ -1361,22 +1361,30 @@ static int wheelbinding(const struct wlr_pointer_axis_event* event)
     struct wlr_keyboard* keyboard = wlr_seat_get_keyboard(seat);
     uint32_t mods = keyboard ? wlr_keyboard_get_modifiers(keyboard) : 0;
     unsigned int wheel = event->delta < 0 ? WheelUp : WheelDown;
-    unsigned int click;
+    unsigned int click, mode;
+    int title;
     const Button* b;
     Client* c;
     Arg arg;
 
     xytonode(cursor->x, cursor->y, NULL, &c, NULL, NULL, NULL);
     click = c ? ClkClient : barclick(xytomon(cursor->x, cursor->y), &arg);
+    title = c && ontitle(c, cursor->x, cursor->y);
     for (b = buttons; b < buttons + nbuttons; b++) {
         if (CLEANMASK(mods) != CLEANMASK(b->mod) || b->button != wheel ||
-            b->click != click || !b->func)
+            (b->click != click && !(b->click == ClkWinTitle && title)) ||
+            !b->func)
             continue;
         if ((notches < 0) != (step < 0))
             notches = 0;
+        /* pressed, as for a click, so focusing does not warp the pointer
+         * away from where it scrolls */
+        mode = cursor_mode;
+        cursor_mode = CurPressed;
         for (notches += step; fabs(notches) >= 1;
              notches -= notches < 0 ? -1 : 1)
             b->func(&b->arg);
+        cursor_mode = mode;
         return 1;
     }
     return 0;

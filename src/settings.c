@@ -35,10 +35,15 @@ static const Enum dragmodes[] = { { CurMove, "move" },
                                   { 0, NULL } };
 
 static const Enum clickareas[] = {
-    { ClkTagBar, "tagbar" }, { ClkLtSymbol, "ltsymbol" },
-    { ClkStatus, "status" }, { ClkTitle, "title" },
-    { ClkClient, "client" }, { ClkRoot, "root" },
-    { ClkTray, "tray" },     { 0, NULL }
+    { ClkTagBar, "tagbar" },
+    { ClkLtSymbol, "ltsymbol" },
+    { ClkStatus, "status" },
+    { ClkTitle, "title" },
+    { ClkClient, "client" },
+    { ClkRoot, "root" },
+    { ClkTray, "tray" },
+    { ClkWinTitle, "wintitle" },
+    { 0, NULL },
 };
 
 static const Enum mousebuttons[] = {
