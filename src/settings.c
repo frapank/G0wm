@@ -1566,14 +1566,20 @@ static void check(const struct scfg_block* want,
             (*bad)++;
         }
     }
-    /* a typo, or a setting this build was configured without */
+    /* a typo, a setting this build was configured without, or a second one */
     for (i = 0; i < got->directives_len; i++) {
         g = &got->directives[i];
-        if (find(want, g->name) || (!*path && isrecord(g->name)))
+        if (!*path && isrecord(g->name))
+            continue;
+        w = find(got, g->name);
+        if (w == g && find(want, g->name))
             continue;
         snprintf(sub, sizeof sub, "%s%s%s", path, *path ? "." : "", g->name);
         line = g->lineno;
-        warn("%s is not a setting this build has", sub);
+        if (w != g)
+            warn("%s is already set on line %d", sub, w->lineno);
+        else
+            warn("%s is not a setting this build has", sub);
         (*bad)++;
     }
 }
