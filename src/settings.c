@@ -6,6 +6,7 @@
 #include <errno.h>
 #include <limits.h>
 #include <scfg.h>
+#include <stdarg.h>
 
 #include "g0wm.h"
 #include "util.h"
@@ -182,6 +183,19 @@ static const Action actions[] = {
     { zoom, "zoom", 0 },
 };
 
+static int line; /* of the directive being read */
+
+static void warn(const char* fmt, ...)
+{
+    va_list ap;
+
+    fprintf(stderr, "g0wm: config:%d: ", line);
+    va_start(ap, fmt);
+    vfprintf(stderr, fmt, ap);
+    va_end(ap);
+    fputc('\n', stderr);
+}
+
 static const char* enumname(const Enum* e, int val)
 {
     for (; e->name; e++)
@@ -200,7 +214,7 @@ static int enumval(const Enum* e,
     for (p = e; p->name; p++)
         if (!strcmp(p->name, name))
             return p->val;
-    fprintf(stderr, "g0wm: config: %s is not a %s\n", name, what);
+    warn("%s is not a %s", name, what);
     return fallback;
 }
 
@@ -223,7 +237,7 @@ static const Action* actionbyname(const char* name)
     for (i = 0; i < LENGTH(actions); i++)
         if (!strcmp(actions[i].name, name))
             return &actions[i];
-    fprintf(stderr, "g0wm: config: %s is not an action\n", name);
+    warn("%s is not an action", name);
     return NULL;
 }
 
@@ -808,9 +822,12 @@ static const struct scfg_directive* find(const struct scfg_block* b,
 
     if (!b)
         return NULL;
-    for (i = 0; i < b->directives_len; i++)
-        if (!strcmp(b->directives[i].name, k))
+    for (i = 0; i < b->directives_len; i++) {
+        if (!strcmp(b->directives[i].name, k)) {
+            line = b->directives[i].lineno;
             return &b->directives[i];
+        }
+    }
     return NULL;
 }
 
@@ -875,7 +892,7 @@ static uint32_t hexval(const char* s, uint32_t cur)
         if (!*end)
             return (uint32_t)v;
     }
-    fprintf(stderr, "g0wm: config: %s is not an #rrggbbaa color\n", s);
+    warn("%s is not an #rrggbbaa color", s);
     return cur;
 }
 
@@ -985,7 +1002,7 @@ static const Layout* layoutbysymbol(const char* symbol)
     for (i = 0; i < nlayouts; i++)
         if (!strcmp(layouts[i].symbol, symbol))
             return &layouts[i];
-    fprintf(stderr, "g0wm: config: no layout draws %s\n", symbol);
+    warn("no layout draws %s", symbol);
     return NULL;
 }
 
@@ -1048,7 +1065,7 @@ static void applylook(const struct scfg_block* b)
     if ((list = strlist(find(b, "tags"), 0, &ntags))) {
         tags = (char**)list;
         if (ntags > 31) { /* TAGMASK has to fit in a uint32_t */
-            fprintf(stderr, "g0wm: config: only the first 31 tags are used\n");
+            warn("only the first 31 tags are used");
             ntags = 31;
         }
     }
@@ -1210,6 +1227,7 @@ static void applylayouts(const struct scfg_block* b)
         const char* name;
 
         d = &b->directives[i];
+        line = d->lineno;
         if (strcmp(d->name, "layout"))
             continue;
         out[n].symbol = param(d, 0) ? param(d, 0) : "[ ]";
@@ -1220,9 +1238,7 @@ static void applylayouts(const struct scfg_block* b)
         if (j < LENGTH(arranges))
             out[n].arrange = arranges[j].arrange;
         else
-            fprintf(stderr,
-                    "g0wm: config: %s is not a layout, using float\n",
-                    name);
+            warn("%s is not a layout, using float", name);
         n++;
     }
     layouts = out;
@@ -1305,6 +1321,7 @@ static void applyautostart(const struct scfg_block* b)
     n = 0;
     for (i = 0; i < b->directives_len; i++) {
         d = &b->directives[i];
+        line = d->lineno;
         if (strcmp(d->name, "autostart") || !d->params_len)
             continue;
         for (j = 0; j < d->params_len; j++)
@@ -1327,12 +1344,13 @@ static void applykeys(const struct scfg_block* b)
         xkb_keysym_t sym;
 
         d = &b->directives[i];
+        line = d->lineno;
         if (strcmp(d->name, "key") || !(act = actionbyname(param(d, 1))))
             continue;
         name = splitmods(param(d, 0), &out[n].mod);
         if ((sym = xkb_keysym_from_name(name, XKB_KEYSYM_NO_FLAGS)) ==
             XKB_KEY_NoSymbol) {
-            fprintf(stderr, "g0wm: config: %s is not a key\n", name);
+            warn("%s is not a key", name);
             continue;
         }
         out[n].keysym = sym;
@@ -1354,6 +1372,7 @@ static void applybuttons(const struct scfg_block* b)
     out = ecalloc(count(b, "button") + 1, sizeof *out);
     for (i = 0; i < b->directives_len; i++) {
         d = &b->directives[i];
+        line = d->lineno;
         if (strcmp(d->name, "button") || !(act = actionbyname(param(d, 2))))
             continue;
         out[n].click = (unsigned int)enumval(
@@ -1381,6 +1400,7 @@ static void applygestures(const struct scfg_block* b)
     out = ecalloc(count(b, "gesture") + 1, sizeof *out);
     for (i = 0; i < b->directives_len; i++) {
         d = &b->directives[i];
+        line = d->lineno;
         if (strcmp(d->name, "gesture") || !(act = actionbyname(param(d, 2))))
             continue;
         out[n].motion = (unsigned int)enumval(
@@ -1404,6 +1424,7 @@ static void applypadbuttons(const struct scfg_block* b)
     out = ecalloc(count(b, "padbutton") + 1, sizeof *out);
     for (i = 0; i < b->directives_len; i++) {
         d = &b->directives[i];
+        line = d->lineno;
         if (strcmp(d->name, "padbutton") || !(act = actionbyname(param(d, 1))))
             continue;
         out[n].button = (unsigned int)numval(param(d, 0), 0);
@@ -1520,7 +1541,8 @@ static void check(const struct scfg_block* want,
         } else if (w->children.directives_len) {
             check(&w->children, &g->children, sub, bad);
         } else if (!sameshape(w, g)) {
-            fprintf(stderr, "g0wm: config: %s should be %s\n", sub, kindof(w));
+            line = g->lineno;
+            warn("%s should be %s", sub, kindof(w));
             (*bad)++;
         }
     }
@@ -1530,8 +1552,8 @@ static void check(const struct scfg_block* want,
         if (find(want, g->name) || (!*path && isrecord(g->name)))
             continue;
         snprintf(sub, sizeof sub, "%s%s%s", path, *path ? "." : "", g->name);
-        fprintf(
-            stderr, "g0wm: config: %s is not a setting this build has\n", sub);
+        line = g->lineno;
+        warn("%s is not a setting this build has", sub);
         (*bad)++;
     }
 }
