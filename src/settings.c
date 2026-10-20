@@ -1601,8 +1601,12 @@ static void check(const struct scfg_block* want,
     /* a typo, a setting this build was configured without, or a second one */
     for (i = 0; i < got->directives_len; i++) {
         g = &got->directives[i];
-        if (!*path && isrecord(g->name))
+        if (!*path && isrecord(g->name)) {
+            /* what a rule or a monitor holds */
+            if ((w = find(want, g->name)) && w->children.directives_len)
+                check(&w->children, &g->children, g->name, bad);
             continue;
+        }
         w = find(got, g->name);
         if (w == g && find(want, g->name))
             continue;
