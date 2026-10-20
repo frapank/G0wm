@@ -163,26 +163,26 @@ TESTCFG = $(BUILDDIR)/test-config
 
 test: g0wm
 	@rm -rf $(TESTCFG)
-	@XDG_CONFIG_HOME=$(TESTCFG) ./g0wm -c >$(TESTCFG).json 2>/dev/null
-	@cmp -s $(TESTCFG).json $(TESTCFG)/g0wm/settings.json || \
+	@XDG_CONFIG_HOME=$(TESTCFG) ./g0wm -c >$(TESTCFG).out 2>/dev/null
+	@cmp -s $(TESTCFG).out $(TESTCFG)/g0wm/config || \
 		{ echo 'what -c wrote is not what it reads back' >&2; exit 1; }
 	@out=`XDG_CONFIG_HOME=$(TESTCFG) ./g0wm -c 2>&1 >/dev/null`; \
 	case $$out in *"is missing"*|*"is not a setting"*|*"should be"*) \
 		printf '%s\n' "$$out" >&2; \
-		echo 'a fresh settings.json did not pass its own check' >&2; exit 1 ;; \
+		echo 'a fresh config did not pass its own check' >&2; exit 1 ;; \
 	esac
-	@sed 's/"borderpx":\([^0-9]*\)[0-9]*/"borderpx":\17/; s/"showbar"/"shobwar"/' \
-		$(TESTCFG)/g0wm/settings.json >$(TESTCFG)/t \
-		&& mv $(TESTCFG)/t $(TESTCFG)/g0wm/settings.json
-	@out=`XDG_CONFIG_HOME=$(TESTCFG) ./g0wm -c 2>&1 >$(TESTCFG).json`; \
+	@sed 's/borderpx [0-9]*/borderpx 7/; s/showbar/shobwar/' \
+		$(TESTCFG)/g0wm/config >$(TESTCFG)/t \
+		&& mv $(TESTCFG)/t $(TESTCFG)/g0wm/config
+	@out=`XDG_CONFIG_HOME=$(TESTCFG) ./g0wm -c 2>&1 >$(TESTCFG).out`; \
 	case $$out in \
 	*"bar.showbar is missing"*"bar.shobwar is not a setting"*) ;; \
 	*) printf '%s\n' "$$out" >&2; \
-		echo 'a damaged settings.json went unreported' >&2; exit 1 ;; \
+		echo 'a damaged config went unreported' >&2; exit 1 ;; \
 	esac
-	@grep -q '"borderpx":[^0-9]*7' $(TESTCFG).json || \
+	@grep -q 'borderpx 7' $(TESTCFG).out || \
 		{ echo 'a setting read from the file was not applied' >&2; exit 1; }
-	@$(MESS) '[$(GREEN)TEST$(RESET)] %s\n' 'settings.json round trip ok'
+	@$(MESS) '[$(GREEN)TEST$(RESET)] %s\n' 'config round trip ok'
 
 clean:
 	@$(MESS) '[$(RED)CLEANER$(RESET)] %s\n' 'Cleaning...'
@@ -193,7 +193,7 @@ clean:
 dist:
 	git archive --prefix=g0wm-$(VERSION)/ -o g0wm-$(VERSION).tar.gz HEAD
 
-# g0wm -c writes settings.json: only the binary knows which features it has.
+# g0wm -c writes the config: only the binary knows which features it has.
 # not for a staged install or root, it would land in the wrong home
 install: g0wm
 	@$(MESS) '[$(YELLOW)INSTALL$(RESET)] %s\n' 'Starting...'

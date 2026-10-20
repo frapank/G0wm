@@ -1,4 +1,4 @@
-/* Default values, used to write a new settings.json. Once the file exists
+/* Default values, used to write a new config. Once the file exists
  * it is the one that counts. */
 
 #define MODKEY WLR_MODIFIER_LOGO
