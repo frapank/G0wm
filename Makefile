@@ -73,10 +73,6 @@ SRC += $(SRCDIR)/xwayland.c
 endif
 OBJ = $(SRC:$(SRCDIR)/%.c=$(BUILDDIR)/%.o)
 
-# Vendored third-party sources, built without the dev warning flags.
-EXTSRC = $(EXTDIR)/cJSON.c
-EXTOBJ = $(EXTSRC:$(EXTDIR)/%.c=$(BUILDDIR)/external/%.o)
-
 # wayland-scanner is a tool which generates C headers and rigging for Wayland
 # protocols, which are specified in XML. wlroots requires you to rig these up
 # to your build system yourself and provide them in the include path.
@@ -99,9 +95,9 @@ vpath %.xml protocols \
 
 all: g0wm
 
-g0wm: $(OBJ) $(EXTOBJ)
+g0wm: $(OBJ)
 	@$(MESS) '[$(GREEN)LINKER$(RESET)] %s\n' 'Linking $@'
-	$(Q)$(CC) $(CFLAGS) $(LDFLAGS) $(OBJ) $(EXTOBJ) $(LDLIBS) -o $@
+	$(Q)$(CC) $(CFLAGS) $(LDFLAGS) $(OBJ) $(LDLIBS) -o $@
 
 # header deps come from the .d files, the generated headers just need to exist
 $(BUILDDIR)/%.o: $(SRCDIR)/%.c config.mk | $(GENHDR)
@@ -109,12 +105,7 @@ $(BUILDDIR)/%.o: $(SRCDIR)/%.c config.mk | $(GENHDR)
 	@mkdir -p $(@D)
 	$(Q)$(CC) $(CPPFLAGS) $(G0WMCFLAGS) -c $< -o $@
 
-$(BUILDDIR)/external/%.o: $(EXTDIR)/%.c config.mk
-	@$(MESS) '[$(GREEN)COMPILER$(RESET)] %s\n' 'Compiling $@'
-	@mkdir -p $(@D)
-	$(Q)$(CC) $(CPPFLAGS) $(CFLAGS) -MMD -MP -c $< -o $@
-
--include $(OBJ:.o=.d) $(EXTOBJ:.o=.d)
+-include $(OBJ:.o=.d)
 
 # rewritten only when the version changes
 $(BUILDDIR)/version: FORCE
