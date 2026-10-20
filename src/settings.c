@@ -380,6 +380,24 @@ static void wcombo(uint32_t mod, const char* last)
     fputs(last, fp);
 }
 
+/* logo+alt, or none */
+static void wmods(const char* k, uint32_t mod)
+{
+    const Enum* e;
+    const char* sep = " ";
+
+    start(k);
+    if (!mod)
+        fputs(" none", fp);
+    for (e = modnames; e->name; e++) {
+        if (mod & (uint32_t)e->val) {
+            fprintf(fp, "%s%s", sep, e->name);
+            sep = "+";
+        }
+    }
+    fputc('\n', fp);
+}
+
 static void warg(char kind, const Arg* arg)
 {
     const char* const* v;
@@ -451,6 +469,8 @@ static void wwindows(void)
     wbool("titlecenter", titlecenter);
     wbool("titleclose", titleclose);
     whex("titleclosecolor", titleclosecolor);
+    wint("movethreshold", movethreshold);
+    wint("movesnap", movesnap);
     wclose();
 }
 
@@ -528,6 +548,7 @@ static void winput(void)
     wstr("touchpad_accel_profile",
          enumname(accelprofiles, touchpad_accel_profile));
     wnum("touchpad_accel_speed", touchpad_accel_speed);
+    wmods("pinchzoom_mod", pinchzoom_mod);
     wstr("button_map", enumname(buttonmaps, button_map));
     wstr("tablet_output", tablet_output);
     wbool("tablet_left_handed", tablet_left_handed);
@@ -892,6 +913,19 @@ static const char* splitmods(const char* s, uint32_t* mod)
     return s;
 }
 
+static uint32_t getmods(const struct scfg_block* b, const char* k, uint32_t cur)
+{
+    const char* s = getstr(b, k, NULL);
+    uint32_t mod;
+
+    if (!s)
+        return cur;
+    if (!strcmp(s, "none"))
+        return 0;
+    s = splitmods(s, &mod);
+    return mod | (uint32_t)enumval(modnames, s, 0, "modifier");
+}
+
 static const Layout* layoutbysymbol(const char* symbol)
 {
     size_t i;
@@ -986,6 +1020,8 @@ static void applywindows(const struct scfg_block* b)
     titlecenter = getbool(b, "titlecenter", titlecenter);
     titleclose = getbool(b, "titleclose", titleclose);
     titleclosecolor = gethex(b, "titleclosecolor", titleclosecolor);
+    movethreshold = (int)getnum(b, "movethreshold", movethreshold);
+    movesnap = (int)getnum(b, "movesnap", movesnap);
 }
 
 static void applybar(const struct scfg_block* b)
@@ -1091,6 +1127,7 @@ static void applyinput(const struct scfg_block* b)
                                                     "acceleration profile");
     touchpad_accel_speed =
         getnum(b, "touchpad_accel_speed", touchpad_accel_speed);
+    pinchzoom_mod = getmods(b, "pinchzoom_mod", pinchzoom_mod);
     button_map = (enum libinput_config_tap_button_map)getenum(
         b, "button_map", buttonmaps, button_map, "button map");
     tablet_output = getstr(b, "tablet_output", tablet_output);
