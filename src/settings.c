@@ -880,6 +880,20 @@ static double numval(const char* s, double cur)
     return isnum(s, &v) ? v : cur;
 }
 
+/* a negative one would not convert */
+static unsigned int uintval(const char* s, unsigned int cur)
+{
+    double v;
+
+    if (!isnum(s, &v))
+        return cur;
+    if (v < 0 || v > UINT_MAX) {
+        warn("%s is out of range", s);
+        return cur;
+    }
+    return (unsigned int)v;
+}
+
 static uint32_t hexval(const char* s, uint32_t cur)
 {
     unsigned long v;
@@ -907,6 +921,13 @@ static int getbool(const struct scfg_block* b, const char* k, int cur)
 static double getnum(const struct scfg_block* b, const char* k, double cur)
 {
     return numval(param(find(b, k), 0), cur);
+}
+
+static unsigned int getuint(const struct scfg_block* b,
+                            const char* k,
+                            unsigned int cur)
+{
+    return uintval(param(find(b, k), 0), cur);
 }
 
 static const char* getstr(const struct scfg_block* b,
@@ -1016,7 +1037,7 @@ static Arg getarg(char kind, const struct scfg_directive* d, size_t i)
             a.i = (int)numval(s, 0);
             break;
         case 'u':
-            a.ui = (uint32_t)numval(s, 0);
+            a.ui = uintval(s, 0);
             break;
         case 'f':
             a.f = (float)numval(s, 0);
@@ -1075,15 +1096,15 @@ static void applywindows(const struct scfg_block* b)
 {
     if (!b)
         return;
-    borderpx = (unsigned int)getnum(b, "borderpx", borderpx);
+    borderpx = getuint(b, "borderpx", borderpx);
     cornerstyle =
         getenum(b, "cornerstyle", cornerstyles, cornerstyle, "corner style");
-    cornerpx = (unsigned int)getnum(b, "cornerpx", cornerpx);
+    cornerpx = getuint(b, "cornerpx", cornerpx);
     gaps = (int)getnum(b, "gaps", gaps);
-    gappx = (unsigned int)getnum(b, "gappx", gappx);
+    gappx = getuint(b, "gappx", gappx);
     smartgaps = getbool(b, "smartgaps", smartgaps);
     titlebar = getbool(b, "titlebar", titlebar);
-    titlepadding = (unsigned int)getnum(b, "titlepadding", titlepadding);
+    titlepadding = getuint(b, "titlepadding", titlepadding);
     titlecenter = getbool(b, "titlecenter", titlecenter);
     titleclose = getbool(b, "titleclose", titleclose);
     titleclosecolor = gethex(b, "titleclosecolor", titleclosecolor);
@@ -1100,22 +1121,21 @@ static void applybar(const struct scfg_block* b)
     barwintitle = getbool(b, "barwintitle", barwintitle);
     bartagdots = getbool(b, "bartagdots", bartagdots);
     barltsymbol = getbool(b, "barltsymbol", barltsymbol);
-    barboxradius = (unsigned int)getnum(b, "barboxradius", barboxradius);
-    barpadding = (unsigned int)getnum(b, "barpadding", barpadding);
+    barboxradius = getuint(b, "barboxradius", barboxradius);
+    barpadding = getuint(b, "barpadding", barpadding);
     barheight = (float)getnum(b, "barheight", barheight);
     barsinglemon = getbool(b, "barsinglemon", barsinglemon);
     showsystray = getbool(b, "showsystray", showsystray);
-    systrayspacing = (unsigned int)getnum(b, "systrayspacing", systrayspacing);
-    systraypadding = (unsigned int)getnum(b, "systraypadding", systraypadding);
-    systrayiconsize =
-        (unsigned int)getnum(b, "systrayiconsize", systrayiconsize);
+    systrayspacing = getuint(b, "systrayspacing", systrayspacing);
+    systraypadding = getuint(b, "systraypadding", systraypadding);
+    systrayiconsize = getuint(b, "systrayiconsize", systrayiconsize);
     shownotifications = getbool(b, "shownotifications", shownotifications);
     notification_timeout =
-        (unsigned int)getnum(b, "notification_timeout", notification_timeout);
-    notification_linewidth = (unsigned int)getnum(
-        b, "notification_linewidth", notification_linewidth);
-    notification_lineradius = (unsigned int)getnum(
-        b, "notification_lineradius", notification_lineradius);
+        getuint(b, "notification_timeout", notification_timeout);
+    notification_linewidth =
+        getuint(b, "notification_linewidth", notification_linewidth);
+    notification_lineradius =
+        getuint(b, "notification_lineradius", notification_lineradius);
     notification_actionsign =
         getstr(b, "notification_actionsign", notification_actionsign);
     runner_placeholder = getstr(b, "runner_placeholder", runner_placeholder);
@@ -1132,8 +1152,8 @@ static void applyopacity(const struct scfg_block* b)
 #ifdef INTEGRATED_BACKGROUND
     opacity_type = getenum(
         b, "opacity_type", opacitykinds, opacity_type, "kind of opacity");
-    blur_radius = (unsigned int)getnum(b, "blur_radius", blur_radius);
-    blur_passes = (unsigned int)getnum(b, "blur_passes", blur_passes);
+    blur_radius = getuint(b, "blur_radius", blur_radius);
+    blur_passes = getuint(b, "blur_passes", blur_passes);
     blur_saturation = (float)getnum(b, "blur_saturation", blur_saturation);
     blur_brightness = (float)getnum(b, "blur_brightness", blur_brightness);
 #endif
@@ -1258,7 +1278,7 @@ static void applyrules(const struct scfg_block* b)
         r = &b->directives[i].children;
         out[n].id = getstr(r, "id", NULL);
         out[n].title = getstr(r, "title", NULL);
-        out[n].tags = (uint32_t)getnum(r, "tags", 0);
+        out[n].tags = getuint(r, "tags", 0);
         out[n].isfloating = getbool(r, "isfloating", 0);
         out[n].opacity_focus = (float)getnum(r, "opacity_focus", 0);
         out[n].opacity_unfocus = (float)getnum(r, "opacity_unfocus", 0);
@@ -1405,7 +1425,7 @@ static void applygestures(const struct scfg_block* b)
             continue;
         out[n].motion = (unsigned int)enumval(
             gesturemotions, param(d, 0), SwipeLeft, "gesture motion");
-        out[n].fingers = (unsigned int)numval(param(d, 1), 3);
+        out[n].fingers = uintval(param(d, 1), 3);
         out[n].func = act->func;
         out[n].arg = getarg(act->arg, d, 3);
         n++;
@@ -1427,7 +1447,7 @@ static void applypadbuttons(const struct scfg_block* b)
         line = d->lineno;
         if (strcmp(d->name, "padbutton") || !(act = actionbyname(param(d, 1))))
             continue;
-        out[n].button = (unsigned int)numval(param(d, 0), 0);
+        out[n].button = uintval(param(d, 0), 0);
         out[n].func = act->func;
         out[n].arg = getarg(act->arg, d, 2);
         n++;
