@@ -19,9 +19,8 @@ and a customizable status bar. It also includes the tabbed mode from i3,
 with window titles and close buttons that appear on the right side of the bar
 when hovered.
 
-The settings are documented in the comments of
-[`include/config.h`](include/config.h), and the man page is at
-[`docs/g0wm.1`](docs/g0wm.1).
+Settings and docs can be found at:
+[`Features`](docs/FEATURES.md)
 
 ## Screenshots
 
