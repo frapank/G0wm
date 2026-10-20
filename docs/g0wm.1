@@ -35,8 +35,10 @@ option,
 writes the default settings to
 .Pa ~/.config/g0wm/config
 and exits.
-An existing file is kept and checked instead: every setting this build has
-must be in it, and anything else in it is reported.
+An existing file is kept and checked instead: anything that is not a setting
+this build has, or is set twice, is reported.
+A setting left out keeps its built-in value, and so do the bindings, rules
+or monitors when the file has none of that kind.
 The same check runs at startup.
 .Pp
 Users are encouraged to customize

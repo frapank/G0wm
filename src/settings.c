@@ -780,7 +780,7 @@ static void wpadbuttons(void)
 
 static void defaults(void)
 {
-    note("", "a setting with no value is off");
+    note("", "a setting left out keeps its default, one with no value is off");
     wlook();
     wwindows();
     wbar();
@@ -1456,23 +1456,56 @@ static void applypadbuttons(const struct scfg_block* b)
     npadbuttons = n;
 }
 
-/* the layouts first: the rest names them by symbol */
-static void apply(const struct scfg_block* b)
+/* config.h's settings, read back: what the file is checked against and what
+ * fills in for what it leaves out */
+static const struct scfg_block* builtin;
+
+static void loadbuiltin(void)
 {
-    applylayouts(b);
+    static struct scfg_block b;
+    char* text;
+    FILE* f;
+
+    if (builtin || !(text = rendered()))
+        return;
+    if ((f = fmemopen(text, strlen(text), "r"))) {
+        if (!scfg_parse_file(&b, f))
+            builtin = &b;
+        fclose(f);
+    }
+    free(text);
+}
+
+/* the file's lines of kind k, or the built-in ones when it has none */
+static const struct scfg_block* lines(const struct scfg_block* b, const char* k)
+{
+    return count(b, k) || !builtin ? b : builtin;
+}
+
+static void applysections(const struct scfg_block* b)
+{
     applylook(section(b, "look"));
     applywindows(section(b, "windows"));
     applybar(section(b, "bar"));
     applyopacity(section(b, "opacity"));
     applyinput(section(b, "input"));
     applymisc(section(b, "misc"));
-    applyrules(b);
-    applymonitors(b);
-    applyautostart(b);
-    applykeys(b);
-    applybuttons(b);
-    applygestures(b);
-    applypadbuttons(b);
+}
+
+/* the layouts first: the rest names them by symbol */
+static void apply(const struct scfg_block* b)
+{
+    applylayouts(lines(b, "layout"));
+    /* a reload has to undo a setting since left out */
+    applysections(builtin);
+    applysections(b);
+    applyrules(lines(b, "rule"));
+    applymonitors(lines(b, "monitor"));
+    applyautostart(lines(b, "autostart"));
+    applykeys(lines(b, "key"));
+    applybuttons(lines(b, "button"));
+    applygestures(lines(b, "gesture"));
+    applypadbuttons(lines(b, "padbutton"));
 }
 
 static const char* settingspath(void)
@@ -1555,10 +1588,9 @@ static void check(const struct scfg_block* want,
         if (!*path && isrecord(w->name))
             continue;
         snprintf(sub, sizeof sub, "%s%s%s", path, *path ? "." : "", w->name);
-        if (!(g = find(got, w->name))) {
-            fprintf(stderr, "g0wm: config: %s is missing\n", sub);
-            (*bad)++;
-        } else if (w->children.directives_len) {
+        if (!(g = find(got, w->name)))
+            continue;
+        if (w->children.directives_len) {
             check(&w->children, &g->children, sub, bad);
         } else if (!sameshape(w, g)) {
             line = g->lineno;
@@ -1642,9 +1674,6 @@ void settingsload(void)
 {
     const char* path = settingspath();
     struct scfg_block* tree;
-    struct scfg_block def = { 0 };
-    char* text;
-    FILE* f;
     int bad = 0;
 
     if (!path) {
@@ -1665,22 +1694,14 @@ void settingsload(void)
         return;
     }
 
-    /* checked against the defaults, parsed back */
-    if ((text = rendered())) {
-        if ((f = fmemopen(text, strlen(text), "r"))) {
-            if (!scfg_parse_file(&def, f))
-                check(&def, tree, "", &bad);
-            fclose(f);
-        }
-        scfg_block_finish(&def);
-        free(text);
-    }
+    loadbuiltin();
+    if (builtin)
+        check(builtin, tree, "", &bad);
     /* never freed: the settings point into its strings */
     apply(tree);
     if (bad)
         fprintf(stderr,
-                "g0wm: %s has %d problem%s; delete it and run 'g0wm -c' for a "
-                "fresh one\n",
+                "g0wm: %s has %d problem%s\n",
                 path,
                 bad,
                 bad == 1 ? "" : "s");
