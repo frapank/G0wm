@@ -311,6 +311,18 @@ static void num(double v)
     fprintf(fp, " %g", round(v * 1e6) / 1e6);
 }
 
+/* a comment over k */
+static void note(const char* k, const char* s)
+{
+    if (!depth) {
+        if (prev)
+            fputc('\n', fp);
+        prev = k;
+    }
+    indent();
+    fprintf(fp, "# %s\n", s);
+}
+
 static void wopen(const char* k)
 {
     start(k);
@@ -433,8 +445,7 @@ static void wlook(void)
     wopen("look");
     wlist("fonts", fonts, nfonts);
     wopen("colors");
-    indent();
-    fputs("# fg bg border\n", fp);
+    note("norm", "fg bg border");
     for (i = 0; i < LENGTH(schemenames); i++) {
         if (!schemenames[i])
             continue;
@@ -449,8 +460,10 @@ static void wlook(void)
     whex("rootcolor", packrgba(rootcolor));
     whex("fullscreen_bg", packrgba(fullscreen_bg));
 #ifdef INTEGRATED_BACKGROUND
+    note("wallpaper", "empty for none");
     wstr("wallpaper", wallpaper);
 #endif
+    note("tags", "up to 31");
     wlist("tags", (const char* const*)tags, ntags);
     wclose();
 }
@@ -459,6 +472,7 @@ static void wwindows(void)
 {
     wopen("windows");
     wint("borderpx", borderpx);
+    note("cornerstyle", "normal or squircle");
     wstr("cornerstyle", enumname(cornerstyles, cornerstyle));
     wint("cornerpx", cornerpx);
     wint("gaps", gaps);
@@ -467,9 +481,12 @@ static void wwindows(void)
     wbool("titlebar", titlebar);
     wint("titlepadding", titlepadding);
     wbool("titlecenter", titlecenter);
+    note("titleclose", "shown with the pointer over it");
     wbool("titleclose", titleclose);
     whex("titleclosecolor", titleclosecolor);
+    note("movethreshold", "px dragged on a title before the window moves");
     wint("movethreshold", movethreshold);
+    note("movesnap", "px at which a moved floating window sticks, 0 off");
     wint("movesnap", movesnap);
     wclose();
 }
@@ -480,21 +497,27 @@ static void wbar(void)
     wbool("showbar", showbar);
     wbool("topbar", topbar);
     wbool("barwintitle", barwintitle);
+    note("bartagdots", "dots instead of the tag names");
     wbool("bartagdots", bartagdots);
     wbool("barltsymbol", barltsymbol);
     wint("barboxradius", barboxradius);
     wint("barpadding", barpadding);
+    note("barheight", "times the font height, 0 for automatic");
     wnum("barheight", barheight);
+    note("barsinglemon", "one bar only, on the first monitor");
     wbool("barsinglemon", barsinglemon);
     wbool("showsystray", showsystray);
     wint("systrayspacing", systrayspacing);
     wint("systraypadding", systraypadding);
+    note("systrayiconsize", "0 fills the bar");
     wint("systrayiconsize", systrayiconsize);
     wbool("shownotifications", shownotifications);
+    note("notification_timeout", "seconds");
     wint("notification_timeout", notification_timeout);
     wint("notification_linewidth", notification_linewidth);
     wint("notification_lineradius", notification_lineradius);
     wstr("notification_actionsign", notification_actionsign);
+    note("runner_placeholder", "shown while nothing is typed");
     wstr("runner_placeholder", runner_placeholder);
     wclose();
 }
@@ -505,8 +528,10 @@ static void wopacity(void)
     wbool("opacity_enabled", opacity_enabled);
     wnum("opacity_focus", opacity_focus);
     wnum("opacity_unfocus", opacity_unfocus);
+    note("opacity_deco", "bar, title bars and borders");
     wnum("opacity_deco", opacity_deco);
 #ifdef INTEGRATED_BACKGROUND
+    note("opacity_type", "normal or blur");
     wstr("opacity_type", enumname(opacitykinds, opacity_type));
     wint("blur_radius", blur_radius);
     wint("blur_passes", blur_passes);
@@ -539,19 +564,29 @@ static void winput(void)
     wbool("disable_while_typing", disable_while_typing);
     wbool("left_handed", left_handed);
     wbool("middle_button_emulation", middle_button_emulation);
+    note("scroll_method", "none, 2fg, edge or on-button-down");
     wstr("scroll_method", enumname(scrollmethods, scroll_method));
+    note("click_method", "none, button-areas or clickfinger");
     wstr("click_method", enumname(clickmethods, click_method));
+    note("send_events_mode", "enabled, disabled or disabled-on-external-mouse");
     wstr("send_events_mode", enumname(sendevents, (int)send_events_mode));
+    note("accel_profile", "none, flat or adaptive, speed from -1 to 1");
     wstr("accel_profile", enumname(accelprofiles, accel_profile));
     wnum("accel_speed", accel_speed);
+    note("touchpad_natural_scrolling", "the same three, for touchpads");
     wbool("touchpad_natural_scrolling", touchpad_natural_scrolling);
     wstr("touchpad_accel_profile",
          enumname(accelprofiles, touchpad_accel_profile));
     wnum("touchpad_accel_speed", touchpad_accel_speed);
+    note("pinchzoom_mod", "held while pinching to zoom, none for off");
     wmods("pinchzoom_mod", pinchzoom_mod);
+    note("button_map", "lrm or lmr");
     wstr("button_map", enumname(buttonmaps, button_map));
+    note("tablet_output", "output names as wlr-randr shows them, none for all");
     wstr("tablet_output", tablet_output);
+    note("tablet_left_handed", "buttons on the right");
     wbool("tablet_left_handed", tablet_left_handed);
+    note("touch_output", "none: the one udev reports");
     wstr("touch_output", touch_output);
     wclose();
 }
@@ -559,9 +594,14 @@ static void winput(void)
 static void wmisc(void)
 {
     wopen("misc");
+    note("log_level", "silent, error, info or debug");
     wstr("log_level", enumname(loglevels, log_level));
+    note("bypass_surface_visibility",
+         "a hidden fullscreen window keeps the screen awake");
     wbool("bypass_surface_visibility", bypass_surface_visibility);
+    note("allow_tearing", "tearing for fullscreen windows that ask for it");
     wbool("allow_tearing", allow_tearing);
+    note("auto_vrr", "VRR for fullscreen games and videos");
     wbool("auto_vrr", auto_vrr);
     wclose();
 }
@@ -570,6 +610,7 @@ static void wlayouts(void)
 {
     size_t i;
 
+    note("layout", "layout: symbol, then tile, float or tabbed");
     for (i = 0; i < nlayouts; i++) {
         start("layout");
         word(layouts[i].symbol);
@@ -582,6 +623,8 @@ static void wrules(void)
 {
     size_t i;
 
+    note("rule",
+         "rule: opacity 0 keeps the default, monitor -1 is the focused one");
     for (i = 0; i < nrules; i++) {
         wopen("rule");
         wstr("id", rules[i].id);
@@ -599,6 +642,7 @@ static void wmonitors(void)
 {
     size_t i;
 
+    note("monitor", "monitor: the first matching name wins");
     for (i = 0; i < nmonrules; i++) {
         wopen("monitor");
         wstr("name", monrules[i].name);
@@ -621,6 +665,7 @@ static void wautostart(void)
 {
     const char* const* p;
 
+    note("autostart", "autostart: a command, run without a shell");
     for (p = autostart; *p; p++) {
         start("autostart");
         for (; *p; p++)
@@ -633,6 +678,7 @@ static void wkeys(void)
 {
     size_t i;
 
+    note("key", "key: modifiers+key, action, argument");
     for (i = 0; i < nkeys; i++) {
         const Action* act = actionbyfunc(keys[i].func);
         char name[64];
@@ -656,6 +702,7 @@ static void wbuttons(void)
 {
     size_t i;
 
+    note("button", "button: bar area, modifiers+button, action, argument");
     for (i = 0; i < nbuttons; i++) {
         const Action* act = actionbyfunc(buttons[i].func);
 
@@ -677,6 +724,7 @@ static void wgestures(void)
 {
     size_t i;
 
+    note("gesture", "gesture: motion, fingers, action, argument");
     for (i = 0; i < ngestures; i++) {
         const Action* act = actionbyfunc(gestures[i].func);
 
@@ -698,6 +746,7 @@ static void wpadbuttons(void)
 {
     size_t i;
 
+    note("padbutton", "padbutton: button from 0, action, argument");
     for (i = 0; i < npadbuttons; i++) {
         const Action* act = actionbyfunc(padbuttons[i].func);
 
@@ -717,6 +766,7 @@ static void wpadbuttons(void)
 
 static void defaults(void)
 {
+    note("", "a setting with no value is off");
     wlook();
     wwindows();
     wbar();
