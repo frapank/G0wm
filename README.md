@@ -39,7 +39,7 @@ Settings and docs can be found at:
 
 The required dependencies are: wlroots 0.20 (with the libinput backend),
 wayland, wayland-protocols, libinput, xkbcommon, pixman, fcft,
-libdbus, gdk-pixbuf and pkg-config.
+libdbus, gdk-pixbuf, libscfg and pkg-config.
 
 X11 support also requires: libxcb, libxcb-icccm and Xwayland.
 
