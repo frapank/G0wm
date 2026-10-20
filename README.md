@@ -53,8 +53,8 @@ toolchain settings, `--debug` and `--native`.
 
 ## Configure & Run
 
-Every setting lives in `~/.config/g0wm/settings.json`, which `make install`
-writes and g0wm reads at startup. 
+Every setting lives in `~/.config/g0wm/config`, an [scfg] file that
+`make install` writes and g0wm reads at startup.
 
 ```sh
 g0wm -c             # write it if it is not there
@@ -71,6 +71,8 @@ your display manager, or run `g0wm` from a VT.
 What is planned next (color management and HDR, input methods and the
 on-screen keyboard, the magnifier) is listed step by step in
 [`ROADMAP.md`](ROADMAP.md).
+
+[scfg]: https://git.sr.ht/~emersion/scfg
 
 ## License
 

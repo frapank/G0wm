@@ -35,7 +35,7 @@ them.
 Drives an HDR monitor in BT.2020/PQ, so games and video players can show
 real HDR.
 
-- [ ] Add an `hdr` option to the monitor rules in `settings.json`.
+- [ ] Add an `hdr` option to the monitor rules in the config.
 - [ ] Enable it only when the output lists PQ and BT.2020 in
   `supported_transfer_functions` / `supported_primaries`.
 - [ ] Set the image description on the output commit
