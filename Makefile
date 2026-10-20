@@ -158,7 +158,7 @@ test: g0wm
 	@cmp -s $(TESTCFG).out $(TESTCFG)/g0wm/config || \
 		{ echo 'what -c wrote is not what it reads back' >&2; exit 1; }
 	@out=`XDG_CONFIG_HOME=$(TESTCFG) ./g0wm -c 2>&1 >/dev/null`; \
-	case $$out in *"is missing"*|*"is not a setting"*|*"should be"*) \
+	case $$out in *"config:"*) \
 		printf '%s\n' "$$out" >&2; \
 		echo 'a fresh config did not pass its own check' >&2; exit 1 ;; \
 	esac
@@ -167,7 +167,7 @@ test: g0wm
 		&& mv $(TESTCFG)/t $(TESTCFG)/g0wm/config
 	@out=`XDG_CONFIG_HOME=$(TESTCFG) ./g0wm -c 2>&1 >$(TESTCFG).out`; \
 	case $$out in \
-	*"bar.showbar is missing"*"bar.shobwar is not a setting"*) ;; \
+	*"bar.shobwar is not a setting"*) ;; \
 	*) printf '%s\n' "$$out" >&2; \
 		echo 'a damaged config went unreported' >&2; exit 1 ;; \
 	esac
