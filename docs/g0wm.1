@@ -33,25 +33,32 @@ When given the
 option,
 .Nm
 writes the default settings to
-.Pa ~/.config/g0wm/settings.json
+.Pa ~/.config/g0wm/config
 and exits.
-An existing file is kept and checked instead: every setting this build has
-must be in it, and anything else in it is reported.
+An existing file is kept and checked instead: anything that is not a setting
+this build has, or is set twice, is reported.
+A setting left out keeps its built-in value, and so do the bindings, rules
+or monitors when the file has none of that kind.
 The same check runs at startup.
 .Pp
 Users are encouraged to customize
 .Nm
 by editing
-.Pa ~/.config/g0wm/settings.json ,
-whose built-in values come from
+.Pa ~/.config/g0wm/config ,
+an scfg file whose built-in values come from
 .Pa include/config.h
 in the sources.
-The key and mouse bindings live there too, under
-.Em keys
+The key and mouse bindings live there too, one per
+.Em key
 and
-.Em buttons ,
-and those of a drawing tablet's pad under
-.Em padbuttons .
+.Em button
+line, and those of a drawing tablet's pad on
+.Em padbutton
+lines, such as:
+.Bd -literal -offset indent
+key logo+q spawn foot
+button client logo+left moveresize move
+.Ed
 .Sh STATUS TEXT
 Every line
 .Nm
@@ -101,8 +108,8 @@ tell how to connect to the
 server.
 .El
 .Sh FILES
-.Bl -tag -width "~/.config/g0wm/settings.json"
-.It Pa ~/.config/g0wm/settings.json
+.Bl -tag -width "~/.config/g0wm/config"
+.It Pa ~/.config/g0wm/config
 Every setting
 .Nm
 reads at startup.

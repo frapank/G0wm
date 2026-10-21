@@ -125,7 +125,7 @@ options() { # "$@" -> every setting above, overridden from the command line
 
 configure_flags() { # package list and compiler/linker flags from the options
 	wlr_pkg=wlroots-$wlroots
-	pkgs="wayland-server xkbcommon libinput pixman-1 fcft dbus-1 gdk-pixbuf-2.0"
+	pkgs="wayland-server xkbcommon libinput pixman-1 fcft dbus-1 gdk-pixbuf-2.0 scfg"
 	[ "$xwayland" = yes ] && pkgs="$pkgs xcb xcb-icccm"
 
 	[ "$sanitize" = yes ] && {

@@ -10,7 +10,7 @@ The suckless style has been dropped in exchange for a fully functional desktop e
 
 Here is a list of the main additions in g0wm:
 
-- `config`: g0wm now has a fully dynamic config file, a JSON file at `~/.config/g0wm/settings.json`
+- `config`: g0wm now has a fully dynamic config file, an scfg file at `~/.config/g0wm/config`
 - `opacity`: g0wm fully supports window opacity
 - `borders`: window borders can be rounded
 - `window titles`: g0wm shows a title bar on each window by default

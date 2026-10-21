@@ -39,7 +39,7 @@ Settings and docs can be found at:
 
 The required dependencies are: wlroots 0.20 (with the libinput backend),
 wayland, wayland-protocols, libinput, xkbcommon, pixman, fcft,
-libdbus, gdk-pixbuf and pkg-config.
+libdbus, gdk-pixbuf, libscfg and pkg-config.
 
 X11 support also requires: libxcb, libxcb-icccm and Xwayland.
 
@@ -53,8 +53,8 @@ toolchain settings, `--debug` and `--native`.
 
 ## Configure & Run
 
-Every setting lives in `~/.config/g0wm/settings.json`, which `make install`
-writes and g0wm reads at startup. 
+Every setting lives in `~/.config/g0wm/config`, an [scfg] file that
+`make install` writes and g0wm reads at startup.
 
 ```sh
 g0wm -c             # write it if it is not there
@@ -71,6 +71,8 @@ your display manager, or run `g0wm` from a VT.
 What is planned next (color management and HDR, input methods and the
 on-screen keyboard, the magnifier) is listed step by step in
 [`ROADMAP.md`](ROADMAP.md).
+
+[scfg]: https://git.sr.ht/~emersion/scfg
 
 ## License
 

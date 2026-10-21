@@ -716,7 +716,7 @@ extern struct wlr_xwayland* xwayland;
 #endif /* XWAYLAND */
 
 /* the settings. config.h holds their initial values and settings.c is the one
- * file that includes it; settingsload() overwrites them from settings.json. */
+ * file that includes it; settingsload() overwrites them from the config. */
 extern const char** fonts;
 extern size_t nfonts;
 extern uint32_t colors[NumSchemes][3];
