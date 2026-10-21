@@ -1,10 +1,12 @@
 /*
  * See LICENSE file for copyright and license details.
  *
- * ~/.config/g0wm/settings.json: written from config.h, read back over it
+ * ~/.config/g0wm/config: written from config.h, read back over it
  */
 #include <errno.h>
 #include <limits.h>
+#include <scfg.h>
+#include <stdarg.h>
 
 #include "g0wm.h"
 #include "util.h"
@@ -12,21 +14,20 @@
 /* the only file that includes it: these are the definitions */
 #include "config.h"
 
-cJSON* settings;
-
 typedef struct {
     int val;
     const char* name;
 } Enum;
 
 /* tables end on { 0, NULL }; a real zero value is listed before it */
-static const Enum modnames[] = { { WLR_MODIFIER_SHIFT, "shift" },
-                                 { WLR_MODIFIER_CAPS, "caps" },
+/* in combo order: logo+shift+q */
+static const Enum modnames[] = { { WLR_MODIFIER_LOGO, "logo" },
                                  { WLR_MODIFIER_CTRL, "ctrl" },
                                  { WLR_MODIFIER_ALT, "alt" },
+                                 { WLR_MODIFIER_SHIFT, "shift" },
+                                 { WLR_MODIFIER_CAPS, "caps" },
                                  { WLR_MODIFIER_MOD2, "mod2" },
                                  { WLR_MODIFIER_MOD3, "mod3" },
-                                 { WLR_MODIFIER_LOGO, "logo" },
                                  { WLR_MODIFIER_MOD5, "mod5" },
                                  { 0, NULL } };
 
@@ -182,6 +183,19 @@ static const Action actions[] = {
     { zoom, "zoom", 0 },
 };
 
+static int line; /* of the directive being read */
+
+static void warn(const char* fmt, ...)
+{
+    va_list ap;
+
+    fprintf(stderr, "g0wm: config:%d: ", line);
+    va_start(ap, fmt);
+    vfprintf(stderr, fmt, ap);
+    va_end(ap);
+    fputc('\n', stderr);
+}
+
 static const char* enumname(const Enum* e, int val)
 {
     for (; e->name; e++)
@@ -200,7 +214,7 @@ static int enumval(const Enum* e,
     for (p = e; p->name; p++)
         if (!strcmp(p->name, name))
             return p->val;
-    fprintf(stderr, "g0wm: settings.json: %s is not a %s\n", name, what);
+    warn("%s is not a %s", name, what);
     return fallback;
 }
 
@@ -223,7 +237,7 @@ static const Action* actionbyname(const char* name)
     for (i = 0; i < LENGTH(actions); i++)
         if (!strcmp(actions[i].name, name))
             return &actions[i];
-    fprintf(stderr, "g0wm: settings.json: %s is not an action\n", name);
+    warn("%s is not an action", name);
     return NULL;
 }
 
@@ -244,311 +258,444 @@ static uint32_t packrgba(const float c[static 4])
            ((uint32_t)(c[2] * 255 + 0.5f) << 8) | (uint32_t)(c[3] * 255 + 0.5f);
 }
 
-static cJSON* jhex(uint32_t c)
-{
-    char buf[10];
+/* the holes keep every name on its Scheme* index */
+static const char* const schemenames[] = {
+    [SchemeNorm] = "norm",
+    [SchemeSel] = "sel",
+    [SchemeUrg] = "urg",
+    [SchemeTitle] = "title",
+    [SchemeTitleSel] = "titlesel",
+    [SchemeStatus] = "status",
+    [SchemeNotify] = "notify",
+    [SchemeNotifyLow] = "notifylow",
+    [SchemeNotifyCrit] = "notifycrit",
+    [SchemeRunner] = "runner",
+    [SchemeRunnerSuggest] = "runnersuggest",
+};
 
-    snprintf(buf, sizeof buf, "#%08x", c);
-    return cJSON_CreateString(buf);
+/* repeatable, so never missing */
+static const char* const records[] = { "layout",    "rule",     "monitor",
+                                       "autostart", "key",      "button",
+                                       "gesture",   "padbutton" };
+
+static FILE* fp;
+static int depth;
+static const char* prev; /* last top level directive */
+
+static void indent(void)
+{
+    int i;
+
+    for (i = 0; i < depth; i++)
+        fputc('\t', fp);
+}
+
+/* a blank line between top level groups */
+static void start(const char* k)
+{
+    if (!depth) {
+        if (prev && strcmp(prev, k))
+            fputc('\n', fp);
+        prev = k;
+    }
+    indent();
+    fputs(k, fp);
+}
+
+/* quoted only when it has to be */
+static void word(const char* s)
+{
+    fputc(' ', fp);
+    if (*s && !strpbrk(s, " \t\"'\\{}")) {
+        fputs(s, fp);
+        return;
+    }
+    fputc('"', fp);
+    for (; *s; s++) {
+        if (*s == '"' || *s == '\\')
+            fputc('\\', fp);
+        fputc(*s, fp);
+    }
+    fputc('"', fp);
 }
 
 /* floats, so a double's digits would only be conversion noise */
-static cJSON* jnum(double v)
+static void num(double v)
 {
-    return cJSON_CreateNumber(round(v * 1e6) / 1e6);
+    fprintf(fp, " %g", round(v * 1e6) / 1e6);
+}
+
+/* a comment over k */
+static void note(const char* k, const char* s)
+{
+    if (!depth) {
+        if (prev)
+            fputc('\n', fp);
+        prev = k;
+    }
+    indent();
+    fprintf(fp, "# %s\n", s);
+}
+
+static void wopen(const char* k)
+{
+    start(k);
+    fputs(" {\n", fp);
+    depth++;
+}
+
+static void wclose(void)
+{
+    depth--;
+    indent();
+    fputs("}\n", fp);
 }
 
 /* NULL is off, not empty */
-static cJSON* jstr(const char* s)
+static void wstr(const char* k, const char* v)
 {
-    return s ? cJSON_CreateString(s) : cJSON_CreateNull();
+    start(k);
+    if (v)
+        word(v);
+    fputc('\n', fp);
 }
 
-/* one execvp() argument list */
-static cJSON* jargv(const char* const* v)
+static void wint(const char* k, long v)
 {
-    cJSON* a = cJSON_CreateArray();
-
-    for (; v && *v; v++)
-        cJSON_AddItemToArray(a, cJSON_CreateString(*v));
-    return a;
+    start(k);
+    fprintf(fp, " %ld\n", v);
 }
 
-static cJSON* jmods(uint32_t mod)
+static void wnum(const char* k, double v)
+{
+    start(k);
+    num(v);
+    fputc('\n', fp);
+}
+
+static void wbool(const char* k, int v)
+{
+    start(k);
+    fputs(v ? " true\n" : " false\n", fp);
+}
+
+static void whex(const char* k, uint32_t c)
+{
+    start(k);
+    fprintf(fp, " #%08x\n", c);
+}
+
+static void wlist(const char* k, const char* const* v, size_t n)
+{
+    size_t i;
+
+    start(k);
+    for (i = 0; i < n; i++)
+        word(v[i]);
+    fputc('\n', fp);
+}
+
+static void wcombo(uint32_t mod, const char* last)
 {
     const Enum* e;
-    cJSON* a = cJSON_CreateArray();
 
+    fputc(' ', fp);
     for (e = modnames; e->name; e++)
         if (mod & (uint32_t)e->val)
-            cJSON_AddItemToArray(a, cJSON_CreateString(e->name));
-    return a;
+            fprintf(fp, "%s+", e->name);
+    fputs(last, fp);
 }
 
-static cJSON* jarg(char kind, const Arg* arg)
+/* logo+alt, or none */
+static void wmods(const char* k, uint32_t mod)
 {
+    const Enum* e;
+    const char* sep = " ";
+
+    start(k);
+    if (!mod)
+        fputs(" none", fp);
+    for (e = modnames; e->name; e++) {
+        if (mod & (uint32_t)e->val) {
+            fprintf(fp, "%s%s", sep, e->name);
+            sep = "+";
+        }
+    }
+    fputc('\n', fp);
+}
+
+static void warg(char kind, const Arg* arg)
+{
+    const char* const* v;
+
     switch (kind) {
         case 'i':
-            return cJSON_CreateNumber(arg->i);
+            fprintf(fp, " %d", arg->i);
+            break;
         case 'u':
-            return cJSON_CreateNumber(arg->ui);
+            fprintf(fp, " %u", arg->ui);
+            break;
         case 'f':
-            return jnum(arg->f);
+            num(arg->f);
+            break;
         case 'v':
-            return jargv(arg->v);
+            for (v = arg->v; v && *v; v++)
+                word(*v);
+            break;
         case 'l':
-            return arg->v ? cJSON_CreateString(((const Layout*)arg->v)->symbol)
-                          : cJSON_CreateNull();
+            if (arg->v)
+                word(((const Layout*)arg->v)->symbol);
+            break;
         case 'c':
-            return cJSON_CreateString(enumname(dragmodes, (int)arg->ui));
+            word(enumname(dragmodes, (int)arg->ui));
+            break;
     }
-    return cJSON_CreateNull();
 }
 
-static cJSON* jcolors(void)
+static void wlook(void)
 {
-    /* the holes keep every name on its Scheme* index */
-    static const char* const names[] = {
-        [SchemeNorm] = "norm",
-        [SchemeSel] = "sel",
-        [SchemeUrg] = "urg",
-        [SchemeTitle] = "title",
-        [SchemeTitleSel] = "titlesel",
-        [SchemeStatus] = "status",
-        [SchemeNotify] = "notify",
-        [SchemeNotifyLow] = "notifylow",
-        [SchemeNotifyCrit] = "notifycrit",
-        [SchemeRunner] = "runner",
-        [SchemeRunnerSuggest] = "runnersuggest",
-    };
-    cJSON* o = cJSON_CreateObject();
     size_t i;
 
-    for (i = 0; i < LENGTH(names); i++) {
-        cJSON* s;
-        if (!names[i])
+    wopen("look");
+    wlist("fonts", fonts, nfonts);
+    wopen("colors");
+    note("norm", "fg bg border");
+    for (i = 0; i < LENGTH(schemenames); i++) {
+        if (!schemenames[i])
             continue;
-        s = cJSON_AddObjectToObject(o, names[i]);
-        cJSON_AddItemToObject(s, "fg", jhex(colors[i][ColFg]));
-        cJSON_AddItemToObject(s, "bg", jhex(colors[i][ColBg]));
-        cJSON_AddItemToObject(s, "border", jhex(colors[i][ColBorder]));
+        start(schemenames[i]);
+        fprintf(fp,
+                " #%08x #%08x #%08x\n",
+                colors[i][ColFg],
+                colors[i][ColBg],
+                colors[i][ColBorder]);
     }
-    return o;
-}
-
-static cJSON* jlook(void)
-{
-    cJSON* o = cJSON_CreateObject();
-    cJSON* a;
-    size_t i;
-
-    a = cJSON_AddArrayToObject(o, "fonts");
-    for (i = 0; i < nfonts; i++)
-        cJSON_AddItemToArray(a, cJSON_CreateString(fonts[i]));
-
-    cJSON_AddItemToObject(o, "colors", jcolors());
-    cJSON_AddItemToObject(o, "rootcolor", jhex(packrgba(rootcolor)));
-    cJSON_AddItemToObject(o, "fullscreen_bg", jhex(packrgba(fullscreen_bg)));
+    wclose();
+    whex("rootcolor", packrgba(rootcolor));
+    whex("fullscreen_bg", packrgba(fullscreen_bg));
 #ifdef INTEGRATED_BACKGROUND
-    cJSON_AddStringToObject(o, "wallpaper", wallpaper);
+    note("wallpaper", "empty for none");
+    wstr("wallpaper", wallpaper);
 #endif
-
-    a = cJSON_AddArrayToObject(o, "tags");
-    for (i = 0; i < ntags; i++)
-        cJSON_AddItemToArray(a, cJSON_CreateString(tags[i]));
-    return o;
+    note("tags", "up to 31");
+    wlist("tags", (const char* const*)tags, ntags);
+    wclose();
 }
 
-static cJSON* jwindows(void)
+static void wwindows(void)
 {
-    cJSON* o = cJSON_CreateObject();
-    cJSON* a;
+    wopen("windows");
+    wint("borderpx", borderpx);
+    note("cornerstyle", "normal or squircle");
+    wstr("cornerstyle", enumname(cornerstyles, cornerstyle));
+    wint("cornerpx", cornerpx);
+    wint("gaps", gaps);
+    wint("gappx", gappx);
+    wbool("smartgaps", smartgaps);
+    wbool("titlebar", titlebar);
+    wint("titlepadding", titlepadding);
+    wbool("titlecenter", titlecenter);
+    note("titleclose", "shown with the pointer over it");
+    wbool("titleclose", titleclose);
+    whex("titleclosecolor", titleclosecolor);
+    note("movethreshold", "px dragged on a title before the window moves");
+    wint("movethreshold", movethreshold);
+    note("movesnap", "px at which a moved floating window sticks, 0 off");
+    wint("movesnap", movesnap);
+    wclose();
+}
+
+static void wbar(void)
+{
+    wopen("bar");
+    wbool("showbar", showbar);
+    wbool("topbar", topbar);
+    wbool("barwintitle", barwintitle);
+    note("bartagdots", "dots instead of the tag names");
+    wbool("bartagdots", bartagdots);
+    wbool("barltsymbol", barltsymbol);
+    wint("barboxradius", barboxradius);
+    wint("barpadding", barpadding);
+    note("barheight", "times the font height, 0 for automatic");
+    wnum("barheight", barheight);
+    note("barsinglemon", "one bar only, on the first monitor");
+    wbool("barsinglemon", barsinglemon);
+    wbool("showsystray", showsystray);
+    wint("systrayspacing", systrayspacing);
+    wint("systraypadding", systraypadding);
+    note("systrayiconsize", "0 fills the bar");
+    wint("systrayiconsize", systrayiconsize);
+    wbool("shownotifications", shownotifications);
+    note("notification_timeout", "seconds");
+    wint("notification_timeout", notification_timeout);
+    wint("notification_linewidth", notification_linewidth);
+    wint("notification_lineradius", notification_lineradius);
+    wstr("notification_actionsign", notification_actionsign);
+    note("runner_placeholder", "shown while nothing is typed");
+    wstr("runner_placeholder", runner_placeholder);
+    wclose();
+}
+
+static void wopacity(void)
+{
+    wopen("opacity");
+    wbool("opacity_enabled", opacity_enabled);
+    wnum("opacity_focus", opacity_focus);
+    wnum("opacity_unfocus", opacity_unfocus);
+    note("opacity_deco", "bar, title bars and borders");
+    wnum("opacity_deco", opacity_deco);
+#ifdef INTEGRATED_BACKGROUND
+    note("opacity_type", "normal or blur");
+    wstr("opacity_type", enumname(opacitykinds, opacity_type));
+    wint("blur_radius", blur_radius);
+    wint("blur_passes", blur_passes);
+    wnum("blur_saturation", blur_saturation);
+    wnum("blur_brightness", blur_brightness);
+#endif
+    wclose();
+}
+
+static void winput(void)
+{
+    wopen("input");
+    wbool("sloppyfocus", sloppyfocus);
+    wopen("xkb_rules");
+    wstr("rules", xkb_rules.rules);
+    wstr("model", xkb_rules.model);
+    wstr("layout", xkb_rules.layout);
+    wstr("variant", xkb_rules.variant);
+    wstr("options", xkb_rules.options);
+    wclose();
+    wint("repeat_rate", repeat_rate);
+    wint("repeat_delay", repeat_delay);
+    wstr("cursor_theme", cursor_theme);
+    wint("cursor_size", cursor_size);
+    wbool("hide_cursor_when_typing", hide_cursor_when_typing);
+    wbool("tap_to_click", tap_to_click);
+    wbool("tap_and_drag", tap_and_drag);
+    wbool("drag_lock", drag_lock);
+    wbool("natural_scrolling", natural_scrolling);
+    wbool("disable_while_typing", disable_while_typing);
+    wbool("left_handed", left_handed);
+    wbool("middle_button_emulation", middle_button_emulation);
+    note("scroll_method", "none, 2fg, edge or on-button-down");
+    wstr("scroll_method", enumname(scrollmethods, scroll_method));
+    note("click_method", "none, button-areas or clickfinger");
+    wstr("click_method", enumname(clickmethods, click_method));
+    note("send_events_mode", "enabled, disabled or disabled-on-external-mouse");
+    wstr("send_events_mode", enumname(sendevents, (int)send_events_mode));
+    note("accel_profile", "none, flat or adaptive, speed from -1 to 1");
+    wstr("accel_profile", enumname(accelprofiles, accel_profile));
+    wnum("accel_speed", accel_speed);
+    note("touchpad_natural_scrolling", "the same three, for touchpads");
+    wbool("touchpad_natural_scrolling", touchpad_natural_scrolling);
+    wstr("touchpad_accel_profile",
+         enumname(accelprofiles, touchpad_accel_profile));
+    wnum("touchpad_accel_speed", touchpad_accel_speed);
+    note("pinchzoom_mod", "held while pinching to zoom, none for off");
+    wmods("pinchzoom_mod", pinchzoom_mod);
+    note("button_map", "lrm or lmr");
+    wstr("button_map", enumname(buttonmaps, button_map));
+    note("tablet_output", "output names as wlr-randr shows them, none for all");
+    wstr("tablet_output", tablet_output);
+    note("tablet_left_handed", "buttons on the right");
+    wbool("tablet_left_handed", tablet_left_handed);
+    note("touch_output", "none: the one udev reports");
+    wstr("touch_output", touch_output);
+    wclose();
+}
+
+static void wmisc(void)
+{
+    wopen("misc");
+    note("log_level", "silent, error, info or debug");
+    wstr("log_level", enumname(loglevels, log_level));
+    note("bypass_surface_visibility",
+         "a hidden fullscreen window keeps the screen awake");
+    wbool("bypass_surface_visibility", bypass_surface_visibility);
+    note("allow_tearing", "tearing for fullscreen windows that ask for it");
+    wbool("allow_tearing", allow_tearing);
+    note("auto_vrr", "VRR for fullscreen games and videos");
+    wbool("auto_vrr", auto_vrr);
+    wclose();
+}
+
+static void wlayouts(void)
+{
     size_t i;
 
-    cJSON_AddNumberToObject(o, "borderpx", borderpx);
-    cJSON_AddStringToObject(
-        o, "cornerstyle", enumname(cornerstyles, cornerstyle));
-    cJSON_AddNumberToObject(o, "cornerpx", cornerpx);
-    cJSON_AddNumberToObject(o, "gaps", gaps);
-    cJSON_AddNumberToObject(o, "gappx", gappx);
-    cJSON_AddBoolToObject(o, "smartgaps", smartgaps);
-    cJSON_AddBoolToObject(o, "titlebar", titlebar);
-    cJSON_AddNumberToObject(o, "titlepadding", titlepadding);
-    cJSON_AddBoolToObject(o, "titlecenter", titlecenter);
-    cJSON_AddBoolToObject(o, "titleclose", titleclose);
-    cJSON_AddItemToObject(o, "titleclosecolor", jhex(titleclosecolor));
-
-    a = cJSON_AddArrayToObject(o, "layouts");
+    note("layout", "layout: symbol, then tile, float or tabbed");
     for (i = 0; i < nlayouts; i++) {
-        cJSON* l = cJSON_CreateObject();
-        cJSON_AddStringToObject(l, "symbol", layouts[i].symbol);
-        cJSON_AddStringToObject(l, "arrange", arrangename(layouts[i].arrange));
-        cJSON_AddItemToArray(a, l);
+        start("layout");
+        word(layouts[i].symbol);
+        word(arrangename(layouts[i].arrange));
+        fputc('\n', fp);
     }
-
-    a = cJSON_AddArrayToObject(o, "rules");
-    for (i = 0; i < nrules; i++) {
-        cJSON* r = cJSON_CreateObject();
-        cJSON_AddItemToObject(r, "id", jstr(rules[i].id));
-        cJSON_AddItemToObject(r, "title", jstr(rules[i].title));
-        cJSON_AddNumberToObject(r, "tags", rules[i].tags);
-        cJSON_AddBoolToObject(r, "isfloating", rules[i].isfloating);
-        cJSON_AddItemToObject(r, "opacity_focus", jnum(rules[i].opacity_focus));
-        cJSON_AddItemToObject(
-            r, "opacity_unfocus", jnum(rules[i].opacity_unfocus));
-        cJSON_AddNumberToObject(r, "monitor", rules[i].monitor);
-        cJSON_AddItemToArray(a, r);
-    }
-    return o;
 }
 
-static cJSON* jbar(void)
+static void wrules(void)
 {
-    cJSON* o = cJSON_CreateObject();
-
-    cJSON_AddBoolToObject(o, "showbar", showbar);
-    cJSON_AddBoolToObject(o, "topbar", topbar);
-    cJSON_AddBoolToObject(o, "barwintitle", barwintitle);
-    cJSON_AddBoolToObject(o, "bartagdots", bartagdots);
-    cJSON_AddBoolToObject(o, "barltsymbol", barltsymbol);
-    cJSON_AddNumberToObject(o, "barboxradius", barboxradius);
-    cJSON_AddNumberToObject(o, "barpadding", barpadding);
-    cJSON_AddItemToObject(o, "barheight", jnum(barheight));
-    cJSON_AddBoolToObject(o, "barsinglemon", barsinglemon);
-    cJSON_AddBoolToObject(o, "showsystray", showsystray);
-    cJSON_AddNumberToObject(o, "systrayspacing", systrayspacing);
-    cJSON_AddNumberToObject(o, "systraypadding", systraypadding);
-    cJSON_AddNumberToObject(o, "systrayiconsize", systrayiconsize);
-    cJSON_AddBoolToObject(o, "shownotifications", shownotifications);
-    cJSON_AddNumberToObject(o, "notification_timeout", notification_timeout);
-    cJSON_AddNumberToObject(
-        o, "notification_linewidth", notification_linewidth);
-    cJSON_AddNumberToObject(
-        o, "notification_lineradius", notification_lineradius);
-    cJSON_AddStringToObject(
-        o, "notification_actionsign", notification_actionsign);
-    cJSON_AddStringToObject(o, "runner_placeholder", runner_placeholder);
-    return o;
-}
-
-static cJSON* jopacity(void)
-{
-    cJSON* o = cJSON_CreateObject();
-
-    cJSON_AddBoolToObject(o, "opacity_enabled", opacity_enabled);
-    cJSON_AddItemToObject(o, "opacity_focus", jnum(opacity_focus));
-    cJSON_AddItemToObject(o, "opacity_unfocus", jnum(opacity_unfocus));
-    cJSON_AddItemToObject(o, "opacity_deco", jnum(opacity_deco));
-#ifdef INTEGRATED_BACKGROUND
-    cJSON_AddStringToObject(
-        o, "opacity_type", enumname(opacitykinds, opacity_type));
-    cJSON_AddNumberToObject(o, "blur_radius", blur_radius);
-    cJSON_AddNumberToObject(o, "blur_passes", blur_passes);
-    cJSON_AddItemToObject(o, "blur_saturation", jnum(blur_saturation));
-    cJSON_AddItemToObject(o, "blur_brightness", jnum(blur_brightness));
-#endif
-    return o;
-}
-
-static cJSON* jmonitors(void)
-{
-    cJSON* a = cJSON_CreateArray();
     size_t i;
 
-    for (i = 0; i < nmonrules; i++) {
-        cJSON* m = cJSON_CreateObject();
-        cJSON_AddItemToObject(m, "name", jstr(monrules[i].name));
-        cJSON_AddItemToObject(m, "mfact", jnum(monrules[i].mfact));
-        cJSON_AddNumberToObject(m, "nmaster", monrules[i].nmaster);
-        cJSON_AddItemToObject(m, "scale", jnum(monrules[i].scale));
-        cJSON_AddItemToObject(
-            m, "layout", jstr(monrules[i].lt ? monrules[i].lt->symbol : NULL));
-        cJSON_AddStringToObject(
-            m, "transform", enumname(transforms, (int)monrules[i].rr));
-        cJSON_AddNumberToObject(m, "x", monrules[i].x);
-        cJSON_AddNumberToObject(m, "y", monrules[i].y);
-        cJSON_AddNumberToObject(m, "width", monrules[i].width);
-        cJSON_AddNumberToObject(m, "height", monrules[i].height);
-        cJSON_AddNumberToObject(m, "refresh", monrules[i].refresh);
-        cJSON_AddItemToArray(a, m);
+    note("rule",
+         "rule: opacity 0 keeps the default, monitor -1 is the focused one");
+    for (i = 0; i < nrules; i++) {
+        wopen("rule");
+        wstr("id", rules[i].id);
+        wstr("title", rules[i].title);
+        wint("tags", rules[i].tags);
+        wbool("isfloating", rules[i].isfloating);
+        wnum("opacity_focus", rules[i].opacity_focus);
+        wnum("opacity_unfocus", rules[i].opacity_unfocus);
+        wint("monitor", rules[i].monitor);
+        wclose();
     }
-    return a;
 }
 
-static cJSON* jinput(void)
+static void wmonitors(void)
 {
-    cJSON* o = cJSON_CreateObject();
-    cJSON* x;
+    size_t i;
 
-    cJSON_AddBoolToObject(o, "sloppyfocus", sloppyfocus);
-
-    x = cJSON_AddObjectToObject(o, "xkb_rules");
-    cJSON_AddItemToObject(x, "rules", jstr(xkb_rules.rules));
-    cJSON_AddItemToObject(x, "model", jstr(xkb_rules.model));
-    cJSON_AddItemToObject(x, "layout", jstr(xkb_rules.layout));
-    cJSON_AddItemToObject(x, "variant", jstr(xkb_rules.variant));
-    cJSON_AddItemToObject(x, "options", jstr(xkb_rules.options));
-
-    cJSON_AddNumberToObject(o, "repeat_rate", repeat_rate);
-    cJSON_AddNumberToObject(o, "repeat_delay", repeat_delay);
-    cJSON_AddItemToObject(o, "cursor_theme", jstr(cursor_theme));
-    cJSON_AddNumberToObject(o, "cursor_size", cursor_size);
-    cJSON_AddBoolToObject(
-        o, "hide_cursor_when_typing", hide_cursor_when_typing);
-    cJSON_AddBoolToObject(o, "tap_to_click", tap_to_click);
-    cJSON_AddBoolToObject(o, "tap_and_drag", tap_and_drag);
-    cJSON_AddBoolToObject(o, "drag_lock", drag_lock);
-    cJSON_AddBoolToObject(o, "natural_scrolling", natural_scrolling);
-    cJSON_AddBoolToObject(o, "disable_while_typing", disable_while_typing);
-    cJSON_AddBoolToObject(o, "left_handed", left_handed);
-    cJSON_AddBoolToObject(
-        o, "middle_button_emulation", middle_button_emulation);
-    cJSON_AddStringToObject(
-        o, "scroll_method", enumname(scrollmethods, scroll_method));
-    cJSON_AddStringToObject(
-        o, "click_method", enumname(clickmethods, click_method));
-    cJSON_AddStringToObject(
-        o, "send_events_mode", enumname(sendevents, (int)send_events_mode));
-    cJSON_AddStringToObject(
-        o, "accel_profile", enumname(accelprofiles, accel_profile));
-    cJSON_AddItemToObject(o, "accel_speed", jnum(accel_speed));
-    cJSON_AddBoolToObject(
-        o, "touchpad_natural_scrolling", touchpad_natural_scrolling);
-    cJSON_AddStringToObject(o,
-                            "touchpad_accel_profile",
-                            enumname(accelprofiles, touchpad_accel_profile));
-    cJSON_AddItemToObject(
-        o, "touchpad_accel_speed", jnum(touchpad_accel_speed));
-    cJSON_AddStringToObject(o, "button_map", enumname(buttonmaps, button_map));
-    cJSON_AddItemToObject(o, "tablet_output", jstr(tablet_output));
-    cJSON_AddBoolToObject(o, "tablet_left_handed", tablet_left_handed);
-    cJSON_AddItemToObject(o, "touch_output", jstr(touch_output));
-    return o;
+    note("monitor", "monitor: the first matching name wins");
+    for (i = 0; i < nmonrules; i++) {
+        wopen("monitor");
+        wstr("name", monrules[i].name);
+        wnum("mfact", monrules[i].mfact);
+        wint("nmaster", monrules[i].nmaster);
+        wnum("scale", monrules[i].scale);
+        wstr("layout", monrules[i].lt ? monrules[i].lt->symbol : NULL);
+        wstr("transform", enumname(transforms, (int)monrules[i].rr));
+        wint("x", monrules[i].x);
+        wint("y", monrules[i].y);
+        wint("width", monrules[i].width);
+        wint("height", monrules[i].height);
+        wint("refresh", monrules[i].refresh);
+        wclose();
+    }
 }
 
 /* one NULL terminated run of arguments per command */
-static cJSON* jautostart(void)
+static void wautostart(void)
 {
-    cJSON* a = cJSON_CreateArray();
     const char* const* p;
 
+    note("autostart", "autostart: a command, run without a shell");
     for (p = autostart; *p; p++) {
-        cJSON_AddItemToArray(a, jargv(p));
-        while (*++p)
-            ;
+        start("autostart");
+        for (; *p; p++)
+            word(*p);
+        fputc('\n', fp);
     }
-    return a;
 }
 
-static cJSON* jkeys(void)
+static void wkeys(void)
 {
-    cJSON* a = cJSON_CreateArray();
     size_t i;
 
+    note("key", "key: modifiers+key, action, argument");
     for (i = 0; i < nkeys; i++) {
         const Action* act = actionbyfunc(keys[i].func);
         char name[64];
-        cJSON* k;
 
         if (!act) {
             fprintf(
@@ -557,77 +704,65 @@ static cJSON* jkeys(void)
         }
         if (xkb_keysym_get_name(keys[i].keysym, name, sizeof name) < 0)
             continue;
-
-        k = cJSON_CreateObject();
-        cJSON_AddItemToObject(k, "mod", jmods(keys[i].mod));
-        cJSON_AddStringToObject(k, "key", name);
-        cJSON_AddStringToObject(k, "action", act->name);
-        cJSON_AddItemToObject(k, "arg", jarg(act->arg, &keys[i].arg));
-        cJSON_AddItemToArray(a, k);
+        start("key");
+        wcombo(keys[i].mod, name);
+        word(act->name);
+        warg(act->arg, &keys[i].arg);
+        fputc('\n', fp);
     }
-    return a;
 }
 
-static cJSON* jbuttons(void)
+static void wbuttons(void)
 {
-    cJSON* a = cJSON_CreateArray();
     size_t i;
 
+    note("button", "button: bar area, modifiers+button, action, argument");
     for (i = 0; i < nbuttons; i++) {
         const Action* act = actionbyfunc(buttons[i].func);
-        cJSON* b;
 
         if (!act) {
             fprintf(
                 stderr, "g0wm: click %zu calls an action with no name\n", i);
             continue;
         }
-        b = cJSON_CreateObject();
-        cJSON_AddStringToObject(
-            b, "click", enumname(clickareas, (int)buttons[i].click));
-        cJSON_AddItemToObject(b, "mod", jmods(buttons[i].mod));
-        cJSON_AddStringToObject(
-            b, "button", enumname(mousebuttons, (int)buttons[i].button));
-        cJSON_AddStringToObject(b, "action", act->name);
-        cJSON_AddItemToObject(b, "arg", jarg(act->arg, &buttons[i].arg));
-        cJSON_AddItemToArray(a, b);
+        start("button");
+        word(enumname(clickareas, (int)buttons[i].click));
+        wcombo(buttons[i].mod, enumname(mousebuttons, (int)buttons[i].button));
+        word(act->name);
+        warg(act->arg, &buttons[i].arg);
+        fputc('\n', fp);
     }
-    return a;
 }
 
-static cJSON* jgestures(void)
+static void wgestures(void)
 {
-    cJSON* a = cJSON_CreateArray();
     size_t i;
 
+    note("gesture", "gesture: motion, fingers, action, argument");
     for (i = 0; i < ngestures; i++) {
         const Action* act = actionbyfunc(gestures[i].func);
-        cJSON* g;
 
         if (!act) {
             fprintf(
                 stderr, "g0wm: gesture %zu calls an action with no name\n", i);
             continue;
         }
-        g = cJSON_CreateObject();
-        cJSON_AddStringToObject(
-            g, "motion", enumname(gesturemotions, (int)gestures[i].motion));
-        cJSON_AddNumberToObject(g, "fingers", gestures[i].fingers);
-        cJSON_AddStringToObject(g, "action", act->name);
-        cJSON_AddItemToObject(g, "arg", jarg(act->arg, &gestures[i].arg));
-        cJSON_AddItemToArray(a, g);
+        start("gesture");
+        word(enumname(gesturemotions, (int)gestures[i].motion));
+        fprintf(fp, " %u", gestures[i].fingers);
+        word(act->name);
+        warg(act->arg, &gestures[i].arg);
+        fputc('\n', fp);
     }
-    return a;
 }
 
-static cJSON* jpadbuttons(void)
+static void wpadbuttons(void)
 {
-    cJSON* a = cJSON_CreateArray();
     size_t i;
 
+    note("padbutton", "padbutton: button from 0, action, argument");
     for (i = 0; i < npadbuttons; i++) {
         const Action* act = actionbyfunc(padbuttons[i].func);
-        cJSON* b;
 
         if (!act) {
             fprintf(stderr,
@@ -635,89 +770,132 @@ static cJSON* jpadbuttons(void)
                     i);
             continue;
         }
-        b = cJSON_CreateObject();
-        cJSON_AddNumberToObject(b, "button", padbuttons[i].button);
-        cJSON_AddStringToObject(b, "action", act->name);
-        cJSON_AddItemToObject(b, "arg", jarg(act->arg, &padbuttons[i].arg));
-        cJSON_AddItemToArray(a, b);
+        start("padbutton");
+        fprintf(fp, " %u", padbuttons[i].button);
+        word(act->name);
+        warg(act->arg, &padbuttons[i].arg);
+        fputc('\n', fp);
     }
-    return a;
 }
 
-static cJSON* jmisc(void)
+static void defaults(void)
 {
-    cJSON* o = cJSON_CreateObject();
-
-    cJSON_AddStringToObject(o, "log_level", enumname(loglevels, log_level));
-    cJSON_AddBoolToObject(
-        o, "bypass_surface_visibility", bypass_surface_visibility);
-    cJSON_AddBoolToObject(o, "allow_tearing", allow_tearing);
-    cJSON_AddBoolToObject(o, "auto_vrr", auto_vrr);
-    return o;
+    note("", "a setting left out keeps its default, one with no value is off");
+    wlook();
+    wwindows();
+    wbar();
+    wopacity();
+    winput();
+    wmisc();
+    wlayouts();
+    wrules();
+    wmonitors();
+    wautostart();
+    wkeys();
+    wbuttons();
+    wgestures();
+    wpadbuttons();
 }
 
-static cJSON* defaults(void)
+/* the defaults, rendered; NULL and a message when they cannot be */
+static char* rendered(void)
 {
-    cJSON* o = cJSON_CreateObject();
+    char* text = NULL;
+    size_t len;
 
-    cJSON_AddItemToObject(o, "look", jlook());
-    cJSON_AddItemToObject(o, "windows", jwindows());
-    cJSON_AddItemToObject(o, "bar", jbar());
-    cJSON_AddItemToObject(o, "opacity", jopacity());
-    cJSON_AddItemToObject(o, "monitors", jmonitors());
-    cJSON_AddItemToObject(o, "input", jinput());
-    cJSON_AddItemToObject(o, "autostart", jautostart());
-    cJSON_AddItemToObject(o, "keys", jkeys());
-    cJSON_AddItemToObject(o, "buttons", jbuttons());
-    cJSON_AddItemToObject(o, "gestures", jgestures());
-    cJSON_AddItemToObject(o, "padbuttons", jpadbuttons());
-    cJSON_AddItemToObject(o, "misc", jmisc());
-    return o;
+    if ((fp = open_memstream(&text, &len))) {
+        depth = 0;
+        prev = NULL;
+        defaults();
+        if (!fclose(fp))
+            return text;
+    }
+    free(text);
+    fprintf(stderr, "g0wm: cannot render the settings\n");
+    return NULL;
 }
 
-static const cJSON* item(const cJSON* o, const char* k)
+static const struct scfg_directive* find(const struct scfg_block* b,
+                                         const char* k)
 {
-    return cJSON_GetObjectItemCaseSensitive(o, k);
+    size_t i;
+
+    if (!b)
+        return NULL;
+    for (i = 0; i < b->directives_len; i++) {
+        if (!strcmp(b->directives[i].name, k)) {
+            line = b->directives[i].lineno;
+            return &b->directives[i];
+        }
+    }
+    return NULL;
 }
 
-/* the getters keep the value config.h gave when the file has nothing usable */
-static int getbool(const cJSON* o, const char* k, int cur)
+static const struct scfg_block* section(const struct scfg_block* b,
+                                        const char* k)
 {
-    const cJSON* v = item(o, k);
+    const struct scfg_directive* d = find(b, k);
 
-    return cJSON_IsBool(v) ? cJSON_IsTrue(v) : cur;
+    return d ? &d->children : NULL;
 }
 
-static double getnum(const cJSON* o, const char* k, double cur)
+static size_t count(const struct scfg_block* b, const char* k)
 {
-    const cJSON* v = item(o, k);
+    size_t i, n = 0;
 
-    return cJSON_IsNumber(v) ? v->valuedouble : cur;
+    for (i = 0; i < b->directives_len; i++)
+        n += !strcmp(b->directives[i].name, k);
+    return n;
 }
 
-static const char* getstr(const cJSON* o, const char* k, const char* cur)
+static const char* param(const struct scfg_directive* d, size_t i)
 {
-    const cJSON* v = item(o, k);
-
-    if (cJSON_IsString(v))
-        return v->valuestring;
-    return cJSON_IsNull(v) ? NULL : cur;
+    return d && i < d->params_len ? d->params[i] : NULL;
 }
 
-static int getenum(const cJSON* o,
-                   const char* k,
-                   const Enum* e,
-                   int cur,
-                   const char* what)
+static int isbool(const char* s)
 {
-    const char* name = getstr(o, k, NULL);
-
-    return name ? enumval(e, name, cur, what) : cur;
+    return s && (!strcmp(s, "true") || !strcmp(s, "false"));
 }
 
-static uint32_t gethex(const cJSON* o, const char* k, uint32_t cur)
+static int isnum(const char* s, double* v)
 {
-    const char* s = getstr(o, k, NULL);
+    char* end;
+    double x;
+
+    if (!s || !*s)
+        return 0;
+    x = strtod(s, &end);
+    if (*end)
+        return 0;
+    if (v)
+        *v = x;
+    return 1;
+}
+
+static double numval(const char* s, double cur)
+{
+    double v;
+
+    return isnum(s, &v) ? v : cur;
+}
+
+/* a negative one would not convert */
+static unsigned int uintval(const char* s, unsigned int cur)
+{
+    double v;
+
+    if (!isnum(s, &v))
+        return cur;
+    if (v < 0 || v > UINT_MAX) {
+        warn("%s is out of range", s);
+        return cur;
+    }
+    return (unsigned int)v;
+}
+
+static uint32_t hexval(const char* s, uint32_t cur)
+{
     unsigned long v;
     char* end;
 
@@ -728,13 +906,60 @@ static uint32_t gethex(const cJSON* o, const char* k, uint32_t cur)
         if (!*end)
             return (uint32_t)v;
     }
-    fprintf(stderr, "g0wm: settings.json: %s is not an #rrggbbaa color\n", s);
+    warn("%s is not an #rrggbbaa color", s);
     return cur;
 }
 
-static void getrgba(float c[static 4], const cJSON* o, const char* k)
+/* the getters keep the value config.h gave when the file has nothing usable */
+static int getbool(const struct scfg_block* b, const char* k, int cur)
 {
-    uint32_t v = gethex(o, k, packrgba(c));
+    const char* s = param(find(b, k), 0);
+
+    return isbool(s) ? *s == 't' : cur;
+}
+
+static double getnum(const struct scfg_block* b, const char* k, double cur)
+{
+    return numval(param(find(b, k), 0), cur);
+}
+
+static unsigned int getuint(const struct scfg_block* b,
+                            const char* k,
+                            unsigned int cur)
+{
+    return uintval(param(find(b, k), 0), cur);
+}
+
+static const char* getstr(const struct scfg_block* b,
+                          const char* k,
+                          const char* cur)
+{
+    const struct scfg_directive* d = find(b, k);
+
+    return d ? param(d, 0) : cur;
+}
+
+static int getenum(const struct scfg_block* b,
+                   const char* k,
+                   const Enum* e,
+                   int cur,
+                   const char* what)
+{
+    const char* name = getstr(b, k, NULL);
+
+    return name ? enumval(e, name, cur, what) : cur;
+}
+
+static uint32_t gethex(const struct scfg_block* b, const char* k, uint32_t cur)
+{
+    return hexval(getstr(b, k, NULL), cur);
+}
+
+static void getrgba(float c[static 4],
+                    const struct scfg_block* b,
+                    const char* k)
+{
+    uint32_t v = gethex(b, k, packrgba(c));
 
     c[0] = ((v >> 24) & 0xFF) / 255.0f;
     c[1] = ((v >> 16) & 0xFF) / 255.0f;
@@ -744,29 +969,49 @@ static void getrgba(float c[static 4], const cJSON* o, const char* k)
 
 /* the parsed file outlives the settings, so its strings are used in place.
  * One slot to spare: the result is NULL terminated as well as counted. */
-static const char** strlist(const cJSON* a, size_t* n)
+static const char** strlist(const struct scfg_directive* d,
+                            size_t from,
+                            size_t* n)
 {
     const char** v;
-    const cJSON* e;
-    size_t i = 0;
+    size_t i;
 
-    if (!cJSON_IsArray(a))
+    if (!d || d->params_len < from)
         return NULL;
-    v = ecalloc((size_t)cJSON_GetArraySize(a) + 1, sizeof *v);
-    cJSON_ArrayForEach(e, a) if (cJSON_IsString(e)) v[i++] = e->valuestring;
+    v = ecalloc(d->params_len - from + 1, sizeof *v);
+    for (i = from; i < d->params_len; i++)
+        v[i - from] = d->params[i];
     if (n)
-        *n = i;
+        *n = d->params_len - from;
     return v;
 }
 
-static uint32_t getmods(const cJSON* o, const char* k)
+/* logo+shift+q: the mods into *mod, returns q */
+static const char* splitmods(const char* s, uint32_t* mod)
 {
-    const cJSON* e;
-    uint32_t m = 0;
+    const char* plus;
+    char name[16];
 
-    cJSON_ArrayForEach(e, item(o, k)) if (cJSON_IsString(e)) m |=
-        (uint32_t)enumval(modnames, e->valuestring, 0, "modifier");
-    return m;
+    *mod = 0;
+    while ((plus = strchr(s, '+'))) {
+        snprintf(name, sizeof name, "%.*s", (int)(plus - s), s);
+        *mod |= (uint32_t)enumval(modnames, name, 0, "modifier");
+        s = plus + 1;
+    }
+    return s;
+}
+
+static uint32_t getmods(const struct scfg_block* b, const char* k, uint32_t cur)
+{
+    const char* s = getstr(b, k, NULL);
+    uint32_t mod;
+
+    if (!s)
+        return cur;
+    if (!strcmp(s, "none"))
+        return 0;
+    s = splitmods(s, &mod);
+    return mod | (uint32_t)enumval(modnames, s, 0, "modifier");
 }
 
 static const Layout* layoutbysymbol(const char* symbol)
@@ -778,468 +1023,489 @@ static const Layout* layoutbysymbol(const char* symbol)
     for (i = 0; i < nlayouts; i++)
         if (!strcmp(layouts[i].symbol, symbol))
             return &layouts[i];
-    fprintf(stderr, "g0wm: settings.json: no layout draws %s\n", symbol);
+    warn("no layout draws %s", symbol);
     return NULL;
 }
 
-static Arg getarg(char kind, const cJSON* o)
+static Arg getarg(char kind, const struct scfg_directive* d, size_t i)
 {
-    const cJSON* v = item(o, "arg");
+    const char* s = param(d, i);
     Arg a = { 0 };
 
     switch (kind) {
         case 'i':
-            a.i = (int)getnum(o, "arg", 0);
+            a.i = (int)numval(s, 0);
             break;
         case 'u':
-            a.ui = (uint32_t)getnum(o, "arg", 0);
+            a.ui = uintval(s, 0);
             break;
         case 'f':
-            a.f = (float)getnum(o, "arg", 0);
+            a.f = (float)numval(s, 0);
             break;
         case 'v':
-            a.v = strlist(v, NULL);
+            a.v = strlist(d, i, NULL);
             break;
         case 'l':
-            a.v = layoutbysymbol(getstr(o, "arg", NULL));
+            a.v = layoutbysymbol(s);
             break;
         case 'c':
-            a.ui = (uint32_t)getenum(o, "arg", dragmodes, CurMove, "drag mode");
+            a.ui = s ? (uint32_t)enumval(dragmodes, s, CurMove, "drag mode")
+                     : CurMove;
             break;
     }
     return a;
 }
 
-static void applycolors(const cJSON* o)
+static void applycolors(const struct scfg_block* b)
 {
-    const cJSON* s;
-    size_t i;
-    static const char* const names[] = {
-        [SchemeNorm] = "norm",
-        [SchemeSel] = "sel",
-        [SchemeUrg] = "urg",
-        [SchemeTitle] = "title",
-        [SchemeTitleSel] = "titlesel",
-        [SchemeStatus] = "status",
-        [SchemeNotify] = "notify",
-        [SchemeNotifyLow] = "notifylow",
-        [SchemeNotifyCrit] = "notifycrit",
-        [SchemeRunner] = "runner",
-        [SchemeRunnerSuggest] = "runnersuggest",
-    };
+    const struct scfg_directive* d;
+    size_t i, j;
 
-    for (i = 0; i < LENGTH(names); i++) {
-        if (!names[i] || !(s = item(o, names[i])))
+    for (i = 0; i < LENGTH(schemenames); i++) {
+        if (!schemenames[i] || !(d = find(b, schemenames[i])))
             continue;
-        colors[i][ColFg] = gethex(s, "fg", colors[i][ColFg]);
-        colors[i][ColBg] = gethex(s, "bg", colors[i][ColBg]);
-        colors[i][ColBorder] = gethex(s, "border", colors[i][ColBorder]);
+        for (j = 0; j < 3; j++)
+            colors[i][j] = hexval(param(d, j), colors[i][j]);
     }
 }
 
-static void applylook(const cJSON* o)
+static void applylook(const struct scfg_block* b)
 {
     const char** list;
 
-    if (!o)
+    if (!b)
         return;
-    if ((list = strlist(item(o, "fonts"), &nfonts)))
+    if ((list = strlist(find(b, "fonts"), 0, &nfonts)))
         fonts = list;
-    applycolors(item(o, "colors"));
-    getrgba(rootcolor, o, "rootcolor");
-    getrgba(fullscreen_bg, o, "fullscreen_bg");
+    applycolors(section(b, "colors"));
+    getrgba(rootcolor, b, "rootcolor");
+    getrgba(fullscreen_bg, b, "fullscreen_bg");
 #ifdef INTEGRATED_BACKGROUND
-    wallpaper = getstr(o, "wallpaper", wallpaper);
+    wallpaper = getstr(b, "wallpaper", wallpaper);
 #endif
-    if ((list = strlist(item(o, "tags"), &ntags))) {
+    if ((list = strlist(find(b, "tags"), 0, &ntags))) {
         tags = (char**)list;
         if (ntags > 31) { /* TAGMASK has to fit in a uint32_t */
-            fprintf(stderr,
-                    "g0wm: settings.json: only the first 31 tags are"
-                    " used\n");
+            warn("only the first 31 tags are used");
             ntags = 31;
         }
     }
 }
 
-static void applylayouts(const cJSON* a)
+static void applywindows(const struct scfg_block* b)
 {
-    const cJSON* e;
-    Layout* out;
-    size_t i, n = 0;
-
-    if (!cJSON_IsArray(a) || !cJSON_GetArraySize(a))
+    if (!b)
         return;
-    out = ecalloc((size_t)cJSON_GetArraySize(a), sizeof *out);
-    cJSON_ArrayForEach(e, a)
-    {
-        const char* name = getstr(e, "arrange", "float");
-        out[n].symbol = getstr(e, "symbol", "[ ]");
-        for (i = 0; i < LENGTH(arranges); i++)
-            if (!strcmp(arranges[i].name, name))
-                break;
-        if (i < LENGTH(arranges))
-            out[n].arrange = arranges[i].arrange;
-        else
-            fprintf(stderr,
-                    "g0wm: settings.json: %s is not a layout, using float\n",
-                    name);
-        n++;
-    }
-    layouts = out;
-    nlayouts = n;
-}
-
-static void applyrules(const cJSON* a)
-{
-    const cJSON* e;
-    Rule* out;
-    size_t n = 0;
-
-    if (!cJSON_IsArray(a))
-        return;
-    out = ecalloc((size_t)cJSON_GetArraySize(a) + 1, sizeof *out);
-    cJSON_ArrayForEach(e, a)
-    {
-        out[n].id = getstr(e, "id", NULL);
-        out[n].title = getstr(e, "title", NULL);
-        out[n].tags = (uint32_t)getnum(e, "tags", 0);
-        out[n].isfloating = getbool(e, "isfloating", 0);
-        out[n].opacity_focus = (float)getnum(e, "opacity_focus", 0);
-        out[n].opacity_unfocus = (float)getnum(e, "opacity_unfocus", 0);
-        out[n].monitor = (int)getnum(e, "monitor", -1);
-        n++;
-    }
-    rules = out;
-    nrules = n;
-}
-
-static void applywindows(const cJSON* o)
-{
-    if (!o)
-        return;
-    borderpx = (unsigned int)getnum(o, "borderpx", borderpx);
+    borderpx = getuint(b, "borderpx", borderpx);
     cornerstyle =
-        getenum(o, "cornerstyle", cornerstyles, cornerstyle, "corner style");
-    cornerpx = (unsigned int)getnum(o, "cornerpx", cornerpx);
-    gaps = (int)getnum(o, "gaps", gaps);
-    gappx = (unsigned int)getnum(o, "gappx", gappx);
-    smartgaps = getbool(o, "smartgaps", smartgaps);
-    titlebar = getbool(o, "titlebar", titlebar);
-    titlepadding = (unsigned int)getnum(o, "titlepadding", titlepadding);
-    titlecenter = getbool(o, "titlecenter", titlecenter);
-    titleclose = getbool(o, "titleclose", titleclose);
-    titleclosecolor = gethex(o, "titleclosecolor", titleclosecolor);
-    applylayouts(item(o, "layouts"));
-    applyrules(item(o, "rules"));
+        getenum(b, "cornerstyle", cornerstyles, cornerstyle, "corner style");
+    cornerpx = getuint(b, "cornerpx", cornerpx);
+    gaps = (int)getnum(b, "gaps", gaps);
+    gappx = getuint(b, "gappx", gappx);
+    smartgaps = getbool(b, "smartgaps", smartgaps);
+    titlebar = getbool(b, "titlebar", titlebar);
+    titlepadding = getuint(b, "titlepadding", titlepadding);
+    titlecenter = getbool(b, "titlecenter", titlecenter);
+    titleclose = getbool(b, "titleclose", titleclose);
+    titleclosecolor = gethex(b, "titleclosecolor", titleclosecolor);
+    movethreshold = (int)getnum(b, "movethreshold", movethreshold);
+    movesnap = (int)getnum(b, "movesnap", movesnap);
 }
 
-static void applybar(const cJSON* o)
+static void applybar(const struct scfg_block* b)
 {
-    if (!o)
+    if (!b)
         return;
-    showbar = getbool(o, "showbar", showbar);
-    topbar = getbool(o, "topbar", topbar);
-    barwintitle = getbool(o, "barwintitle", barwintitle);
-    bartagdots = getbool(o, "bartagdots", bartagdots);
-    barltsymbol = getbool(o, "barltsymbol", barltsymbol);
-    barboxradius = (unsigned int)getnum(o, "barboxradius", barboxradius);
-    barpadding = (unsigned int)getnum(o, "barpadding", barpadding);
-    barheight = (float)getnum(o, "barheight", barheight);
-    barsinglemon = getbool(o, "barsinglemon", barsinglemon);
-    showsystray = getbool(o, "showsystray", showsystray);
-    systrayspacing = (unsigned int)getnum(o, "systrayspacing", systrayspacing);
-    systraypadding = (unsigned int)getnum(o, "systraypadding", systraypadding);
-    systrayiconsize =
-        (unsigned int)getnum(o, "systrayiconsize", systrayiconsize);
-    shownotifications = getbool(o, "shownotifications", shownotifications);
+    showbar = getbool(b, "showbar", showbar);
+    topbar = getbool(b, "topbar", topbar);
+    barwintitle = getbool(b, "barwintitle", barwintitle);
+    bartagdots = getbool(b, "bartagdots", bartagdots);
+    barltsymbol = getbool(b, "barltsymbol", barltsymbol);
+    barboxradius = getuint(b, "barboxradius", barboxradius);
+    barpadding = getuint(b, "barpadding", barpadding);
+    barheight = (float)getnum(b, "barheight", barheight);
+    barsinglemon = getbool(b, "barsinglemon", barsinglemon);
+    showsystray = getbool(b, "showsystray", showsystray);
+    systrayspacing = getuint(b, "systrayspacing", systrayspacing);
+    systraypadding = getuint(b, "systraypadding", systraypadding);
+    systrayiconsize = getuint(b, "systrayiconsize", systrayiconsize);
+    shownotifications = getbool(b, "shownotifications", shownotifications);
     notification_timeout =
-        (unsigned int)getnum(o, "notification_timeout", notification_timeout);
-    notification_linewidth = (unsigned int)getnum(
-        o, "notification_linewidth", notification_linewidth);
-    notification_lineradius = (unsigned int)getnum(
-        o, "notification_lineradius", notification_lineradius);
+        getuint(b, "notification_timeout", notification_timeout);
+    notification_linewidth =
+        getuint(b, "notification_linewidth", notification_linewidth);
+    notification_lineradius =
+        getuint(b, "notification_lineradius", notification_lineradius);
     notification_actionsign =
-        getstr(o, "notification_actionsign", notification_actionsign);
-    runner_placeholder = getstr(o, "runner_placeholder", runner_placeholder);
+        getstr(b, "notification_actionsign", notification_actionsign);
+    runner_placeholder = getstr(b, "runner_placeholder", runner_placeholder);
 }
 
-static void applyopacity(const cJSON* o)
+static void applyopacity(const struct scfg_block* b)
 {
-    if (!o)
+    if (!b)
         return;
-    opacity_enabled = getbool(o, "opacity_enabled", opacity_enabled);
-    opacity_focus = (float)getnum(o, "opacity_focus", opacity_focus);
-    opacity_unfocus = (float)getnum(o, "opacity_unfocus", opacity_unfocus);
-    opacity_deco = (float)getnum(o, "opacity_deco", opacity_deco);
+    opacity_enabled = getbool(b, "opacity_enabled", opacity_enabled);
+    opacity_focus = (float)getnum(b, "opacity_focus", opacity_focus);
+    opacity_unfocus = (float)getnum(b, "opacity_unfocus", opacity_unfocus);
+    opacity_deco = (float)getnum(b, "opacity_deco", opacity_deco);
 #ifdef INTEGRATED_BACKGROUND
     opacity_type = getenum(
-        o, "opacity_type", opacitykinds, opacity_type, "kind of opacity");
-    blur_radius = (unsigned int)getnum(o, "blur_radius", blur_radius);
-    blur_passes = (unsigned int)getnum(o, "blur_passes", blur_passes);
-    blur_saturation = (float)getnum(o, "blur_saturation", blur_saturation);
-    blur_brightness = (float)getnum(o, "blur_brightness", blur_brightness);
+        b, "opacity_type", opacitykinds, opacity_type, "kind of opacity");
+    blur_radius = getuint(b, "blur_radius", blur_radius);
+    blur_passes = getuint(b, "blur_passes", blur_passes);
+    blur_saturation = (float)getnum(b, "blur_saturation", blur_saturation);
+    blur_brightness = (float)getnum(b, "blur_brightness", blur_brightness);
 #endif
 }
 
-static void applymonitors(const cJSON* a)
+static void applyinput(const struct scfg_block* b)
 {
-    const cJSON* e;
-    MonitorRule* out;
-    size_t n = 0;
+    const struct scfg_block* x;
 
-    if (!cJSON_IsArray(a) || !cJSON_GetArraySize(a))
+    if (!b)
         return;
-    out = ecalloc((size_t)cJSON_GetArraySize(a), sizeof *out);
-    cJSON_ArrayForEach(e, a)
-    {
-        out[n].name = getstr(e, "name", NULL);
-        out[n].mfact = (float)getnum(e, "mfact", 0.55);
-        out[n].nmaster = (int)getnum(e, "nmaster", 1);
-        out[n].scale = (float)getnum(e, "scale", 1);
-        out[n].lt = layoutbysymbol(getstr(e, "layout", NULL));
-        if (!out[n].lt)
-            out[n].lt = layouts;
-        out[n].rr =
-            (enum wl_output_transform)getenum(e,
-                                              "transform",
-                                              transforms,
-                                              WL_OUTPUT_TRANSFORM_NORMAL,
-                                              "transform");
-        out[n].x = (int)getnum(e, "x", -1);
-        out[n].y = (int)getnum(e, "y", -1);
-        out[n].width = (int)getnum(e, "width", 0);
-        out[n].height = (int)getnum(e, "height", 0);
-        out[n].refresh = (int)getnum(e, "refresh", 0);
-        n++;
-    }
-    monrules = out;
-    nmonrules = n;
-}
-
-static void applyinput(const cJSON* o)
-{
-    const cJSON* x;
-
-    if (!o)
-        return;
-    sloppyfocus = getbool(o, "sloppyfocus", sloppyfocus);
-    if ((x = item(o, "xkb_rules"))) {
+    sloppyfocus = getbool(b, "sloppyfocus", sloppyfocus);
+    if ((x = section(b, "xkb_rules"))) {
         xkb_rules.rules = getstr(x, "rules", xkb_rules.rules);
         xkb_rules.model = getstr(x, "model", xkb_rules.model);
         xkb_rules.layout = getstr(x, "layout", xkb_rules.layout);
         xkb_rules.variant = getstr(x, "variant", xkb_rules.variant);
         xkb_rules.options = getstr(x, "options", xkb_rules.options);
     }
-    repeat_rate = (int)getnum(o, "repeat_rate", repeat_rate);
-    repeat_delay = (int)getnum(o, "repeat_delay", repeat_delay);
-    cursor_theme = getstr(o, "cursor_theme", cursor_theme);
-    cursor_size = (int)getnum(o, "cursor_size", cursor_size);
+    repeat_rate = (int)getnum(b, "repeat_rate", repeat_rate);
+    repeat_delay = (int)getnum(b, "repeat_delay", repeat_delay);
+    cursor_theme = getstr(b, "cursor_theme", cursor_theme);
+    cursor_size = (int)getnum(b, "cursor_size", cursor_size);
     hide_cursor_when_typing =
-        getbool(o, "hide_cursor_when_typing", hide_cursor_when_typing);
-    tap_to_click = getbool(o, "tap_to_click", tap_to_click);
-    tap_and_drag = getbool(o, "tap_and_drag", tap_and_drag);
-    drag_lock = getbool(o, "drag_lock", drag_lock);
-    natural_scrolling = getbool(o, "natural_scrolling", natural_scrolling);
+        getbool(b, "hide_cursor_when_typing", hide_cursor_when_typing);
+    tap_to_click = getbool(b, "tap_to_click", tap_to_click);
+    tap_and_drag = getbool(b, "tap_and_drag", tap_and_drag);
+    drag_lock = getbool(b, "drag_lock", drag_lock);
+    natural_scrolling = getbool(b, "natural_scrolling", natural_scrolling);
     disable_while_typing =
-        getbool(o, "disable_while_typing", disable_while_typing);
-    left_handed = getbool(o, "left_handed", left_handed);
+        getbool(b, "disable_while_typing", disable_while_typing);
+    left_handed = getbool(b, "left_handed", left_handed);
     middle_button_emulation =
-        getbool(o, "middle_button_emulation", middle_button_emulation);
+        getbool(b, "middle_button_emulation", middle_button_emulation);
     scroll_method = (enum libinput_config_scroll_method)getenum(
-        o, "scroll_method", scrollmethods, scroll_method, "scroll method");
+        b, "scroll_method", scrollmethods, scroll_method, "scroll method");
     click_method = (enum libinput_config_click_method)getenum(
-        o, "click_method", clickmethods, click_method, "click method");
-    send_events_mode = (uint32_t)getenum(o,
+        b, "click_method", clickmethods, click_method, "click method");
+    send_events_mode = (uint32_t)getenum(b,
                                          "send_events_mode",
                                          sendevents,
                                          (int)send_events_mode,
                                          "send events mode");
     accel_profile =
-        (enum libinput_config_accel_profile)getenum(o,
+        (enum libinput_config_accel_profile)getenum(b,
                                                     "accel_profile",
                                                     accelprofiles,
                                                     accel_profile,
                                                     "acceleration profile");
-    accel_speed = getnum(o, "accel_speed", accel_speed);
+    accel_speed = getnum(b, "accel_speed", accel_speed);
     touchpad_natural_scrolling =
-        getbool(o, "touchpad_natural_scrolling", touchpad_natural_scrolling);
+        getbool(b, "touchpad_natural_scrolling", touchpad_natural_scrolling);
     touchpad_accel_profile =
-        (enum libinput_config_accel_profile)getenum(o,
+        (enum libinput_config_accel_profile)getenum(b,
                                                     "touchpad_accel_profile",
                                                     accelprofiles,
                                                     touchpad_accel_profile,
                                                     "acceleration profile");
     touchpad_accel_speed =
-        getnum(o, "touchpad_accel_speed", touchpad_accel_speed);
+        getnum(b, "touchpad_accel_speed", touchpad_accel_speed);
+    pinchzoom_mod = getmods(b, "pinchzoom_mod", pinchzoom_mod);
     button_map = (enum libinput_config_tap_button_map)getenum(
-        o, "button_map", buttonmaps, button_map, "button map");
-    tablet_output = getstr(o, "tablet_output", tablet_output);
-    tablet_left_handed = getbool(o, "tablet_left_handed", tablet_left_handed);
-    touch_output = getstr(o, "touch_output", touch_output);
+        b, "button_map", buttonmaps, button_map, "button map");
+    tablet_output = getstr(b, "tablet_output", tablet_output);
+    tablet_left_handed = getbool(b, "tablet_left_handed", tablet_left_handed);
+    touch_output = getstr(b, "touch_output", touch_output);
+}
+
+static void applymisc(const struct scfg_block* b)
+{
+    if (!b)
+        return;
+    log_level = getenum(b, "log_level", loglevels, log_level, "log level");
+    bypass_surface_visibility =
+        getbool(b, "bypass_surface_visibility", bypass_surface_visibility);
+    allow_tearing = getbool(b, "allow_tearing", allow_tearing);
+    auto_vrr = getbool(b, "auto_vrr", auto_vrr);
+}
+
+/* none keeps the defaults: a monitor needs a layout */
+static void applylayouts(const struct scfg_block* b)
+{
+    const struct scfg_directive* d;
+    Layout* out;
+    size_t i, j, n = 0;
+
+    if (!count(b, "layout"))
+        return;
+    out = ecalloc(count(b, "layout"), sizeof *out);
+    for (i = 0; i < b->directives_len; i++) {
+        const char* name;
+
+        d = &b->directives[i];
+        line = d->lineno;
+        if (strcmp(d->name, "layout"))
+            continue;
+        out[n].symbol = param(d, 0) ? param(d, 0) : "[ ]";
+        name = param(d, 1) ? param(d, 1) : "float";
+        for (j = 0; j < LENGTH(arranges); j++)
+            if (!strcmp(arranges[j].name, name))
+                break;
+        if (j < LENGTH(arranges))
+            out[n].arrange = arranges[j].arrange;
+        else
+            warn("%s is not a layout, using float", name);
+        n++;
+    }
+    layouts = out;
+    nlayouts = n;
+}
+
+static void applyrules(const struct scfg_block* b)
+{
+    const struct scfg_block* r;
+    Rule* out;
+    size_t i, n = 0;
+
+    out = ecalloc(count(b, "rule") + 1, sizeof *out);
+    for (i = 0; i < b->directives_len; i++) {
+        if (strcmp(b->directives[i].name, "rule"))
+            continue;
+        r = &b->directives[i].children;
+        out[n].id = getstr(r, "id", NULL);
+        out[n].title = getstr(r, "title", NULL);
+        out[n].tags = getuint(r, "tags", 0);
+        out[n].isfloating = getbool(r, "isfloating", 0);
+        out[n].opacity_focus = (float)getnum(r, "opacity_focus", 0);
+        out[n].opacity_unfocus = (float)getnum(r, "opacity_unfocus", 0);
+        out[n].monitor = (int)getnum(r, "monitor", -1);
+        n++;
+    }
+    rules = out;
+    nrules = n;
+}
+
+static void applymonitors(const struct scfg_block* b)
+{
+    const struct scfg_block* m;
+    MonitorRule* out;
+    size_t i, n = 0;
+
+    if (!count(b, "monitor"))
+        return;
+    out = ecalloc(count(b, "monitor"), sizeof *out);
+    for (i = 0; i < b->directives_len; i++) {
+        if (strcmp(b->directives[i].name, "monitor"))
+            continue;
+        m = &b->directives[i].children;
+        out[n].name = getstr(m, "name", NULL);
+        out[n].mfact = (float)getnum(m, "mfact", 0.55);
+        out[n].nmaster = (int)getnum(m, "nmaster", 1);
+        out[n].scale = (float)getnum(m, "scale", 1);
+        out[n].lt = layoutbysymbol(getstr(m, "layout", NULL));
+        if (!out[n].lt)
+            out[n].lt = layouts;
+        out[n].rr =
+            (enum wl_output_transform)getenum(m,
+                                              "transform",
+                                              transforms,
+                                              WL_OUTPUT_TRANSFORM_NORMAL,
+                                              "transform");
+        out[n].x = (int)getnum(m, "x", -1);
+        out[n].y = (int)getnum(m, "y", -1);
+        out[n].width = (int)getnum(m, "width", 0);
+        out[n].height = (int)getnum(m, "height", 0);
+        out[n].refresh = (int)getnum(m, "refresh", 0);
+        n++;
+    }
+    monrules = out;
+    nmonrules = n;
 }
 
 /* back to one flat run of arguments per command, each NULL terminated */
-static void applyautostart(const cJSON* a)
+static void applyautostart(const struct scfg_block* b)
 {
-    const cJSON* cmd;
-    const cJSON* arg;
+    const struct scfg_directive* d;
     const char** out;
-    size_t n = 0;
+    size_t i, j, n = 0;
 
-    if (!cJSON_IsArray(a))
-        return;
-    cJSON_ArrayForEach(cmd, a) n += (size_t)cJSON_GetArraySize(cmd) + 1;
+    for (i = 0; i < b->directives_len; i++)
+        if (!strcmp(b->directives[i].name, "autostart"))
+            n += b->directives[i].params_len + 1;
     out = ecalloc(n + 1, sizeof *out);
 
     n = 0;
-    cJSON_ArrayForEach(cmd, a)
-    {
-        size_t start = n;
-        cJSON_ArrayForEach(arg, cmd) if (cJSON_IsString(arg)) out[n++] =
-            arg->valuestring;
-        if (n > start)
-            out[n++] = NULL;
+    for (i = 0; i < b->directives_len; i++) {
+        d = &b->directives[i];
+        line = d->lineno;
+        if (strcmp(d->name, "autostart") || !d->params_len)
+            continue;
+        for (j = 0; j < d->params_len; j++)
+            out[n++] = d->params[j];
+        out[n++] = NULL;
     }
     autostart = out;
 }
 
-static void applykeys(const cJSON* a)
+static void applykeys(const struct scfg_block* b)
 {
-    const cJSON* e;
+    const struct scfg_directive* d;
+    const Action* act;
     Key* out;
-    size_t n = 0;
+    size_t i, n = 0;
 
-    if (!cJSON_IsArray(a))
-        return;
-    out = ecalloc((size_t)cJSON_GetArraySize(a) + 1, sizeof *out);
-    cJSON_ArrayForEach(e, a)
-    {
-        const Action* act = actionbyname(getstr(e, "action", NULL));
-        const char* name = getstr(e, "key", NULL);
+    out = ecalloc(count(b, "key") + 1, sizeof *out);
+    for (i = 0; i < b->directives_len; i++) {
+        const char* name;
         xkb_keysym_t sym;
 
-        if (!act || !name)
+        d = &b->directives[i];
+        line = d->lineno;
+        if (strcmp(d->name, "key") || !(act = actionbyname(param(d, 1))))
             continue;
+        name = splitmods(param(d, 0), &out[n].mod);
         if ((sym = xkb_keysym_from_name(name, XKB_KEYSYM_NO_FLAGS)) ==
             XKB_KEY_NoSymbol) {
-            fprintf(stderr, "g0wm: settings.json: %s is not a key\n", name);
+            warn("%s is not a key", name);
             continue;
         }
-        out[n].mod = getmods(e, "mod");
         out[n].keysym = sym;
         out[n].func = act->func;
-        out[n].arg = getarg(act->arg, e);
+        out[n].arg = getarg(act->arg, d, 2);
         n++;
     }
     keys = out;
     nkeys = n;
 }
 
-static void applybuttons(const cJSON* a)
+static void applybuttons(const struct scfg_block* b)
 {
-    const cJSON* e;
+    const struct scfg_directive* d;
+    const Action* act;
     Button* out;
-    size_t n = 0;
+    size_t i, n = 0;
 
-    if (!cJSON_IsArray(a))
-        return;
-    out = ecalloc((size_t)cJSON_GetArraySize(a) + 1, sizeof *out);
-    cJSON_ArrayForEach(e, a)
-    {
-        const Action* act = actionbyname(getstr(e, "action", NULL));
-
-        if (!act)
+    out = ecalloc(count(b, "button") + 1, sizeof *out);
+    for (i = 0; i < b->directives_len; i++) {
+        d = &b->directives[i];
+        line = d->lineno;
+        if (strcmp(d->name, "button") || !(act = actionbyname(param(d, 2))))
             continue;
-        out[n].click = (unsigned int)getenum(
-            e, "click", clickareas, ClkClient, "click area");
-        out[n].mod = getmods(e, "mod");
-        out[n].button = (unsigned int)getenum(
-            e, "button", mousebuttons, BTN_LEFT, "button");
+        out[n].click = (unsigned int)enumval(
+            clickareas, param(d, 0), ClkClient, "click area");
+        out[n].button =
+            (unsigned int)enumval(mousebuttons,
+                                  splitmods(param(d, 1), &out[n].mod),
+                                  BTN_LEFT,
+                                  "button");
         out[n].func = act->func;
-        out[n].arg = getarg(act->arg, e);
+        out[n].arg = getarg(act->arg, d, 3);
         n++;
     }
     buttons = out;
     nbuttons = n;
 }
 
-static void applygestures(const cJSON* a)
+static void applygestures(const struct scfg_block* b)
 {
-    const cJSON* e;
+    const struct scfg_directive* d;
+    const Action* act;
     Gesture* out;
-    size_t n = 0;
+    size_t i, n = 0;
 
-    if (!cJSON_IsArray(a))
-        return;
-    out = ecalloc((size_t)cJSON_GetArraySize(a) + 1, sizeof *out);
-    cJSON_ArrayForEach(e, a)
-    {
-        const Action* act = actionbyname(getstr(e, "action", NULL));
-
-        if (!act)
+    out = ecalloc(count(b, "gesture") + 1, sizeof *out);
+    for (i = 0; i < b->directives_len; i++) {
+        d = &b->directives[i];
+        line = d->lineno;
+        if (strcmp(d->name, "gesture") || !(act = actionbyname(param(d, 2))))
             continue;
-        out[n].motion = (unsigned int)getenum(
-            e, "motion", gesturemotions, SwipeLeft, "gesture motion");
-        out[n].fingers = (unsigned int)getnum(e, "fingers", 3);
+        out[n].motion = (unsigned int)enumval(
+            gesturemotions, param(d, 0), SwipeLeft, "gesture motion");
+        out[n].fingers = uintval(param(d, 1), 3);
         out[n].func = act->func;
-        out[n].arg = getarg(act->arg, e);
+        out[n].arg = getarg(act->arg, d, 3);
         n++;
     }
     gestures = out;
     ngestures = n;
 }
 
-static void applypadbuttons(const cJSON* a)
+static void applypadbuttons(const struct scfg_block* b)
 {
-    const cJSON* e;
+    const struct scfg_directive* d;
+    const Action* act;
     PadButton* out;
-    size_t n = 0;
+    size_t i, n = 0;
 
-    if (!cJSON_IsArray(a))
-        return;
-    out = ecalloc((size_t)cJSON_GetArraySize(a) + 1, sizeof *out);
-    cJSON_ArrayForEach(e, a)
-    {
-        const Action* act = actionbyname(getstr(e, "action", NULL));
-
-        if (!act)
+    out = ecalloc(count(b, "padbutton") + 1, sizeof *out);
+    for (i = 0; i < b->directives_len; i++) {
+        d = &b->directives[i];
+        line = d->lineno;
+        if (strcmp(d->name, "padbutton") || !(act = actionbyname(param(d, 1))))
             continue;
-        out[n].button = (unsigned int)getnum(e, "button", 0);
+        out[n].button = uintval(param(d, 0), 0);
         out[n].func = act->func;
-        out[n].arg = getarg(act->arg, e);
+        out[n].arg = getarg(act->arg, d, 2);
         n++;
     }
     padbuttons = out;
     npadbuttons = n;
 }
 
-static void applymisc(const cJSON* o)
+/* config.h's settings, read back: what the file is checked against and what
+ * fills in for what it leaves out */
+static const struct scfg_block* builtin;
+
+static void loadbuiltin(void)
 {
-    if (!o)
+    static struct scfg_block b;
+    char* text;
+    FILE* f;
+
+    if (builtin || !(text = rendered()))
         return;
-    log_level = getenum(o, "log_level", loglevels, log_level, "log level");
-    bypass_surface_visibility =
-        getbool(o, "bypass_surface_visibility", bypass_surface_visibility);
-    allow_tearing = getbool(o, "allow_tearing", allow_tearing);
-    auto_vrr = getbool(o, "auto_vrr", auto_vrr);
+    if ((f = fmemopen(text, strlen(text), "r"))) {
+        if (!scfg_parse_file(&b, f))
+            builtin = &b;
+        fclose(f);
+    }
+    free(text);
 }
 
-/* windows first: the layouts it builds are what the rest names by symbol */
-static void apply(const cJSON* o)
+/* the file's lines of kind k, or the built-in ones when it has none */
+static const struct scfg_block* lines(const struct scfg_block* b, const char* k)
 {
-    applylook(item(o, "look"));
-    applywindows(item(o, "windows"));
-    applybar(item(o, "bar"));
-    applyopacity(item(o, "opacity"));
-    applymonitors(item(o, "monitors"));
-    applyinput(item(o, "input"));
-    applyautostart(item(o, "autostart"));
-    applykeys(item(o, "keys"));
-    applybuttons(item(o, "buttons"));
-    applygestures(item(o, "gestures"));
-    applypadbuttons(item(o, "padbuttons"));
-    applymisc(item(o, "misc"));
+    return count(b, k) || !builtin ? b : builtin;
+}
+
+static void applysections(const struct scfg_block* b)
+{
+    applylook(section(b, "look"));
+    applywindows(section(b, "windows"));
+    applybar(section(b, "bar"));
+    applyopacity(section(b, "opacity"));
+    applyinput(section(b, "input"));
+    applymisc(section(b, "misc"));
+}
+
+/* the layouts first: the rest names them by symbol */
+static void apply(const struct scfg_block* b)
+{
+    applylayouts(lines(b, "layout"));
+    /* a reload has to undo a setting since left out */
+    applysections(builtin);
+    applysections(b);
+    applyrules(lines(b, "rule"));
+    applymonitors(lines(b, "monitor"));
+    applyautostart(lines(b, "autostart"));
+    applykeys(lines(b, "key"));
+    applybuttons(lines(b, "button"));
+    applygestures(lines(b, "gesture"));
+    applypadbuttons(lines(b, "padbutton"));
 }
 
 static const char* settingspath(void)
@@ -1249,9 +1515,9 @@ static const char* settingspath(void)
     const char* home = getenv("HOME");
 
     if (dir && *dir)
-        snprintf(path, sizeof path, "%s/g0wm/settings.json", dir);
+        snprintf(path, sizeof path, "%s/g0wm/config", dir);
     else if (home && *home)
-        snprintf(path, sizeof path, "%s/.config/g0wm/settings.json", home);
+        snprintf(path, sizeof path, "%s/.config/g0wm/config", home);
     else
         return NULL;
     return path;
@@ -1273,120 +1539,85 @@ static int mkdirp(char* path)
     return mkdir(path, 0755) < 0 && errno != EEXIST ? -1 : 0;
 }
 
-/* whole file into one buffer */
-static char* slurp(const char* path)
+static int isrecord(const char* k)
 {
-    FILE* f = fopen(path, "r");
-    char* text;
-    long len;
-    size_t got;
+    size_t i;
 
-    if (!f)
-        return NULL;
-    if (fseek(f, 0, SEEK_END) < 0 || (len = ftell(f)) < 0) {
-        fclose(f);
-        fprintf(stderr, "g0wm: %s is not a regular file\n", path);
-        return NULL;
-    }
-    rewind(f);
-    text = ecalloc(1, (size_t)len + 1);
-    got = fread(text, 1, (size_t)len, f);
-    fclose(f);
-    text[got] = '\0';
-    return text;
+    for (i = 0; i < LENGTH(records); i++)
+        if (!strcmp(records[i], k))
+            return 1;
+    return 0;
 }
 
-static const char* jtypename(const cJSON* v)
+static const char* kindof(const struct scfg_directive* d)
 {
-    if (cJSON_IsBool(v))
+    if (d->params_len != 1)
+        return d->params_len ? "a list" : "off";
+    if (isbool(d->params[0]))
         return "true or false";
-    if (cJSON_IsNumber(v))
+    if (isnum(d->params[0], NULL))
         return "a number";
-    if (cJSON_IsString(v))
-        return "a string";
-    if (cJSON_IsArray(v))
-        return "a list";
-    if (cJSON_IsObject(v))
-        return "a section";
-    return "something else";
+    return "a string";
 }
 
-/* a null default is off by default, so the file may hold anything */
-static int sametype(const cJSON* want, const cJSON* got)
+/* off takes anything, strings and lists any words */
+static int sameshape(const struct scfg_directive* want,
+                     const struct scfg_directive* got)
 {
-    if (cJSON_IsNull(want))
+    const char* k = kindof(want);
+
+    if (!want->params_len)
         return 1;
-    if (cJSON_IsBool(want))
-        return cJSON_IsBool(got);
-    return (want->type & 0xFF) == (got->type & 0xFF);
+    if (!strcmp(k, "a list") || !strcmp(k, "a string"))
+        return got->params_len > 0;
+    return !strcmp(k, kindof(got));
 }
 
-static void checkobj(const cJSON* want,
-                     const cJSON* got,
-                     const char* path,
-                     int* bad);
-
-static void checkitem(const cJSON* want,
-                      const cJSON* got,
-                      const char* path,
-                      int* bad)
+static void check(const struct scfg_block* want,
+                  const struct scfg_block* got,
+                  const char* path,
+                  int* bad)
 {
-    if (!sametype(want, got)) {
-        fprintf(stderr,
-                "g0wm: settings.json: %s should be %s\n",
-                path,
-                jtypename(want));
-        (*bad)++;
-        return;
-    }
-    /* how long a list is, is the user's business */
-    if (cJSON_IsObject(want))
-        checkobj(want, got, path, bad);
-}
-
-static void checkobj(const cJSON* want,
-                     const cJSON* got,
-                     const char* path,
-                     int* bad)
-{
-    const cJSON* w;
-    const cJSON* g;
+    const struct scfg_directive* w;
+    const struct scfg_directive* g;
     char sub[256];
+    size_t i;
 
-    cJSON_ArrayForEach(w, want)
-    {
-        snprintf(sub, sizeof sub, "%s%s%s", path, *path ? "." : "", w->string);
-        g = cJSON_GetObjectItemCaseSensitive(got, w->string);
-        if (!g) {
-            fprintf(stderr, "g0wm: settings.json: %s is missing\n", sub);
+    for (i = 0; i < want->directives_len; i++) {
+        w = &want->directives[i];
+        if (!*path && isrecord(w->name))
+            continue;
+        snprintf(sub, sizeof sub, "%s%s%s", path, *path ? "." : "", w->name);
+        if (!(g = find(got, w->name)))
+            continue;
+        if (w->children.directives_len) {
+            check(&w->children, &g->children, sub, bad);
+        } else if (!sameshape(w, g)) {
+            line = g->lineno;
+            warn("%s should be %s", sub, kindof(w));
             (*bad)++;
+        }
+    }
+    /* a typo, a setting this build was configured without, or a second one */
+    for (i = 0; i < got->directives_len; i++) {
+        g = &got->directives[i];
+        if (!*path && isrecord(g->name)) {
+            /* what a rule or a monitor holds */
+            if ((w = find(want, g->name)) && w->children.directives_len)
+                check(&w->children, &g->children, g->name, bad);
             continue;
         }
-        checkitem(w, g, sub, bad);
-    }
-    /* a typo, or a setting this build was configured without */
-    cJSON_ArrayForEach(g, got)
-    {
-        if (cJSON_GetObjectItemCaseSensitive(want, g->string))
+        w = find(got, g->name);
+        if (w == g && find(want, g->name))
             continue;
-        snprintf(sub, sizeof sub, "%s%s%s", path, *path ? "." : "", g->string);
-        fprintf(stderr,
-                "g0wm: settings.json: %s is not a setting this build has\n",
-                sub);
+        snprintf(sub, sizeof sub, "%s%s%s", path, *path ? "." : "", g->name);
+        line = g->lineno;
+        if (w != g)
+            warn("%s is already set on line %d", sub, w->lineno);
+        else
+            warn("%s is not a setting this build has", sub);
         (*bad)++;
     }
-}
-
-/* the defaults, rendered; NULL and a message when they cannot be */
-static char* rendered(void)
-{
-    cJSON* def = defaults();
-    char* text = cJSON_Print(def);
-
-    cJSON_Delete(def);
-    if (!text)
-        fprintf(stderr, "g0wm: cannot render the settings\n");
-    return text;
 }
 
 /* -c: write the defaults when there are none, read back whatever is there,
@@ -1407,7 +1638,7 @@ int settingswrite(void)
 
     /* never over the user's own file: a reinstall must not undo it */
     if (!access(path, F_OK)) {
-        fprintf(stderr, "g0wm: reading the settings.json in %s\n", path);
+        fprintf(stderr, "g0wm: reading the config in %s\n", path);
     } else {
         snprintf(dir, sizeof dir, "%s", path);
         if ((slash = strrchr(dir, '/')))
@@ -1425,7 +1656,7 @@ int settingswrite(void)
             free(text);
             return 1;
         }
-        fprintf(f, "%s\n", text);
+        fputs(text, f);
         free(text);
         if (fclose(f) != 0) {
             fprintf(
@@ -1438,7 +1669,7 @@ int settingswrite(void)
     settingsload();
     if (!(text = rendered()))
         return 1;
-    puts(text);
+    fputs(text, stdout);
     free(text);
     return 0;
 }
@@ -1446,46 +1677,35 @@ int settingswrite(void)
 void settingsload(void)
 {
     const char* path = settingspath();
-    cJSON* tree;
-    cJSON* def;
-    char* text;
+    struct scfg_block* tree;
     int bad = 0;
 
     if (!path) {
         fprintf(stderr, "g0wm: neither XDG_CONFIG_HOME nor HOME is set\n");
         return;
     }
-    if (!(text = slurp(path))) {
+    if (access(path, F_OK) < 0) {
         fprintf(stderr,
                 "g0wm: no settings in %s, run 'g0wm -c' to write them\n",
                 path);
         return;
     }
-
-    tree = cJSON_Parse(text);
-    if (!tree) {
-        /* the error points into text, so print before freeing it */
-        const char* at = cJSON_GetErrorPtr();
-        fprintf(stderr,
-                "g0wm: %s is not valid JSON, near: %.40s\n",
-                path,
-                at ? at : "");
-        free(text);
+    tree = ecalloc(1, sizeof *tree);
+    if (scfg_load_file(tree, path) < 0) {
+        fprintf(stderr, "g0wm: cannot read %s\n", path);
+        scfg_block_finish(tree);
+        free(tree);
         return;
     }
-    free(text);
 
-    def = defaults();
-    checkobj(def, tree, "", &bad);
-    cJSON_Delete(def);
+    loadbuiltin();
+    if (builtin)
+        check(builtin, tree, "", &bad);
+    /* never freed: the settings point into its strings */
     apply(tree);
-    /* the tree a reload replaces is left behind: the settings point into
-     * its strings */
-    settings = tree;
     if (bad)
         fprintf(stderr,
-                "g0wm: %s has %d problem%s; delete it and run 'g0wm -c' for a "
-                "fresh one\n",
+                "g0wm: %s has %d problem%s\n",
                 path,
                 bad,
                 bad == 1 ? "" : "s");

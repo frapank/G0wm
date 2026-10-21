@@ -52,7 +52,7 @@ G0WMDEVCFLAGS = -g -Wpedantic -Wall -Wextra -Wdeclaration-after-statement \
 
 # CFLAGS / LDFLAGS
 PKGS      = wayland-server xkbcommon libinput pixman-1 fcft dbus-1 gdk-pixbuf-2.0 \
-	$(XLIBS)
+	scfg $(XLIBS)
 PKG_CFLAGS := $(shell $(PKG_CONFIG) --cflags $(PKGS))
 PKG_LIBS   := $(shell $(PKG_CONFIG) --libs $(PKGS))
 G0WMCFLAGS = $(PKG_CFLAGS) $(WLR_INCS) $(G0WMCPPFLAGS) $(G0WMDEVCFLAGS) $(CFLAGS)
@@ -72,10 +72,6 @@ ifneq ($(XWAYLAND),)
 SRC += $(SRCDIR)/xwayland.c
 endif
 OBJ = $(SRC:$(SRCDIR)/%.c=$(BUILDDIR)/%.o)
-
-# Vendored third-party sources, built without the dev warning flags.
-EXTSRC = $(EXTDIR)/cJSON.c
-EXTOBJ = $(EXTSRC:$(EXTDIR)/%.c=$(BUILDDIR)/external/%.o)
 
 # wayland-scanner is a tool which generates C headers and rigging for Wayland
 # protocols, which are specified in XML. wlroots requires you to rig these up
@@ -99,9 +95,9 @@ vpath %.xml protocols \
 
 all: g0wm
 
-g0wm: $(OBJ) $(EXTOBJ)
+g0wm: $(OBJ)
 	@$(MESS) '[$(GREEN)LINKER$(RESET)] %s\n' 'Linking $@'
-	$(Q)$(CC) $(CFLAGS) $(LDFLAGS) $(OBJ) $(EXTOBJ) $(LDLIBS) -o $@
+	$(Q)$(CC) $(CFLAGS) $(LDFLAGS) $(OBJ) $(LDLIBS) -o $@
 
 # header deps come from the .d files, the generated headers just need to exist
 $(BUILDDIR)/%.o: $(SRCDIR)/%.c config.mk | $(GENHDR)
@@ -109,12 +105,7 @@ $(BUILDDIR)/%.o: $(SRCDIR)/%.c config.mk | $(GENHDR)
 	@mkdir -p $(@D)
 	$(Q)$(CC) $(CPPFLAGS) $(G0WMCFLAGS) -c $< -o $@
 
-$(BUILDDIR)/external/%.o: $(EXTDIR)/%.c config.mk
-	@$(MESS) '[$(GREEN)COMPILER$(RESET)] %s\n' 'Compiling $@'
-	@mkdir -p $(@D)
-	$(Q)$(CC) $(CPPFLAGS) $(CFLAGS) -MMD -MP -c $< -o $@
-
--include $(OBJ:.o=.d) $(EXTOBJ:.o=.d)
+-include $(OBJ:.o=.d)
 
 # rewritten only when the version changes
 $(BUILDDIR)/version: FORCE
@@ -163,26 +154,26 @@ TESTCFG = $(BUILDDIR)/test-config
 
 test: g0wm
 	@rm -rf $(TESTCFG)
-	@XDG_CONFIG_HOME=$(TESTCFG) ./g0wm -c >$(TESTCFG).json 2>/dev/null
-	@cmp -s $(TESTCFG).json $(TESTCFG)/g0wm/settings.json || \
+	@XDG_CONFIG_HOME=$(TESTCFG) ./g0wm -c >$(TESTCFG).out 2>/dev/null
+	@cmp -s $(TESTCFG).out $(TESTCFG)/g0wm/config || \
 		{ echo 'what -c wrote is not what it reads back' >&2; exit 1; }
 	@out=`XDG_CONFIG_HOME=$(TESTCFG) ./g0wm -c 2>&1 >/dev/null`; \
-	case $$out in *"is missing"*|*"is not a setting"*|*"should be"*) \
+	case $$out in *"config:"*) \
 		printf '%s\n' "$$out" >&2; \
-		echo 'a fresh settings.json did not pass its own check' >&2; exit 1 ;; \
+		echo 'a fresh config did not pass its own check' >&2; exit 1 ;; \
 	esac
-	@sed 's/"borderpx":\([^0-9]*\)[0-9]*/"borderpx":\17/; s/"showbar"/"shobwar"/' \
-		$(TESTCFG)/g0wm/settings.json >$(TESTCFG)/t \
-		&& mv $(TESTCFG)/t $(TESTCFG)/g0wm/settings.json
-	@out=`XDG_CONFIG_HOME=$(TESTCFG) ./g0wm -c 2>&1 >$(TESTCFG).json`; \
+	@sed 's/borderpx [0-9]*/borderpx 7/; s/showbar/shobwar/' \
+		$(TESTCFG)/g0wm/config >$(TESTCFG)/t \
+		&& mv $(TESTCFG)/t $(TESTCFG)/g0wm/config
+	@out=`XDG_CONFIG_HOME=$(TESTCFG) ./g0wm -c 2>&1 >$(TESTCFG).out`; \
 	case $$out in \
-	*"bar.showbar is missing"*"bar.shobwar is not a setting"*) ;; \
+	*"bar.shobwar is not a setting"*) ;; \
 	*) printf '%s\n' "$$out" >&2; \
-		echo 'a damaged settings.json went unreported' >&2; exit 1 ;; \
+		echo 'a damaged config went unreported' >&2; exit 1 ;; \
 	esac
-	@grep -q '"borderpx":[^0-9]*7' $(TESTCFG).json || \
+	@grep -q 'borderpx 7' $(TESTCFG).out || \
 		{ echo 'a setting read from the file was not applied' >&2; exit 1; }
-	@$(MESS) '[$(GREEN)TEST$(RESET)] %s\n' 'settings.json round trip ok'
+	@$(MESS) '[$(GREEN)TEST$(RESET)] %s\n' 'config round trip ok'
 
 clean:
 	@$(MESS) '[$(RED)CLEANER$(RESET)] %s\n' 'Cleaning...'
@@ -193,7 +184,7 @@ clean:
 dist:
 	git archive --prefix=g0wm-$(VERSION)/ -o g0wm-$(VERSION).tar.gz HEAD
 
-# g0wm -c writes settings.json: only the binary knows which features it has.
+# g0wm -c writes the config: only the binary knows which features it has.
 # not for a staged install or root, it would land in the wrong home
 install: g0wm
 	@$(MESS) '[$(YELLOW)INSTALL$(RESET)] %s\n' 'Starting...'
