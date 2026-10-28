@@ -564,6 +564,7 @@ void setfloating(Client* c, int floating)
     if (!c->mon || !client_surface(c)->mapped ||
         !c->mon->lt[c->mon->sellt]->arrange)
         return;
+    textinputarrange();
     wlr_scene_node_reparent(
         &c->scene->node,
         layers[c->isfullscreen || (p && p->isfullscreen) ? LyrFS

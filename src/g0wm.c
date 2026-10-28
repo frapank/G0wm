@@ -63,12 +63,16 @@ static struct wl_listener cursor_touch_up = { .notify = touchup };
 static struct wl_listener gpu_reset = { .notify = gpureset };
 static struct wl_listener keyboard_focus_change = { .notify =
                                                         padkeyboardfocus };
+static struct wl_listener text_input_focus_change = { .notify =
+                                                          textinputfocus };
 static struct wl_listener layout_change = { .notify = updatemons };
 static struct wl_listener new_capture_request = { .notify = capturetoplevel };
 static struct wl_listener new_idle_inhibitor = { .notify =
                                                      createidleinhibitor };
 static struct wl_listener new_input_device = { .notify = inputdevice };
+static struct wl_listener new_input_method = { .notify = createinputmethod };
 static struct wl_listener new_kb_inhibitor = { .notify = createkbinhibitor };
+static struct wl_listener new_text_input = { .notify = createtextinput };
 static struct wl_listener new_virtual_keyboard = { .notify = virtualkeyboard };
 static struct wl_listener new_virtual_pointer = { .notify = virtualpointer };
 static struct wl_listener new_pointer_constraint = {
@@ -286,9 +290,12 @@ static void cleanuplisteners(void)
     wl_list_remove(&cursor_touch_up.link);
     wl_list_remove(&gpu_reset.link);
     wl_list_remove(&keyboard_focus_change.link);
+    wl_list_remove(&text_input_focus_change.link);
     wl_list_remove(&new_idle_inhibitor.link);
     wl_list_remove(&layout_change.link);
     wl_list_remove(&new_input_device.link);
+    wl_list_remove(&new_input_method.link);
+    wl_list_remove(&new_text_input.link);
     wl_list_remove(&new_virtual_keyboard.link);
     wl_list_remove(&new_virtual_pointer.link);
     wl_list_remove(&new_pointer_constraint.link);
@@ -767,9 +774,17 @@ static void setup(void)
     wl_signal_add(&seat->events.start_drag, &start_drag);
     wl_signal_add(&seat->keyboard_state.events.focus_change,
                   &keyboard_focus_change);
+    wl_signal_add(&seat->keyboard_state.events.focus_change,
+                  &text_input_focus_change);
 
     kb_group = createkeyboardgroup();
     wl_list_init(&kb_group->destroy.link);
+
+    wl_signal_add(&wlr_text_input_manager_v3_create(dpy)->events.new_text_input,
+                  &new_text_input);
+    wl_signal_add(
+        &wlr_input_method_manager_v2_create(dpy)->events.new_input_method,
+        &new_input_method);
 
     output_mgr = wlr_output_manager_v1_create(dpy);
     wl_signal_add(&output_mgr->events.apply, &output_mgr_apply);
