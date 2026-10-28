@@ -79,7 +79,7 @@ method connects.
   (`keypress` in `input.c`).
 - [x] Place the candidate popup next to the text cursor, clamped to the
   monitor.
-- [ ] Test with fcitx5 and with an input-method keyboard such as squeekboard,
+- [x] Test with fcitx5 and with an input-method keyboard such as squeekboard,
   which then opens on its own when a text field is touched. Chromium and
   Electron need `--enable-wayland-ime`.
 
