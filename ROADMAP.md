@@ -71,15 +71,15 @@ Lets the compositor bridge apps (text-input) and input methods
 pickers, keyboards that open by themselves. Nothing changes until an input
 method connects.
 
-- [ ] Add `src/textinput.c` with the two managers.
-- [ ] Make the active text-input follow the keyboard focus (enter/leave).
-- [ ] Relay state between them: surrounding text, cursor rectangle and content
+- [x] Add `src/textinput.c` with the two managers.
+- [x] Make the active text-input follow the keyboard focus (enter/leave).
+- [x] Relay state between them: surrounding text, cursor rectangle and content
   type from the app, preedit and commit strings from the input method.
-- [ ] Hand the keys to the input method while it holds a keyboard grab
+- [x] Hand the keys to the input method while it holds a keyboard grab
   (`keypress` in `input.c`).
-- [ ] Place the candidate popup next to the text cursor, clamped to the
+- [x] Place the candidate popup next to the text cursor, clamped to the
   monitor.
-- [ ] Test with fcitx5 and with an input-method keyboard such as squeekboard,
+- [x] Test with fcitx5 and with an input-method keyboard such as squeekboard,
   which then opens on its own when a text field is touched. Chromium and
   Electron need `--enable-wayland-ime`.
 

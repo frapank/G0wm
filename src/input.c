@@ -803,6 +803,9 @@ static void keypress(struct wl_listener* listener, void* data)
     if (handled)
         return;
 
+    if (textinputkey(group, event))
+        return;
+
     wlr_seat_set_keyboard(seat, &group->wlr_group->keyboard);
     /* Pass unhandled keycodes along to the client. */
     wlr_seat_keyboard_notify_key(
@@ -814,6 +817,9 @@ static void keypressmod(struct wl_listener* listener, void* data)
     /* This event is raised when a modifier key, such as shift or alt, is
      * pressed. We simply communicate this to the client. */
     KeyboardGroup* group = wl_container_of(listener, group, modifiers);
+
+    if (textinputmodifiers(group))
+        return;
 
     wlr_seat_set_keyboard(seat, &group->wlr_group->keyboard);
     /* Send modifiers to the client. */
@@ -1265,6 +1271,7 @@ void virtualkeyboard(struct wl_listener* listener, void* data)
     struct wlr_virtual_keyboard_v1* kb = data;
     /* virtual keyboards shouldn't share keyboard group */
     KeyboardGroup* group = createkeyboardgroup();
+    group->vkb = kb;
     /* Set the keymap to match the group keymap */
     wlr_keyboard_set_keymap(&kb->keyboard, group->wlr_group->keyboard.keymap);
     LISTEN(&kb->keyboard.base.events.destroy,
