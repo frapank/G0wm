@@ -64,7 +64,7 @@ SRC = $(SRCDIR)/g0wm.c $(SRCDIR)/bar.c $(SRCDIR)/buffer.c $(SRCDIR)/client.c \
 	$(SRCDIR)/magnifier.c $(SRCDIR)/monitor.c $(SRCDIR)/opacity.c \
 	$(SRCDIR)/util.c $(SRCDIR)/dbus.c $(SRCDIR)/settings.c \
 	$(SRCDIR)/notify.c $(SRCDIR)/runner.c $(SRCDIR)/tablet.c \
-	$(SRCDIR)/toplevel.c $(SRCDIR)/traypopup.c \
+	$(SRCDIR)/textinput.c $(SRCDIR)/toplevel.c $(SRCDIR)/traypopup.c \
 	$(SRCDIR)/systray/watcher.c $(SRCDIR)/systray/tray.c \
 	$(SRCDIR)/systray/item.c $(SRCDIR)/systray/icon.c \
 	$(SRCDIR)/systray/menu.c $(SRCDIR)/systray/helpers.c

@@ -48,6 +48,7 @@
 #include <wlr/types/wlr_idle_inhibit_v1.h>
 #include <wlr/types/wlr_idle_notify_v1.h>
 #include <wlr/types/wlr_input_device.h>
+#include <wlr/types/wlr_input_method_v2.h>
 #include <wlr/types/wlr_keyboard.h>
 #include <wlr/types/wlr_keyboard_group.h>
 #include <wlr/types/wlr_keyboard_shortcuts_inhibit_v1.h>
@@ -77,6 +78,7 @@
 #include <wlr/types/wlr_tablet_tool.h>
 #include <wlr/types/wlr_tablet_v2.h>
 #include <wlr/types/wlr_tearing_control_v1.h>
+#include <wlr/types/wlr_text_input_v3.h>
 #include <wlr/types/wlr_touch.h>
 #include <wlr/types/wlr_viewporter.h>
 #include <wlr/types/wlr_virtual_keyboard_v1.h>
@@ -317,6 +319,8 @@ typedef struct {
     struct wl_event_source* key_repeat_source;
 
     struct wl_listener modifiers;
+    struct wlr_virtual_keyboard_v1* vkb; /* NULL for the physical keyboards */
+    uint32_t imkeys[KEY_CNT / 32]; /* held keys whose press went to the IM */
     struct wl_listener key;
     struct wl_listener destroy;
 } KeyboardGroup;
@@ -469,6 +473,7 @@ void closemon(Monitor* m);
 void createdecoration(struct wl_listener* listener, void* data);
 void createkbinhibitor(struct wl_listener* listener, void* data);
 KeyboardGroup* createkeyboardgroup(void);
+void createinputmethod(struct wl_listener* listener, void* data);
 void createlayersurface(struct wl_listener* listener, void* data);
 void createmon(struct wl_listener* listener, void* data);
 void createnotify(struct wl_listener* listener, void* data);
@@ -478,6 +483,7 @@ void createtablet(struct wlr_tablet* wlr_tablet);
 void createtabletpad(struct wlr_tablet_pad* wlr_pad);
 void createtouch(struct wlr_touch* wlr_touch);
 void cornerclear(uint32_t* px, int w, int h, int r);
+void createtextinput(struct wl_listener* listener, void* data);
 void cornercut(uint32_t* px, int w, int h, int r);
 int cornerradius(Client* c);
 void cursorframe(struct wl_listener* listener, void* data);
@@ -602,6 +608,10 @@ Client* tabtop(Monitor* m);
 void tagmon(const Arg* arg);
 void tile(Monitor* m);
 void togglebar(const Arg* arg);
+void textinputarrange(void);
+void textinputfocus(struct wl_listener* listener, void* data);
+int textinputkey(KeyboardGroup* group, struct wlr_keyboard_key_event* event);
+int textinputmodifiers(KeyboardGroup* group);
 void togglefloating(const Arg* arg);
 void togglefullscreen(const Arg* arg);
 void togglegaps(const Arg* arg);

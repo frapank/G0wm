@@ -542,6 +542,7 @@ void resize(Client* c, struct wlr_box geo, int interact)
     wlr_scene_subsurface_tree_set_clip(&c->scene_surface->node, &clip);
 
     settitle(c);
+    textinputarrange();
 }
 
 void ringbell(struct wl_listener* listener, void* data)
