@@ -137,6 +137,7 @@
       ((hex >> 8) & 0xFF) / 255.0f,                                            \
       (hex & 0xFF) / 255.0f }
 #define OPACITY_MIN 0.1f /* floor for the opacity keybindings */
+#define MAPWAIT_MS 200   /* longest a new client may take to fit its tile */
 #define END(A) ((A) + LENGTH(A))
 #define TAGMASK ((1u << ntags) - 1)
 #define LISTEN(E, L, H) wl_signal_add((E), ((L)->notify = (H), (L)))
@@ -295,6 +296,7 @@ typedef struct {
     float opacity_unfocus; /* used while it does not */
     int borderscheme;      /* scheme its border is drawn in, to redo it */
     uint32_t resize;       /* configure serial of a pending resize */
+    struct wl_event_source* mapwait; /* set while a new client is held back */
     struct wlr_foreign_toplevel_handle_v1* ftl;
     struct wlr_ext_foreign_toplevel_handle_v1* eftl;
     struct wlr_ext_image_capture_source_v1* capture;
