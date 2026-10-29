@@ -48,6 +48,15 @@ X11 support also requires: libxcb, libxcb-icccm and Xwayland.
 make install         # g0wm into ~/.local/bin
 ```
 
+wlroots 0.20 and [libscfg][scfg] are not packaged by every distribution. If you
+installed them in their own prefix, `./configure` cannot find them on its own:
+point it there and it also records an rpath in the binary, so `g0wm` finds the
+libraries at run time without `LD_LIBRARY_PATH` or `ldconfig`:
+
+```sh
+./configure --wlroots-prefix=/path/to/prefix
+```
+
 Run `./configure --help` to see the other available options such as
 toolchain settings, `--debug` and `--native`.
 
