@@ -75,6 +75,7 @@ defaults() {
 	checks=yes
 	quiet=no
 	failed=no
+	missing=
 }
 
 options() { # "$@" -> every setting above, overridden from the command line
@@ -150,8 +151,8 @@ configure_flags() { # package list and compiler/linker flags from the options
 	[ -n "$linker" ] && extra_ldflags="$extra_ldflags -fuse-ld=$linker"
 }
 
-# wlroots outside the system paths: resolve it here so make does not need the
-# search path, and pin it with an rpath to keep the loader off the system copy.
+# wlroots outside the system paths: resolve it here, pass the search path to
+# make through PKG_CONFIG, and pin it with an rpath.
 resolve_wlroots_prefix() {
 	pkg_config_env=
 	if [ -n "$wlroots_prefix" ]; then
@@ -171,7 +172,18 @@ probe() { # description, then the command that must succeed
 	else
 		printf 'checking %s... no\n' "$desc" >&2
 		failed=yes
+		missing="$missing $desc"
 	fi
+}
+
+missing_hint() {
+	printf '\nconfigure: missing:%s\n' "$missing" >&2
+	cat >&2 <<EOF
+If they are installed, pkg-config just cannot see them: pass the prefix of
+wlroots and libscfg with --wlroots-prefix=DIR (it also pins an rpath, so
+g0wm finds the libraries at run time), or add their pkgconfig directory to
+PKG_CONFIG_PATH. Otherwise install them, see "Build" in the README.
+EOF
 }
 
 run_checks() {
@@ -187,7 +199,7 @@ run_checks() {
 		for p in $pkgs $wlr_pkg wayland-scanner wayland-protocols; do
 			probe "for $p" "$pkg_config" --exists "$p"
 		done
-		[ "$failed" = no ] || die 'missing dependencies, see above'
+		[ "$failed" = no ] || { missing_hint; die 'missing dependencies, see above'; }
 	fi
 }
 
@@ -197,6 +209,10 @@ resolve_wlroots_flags() {
 		wlr_libs=$($pkg_config --libs "$wlr_pkg") || die "cannot query $wlr_pkg"
 		wlr_libdir=$($pkg_config --variable=libdir "$wlr_pkg")
 		wlr_libs="-Wl,-rpath,${wlr_libdir:-$wlroots_prefix/lib} $wlr_libs"
+		# libscfg often shares the prefix
+		scfg_libdir=$($pkg_config --variable=libdir scfg 2>/dev/null)
+		[ -n "$scfg_libdir" ] && [ "$scfg_libdir" != "$wlr_libdir" ] &&
+			wlr_libs="-Wl,-rpath,$scfg_libdir $wlr_libs"
 	else
 		wlr_incs="\$(shell \$(PKG_CONFIG) --cflags $wlr_pkg)"
 		wlr_libs="\$(shell \$(PKG_CONFIG) --libs $wlr_pkg)"
@@ -214,7 +230,7 @@ _VERSION = $_version
 VERSION  = \$(shell git describe --tags --dirty 2>/dev/null || echo \$(_VERSION))
 
 CC = $cc
-PKG_CONFIG = $pkg_config
+PKG_CONFIG = ${pkg_config_env:+PKG_CONFIG_PATH=$PKG_CONFIG_PATH }$pkg_config
 
 # paths
 PREFIX = $prefix
