@@ -20,7 +20,9 @@ void arrange(Monitor* m)
     wl_list_for_each(c, &clients, link)
     {
         if (c->mon == m) {
-            wlr_scene_node_set_enabled(&c->scene->node, VISIBLEON(c, m));
+            /* mapwaitdone() shows a client held back by mapnotify() */
+            wlr_scene_node_set_enabled(&c->scene->node,
+                                       VISIBLEON(c, m) && !c->mapwait);
             /* re-enable content tabbed() may have hidden for a non-top tab */
             wlr_scene_node_set_enabled(&c->scene_surface->node, 1);
             client_set_suspended(c, !VISIBLEON(c, m));

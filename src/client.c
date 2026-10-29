@@ -6,13 +6,13 @@
 #include "g0wm.h"
 
 /* function declarations */
-/* function declarations */
 static void applybounds(Client* c, struct wlr_box* bbox);
 static void applyrules(Client* c);
 static void commitnotify(struct wl_listener* listener, void* data);
 static void commitpopup(struct wl_listener* listener, void* data);
 static void destroydecoration(struct wl_listener* listener, void* data);
 static void maximizenotify(struct wl_listener* listener, void* data);
+static int mapwaitdone(void* data);
 static Client* modaltop(Client* c);
 static void requestdecorationmode(struct wl_listener* listener, void* data);
 static void seturgent(Client* c);
@@ -109,6 +109,9 @@ static void commitnotify(struct wl_listener* listener, void* data)
     /* mark a pending resize as completed */
     if (c->resize && c->resize <= c->surface.xdg->current.configure_serial)
         c->resize = 0;
+
+    if (c->mapwait && !c->resize)
+        mapwaitdone(c);
 }
 
 static void commitpopup(struct wl_listener* listener, void* data)
@@ -441,6 +444,14 @@ void mapnotify(struct wl_listener* listener, void* data)
         resize(c, c->geom, c->isfloating && !c->isfullscreen);
     }
 
+    /* the first buffer has the client's own size, not its tile's: stay hidden
+     * until the resize lands or MAPWAIT_MS passes */
+    if (c->resize) {
+        c->mapwait = wl_event_loop_add_timer(event_loop, mapwaitdone, c);
+        wl_event_source_timer_update(c->mapwait, MAPWAIT_MS);
+        wlr_scene_node_set_enabled(&c->scene->node, 0);
+    }
+
     drawbars();
     toplevelmap(c);
 
@@ -452,6 +463,17 @@ unset_fullscreen:
             (w->tags & c->tags))
             setfullscreen(w, 0);
     }
+}
+
+static int mapwaitdone(void* data)
+{
+    Client* c = data;
+
+    wl_event_source_remove(c->mapwait);
+    c->mapwait = NULL;
+    if (c->mon)
+        wlr_scene_node_set_enabled(&c->scene->node, VISIBLEON(c, c->mon));
+    return 0;
 }
 
 static void maximizenotify(struct wl_listener* listener, void* data)
@@ -657,6 +679,10 @@ void unmapnotify(struct wl_listener* listener, void* data)
     int i;
 
     toplevelunmap(c);
+    if (c->mapwait) {
+        wl_event_source_remove(c->mapwait);
+        c->mapwait = NULL;
+    }
     if (c == grabc) {
         cursor_mode = CurNormal;
         grabc = NULL;
