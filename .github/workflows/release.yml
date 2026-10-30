@@ -1,0 +1,30 @@
+name: Release
+
+on:
+  release:
+    types: [published]
+
+permissions:
+  contents: write
+
+jobs:
+  tarball:
+    name: binary tarball
+    runs-on: ubuntu-latest
+    container: archlinux:base-devel
+    steps:
+      - name: Install git for the checkout
+        run: pacman -Syu --noconfirm --needed git github-cli
+      - uses: actions/checkout@v5
+        with:
+          fetch-depth: 0
+      - name: Let git read the checkout, or the version falls back to _VERSION
+        run: git config --global --add safe.directory "$GITHUB_WORKSPACE"
+      - uses: ./.github/actions/arch-deps
+      - run: make -j"$(nproc)"
+      - run: make tarball
+      - name: Attach the tarball to the release
+        env:
+          GH_TOKEN: ${{ github.token }}
+          TAG: ${{ github.event.release.tag_name }}
+        run: gh release upload "$TAG" build/pkg/g0wm-*-linux-*.tar.gz --repo "$GITHUB_REPOSITORY" --clobber
