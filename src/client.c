@@ -436,8 +436,7 @@ void mapnotify(struct wl_listener* listener, void* data)
         applyrules(c);
     }
 
-    if ((th = titleheight(c)) > 0 &&
-        (c->isfloating || !c->mon->lt[c->mon->sellt]->arrange)) {
+    if ((th = titleheight(c)) > 0 && c->isfloating) {
         c->geom.height += th;
         c->prev.height += th;
         c->prev.y -= th / 2;
@@ -583,9 +582,7 @@ void setfloating(Client* c, int floating)
 {
     Client* p = client_get_parent(c);
     c->isfloating = floating;
-    /* If in floating layout do not change the client's layer */
-    if (!c->mon || !client_surface(c)->mapped ||
-        !c->mon->lt[c->mon->sellt]->arrange)
+    if (!c->mon || !client_surface(c)->mapped)
         return;
     wlr_scene_node_reparent(
         &c->scene->node,

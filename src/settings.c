@@ -126,7 +126,7 @@ static const Enum loglevels[] = { { WLR_SILENT, "silent" },
 static const struct {
     const char* name;
     void (*arrange)(Monitor*);
-} arranges[] = { { "tile", tile }, { "float", NULL }, { "tabbed", tabbed } };
+} arranges[] = { { "tile", tile }, { "tabbed", tabbed } };
 
 /* which member of the Arg a binding uses: 'i' int, 'u' unsigned, 'f' float,
  * 'v' an execvp() list, 'l' a layout symbol, 'c' a drag mode, 0 none */
@@ -248,7 +248,7 @@ static const char* arrangename(void (*fn)(Monitor*))
     for (i = 0; i < LENGTH(arranges); i++)
         if (arranges[i].arrange == fn)
             return arranges[i].name;
-    return "float";
+    return "tile";
 }
 
 static uint32_t packrgba(const float c[static 4])
@@ -624,7 +624,7 @@ static void wlayouts(void)
 {
     size_t i;
 
-    note("layout", "layout: symbol, then tile, float or tabbed");
+    note("layout", "layout: symbol, then tile or tabbed");
     for (i = 0; i < nlayouts; i++) {
         start("layout");
         word(layouts[i].symbol);
@@ -1251,14 +1251,16 @@ static void applylayouts(const struct scfg_block* b)
         if (strcmp(d->name, "layout"))
             continue;
         out[n].symbol = param(d, 0) ? param(d, 0) : "[ ]";
-        name = param(d, 1) ? param(d, 1) : "float";
+        name = param(d, 1) ? param(d, 1) : "tile";
         for (j = 0; j < LENGTH(arranges); j++)
             if (!strcmp(arranges[j].name, name))
                 break;
-        if (j < LENGTH(arranges))
+        if (j < LENGTH(arranges)) {
             out[n].arrange = arranges[j].arrange;
-        else
-            warn("%s is not a layout, using float", name);
+        } else {
+            out[n].arrange = tile;
+            warn("%s is not a layout, using tile", name);
+        }
         n++;
     }
     layouts = out;

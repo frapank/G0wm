@@ -81,7 +81,6 @@ uint32_t titleclosecolor  = 0xff5f57ff;
 
 static Layout layouts_def[] = {
     { "[ ]", tile },
-    { "< >", NULL },
     { "|||", tabbed },
 };
 Layout* layouts = layouts_def;
@@ -231,7 +230,7 @@ static Key keys_def[] = {
 	{ MODKEY|WLR_MODIFIER_SHIFT, XKB_KEY_g,           togglegaps,       {0} },
 	{ MODKEY|WLR_MODIFIER_SHIFT, XKB_KEY_b,           togglebar,        {0} },
 	{ MODKEY|WLR_MODIFIER_SHIFT, XKB_KEY_t,           toggletitlebar,   {0} },
-	{ MODKEY,                    XKB_KEY_t,           toggletabbed,     {.v = &layouts_def[2]} },
+	{ MODKEY,                    XKB_KEY_t,           toggletabbed,     {.v = &layouts_def[1]} },
 	{ MODKEY|WLR_MODIFIER_SHIFT, XKB_KEY_f,           togglefullscreen, {0} },
 	{ MODKEY|WLR_MODIFIER_SHIFT, XKB_KEY_r,           reloadsettings,   {0} },
 
@@ -312,7 +311,7 @@ size_t nkeys = LENGTH(keys_def);
 
 static Button buttons_def[] = {
 	{ ClkLtSymbol, 0,      BTN_LEFT,   setlayout,      {.v = &layouts_def[0]} },
-	{ ClkLtSymbol, 0,      BTN_RIGHT,  setlayout,      {.v = &layouts_def[2]} },
+	{ ClkLtSymbol, 0,      BTN_RIGHT,  setlayout,      {.v = &layouts_def[1]} },
 
 	{ ClkTitle,    0,      BTN_MIDDLE, zoom,           {0} },
 	{ ClkTitle,    0,      BTN_LEFT,   notifyopen,     {0} },
