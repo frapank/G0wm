@@ -34,7 +34,8 @@ void arrange(Monitor* m)
 
     snprintf(m->ltsymbol, LENGTH(m->ltsymbol), "%s", m->lt[m->sellt]->symbol);
 
-    /* Keep floating clients (except fullscreen and unmanaged) above the tiles */
+    /* Keep floating clients (except fullscreen and unmanaged) above the tiles
+     */
     wl_list_for_each(c, &clients, link)
     {
         if (c->mon != m || c->scene->node.parent == layers[LyrFS])
