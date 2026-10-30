@@ -77,7 +77,7 @@ static void configurex11(struct wl_listener* listener, void* data)
         return;
     }
 
-    if ((c->isfloating && c != grabc) || !c->mon->lt[c->mon->sellt]->arrange) {
+    if (c->isfloating && c != grabc) {
         resize(c,
                (struct wlr_box){ .x = event->x - c->bw,
                                  .y = event->y - c->bw,

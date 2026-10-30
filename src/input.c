@@ -1085,10 +1085,9 @@ static void grab(Client* c, unsigned int mode)
     grabc = c;
 
     /* Float the window and tell motionnotify to grab it - except when moving a
-     * tiled client under a real layout, which stays tiled and is swapped with
-     * the tile it is dragged onto instead. */
-    if (mode != CurMove || c->isfloating || !c->mon ||
-        !c->mon->lt[c->mon->sellt]->arrange)
+     * tiled client, which stays tiled and is swapped with the tile it is
+     * dragged onto instead. */
+    if (mode != CurMove || c->isfloating || !c->mon)
         setfloating(c, 1);
     switch (cursor_mode = mode) {
         case CurMove:

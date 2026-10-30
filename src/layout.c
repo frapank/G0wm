@@ -34,23 +34,18 @@ void arrange(Monitor* m)
 
     snprintf(m->ltsymbol, LENGTH(m->ltsymbol), "%s", m->lt[m->sellt]->symbol);
 
-    /* We move all clients (except fullscreen and unmanaged) to LyrTile while
-     * in floating layout to avoid "real" floating clients be always on top */
+    /* Keep floating clients (except fullscreen and unmanaged) above the tiles */
     wl_list_for_each(c, &clients, link)
     {
         if (c->mon != m || c->scene->node.parent == layers[LyrFS])
             continue;
 
         wlr_scene_node_reparent(&c->scene->node,
-                                (!m->lt[m->sellt]->arrange && c->isfloating)
-                                    ? layers[LyrTile]
-                                : (m->lt[m->sellt]->arrange && c->isfloating)
-                                    ? layers[LyrFloat]
-                                    : c->scene->node.parent);
+                                c->isfloating ? layers[LyrFloat]
+                                              : c->scene->node.parent);
     }
 
-    if (m->lt[m->sellt]->arrange)
-        m->lt[m->sellt]->arrange(m);
+    m->lt[m->sellt]->arrange(m);
     motionnotify(0, NULL, 0, 0, 0, 0);
     checkidleinhibitor(NULL);
     warpcursor(focustop(selmon));
@@ -182,7 +177,7 @@ void setmfact(const Arg* arg)
 {
     float f;
 
-    if (!arg || !selmon || !selmon->lt[selmon->sellt]->arrange)
+    if (!arg || !selmon)
         return;
     f = arg->f < 1.0f ? arg->f + selmon->mfact : arg->f - 1.0f;
     if (f < 0.1 || f > 0.9)
@@ -428,8 +423,7 @@ void zoom(const Arg* arg)
 {
     Client *c, *sel = focustop(selmon);
 
-    if (!sel || !selmon || !selmon->lt[selmon->sellt]->arrange ||
-        sel->isfloating)
+    if (!sel || !selmon || sel->isfloating)
         return;
 
     /* Search for the first tiled window that is not sel, marking sel as
