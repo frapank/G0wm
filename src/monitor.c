@@ -679,11 +679,10 @@ skip:
     wlr_scene_output_send_frame_done(m->scene_output, &now);
 
     /* a client held back by mapnotify() still needs frame callbacks */
-    wl_list_for_each(c, &clients, link) if (c->mon == m &&
-                                            client_surface(c)->mapped &&
-                                            ((c->isfullscreen &&
-                                              !VISIBLEON(c, m)) ||
-                                             c->mapwait))
+    wl_list_for_each(
+        c, &clients, link) if (c->mon == m && client_surface(c)->mapped &&
+                               ((c->isfullscreen && !VISIBLEON(c, m)) ||
+                                c->mapwait))
         wlr_surface_send_frame_done(client_surface(c), &now);
 
     wlr_output_state_finish(&pending);
