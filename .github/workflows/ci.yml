@@ -80,6 +80,28 @@ jobs:
           make install BINDIR="$PWD/_install"
           test -x _install/g0wm
 
+  packages:
+    name: packages
+    runs-on: ubuntu-latest
+    container: archlinux:base-devel
+    steps:
+      - name: Install git for the checkout
+        run: pacman -Syu --noconfirm --needed git
+      - uses: actions/checkout@v5
+        with:
+          fetch-depth: 0
+      - uses: ./.github/actions/arch-deps
+      - name: Install the packaging tools
+        run: pacman -S --noconfirm --needed dpkg rpm-tools
+      - run: make -j"$(nproc)"
+      - name: Build the tarball, .deb and .rpm
+        run: make packages MAINTAINER="g0wm <noreply@github.com>"
+      - uses: actions/upload-artifact@v4
+        with:
+          name: g0wm-packages
+          path: build/pkg/g0wm*
+          if-no-files-found: error
+
   format:
     name: clang-format
     runs-on: ubuntu-latest
