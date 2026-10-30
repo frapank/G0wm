@@ -1,0 +1,20 @@
+%global debug_package %{nil}
+
+Name:           g0wm
+Version:        @VERSION@
+Release:        1
+Summary:        A personal Wayland desktop environment
+License:        GPL-3.0-or-later
+BuildArch:      @ARCH@
+
+%description
+g0wm is a dwl-based Wayland compositor with a bar, a system tray and
+a tiling layout.
+
+%install
+cp -a @STAGE@/. %{buildroot}/
+
+%files
+/usr/bin/g0wm
+/usr/share/man/man1/g0wm.1*
+/usr/share/wayland-sessions/g0wm.desktop

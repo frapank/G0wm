@@ -1,0 +1,12 @@
+Package: g0wm
+Version: @VERSION@
+Architecture: @ARCH@
+Maintainer: @MAINTAINER@
+Installed-Size: @SIZE@
+Depends: @DEPENDS@
+Recommends: xwayland
+Section: x11
+Priority: optional
+Description: A personal Wayland desktop environment
+ g0wm is a dwl-based Wayland compositor with a bar, a system tray and
+ a tiling layout.
