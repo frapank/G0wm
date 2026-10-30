@@ -90,6 +90,8 @@ jobs:
       - uses: actions/checkout@v5
         with:
           fetch-depth: 0
+      - name: Let git read the checkout, or the version falls back to _VERSION
+        run: git config --global --add safe.directory "$GITHUB_WORKSPACE"
       - uses: ./.github/actions/arch-deps
       - name: Install the packaging tools
         run: pacman -S --noconfirm --needed dpkg rpm-tools
