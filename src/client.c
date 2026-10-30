@@ -470,8 +470,11 @@ static int mapwaitdone(void* data)
 
     wl_event_source_remove(c->mapwait);
     c->mapwait = NULL;
-    if (c->mon)
+    if (c->mon) {
         wlr_scene_node_set_enabled(&c->scene->node, VISIBLEON(c, c->mon));
+        /* drawtitle() skipped the title bar while the client was hidden */
+        drawbar(c->mon);
+    }
     return 0;
 }
 
