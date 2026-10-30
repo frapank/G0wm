@@ -91,7 +91,8 @@ vpath %.xml protocols \
 	$(WAYLAND_PROTOCOLS)/staging/ext-image-copy-capture \
 	$(WAYLAND_PROTOCOLS)/unstable/pointer-constraints
 
-.PHONY: all clean dist install uninstall remove format format-check test FORCE
+.PHONY: all clean dist install uninstall remove format format-check test FORCE \
+	stage tarball deb rpm packages
 
 all: g0wm
 
@@ -200,3 +201,54 @@ uninstall remove:
 	rm -f $(DESTDIR)$(BINDIR)/g0wm $(DESTDIR)$(MANDIR)/man1/g0wm.1 \
 		$(DESTDIR)$(DATADIR)/wayland-sessions/g0wm.desktop
 	@$(MESS) '[$(RED)UNINSTALL$(RESET)] %s\n' 'Done!'
+
+PKGVER  := $(subst -,+,$(patsubst v%,%,$(VERSION)))
+PKGDIR   = $(BUILDDIR)/pkg
+PKGROOT  = $(PKGDIR)/root
+MACHINE := $(shell uname -m)
+DEB_ARCH ?= $(shell dpkg --print-architecture 2>/dev/null || echo amd64)
+MAINTAINER ?= $(shell git config user.name) <$(shell git config user.email)>
+# Debian library names, check them against the release you build for
+DEB_DEPENDS ?= libwlroots-0.20, libwayland-server0, libxkbcommon0, libinput10, \
+	libpixman-1-0, libfcft4, libdbus-1-3, libgdk-pixbuf-2.0-0, libscfg0, \
+	libxcb1, libxcb-icccm4
+
+stage: g0wm
+	@$(MESS) '[$(CYAN)PACKAGE$(RESET)] %s\n' 'Staging $(PKGVER)'
+	rm -rf $(PKGROOT)
+	$(MAKE) install DESTDIR=$(abspath $(PKGROOT)) PREFIX=/usr
+	strip $(PKGROOT)/usr/bin/g0wm
+	@# a strict umask must not leak into the directories the packages ship
+	find $(PKGROOT) -type d -exec chmod 755 {} +
+
+# generic binary: unpack over / (or any prefix), the libraries must be there
+tarball: stage
+	tar --owner=0 --group=0 --numeric-owner -C $(PKGROOT) \
+		-czf $(PKGDIR)/g0wm-$(PKGVER)-linux-$(MACHINE).tar.gz usr
+	@$(MESS) '[$(CYAN)PACKAGE$(RESET)] %s\n' '$(PKGDIR)/g0wm-$(PKGVER)-linux-$(MACHINE).tar.gz'
+
+deb: stage
+	rm -rf $(PKGDIR)/deb
+	cp -a $(PKGROOT) $(PKGDIR)/deb
+	install -d -m755 $(PKGDIR)/deb/DEBIAN
+	sed -e 's|@VERSION@|$(PKGVER)|' -e 's|@ARCH@|$(DEB_ARCH)|' \
+		-e 's|@MAINTAINER@|$(MAINTAINER)|' -e 's|@DEPENDS@|$(DEB_DEPENDS)|' \
+		-e "s|@SIZE@|`du -sk $(PKGROOT)/usr | cut -f1`|" \
+		packaging/deb/control.in >$(PKGDIR)/deb/DEBIAN/control
+	dpkg-deb --root-owner-group -b $(PKGDIR)/deb \
+		$(PKGDIR)/g0wm_$(PKGVER)_$(DEB_ARCH).deb
+	rm -rf $(PKGDIR)/deb
+
+rpm: stage
+	mkdir -p $(PKGDIR)/rpm
+	sed -e 's|@VERSION@|$(PKGVER)|' -e 's|@ARCH@|$(MACHINE)|' \
+		-e 's|@STAGE@|$(abspath $(PKGROOT))|' \
+		packaging/rpm/g0wm.spec.in >$(PKGDIR)/rpm/g0wm.spec
+	rpmbuild -bb --define '_topdir $(abspath $(PKGDIR))/rpm' \
+		$(PKGDIR)/rpm/g0wm.spec
+	cp $(PKGDIR)/rpm/RPMS/*/g0wm-*.rpm $(PKGDIR)/
+
+# the formats this machine has the tools for
+packages: tarball
+	@if command -v dpkg-deb >/dev/null; then $(MAKE) deb; fi
+	@if command -v rpmbuild >/dev/null; then $(MAKE) rpm; fi
