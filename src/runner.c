@@ -17,6 +17,7 @@ static int* runner_match;
 static int runner_nmatch;
 static int runner_sel;
 static int runner_cycling;
+static int* runner_score;
 static struct timespec runner_stamp; /* newest PATH mtime the cache was built
                                         from */
 
@@ -81,7 +82,9 @@ static void runnerbuildcache(void)
     runner_ncmds = w;
 
     if (!(runner_match =
-              realloc(runner_match, MAX(runner_ncmds, 1) * sizeof(int))))
+              realloc(runner_match, MAX(runner_ncmds, 1) * sizeof(int))) ||
+        !(runner_score =
+              realloc(runner_score, MAX(runner_ncmds, 1) * sizeof(int))))
         die("realloc:");
 }
 
@@ -95,17 +98,71 @@ static void runnerfreecache(void)
     runner_sel = 0;
 }
 
+static int runnerfold(int ch, int fold)
+{
+    return fold && ch >= 'A' && ch <= 'Z' ? ch - 'A' + 'a' : ch;
+}
+
+/* 0 when cand doesn't match q. Without runner_fuzzy only a prefix matches,
+ * with it the letters of q just have to show up in order. The start of the
+ * name, the start of a word and letters typed in a row score higher. */
+static int runnerscore(const char* cand, const char* q, int qlen, int fold)
+{
+    int score = 0, run = 0, i = 0, j, clen = (int)strlen(cand);
+
+    if (clen == qlen && !strcmp(cand, q))
+        return 1 << 24;
+    if (!runner_fuzzy)
+        return !strncmp(cand, q, qlen);
+    for (j = 0; cand[j] && i < qlen; j++) {
+        if (runnerfold((unsigned char)cand[j], fold) !=
+            runnerfold((unsigned char)q[i], fold)) {
+            run = 0;
+            continue;
+        }
+        score += 1 + 3 * run;
+        if (j == 0)
+            score += 8;
+        else if (strchr("-_. ", cand[j - 1]))
+            score += 4;
+        run++;
+        i++;
+    }
+    if (i < qlen)
+        return 0;
+    if (j == qlen)
+        score += 20;
+    /* the shorter name wins a tie */
+    return MAX(score * 8 - (clen - qlen), 1);
+}
+
+static int runnerbyscore(const void* a, const void* b)
+{
+    int x = *(const int*)a, y = *(const int*)b;
+
+    if (runner_score[x] != runner_score[y])
+        return runner_score[y] - runner_score[x];
+    return x - y;
+}
+
 static void runnerfilter(void)
 {
-    int i;
+    int i, fold = 1;
+    double calcval;
 
     runner_nmatch = 0;
     runner_sel = 0;
-    if (!runner_len)
+    if (!runner_len || runnercalc(&calcval))
         return;
+    /* an uppercase letter makes the match case sensitive */
+    for (i = 0; i < runner_len; i++)
+        if (runner_buf[i] >= 'A' && runner_buf[i] <= 'Z')
+            fold = 0;
     for (i = 0; i < runner_ncmds; i++)
-        if (!strncmp(runner_cmds[i], runner_buf, runner_len))
+        if ((runner_score[i] =
+                 runnerscore(runner_cmds[i], runner_buf, runner_len, fold)))
             runner_match[runner_nmatch++] = i;
+    qsort(runner_match, runner_nmatch, sizeof(int), runnerbyscore);
 }
 
 static void runnerselect(int step)

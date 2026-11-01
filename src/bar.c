@@ -446,7 +446,8 @@ void drawbar(Monitor* m)
                           runner_placeholder,
                           0);
             } else if (!runner_max_candidates && sug &&
-                       (size_t)runner_len < strlen(sug) && tx < end) {
+                       (size_t)runner_len < strlen(sug) &&
+                       !strncmp(sug, runner_buf, runner_len) && tx < end) {
                 drwl_text(m->drw,
                           tx,
                           0,

@@ -552,6 +552,7 @@ static void wbar(void)
     wint("runner_pillpadding", runner_pillpadding);
     note("runner_pillround", "below 0 follows bartagdotround");
     wnum("runner_pillround", runner_pillround);
+    wbool("runner_fuzzy", runner_fuzzy);
     wclose();
 }
 
@@ -1171,6 +1172,7 @@ static void applybar(const struct scfg_block* b)
     runner_pillpadding = getuint(b, "runner_pillpadding", runner_pillpadding);
     runner_pillround =
         (float)fmin(getnum(b, "runner_pillround", runner_pillround), 1);
+    runner_fuzzy = getbool(b, "runner_fuzzy", runner_fuzzy);
 }
 
 static void applyopacity(const struct scfg_block* b)
