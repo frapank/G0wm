@@ -555,6 +555,7 @@ static void wbar(void)
     wbool("runner_fuzzy", runner_fuzzy);
     note("runner_history_size", "0 for none");
     wint("runner_history_size", runner_history_size);
+    wstr("runner_shell", runner_shell);
     wclose();
 }
 
@@ -1177,6 +1178,7 @@ static void applybar(const struct scfg_block* b)
     runner_fuzzy = getbool(b, "runner_fuzzy", runner_fuzzy);
     runner_history_size =
         getuint(b, "runner_history_size", runner_history_size);
+    runner_shell = getstr(b, "runner_shell", runner_shell);
 }
 
 static void applyopacity(const struct scfg_block* b)
