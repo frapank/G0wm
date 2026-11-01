@@ -15,14 +15,13 @@ static void runnerfreecache(void);
 static int runnerpathstale(void);
 
 /* enums */
-enum { ModeRun, ModeTerm, ModeCalc, ModeSearch, ModeWindow, NumModes };
+enum { ModeRun, ModeTerm, ModeCalc, ModeSearch, ModeWindow, ModeTag, NumModes };
 
 /* variables */
 static const char** runner_prefixes[NumModes] = {
-    [ModeTerm] = &runner_termprefix,
-    [ModeCalc] = &runner_calcprefix,
-    [ModeSearch] = &runner_searchprefix,
-    [ModeWindow] = &runner_windowprefix,
+    [ModeTerm] = &runner_termprefix,     [ModeCalc] = &runner_calcprefix,
+    [ModeSearch] = &runner_searchprefix, [ModeWindow] = &runner_windowprefix,
+    [ModeTag] = &runner_tagprefix,
 };
 static char** runner_cmds;
 static int runner_ncmds;
@@ -413,6 +412,10 @@ static void runnersource(int mode)
             runner_src = (const char**)runner_winlabels;
             runner_nsrc = runner_nwins;
             break;
+        case ModeTag:
+            runner_src = (const char**)tags;
+            runner_nsrc = (int)ntags;
+            break;
         default:
             runner_src = NULL;
             runner_nsrc = 0;
@@ -438,7 +441,7 @@ static void runnerfilter(void)
     runner_sel = 0;
     runnersource(mode);
     /* with nothing typed yet a short list shows all of it */
-    if (!qlen && mode == ModeWindow)
+    if (!qlen && (mode == ModeWindow || mode == ModeTag))
         for (i = 0; i < runner_nsrc; i++)
             runner_match[runner_nmatch++] = i;
     if (!qlen || runnercalc(&calcval))
@@ -892,6 +895,10 @@ static void runnerenter(void)
         case ModeWindow:
             if (sug)
                 runnerfocus(runner_wins[runner_match[runner_sel]]);
+            return;
+        case ModeTag:
+            if (sug)
+                view(&(Arg){ .ui = 1u << runner_match[runner_sel] });
             return;
     }
     /* with the prefix, so a recalled line keeps its mode */
