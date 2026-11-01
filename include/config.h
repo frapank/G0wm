@@ -108,6 +108,7 @@ unsigned int bartagdotsize = 0;
 unsigned int bartagdotgap  = 0;
 float bartagdotwidth       = 3.0f;
 float bartagdotround       = 1.0f;
+unsigned int barurgentpulse = 1200;
 int barltsymbol = 0;
 
 unsigned int barboxradius = 2;
