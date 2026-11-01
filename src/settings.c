@@ -561,6 +561,8 @@ static void wbar(void)
     wstr("runner_termprefix", runner_termprefix);
     note("runner_paths", "searched after $PATH");
     wstr("runner_paths", runner_paths);
+    note("runner_calc_precision", "significant digits, up to 17");
+    wint("runner_calc_precision", runner_calc_precision);
     wclose();
 }
 
@@ -1187,6 +1189,8 @@ static void applybar(const struct scfg_block* b)
     runner_terminal = getstr(b, "runner_terminal", runner_terminal);
     runner_termprefix = getstr(b, "runner_termprefix", runner_termprefix);
     runner_paths = getstr(b, "runner_paths", runner_paths);
+    runner_calc_precision =
+        getuint(b, "runner_calc_precision", runner_calc_precision);
 }
 
 static void applyopacity(const struct scfg_block* b)
