@@ -271,6 +271,7 @@ static const char* const schemenames[] = {
     [SchemeNotifyCrit] = "notifycrit",
     [SchemeRunner] = "runner",
     [SchemeRunnerSuggest] = "runnersuggest",
+    [SchemeRunnerSel] = "runnersel",
 };
 
 /* repeatable, so never missing */
@@ -543,6 +544,14 @@ static void wbar(void)
     wstr("notification_actionsign", notification_actionsign);
     note("runner_placeholder", "shown while nothing is typed");
     wstr("runner_placeholder", runner_placeholder);
+    note("runner_max_candidates", "0 for none");
+    wint("runner_max_candidates", runner_max_candidates);
+    note("runner_pillheight", "0 fits the font");
+    wint("runner_pillheight", runner_pillheight);
+    note("runner_pillpadding", "0 for automatic");
+    wint("runner_pillpadding", runner_pillpadding);
+    note("runner_pillround", "below 0 follows bartagdotround");
+    wnum("runner_pillround", runner_pillround);
     wclose();
 }
 
@@ -1156,6 +1165,12 @@ static void applybar(const struct scfg_block* b)
     notification_actionsign =
         getstr(b, "notification_actionsign", notification_actionsign);
     runner_placeholder = getstr(b, "runner_placeholder", runner_placeholder);
+    runner_max_candidates =
+        getuint(b, "runner_max_candidates", runner_max_candidates);
+    runner_pillheight = getuint(b, "runner_pillheight", runner_pillheight);
+    runner_pillpadding = getuint(b, "runner_pillpadding", runner_pillpadding);
+    runner_pillround =
+        (float)fmin(getnum(b, "runner_pillround", runner_pillround), 1);
 }
 
 static void applyopacity(const struct scfg_block* b)
