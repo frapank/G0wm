@@ -20,6 +20,7 @@ static void drawpill(Monitor* m,
                      int hollow,
                      uint32_t rgba);
 static void traynotify(void* data);
+static void drawcandidates(Monitor* m, int x, int end);
 static void drawtitle(Client* c);
 typedef struct {
     int linex, linew;
@@ -216,6 +217,48 @@ void barfini(void)
     pulsetimer = NULL;
 }
 
+/* The candidates after the prompt, a page at a time. The selected one sits
+ * in a pill shaped like the selected tag dot. */
+static void drawcandidates(Monitor* m, int x, int end)
+{
+    int n = runnercandidates(), sel = runnerselected();
+    int per = (int)MIN(runner_max_candidates, (unsigned int)n);
+    int fh = m->drw->font->height, bh = (int)m->b.height;
+    int i, ph, pad, mg, tw;
+    double scale = m->wlr_output->scale, r;
+    const char* s;
+
+    ph = runner_pillheight ? (int)round(runner_pillheight * scale) : fh * 4 / 3;
+    ph = MIN(MAX(ph, fh), bh);
+    pad = runner_pillpadding ? (int)round(runner_pillpadding * scale)
+                             : m->lrpad / 2;
+    r = ph / 2.0 * (runner_pillround < 0 ? bartagdotround : runner_pillround);
+    /* drwl_text() paints behind the text too, keep that off the round ends */
+    mg = (ph - fh) / 2;
+    if (mg < r)
+        pad = MAX(pad, (int)ceil(r - sqrt(r * r - (r - mg) * (r - mg))));
+
+    for (i = sel / per * per; i < n && i < sel / per * per + per; i++) {
+        s = runnercandidate(i);
+        tw = MIN((int)drwl_font_getwidth(m->drw, s), end - x - 2 * pad);
+        if (tw <= 0)
+            break;
+        if (i == sel)
+            drawpill(m,
+                     x,
+                     (bh - ph) / 2,
+                     tw + 2 * pad,
+                     ph,
+                     r,
+                     0,
+                     colors[SchemeRunnerSel][ColBg]);
+        drwl_setscheme(
+            m->drw, colors[i == sel ? SchemeRunnerSel : SchemeRunnerSuggest]);
+        drwl_text(m->drw, x + pad, (bh - fh) / 2, tw, fh, 0, s, 0);
+        x += tw + 2 * pad;
+    }
+}
+
 /* the dot of tag i, a pill when selected; returns its cell's width */
 static int tagdot(Monitor* m,
                   Monitor* s,
@@ -402,7 +445,8 @@ void drawbar(Monitor* m)
                           0,
                           runner_placeholder,
                           0);
-            } else if (sug && (size_t)runner_len < strlen(sug) && tx < end) {
+            } else if (!runner_max_candidates && sug &&
+                       (size_t)runner_len < strlen(sug) && tx < end) {
                 drwl_text(m->drw,
                           tx,
                           0,
@@ -423,6 +467,8 @@ void drawbar(Monitor* m)
                         m->drw, tx, 0, end - tx, m->b.height, 0, calcbuf, 0);
                 }
             }
+            if (runner_max_candidates && runnercandidates())
+                drawcandidates(m, tx + m->lrpad / 2, end);
         } else {
             /* A notification takes the box over for as long as it lasts, so the
              * window title (if barwintitle is on) steps aside and comes back

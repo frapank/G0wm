@@ -165,6 +165,7 @@ enum {
     SchemeNotifyCrit,
     SchemeRunner,
     SchemeRunnerSuggest,
+    SchemeRunnerSel,
     NumSchemes
 }; /* color schemes */
 enum { CornerNormal, CornerSquircle };              /* corner curve */
@@ -561,6 +562,9 @@ void run(void);
 int runnercalc(double* out);
 void runnerkey(xkb_keysym_t sym, uint32_t mods, uint32_t codepoint);
 const char* runnersuggest(void);
+int runnercandidates(void);
+const char* runnercandidate(int i);
+int runnerselected(void);
 void runnertoggle(const Arg* arg);
 void seatcaps(void);
 void scenebuffersetopacity(struct wlr_scene_buffer* buffer,
@@ -779,6 +783,10 @@ extern unsigned int notification_linewidth;
 extern unsigned int notification_lineradius;
 extern const char* notification_actionsign;
 extern const char* runner_placeholder;
+extern unsigned int runner_max_candidates;
+extern unsigned int runner_pillheight;
+extern unsigned int runner_pillpadding;
+extern float runner_pillround;
 extern int opacity_enabled;
 extern float opacity_focus;
 extern float opacity_unfocus;

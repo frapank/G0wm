@@ -13,6 +13,10 @@ static int runnerpathstale(void);
 /* variables */
 static char** runner_cmds;
 static int runner_ncmds;
+static int* runner_match;
+static int runner_nmatch;
+static int runner_sel;
+static int runner_cycling;
 static struct timespec runner_stamp; /* newest PATH mtime the cache was built
                                         from */
 
@@ -75,6 +79,10 @@ static void runnerbuildcache(void)
             runner_cmds[w++] = runner_cmds[i];
     }
     runner_ncmds = w;
+
+    if (!(runner_match =
+              realloc(runner_match, MAX(runner_ncmds, 1) * sizeof(int))))
+        die("realloc:");
 }
 
 static void runnerfreecache(void)
@@ -83,6 +91,27 @@ static void runnerfreecache(void)
         free(runner_cmds[--runner_ncmds]);
     free(runner_cmds);
     runner_cmds = NULL;
+    runner_nmatch = 0;
+    runner_sel = 0;
+}
+
+static void runnerfilter(void)
+{
+    int i;
+
+    runner_nmatch = 0;
+    runner_sel = 0;
+    if (!runner_len)
+        return;
+    for (i = 0; i < runner_ncmds; i++)
+        if (!strncmp(runner_cmds[i], runner_buf, runner_len))
+            runner_match[runner_nmatch++] = i;
+}
+
+static void runnerselect(int step)
+{
+    if (runner_nmatch)
+        runner_sel = (runner_sel + step + runner_nmatch) % runner_nmatch;
 }
 
 static int runnerpathstale(void)
@@ -120,14 +149,22 @@ static int runnerpathstale(void)
 
 const char* runnersuggest(void)
 {
-    int i;
+    return runner_nmatch ? runner_cmds[runner_match[runner_sel]] : NULL;
+}
 
-    if (!runner_len)
-        return NULL;
-    for (i = 0; i < runner_ncmds; i++)
-        if (!strncmp(runner_cmds[i], runner_buf, runner_len))
-            return runner_cmds[i];
-    return NULL;
+int runnercandidates(void)
+{
+    return runner_nmatch;
+}
+
+const char* runnercandidate(int i)
+{
+    return i >= 0 && i < runner_nmatch ? runner_cmds[runner_match[i]] : NULL;
+}
+
+int runnerselected(void)
+{
+    return runner_sel;
 }
 
 /* +, -, *, /, %, parens, a decimal point and whitespace: nothing here can
@@ -336,6 +373,8 @@ void runnertoggle(const Arg* arg)
         runner_len = 0;
         runner_cur = 0;
         runner_buf[0] = '\0';
+        runnerfilter();
+        runner_cycling = 0;
         /* the repeat this very binding is arming must not reach the prompt */
         runner_repeating = 0;
     }
@@ -348,7 +387,11 @@ void runnerkey(xkb_keysym_t sym, uint32_t mods, uint32_t codepoint)
     const char* sug;
     const char* cmd;
     char* argv[4];
+    char before[sizeof runner_buf];
+    int tab = 0;
     Arg a;
+
+    memcpy(before, runner_buf, runner_len + 1);
 
     /* Ctrl+<letter> line-editing, readline-style. Ctrl doesn't change the
      * keysym a key produces, only mods, so these are matched on the plain
@@ -430,11 +473,20 @@ void runnerkey(xkb_keysym_t sym, uint32_t mods, uint32_t codepoint)
                 runner_cur = runner_len;
                 break;
             case XKB_KEY_Tab:
+            case XKB_KEY_ISO_Left_Tab: {
+                /* The first Tab takes the selected candidate, the next ones
+                 * move to the following candidate. Shift goes backwards. */
+                int back =
+                    sym == XKB_KEY_ISO_Left_Tab || mods & WLR_MODIFIER_SHIFT;
+                if (runner_nmatch && (runner_cycling || back))
+                    runnerselect(back ? -1 : 1);
                 sug = runnersuggest();
                 if (sug && strlen(sug) < sizeof(runner_buf)) {
                     runner_len = (int)strlen(sug);
                     memcpy(runner_buf, sug, runner_len + 1);
                     runner_cur = runner_len;
+                    runner_cycling = 1;
+                    tab = 1;
                 } else if (!sug) {
                     double calcval;
                     char calcbuf[48];
@@ -448,6 +500,7 @@ void runnerkey(xkb_keysym_t sym, uint32_t mods, uint32_t codepoint)
                     }
                 }
                 break;
+            }
             default: {
                 /* any printable codepoint, stored as UTF-8: C0, DEL and C1
                  * controls are what Ctrl combinations and the like produce,
@@ -469,5 +522,10 @@ void runnerkey(xkb_keysym_t sym, uint32_t mods, uint32_t codepoint)
                 break;
             }
         }
+    /* the list stays put while Tab goes through it */
+    if (runner_active && !tab && strcmp(before, runner_buf)) {
+        runner_cycling = 0;
+        runnerfilter();
+    }
     drawselbar();
 }

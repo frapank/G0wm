@@ -51,6 +51,7 @@ uint32_t colors[NumSchemes][3] = {
 
     [SchemeRunner]        = { 0xffffffff, 0x000000ff, 0x000000ff },
     [SchemeRunnerSuggest] = { 0xaaaaaaff, 0x000000ff, 0x000000ff },
+    [SchemeRunnerSel]     = { 0x000000ff, 0xffffffff, 0x000000ff },
 };
 
 float rootcolor[]     = COLOR(0x000000ff);
@@ -132,6 +133,10 @@ unsigned int notification_lineradius = 2;
 const char* notification_actionsign = "[r]";
 
 const char* runner_placeholder = "Run..."; // shown while nothing is typed
+unsigned int runner_max_candidates = 5;
+unsigned int runner_pillheight     = 1;
+unsigned int runner_pillpadding    = 1;
+float runner_pillround             = -1.0f;
 
 int opacity_enabled = 1;
 
