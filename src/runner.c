@@ -3,6 +3,7 @@
  *
  * the command prompt and its calculator
  */
+#include <ctype.h>
 #include <errno.h>
 #include <limits.h>
 
@@ -14,12 +15,13 @@ static void runnerfreecache(void);
 static int runnerpathstale(void);
 
 /* enums */
-enum { ModeRun, ModeTerm, ModeCalc, NumModes };
+enum { ModeRun, ModeTerm, ModeCalc, ModeSearch, NumModes };
 
 /* variables */
 static const char** runner_prefixes[NumModes] = {
     [ModeTerm] = &runner_termprefix,
     [ModeCalc] = &runner_calcprefix,
+    [ModeSearch] = &runner_searchprefix,
 };
 static char** runner_cmds;
 static int runner_ncmds;
@@ -152,6 +154,8 @@ static int runnermodeon(int mode)
     switch (mode) {
         case ModeTerm:
             return runner_terminal && *runner_terminal;
+        case ModeSearch:
+            return runner_searchurl && *runner_searchurl;
         default:
             return 1;
     }
@@ -744,6 +748,37 @@ static void runnerexec(const char* cmd, int term)
     free(script);
 }
 
+/* runner_searchurl with q in place of its %s, or after it without one */
+static void runnersearch(const char* q)
+{
+    const char* url = runner_searchurl;
+    const char* at = strstr(url, "%s");
+    char *s, *p;
+    char* argv[3];
+    Arg a;
+
+    p = s = ecalloc(1, strlen(url) + 3 * strlen(q) + 1);
+    if (at) {
+        memcpy(p, url, at - url);
+        p += at - url;
+    } else {
+        p = stpcpy(p, url);
+    }
+    for (; *q; q++)
+        if (isalnum((unsigned char)*q) || strchr("-_.~", *q))
+            *p++ = *q;
+        else
+            p += sprintf(p, "%%%02X", (unsigned char)*q);
+    if (at)
+        strcpy(p, at + 2);
+    argv[0] = "xdg-open";
+    argv[1] = s;
+    argv[2] = NULL;
+    a.v = argv;
+    spawn(&a);
+    free(s);
+}
+
 /* puts the result in place of the expression, after the prefix if any */
 static int runnercalcfill(void)
 {
@@ -790,6 +825,11 @@ static void runnerenter(void)
             if (runnercalcfill() || runner_len > off)
                 runner_active = 1;
             return;
+        case ModeSearch:
+            if (!*cmd)
+                return;
+            runnersearch(cmd);
+            break;
     }
     /* with the prefix, so a recalled line keeps its mode */
     snprintf(line, sizeof line, "%.*s%s", off, runner_buf, cmd);

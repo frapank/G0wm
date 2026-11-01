@@ -560,6 +560,9 @@ static void wbar(void)
     wstr("runner_terminal", runner_terminal);
     wstr("runner_termprefix", runner_termprefix);
     wstr("runner_calcprefix", runner_calcprefix);
+    wstr("runner_searchprefix", runner_searchprefix);
+    note("runner_searchurl", "%s is the query, opened with xdg-open");
+    wstr("runner_searchurl", runner_searchurl);
     note("runner_paths", "searched after $PATH");
     wstr("runner_paths", runner_paths);
     note("runner_calc_precision", "significant digits, up to 17");
@@ -1190,6 +1193,8 @@ static void applybar(const struct scfg_block* b)
     runner_terminal = getstr(b, "runner_terminal", runner_terminal);
     runner_termprefix = getstr(b, "runner_termprefix", runner_termprefix);
     runner_calcprefix = getstr(b, "runner_calcprefix", runner_calcprefix);
+    runner_searchprefix = getstr(b, "runner_searchprefix", runner_searchprefix);
+    runner_searchurl = getstr(b, "runner_searchurl", runner_searchurl);
     runner_paths = getstr(b, "runner_paths", runner_paths);
     runner_calc_precision =
         getuint(b, "runner_calc_precision", runner_calc_precision);
