@@ -15,13 +15,14 @@ static void runnerfreecache(void);
 static int runnerpathstale(void);
 
 /* enums */
-enum { ModeRun, ModeTerm, ModeCalc, ModeSearch, NumModes };
+enum { ModeRun, ModeTerm, ModeCalc, ModeSearch, ModeWindow, NumModes };
 
 /* variables */
 static const char** runner_prefixes[NumModes] = {
     [ModeTerm] = &runner_termprefix,
     [ModeCalc] = &runner_calcprefix,
     [ModeSearch] = &runner_searchprefix,
+    [ModeWindow] = &runner_windowprefix,
 };
 static char** runner_cmds;
 static int runner_ncmds;
@@ -30,6 +31,9 @@ static int runner_nsrc;
 static int* runner_match;
 static int runner_nmatch;
 static int runner_room;
+static Client** runner_wins;
+static char** runner_winlabels;
+static int runner_nwins;
 static int runner_sel;
 static int runner_cycling;
 static int* runner_score;
@@ -364,6 +368,38 @@ static int runnerbyscore(const void* a, const void* b)
     return x - y;
 }
 
+/* the open windows, the last focused first */
+static void runnerwindows(void)
+{
+    const char *id, *title;
+    size_t n;
+    Client* c;
+    int i = 0;
+
+    while (runner_nwins)
+        free(runner_winlabels[--runner_nwins]);
+    n = wl_list_length(&fstack);
+    if (!(runner_wins = realloc(runner_wins, MAX(n, 1) * sizeof(Client*))) ||
+        !(runner_winlabels =
+              realloc(runner_winlabels, MAX(n, 1) * sizeof(char*))))
+        die("realloc:");
+    wl_list_for_each(c, &fstack, flink)
+    {
+        if (client_is_unmanaged(c) || !c->mon)
+            continue;
+        id = client_get_appid(c);
+        title = client_get_title(c);
+        n = strlen(id) + strlen(title) + 3;
+        runner_winlabels[i] = ecalloc(1, n);
+        if (!*title || !strcmp(id, title))
+            snprintf(runner_winlabels[i], n, "%s", id);
+        else
+            snprintf(runner_winlabels[i], n, "%s: %s", id, title);
+        runner_wins[i++] = c;
+    }
+    runner_nwins = i;
+}
+
 static void runnersource(int mode)
 {
     switch (mode) {
@@ -371,6 +407,11 @@ static void runnersource(int mode)
         case ModeTerm:
             runner_src = (const char**)runner_cmds;
             runner_nsrc = runner_ncmds;
+            break;
+        case ModeWindow:
+            runnerwindows();
+            runner_src = (const char**)runner_winlabels;
+            runner_nsrc = runner_nwins;
             break;
         default:
             runner_src = NULL;
@@ -396,6 +437,10 @@ static void runnerfilter(void)
     runner_nmatch = 0;
     runner_sel = 0;
     runnersource(mode);
+    /* with nothing typed yet a short list shows all of it */
+    if (!qlen && mode == ModeWindow)
+        for (i = 0; i < runner_nsrc; i++)
+            runner_match[runner_nmatch++] = i;
     if (!qlen || runnercalc(&calcval))
         return;
     /* an uppercase letter makes the match case sensitive */
@@ -798,6 +843,20 @@ static int runnercalcfill(void)
     return 1;
 }
 
+static void runnerfocus(Client* c)
+{
+    Client* w;
+
+    /* it may have closed while the prompt was up */
+    wl_list_for_each(w, &clients, link)
+    {
+        if (w == c) {
+            activateclient(c);
+            return;
+        }
+    }
+}
+
 static void runnerenter(void)
 {
     const char* sug = runnersuggest();
@@ -830,6 +889,10 @@ static void runnerenter(void)
                 return;
             runnersearch(cmd);
             break;
+        case ModeWindow:
+            if (sug)
+                runnerfocus(runner_wins[runner_match[runner_sel]]);
+            return;
     }
     /* with the prefix, so a recalled line keeps its mode */
     snprintf(line, sizeof line, "%.*s%s", off, runner_buf, cmd);
