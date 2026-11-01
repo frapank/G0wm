@@ -513,6 +513,12 @@ static void wbar(void)
     wbool("barwintitle", barwintitle);
     note("bartagdots", "dots instead of the tag names");
     wbool("bartagdots", bartagdots);
+    note("bartagdotsize", "px, 0 for automatic");
+    wint("bartagdotsize", bartagdotsize);
+    note("bartagdotgap", "px between dots, 0 for automatic");
+    wint("bartagdotgap", bartagdotgap);
+    note("bartagdotwidth", "selected pill, times the dot size");
+    wnum("bartagdotwidth", bartagdotwidth);
     wbool("barltsymbol", barltsymbol);
     wint("barboxradius", barboxradius);
     wint("barpadding", barpadding);
@@ -1120,6 +1126,10 @@ static void applybar(const struct scfg_block* b)
     topbar = getbool(b, "topbar", topbar);
     barwintitle = getbool(b, "barwintitle", barwintitle);
     bartagdots = getbool(b, "bartagdots", bartagdots);
+    bartagdotsize = getuint(b, "bartagdotsize", bartagdotsize);
+    bartagdotgap = getuint(b, "bartagdotgap", bartagdotgap);
+    bartagdotwidth =
+        (float)fmax(getnum(b, "bartagdotwidth", bartagdotwidth), 1);
     barltsymbol = getbool(b, "barltsymbol", barltsymbol);
     barboxradius = getuint(b, "barboxradius", barboxradius);
     barpadding = getuint(b, "barpadding", barpadding);
