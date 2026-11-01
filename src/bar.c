@@ -189,10 +189,13 @@ static int tagdot(Monitor* m,
                   int* sw)
 {
     int gap;
+    double scale = m->wlr_output->scale;
 
-    *d = MAX(m->drw->font->height * 2 / 5, 4);
-    gap = *d * 3 / 2;
-    *sw = s->tagset[s->seltags] & 1 << i ? *d * 3 : *d;
+    *d = bartagdotsize ? MAX((int)round(bartagdotsize * scale), 1)
+                       : MAX(m->drw->font->height * 2 / 5, 4);
+    gap = bartagdotgap ? (int)round(bartagdotgap * scale) : *d * 3 / 2;
+    *sw = s->tagset[s->seltags] & 1 << i ? (int)round(*d * bartagdotwidth)
+                                         : *d;
     *lead = i ? gap / 2 : m->lrpad / 2;
     return *lead + *sw + (i == ntags - 1 ? m->lrpad / 2 : gap - gap / 2);
 }
