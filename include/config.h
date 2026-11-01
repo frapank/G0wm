@@ -103,7 +103,12 @@ int showbar     = 1;
 int topbar      = 1;
 int barwintitle = 0;
 
-int bartagdots  = 1; // dots instead of the tag names
+int bartagdots  = 1;
+unsigned int bartagdotsize = 0;
+unsigned int bartagdotgap  = 0;
+float bartagdotwidth       = 3.0f;
+float bartagdotround       = 1.0f;
+unsigned int barurgentpulse = 1200;
 int barltsymbol = 0;
 
 unsigned int barboxradius = 2;
