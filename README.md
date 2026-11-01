@@ -1,4 +1,5 @@
 <div align="center">
+  <img src=".github/assets/logo.png" alt="G0wm Logo" width="120"/>
 
 # G0wm
 
