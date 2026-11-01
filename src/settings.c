@@ -553,6 +553,8 @@ static void wbar(void)
     note("runner_pillround", "below 0 follows bartagdotround");
     wnum("runner_pillround", runner_pillround);
     wbool("runner_fuzzy", runner_fuzzy);
+    note("runner_history_size", "0 for none");
+    wint("runner_history_size", runner_history_size);
     wclose();
 }
 
@@ -1173,6 +1175,8 @@ static void applybar(const struct scfg_block* b)
     runner_pillround =
         (float)fmin(getnum(b, "runner_pillround", runner_pillround), 1);
     runner_fuzzy = getbool(b, "runner_fuzzy", runner_fuzzy);
+    runner_history_size =
+        getuint(b, "runner_history_size", runner_history_size);
 }
 
 static void applyopacity(const struct scfg_block* b)
@@ -1560,7 +1564,7 @@ static const char* settingspath(void)
 }
 
 /* mkdir -p, on a copy the caller owns */
-static int mkdirp(char* path)
+int mkdirp(char* path)
 {
     char* p;
 

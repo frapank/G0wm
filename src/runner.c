@@ -3,6 +3,9 @@
  *
  * the command prompt and its calculator
  */
+#include <errno.h>
+#include <limits.h>
+
 #include "g0wm.h"
 
 /* function declarations */
@@ -18,6 +21,10 @@ static int runner_nmatch;
 static int runner_sel;
 static int runner_cycling;
 static int* runner_score;
+static int* runner_use;
+static char** runner_hist; /* oldest first */
+static int runner_nhist;
+static int runner_histread;
 static struct timespec runner_stamp; /* newest PATH mtime the cache was built
                                         from */
 
@@ -84,7 +91,8 @@ static void runnerbuildcache(void)
     if (!(runner_match =
               realloc(runner_match, MAX(runner_ncmds, 1) * sizeof(int))) ||
         !(runner_score =
-              realloc(runner_score, MAX(runner_ncmds, 1) * sizeof(int))))
+              realloc(runner_score, MAX(runner_ncmds, 1) * sizeof(int))) ||
+        !(runner_use = realloc(runner_use, MAX(runner_ncmds, 1) * sizeof(int))))
         die("realloc:");
 }
 
@@ -96,6 +104,126 @@ static void runnerfreecache(void)
     runner_cmds = NULL;
     runner_nmatch = 0;
     runner_sel = 0;
+}
+
+static const char* runnerhistpath(void)
+{
+    static char path[PATH_MAX];
+    const char* dir = getenv("XDG_STATE_HOME");
+    const char* home = getenv("HOME");
+
+    if (dir && *dir)
+        snprintf(path, sizeof path, "%s/g0wm/runner_history", dir);
+    else if (home && *home)
+        snprintf(
+            path, sizeof path, "%s/.local/state/g0wm/runner_history", home);
+    else
+        return NULL;
+    return path;
+}
+
+static void runnertrimhist(void)
+{
+    int i, drop = runner_nhist - (int)MIN(runner_history_size, INT_MAX);
+
+    if (drop <= 0)
+        return;
+    for (i = 0; i < drop; i++)
+        free(runner_hist[i]);
+    memmove(
+        runner_hist, runner_hist + drop, (runner_nhist - drop) * sizeof(char*));
+    runner_nhist -= drop;
+}
+
+static void runnerpushhist(const char* cmd)
+{
+    if (!(runner_hist =
+              realloc(runner_hist, (runner_nhist + 1) * sizeof(char*))) ||
+        !(runner_hist[runner_nhist++] = strdup(cmd)))
+        die("strdup:");
+}
+
+/* read once, after that every run rewrites the file */
+static void runnerreadhist(void)
+{
+    const char* path = runnerhistpath();
+    char line[sizeof runner_buf + 1];
+    size_t n;
+    FILE* f;
+
+    runner_histread = 1;
+    if (!path || !(f = fopen(path, "r")))
+        return;
+    while (fgets(line, sizeof line, f)) {
+        n = strcspn(line, "\n");
+        line[n] = '\0';
+        if (n && n < sizeof runner_buf)
+            runnerpushhist(line);
+    }
+    fclose(f);
+    runnertrimhist();
+}
+
+static void runnerwritehist(void)
+{
+    const char* path = runnerhistpath();
+    char tmp[PATH_MAX + 4], dir[PATH_MAX];
+    char* slash;
+    FILE* f;
+    int i;
+
+    if (!path)
+        return;
+    snprintf(dir, sizeof dir, "%s", path);
+    if ((slash = strrchr(dir, '/')))
+        *slash = '\0';
+    snprintf(tmp, sizeof tmp, "%s.new", path);
+    if (mkdirp(dir) < 0 || !(f = fopen(tmp, "w"))) {
+        fprintf(stderr, "g0wm: cannot write %s: %s\n", path, strerror(errno));
+        return;
+    }
+    for (i = 0; i < runner_nhist; i++)
+        fprintf(f, "%s\n", runner_hist[i]);
+    if (fclose(f) != 0 || rename(tmp, path) < 0) {
+        fprintf(stderr, "g0wm: cannot write %s: %s\n", path, strerror(errno));
+        unlink(tmp);
+    }
+}
+
+/* Every run counts for the command in its first word, a recent one up to
+ * five times as much as the oldest. */
+static void runnerweigh(void)
+{
+    char word[sizeof runner_buf];
+    const char* key = word;
+    char** hit;
+    size_t n;
+    int i;
+
+    for (i = 0; i < runner_ncmds; i++)
+        runner_use[i] = 0;
+    if (!runner_ncmds)
+        return;
+    for (i = 0; i < runner_nhist; i++) {
+        n = strcspn(runner_hist[i], " \t");
+        if (n >= sizeof word)
+            continue;
+        memcpy(word, runner_hist[i], n);
+        word[n] = '\0';
+        if ((hit = bsearch(
+                 &key, runner_cmds, runner_ncmds, sizeof(char*), runnercmp)))
+            runner_use[hit - runner_cmds] += 1 + (i + 1) * 4 / runner_nhist;
+    }
+}
+
+static void runnerrecord(const char* cmd)
+{
+    if (!runner_history_size)
+        return;
+    runnerpushhist(cmd);
+    runnertrimhist();
+    runnerwritehist();
+    runnerweigh();
 }
 
 static int runnerfold(int ch, int fold)
@@ -160,8 +288,10 @@ static void runnerfilter(void)
             fold = 0;
     for (i = 0; i < runner_ncmds; i++)
         if ((runner_score[i] =
-                 runnerscore(runner_cmds[i], runner_buf, runner_len, fold)))
+                 runnerscore(runner_cmds[i], runner_buf, runner_len, fold))) {
+            runner_score[i] += MIN(runner_use[i], 1 << 16) * 16;
             runner_match[runner_nmatch++] = i;
+        }
     qsort(runner_match, runner_nmatch, sizeof(int), runnerbyscore);
 }
 
@@ -427,6 +557,11 @@ void runnertoggle(const Arg* arg)
             runnerfreecache();
             runnerbuildcache();
         }
+        if (!runner_histread && runner_history_size)
+            runnerreadhist();
+        /* runner_history_size may have shrunk on a reload */
+        runnertrimhist();
+        runnerweigh();
         runner_len = 0;
         runner_cur = 0;
         runner_buf[0] = '\0';
@@ -502,6 +637,7 @@ void runnerkey(xkb_keysym_t sym, uint32_t mods, uint32_t codepoint)
                     argv[3] = NULL;
                     a.v = argv;
                     spawn(&a);
+                    runnerrecord(cmd);
                 }
                 runner_active = 0;
                 break;
