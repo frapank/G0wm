@@ -788,6 +788,7 @@ extern unsigned int runner_pillheight;
 extern unsigned int runner_pillpadding;
 extern float runner_pillround;
 extern int runner_fuzzy;
+extern unsigned int runner_history_size;
 extern int opacity_enabled;
 extern float opacity_focus;
 extern float opacity_unfocus;

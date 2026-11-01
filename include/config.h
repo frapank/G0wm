@@ -138,6 +138,7 @@ unsigned int runner_pillheight     = 1;
 unsigned int runner_pillpadding    = 1;
 float runner_pillround             = -1.0f;
 int runner_fuzzy                   = 1;
+unsigned int runner_history_size   = 100;
 
 int opacity_enabled = 1;
 
