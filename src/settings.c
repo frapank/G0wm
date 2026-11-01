@@ -559,6 +559,8 @@ static void wbar(void)
     note("runner_terminal", "runs a line starting with runner_termprefix");
     wstr("runner_terminal", runner_terminal);
     wstr("runner_termprefix", runner_termprefix);
+    note("runner_paths", "searched after $PATH");
+    wstr("runner_paths", runner_paths);
     wclose();
 }
 
@@ -1184,6 +1186,7 @@ static void applybar(const struct scfg_block* b)
     runner_shell = getstr(b, "runner_shell", runner_shell);
     runner_terminal = getstr(b, "runner_terminal", runner_terminal);
     runner_termprefix = getstr(b, "runner_termprefix", runner_termprefix);
+    runner_paths = getstr(b, "runner_paths", runner_paths);
 }
 
 static void applyopacity(const struct scfg_block* b)

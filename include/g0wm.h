@@ -793,6 +793,7 @@ extern unsigned int runner_history_size;
 extern const char* runner_shell;
 extern const char* runner_terminal;
 extern const char* runner_termprefix;
+extern const char* runner_paths;
 extern int opacity_enabled;
 extern float opacity_focus;
 extern float opacity_unfocus;

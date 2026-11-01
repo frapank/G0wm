@@ -28,6 +28,7 @@ static int runner_histread;
 static int runner_histpos = -1;
 static struct timespec runner_stamp; /* newest PATH mtime the cache was built
                                         from */
+static char* runner_cachepath;
 
 /* function implementations */
 static int runnercmp(const void* a, const void* b)
@@ -35,12 +36,49 @@ static int runnercmp(const void* a, const void* b)
     return strcmp(*(char* const*)a, *(char* const*)b);
 }
 
+static void runnerappend(char** s, size_t* n, const char* add, size_t len)
+{
+    if (!(*s = realloc(*s, *n + len + 1)))
+        die("realloc:");
+    memcpy(*s + *n, add, len);
+    *n += len;
+    (*s)[*n] = '\0';
+}
+
+/* $PATH followed by runner_paths, with ~ expanded */
+static char* runnersearchpath(void)
+{
+    const char* path = getenv("PATH");
+    const char* home = getenv("HOME");
+    const char* e = runner_paths;
+    char* out = NULL;
+    size_t n = 0, len;
+
+    runnerappend(&out, &n, path ? path : "", path ? strlen(path) : 0);
+    while (e && *e) {
+        len = strcspn(e, ":");
+        if (len) {
+            if (n)
+                runnerappend(&out, &n, ":", 1);
+            if (e[0] == '~' && (len == 1 || e[1] == '/') && home) {
+                runnerappend(&out, &n, home, strlen(home));
+                e++;
+                len--;
+            }
+            runnerappend(&out, &n, e, len);
+        }
+        e += len;
+        if (*e == ':')
+            e++;
+    }
+    return out;
+}
+
 static void runnerbuildcache(void)
 {
     /* Same idea as dmenu_path: list every executable name under $PATH once,
      * so each keystroke only has to filter an already-built array. */
-    const char* path = getenv("PATH");
-    char *p, *dir, *saveptr;
+    char *p = runnersearchpath(), *dir, *saveptr;
     char full[1024];
     struct stat st;
     DIR* d;
@@ -48,10 +86,6 @@ static void runnerbuildcache(void)
     int i, w;
     size_t cap = 0;
 
-    if (!path)
-        return;
-    if (!(p = strdup(path)))
-        die("strdup:");
     for (dir = strtok_r(p, ":", &saveptr); dir;
          dir = strtok_r(NULL, ":", &saveptr)) {
         if (!(d = opendir(dir)))
@@ -354,15 +388,16 @@ static int runnerpathstale(void)
      * whether a rescan would turn anything up. That keeps the cost of
      * noticing a newly installed program off every prompt but the one that
      * follows the install. */
-    const char* path = getenv("PATH");
-    char *p, *dir, *saveptr;
+    char *p = runnersearchpath(), *dir, *saveptr;
     struct stat st;
     struct timespec newest = { 0, 0 };
+    int moved = !runner_cachepath || strcmp(p, runner_cachepath);
 
-    if (!path)
-        return 0;
-    if (!(p = strdup(path)))
-        die("strdup:");
+    if (moved) {
+        free(runner_cachepath);
+        if (!(runner_cachepath = strdup(p)))
+            die("strdup:");
+    }
     for (dir = strtok_r(p, ":", &saveptr); dir;
          dir = strtok_r(NULL, ":", &saveptr))
         /* to the nanosecond: at second granularity an install and the removal
@@ -373,7 +408,7 @@ static int runnerpathstale(void)
             newest = st.st_mtim;
     free(p);
 
-    if (newest.tv_sec == runner_stamp.tv_sec &&
+    if (!moved && newest.tv_sec == runner_stamp.tv_sec &&
         newest.tv_nsec == runner_stamp.tv_nsec)
         return 0;
     runner_stamp = newest;
@@ -603,6 +638,7 @@ static void runnerexec(const char* cmd, int term)
         (char*)(runner_shell && *runner_shell ? runner_shell : "/bin/sh");
     char* argv[6];
     char* script = NULL;
+    char *path = NULL, *saved = NULL;
     size_t n;
     Arg a;
 
@@ -623,7 +659,22 @@ static void runnerexec(const char* cmd, int term)
         argv[5] = NULL;
     }
     a.v = argv;
+    /* only the child gets the wider PATH */
+    if (runner_paths && *runner_paths) {
+        path = runnersearchpath();
+        if (getenv("PATH") && !(saved = strdup(getenv("PATH"))))
+            die("strdup:");
+        setenv("PATH", path, 1);
+    }
     spawn(&a);
+    if (path) {
+        if (saved)
+            setenv("PATH", saved, 1);
+        else
+            unsetenv("PATH");
+    }
+    free(path);
+    free(saved);
     free(script);
 }
 
