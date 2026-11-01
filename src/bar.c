@@ -406,6 +406,7 @@ void drawbar(Monitor* m)
          * and outranks one if both would want it at once. */
         if (runner_active && sel) {
             const char* sug = runnersuggest();
+            int qlen = runner_len - runnerquery();
             /* the caret scales with the font, which is loaded at the output's
              * dpi, so it keeps its proportions on every monitor */
             int fh = m->drw->font->height, cw = MAX(fh / 12, 2);
@@ -446,19 +447,14 @@ void drawbar(Monitor* m)
                           runner_placeholder,
                           0);
             } else if (!runner_max_candidates && sug &&
-                       (size_t)runner_len < strlen(sug) &&
-                       !strncmp(sug, runner_buf, runner_len) && tx < end) {
-                drwl_text(m->drw,
-                          tx,
-                          0,
-                          end - tx,
-                          m->b.height,
-                          0,
-                          sug + runner_len,
-                          0);
+                       (size_t)qlen < strlen(sug) &&
+                       !strncmp(sug, runner_buf + runner_len - qlen, qlen) &&
+                       tx < end) {
+                drwl_text(
+                    m->drw, tx, 0, end - tx, m->b.height, 0, sug + qlen, 0);
             } else if (!sug && tx < end) {
                 /* Not a completion of what's typed, so it can't reuse the
-                 * "sug + runner_len" tail above: it's an unrelated answer,
+                 * "sug + qlen" tail above: it's an unrelated answer,
                  * appended rather than spliced in. */
                 double calcval;
                 char calcbuf[48];
