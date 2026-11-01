@@ -794,6 +794,7 @@ extern unsigned int runner_history_size;
 extern const char* runner_shell;
 extern const char* runner_terminal;
 extern const char* runner_termprefix;
+extern const char* runner_calcprefix;
 extern const char* runner_paths;
 extern unsigned int runner_calc_precision;
 extern int opacity_enabled;

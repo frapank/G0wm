@@ -14,11 +14,12 @@ static void runnerfreecache(void);
 static int runnerpathstale(void);
 
 /* enums */
-enum { ModeRun, ModeTerm, NumModes };
+enum { ModeRun, ModeTerm, ModeCalc, NumModes };
 
 /* variables */
 static const char** runner_prefixes[NumModes] = {
     [ModeTerm] = &runner_termprefix,
+    [ModeCalc] = &runner_calcprefix,
 };
 static char** runner_cmds;
 static int runner_ncmds;
@@ -622,16 +623,16 @@ static double runnercalcexpr(struct RunnerCalcState* c)
     return v;
 }
 
-/* Only a buffer made purely of digits/operators/parens/whitespace, with at
- * least one digit and one operator, is worth trying to parse: this keeps
- * plain PATH lookups (letters) and bare numbers untouched. */
-static int runnerisexpr(void)
+/* Only digits, operators, parens and blanks are worth parsing. Outside the
+ * calculator mode it also takes an operator, so a bare number is left
+ * alone. */
+static int runnerisexpr(const char* s, int needop)
 {
-    int i, digit = 0, op = 0;
+    int digit = 0, op = !needop;
     char ch;
 
-    for (i = 0; i < runner_len; i++) {
-        ch = runner_buf[i];
+    for (; *s; s++) {
+        ch = *s;
         if (ch >= '0' && ch <= '9')
             digit = 1;
         else if (ch == '+' || ch == '-' || ch == '*' || ch == '/' || ch == '%')
@@ -650,10 +651,12 @@ void runnercalcformat(char* out, size_t n, double v)
 
 int runnercalc(double* out)
 {
-    struct RunnerCalcState c = { runner_buf, 0, 0 };
+    int off, mode = runnermode(runner_buf, &off);
+    struct RunnerCalcState c = { runner_buf + off, 0, 0 };
     double v;
 
-    if (!runnerisexpr())
+    if ((mode != ModeRun && mode != ModeCalc) ||
+        !runnerisexpr(c.s, mode == ModeRun))
         return 0;
     v = runnercalcexpr(&c);
     while (*c.s == ' ' || *c.s == '\t')
@@ -741,6 +744,25 @@ static void runnerexec(const char* cmd, int term)
     free(script);
 }
 
+/* puts the result in place of the expression, after the prefix if any */
+static int runnercalcfill(void)
+{
+    char res[48];
+    double v;
+    int off;
+
+    if (!runnercalc(&v))
+        return 0;
+    runnermode(runner_buf, &off);
+    runnercalcformat(res, sizeof res, v);
+    if (off + strlen(res) >= sizeof runner_buf)
+        return 0;
+    memcpy(runner_buf + off, res, strlen(res) + 1);
+    runner_len = (int)strlen(runner_buf);
+    runner_cur = runner_len;
+    return 1;
+}
+
 static void runnerenter(void)
 {
     const char* sug = runnersuggest();
@@ -763,6 +785,11 @@ static void runnerenter(void)
         case ModeTerm:
             runnerexec(cmd, 1);
             break;
+        case ModeCalc:
+            /* stays open to go on from the result, or to fix a typo */
+            if (runnercalcfill() || runner_len > off)
+                runner_active = 1;
+            return;
     }
     /* with the prefix, so a recalled line keeps its mode */
     snprintf(line, sizeof line, "%.*s%s", off, runner_buf, cmd);
@@ -892,16 +919,7 @@ void runnerkey(xkb_keysym_t sym, uint32_t mods, uint32_t codepoint)
                     runner_cycling = 1;
                     tab = 1;
                 } else if (!sug) {
-                    double calcval;
-                    char calcbuf[48];
-                    if (runnercalc(&calcval)) {
-                        runnercalcformat(calcbuf, sizeof calcbuf, calcval);
-                        if (strlen(calcbuf) < sizeof(runner_buf)) {
-                            runner_len = (int)strlen(calcbuf);
-                            memcpy(runner_buf, calcbuf, runner_len + 1);
-                            runner_cur = runner_len;
-                        }
-                    }
+                    runnercalcfill();
                 }
                 break;
             }
