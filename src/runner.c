@@ -25,6 +25,7 @@ static int* runner_use;
 static char** runner_hist; /* oldest first */
 static int runner_nhist;
 static int runner_histread;
+static int runner_histpos = -1;
 static struct timespec runner_stamp; /* newest PATH mtime the cache was built
                                         from */
 
@@ -301,6 +302,31 @@ static void runnerselect(int step)
         runner_sel = (runner_sel + step + runner_nmatch) % runner_nmatch;
 }
 
+/* Up and Down through the history like a shell, skipping repeats. Down past
+ * the newest entry clears the prompt. */
+static void runnerrecall(int step)
+{
+    int pos = runner_histpos < 0 ? runner_nhist : runner_histpos;
+    const char* shown = runner_histpos < 0 ? "" : runner_hist[runner_histpos];
+
+    if (runner_histpos < 0 && step > 0)
+        return;
+    do
+        pos += step;
+    while (pos >= 0 && pos < runner_nhist && !strcmp(runner_hist[pos], shown));
+    if (pos < 0)
+        return;
+    if (pos >= runner_nhist) {
+        runner_histpos = -1;
+        runner_buf[0] = '\0';
+    } else {
+        runner_histpos = pos;
+        snprintf(runner_buf, sizeof runner_buf, "%s", runner_hist[pos]);
+    }
+    runner_len = (int)strlen(runner_buf);
+    runner_cur = runner_len;
+}
+
 static int runnerpathstale(void)
 {
     /* A directory's mtime moves whenever an entry is added or removed, so
@@ -562,6 +588,7 @@ void runnertoggle(const Arg* arg)
         /* runner_history_size may have shrunk on a reload */
         runnertrimhist();
         runnerweigh();
+        runner_histpos = -1;
         runner_len = 0;
         runner_cur = 0;
         runner_buf[0] = '\0';
@@ -656,6 +683,14 @@ void runnerkey(xkb_keysym_t sym, uint32_t mods, uint32_t codepoint)
             case XKB_KEY_Right:
             case XKB_KEY_KP_Right:
                 runner_cur = runnernext(runner_cur);
+                break;
+            case XKB_KEY_Up:
+            case XKB_KEY_KP_Up:
+                runnerrecall(-1);
+                break;
+            case XKB_KEY_Down:
+            case XKB_KEY_KP_Down:
+                runnerrecall(1);
                 break;
             case XKB_KEY_Home:
             case XKB_KEY_KP_Home:
