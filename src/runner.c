@@ -107,6 +107,24 @@ static void runnerfreecache(void)
     runner_sel = 0;
 }
 
+/* how far into s the command starts, past the terminal prefix if any */
+static int runnertermoff(const char* s)
+{
+    size_t n;
+
+    if (!runner_terminal || !*runner_terminal || !runner_termprefix ||
+        !(n = strlen(runner_termprefix)) || strncmp(s, runner_termprefix, n))
+        return 0;
+    while (s[n] == ' ' || s[n] == '\t')
+        n++;
+    return (int)n;
+}
+
+int runnerquery(void)
+{
+    return runnertermoff(runner_buf);
+}
+
 static const char* runnerhistpath(void)
 {
     static char path[PATH_MAX];
@@ -197,6 +215,7 @@ static void runnerweigh(void)
 {
     char word[sizeof runner_buf];
     const char* key = word;
+    const char* line;
     char** hit;
     size_t n;
     int i;
@@ -206,10 +225,11 @@ static void runnerweigh(void)
     if (!runner_ncmds)
         return;
     for (i = 0; i < runner_nhist; i++) {
-        n = strcspn(runner_hist[i], " \t");
+        line = runner_hist[i] + runnertermoff(runner_hist[i]);
+        n = strcspn(line, " \t");
         if (n >= sizeof word)
             continue;
-        memcpy(word, runner_hist[i], n);
+        memcpy(word, line, n);
         word[n] = '\0';
         if ((hit = bsearch(
                  &key, runner_cmds, runner_ncmds, sizeof(char*), runnercmp)))
@@ -276,20 +296,20 @@ static int runnerbyscore(const void* a, const void* b)
 
 static void runnerfilter(void)
 {
-    int i, fold = 1;
+    int i, fold = 1, off = runnerquery(), qlen = runner_len - off;
+    const char* q = runner_buf + off;
     double calcval;
 
     runner_nmatch = 0;
     runner_sel = 0;
-    if (!runner_len || runnercalc(&calcval))
+    if (!qlen || runnercalc(&calcval))
         return;
     /* an uppercase letter makes the match case sensitive */
-    for (i = 0; i < runner_len; i++)
-        if (runner_buf[i] >= 'A' && runner_buf[i] <= 'Z')
+    for (i = 0; i < qlen; i++)
+        if (q[i] >= 'A' && q[i] <= 'Z')
             fold = 0;
     for (i = 0; i < runner_ncmds; i++)
-        if ((runner_score[i] =
-                 runnerscore(runner_cmds[i], runner_buf, runner_len, fold))) {
+        if ((runner_score[i] = runnerscore(runner_cmds[i], q, qlen, fold))) {
             runner_score[i] += MIN(runner_use[i], 1 << 16) * 16;
             runner_match[runner_nmatch++] = i;
         }
@@ -574,17 +594,37 @@ static void runnercut(int from, int to)
     runner_cur = from;
 }
 
-static void runnerexec(const char* cmd)
+/* In a terminal the command goes to the shell inside it as one argument,
+ * so pipes and lists stay in the terminal too. An empty command just opens
+ * the terminal. */
+static void runnerexec(const char* cmd, int term)
 {
-    char* argv[4];
+    char* sh =
+        (char*)(runner_shell && *runner_shell ? runner_shell : "/bin/sh");
+    char* argv[6];
+    char* script = NULL;
+    size_t n;
     Arg a;
 
-    argv[0] = (char*)(runner_shell && *runner_shell ? runner_shell : "/bin/sh");
+    argv[0] = sh;
     argv[1] = "-c";
     argv[2] = (char*)cmd;
     argv[3] = NULL;
+    if (term) {
+        n = strlen(runner_terminal) + 32;
+        script = ecalloc(1, n);
+        snprintf(script,
+                 n,
+                 *cmd ? "exec %s \"$0\" -c \"$1\"" : "exec %s",
+                 runner_terminal);
+        argv[2] = script;
+        argv[3] = sh;
+        argv[4] = (char*)cmd;
+        argv[5] = NULL;
+    }
     a.v = argv;
     spawn(&a);
+    free(script);
 }
 
 void runnertoggle(const Arg* arg)
@@ -663,14 +703,18 @@ void runnerkey(xkb_keysym_t sym, uint32_t mods, uint32_t codepoint)
             case XKB_KEY_Return:
             case XKB_KEY_KP_Enter: {
                 double calcval;
+                char line[sizeof runner_buf];
+                int off = runnerquery();
                 sug = runnersuggest();
-                cmd = sug ? sug : runner_buf;
+                cmd = sug ? sug : runner_buf + off;
                 /* A bare expression has no business reaching the shell: it
                  * would just fail as an unknown command. Tab already turns
                  * it into its result for anyone who wants that value. */
-                if (*cmd && !(!sug && runnercalc(&calcval))) {
-                    runnerexec(cmd);
-                    runnerrecord(cmd);
+                if (off || (*cmd && !(!sug && runnercalc(&calcval)))) {
+                    runnerexec(cmd, off > 0);
+                    /* with the prefix, so a recalled line keeps it */
+                    snprintf(line, sizeof line, "%.*s%s", off, runner_buf, cmd);
+                    runnerrecord(line);
                 }
                 runner_active = 0;
                 break;
@@ -715,9 +759,9 @@ void runnerkey(xkb_keysym_t sym, uint32_t mods, uint32_t codepoint)
                 if (runner_nmatch && (runner_cycling || back))
                     runnerselect(back ? -1 : 1);
                 sug = runnersuggest();
-                if (sug && strlen(sug) < sizeof(runner_buf)) {
-                    runner_len = (int)strlen(sug);
-                    memcpy(runner_buf, sug, runner_len + 1);
+                if (sug && runnerquery() + strlen(sug) < sizeof(runner_buf)) {
+                    runner_len = runnerquery() + (int)strlen(sug);
+                    memcpy(runner_buf + runnerquery(), sug, strlen(sug) + 1);
                     runner_cur = runner_len;
                     runner_cycling = 1;
                     tab = 1;

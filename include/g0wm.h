@@ -565,6 +565,7 @@ const char* runnersuggest(void);
 int runnercandidates(void);
 const char* runnercandidate(int i);
 int runnerselected(void);
+int runnerquery(void);
 void runnertoggle(const Arg* arg);
 void seatcaps(void);
 void scenebuffersetopacity(struct wlr_scene_buffer* buffer,
@@ -790,6 +791,8 @@ extern float runner_pillround;
 extern int runner_fuzzy;
 extern unsigned int runner_history_size;
 extern const char* runner_shell;
+extern const char* runner_terminal;
+extern const char* runner_termprefix;
 extern int opacity_enabled;
 extern float opacity_focus;
 extern float opacity_unfocus;

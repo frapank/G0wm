@@ -140,6 +140,8 @@ float runner_pillround             = -1.0f;
 int runner_fuzzy                   = 1;
 unsigned int runner_history_size   = 100;
 const char* runner_shell           = "/bin/sh";
+const char* runner_terminal        = "foot";
+const char* runner_termprefix      = "!";
 
 int opacity_enabled = 1;
 

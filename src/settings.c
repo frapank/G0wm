@@ -556,6 +556,9 @@ static void wbar(void)
     note("runner_history_size", "0 for none");
     wint("runner_history_size", runner_history_size);
     wstr("runner_shell", runner_shell);
+    note("runner_terminal", "runs a line starting with runner_termprefix");
+    wstr("runner_terminal", runner_terminal);
+    wstr("runner_termprefix", runner_termprefix);
     wclose();
 }
 
@@ -1179,6 +1182,8 @@ static void applybar(const struct scfg_block* b)
     runner_history_size =
         getuint(b, "runner_history_size", runner_history_size);
     runner_shell = getstr(b, "runner_shell", runner_shell);
+    runner_terminal = getstr(b, "runner_terminal", runner_terminal);
+    runner_termprefix = getstr(b, "runner_termprefix", runner_termprefix);
 }
 
 static void applyopacity(const struct scfg_block* b)
