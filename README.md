@@ -1,11 +1,13 @@
 <div align="center">
   <img src=".github/assets/logo.png" alt="G0wm Logo" width="120"/>
 
-# G0wm
+# G0 Window Manager
 
-**A personal desktop environment designed to my liking**
+**The Wayland compositor that wants to be a desktop environment**
 
 [![C](https://img.shields.io/badge/C-99%2B-A8B9CC?style=flat-square&logo=c)](https://en.wikipedia.org/wiki/C_(programming_language))
+[![wlroots](https://img.shields.io/badge/wlroots-0.20-blue?style=flat-square)](https://gitlab.freedesktop.org/wlroots/wlroots)
+![Platform](https://img.shields.io/badge/platform-linux-lightgrey?style=flat-square&logo=linux&logoColor=white)
 ![Status](https://img.shields.io/badge/status-stable-green?style=flat-square)
 [![License](https://img.shields.io/badge/license-GPL--3.0-blue?style=flat-square)](LICENSE)
 
