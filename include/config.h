@@ -137,6 +137,7 @@ unsigned int runner_max_candidates = 5;
 unsigned int runner_pillheight     = 1;
 unsigned int runner_pillpadding    = 1;
 float runner_pillround             = -1.0f;
+int runner_fuzzy                   = 1;
 
 int opacity_enabled = 1;
 
