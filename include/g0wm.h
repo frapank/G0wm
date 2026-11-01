@@ -798,6 +798,7 @@ extern const char* runner_calcprefix;
 extern const char* runner_searchprefix;
 extern const char* runner_searchurl;
 extern const char* runner_windowprefix;
+extern const char* runner_tagprefix;
 extern const char* runner_paths;
 extern unsigned int runner_calc_precision;
 extern int opacity_enabled;
