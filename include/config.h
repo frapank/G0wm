@@ -145,6 +145,7 @@ const char* runner_termprefix      = "!";
 const char* runner_calcprefix      = "=";
 const char* runner_searchprefix    = "?";
 const char* runner_searchurl       = "https://duckduckgo.com/?q=%s";
+const char* runner_windowprefix    = "@";
 const char* runner_paths           = "";
 unsigned int runner_calc_precision = 10;
 
