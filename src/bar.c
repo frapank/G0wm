@@ -275,7 +275,14 @@ void drawbar(Monitor* m)
             clr = colors[SchemeNorm][ColFg];
         else /* empty */
             clr = fade(colors[SchemeNorm][ColFg]);
-        drawpill(m, x + lead, (m->b.height - d) / 2, sw, d, d / 2.0, 0, clr);
+        drawpill(m,
+                 x + lead,
+                 (m->b.height - d) / 2,
+                 sw,
+                 d,
+                 d / 2.0 * bartagdotround,
+                 0,
+                 clr);
         x += w;
     }
     for (i = 0; i < ntags && !bartagdots; i++) {

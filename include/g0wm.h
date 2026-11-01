@@ -761,6 +761,7 @@ extern int bartagdots;
 extern unsigned int bartagdotsize;
 extern unsigned int bartagdotgap;
 extern float bartagdotwidth;
+extern float bartagdotround;
 extern int barltsymbol;
 extern unsigned int barboxradius;
 extern unsigned int barpadding;

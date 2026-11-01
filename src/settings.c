@@ -519,6 +519,8 @@ static void wbar(void)
     wint("bartagdotgap", bartagdotgap);
     note("bartagdotwidth", "selected pill, times the dot size");
     wnum("bartagdotwidth", bartagdotwidth);
+    note("bartagdotround", "0 square to 1 fully round corners");
+    wnum("bartagdotround", bartagdotround);
     wbool("barltsymbol", barltsymbol);
     wint("barboxradius", barboxradius);
     wint("barpadding", barpadding);
@@ -1130,6 +1132,8 @@ static void applybar(const struct scfg_block* b)
     bartagdotgap = getuint(b, "bartagdotgap", bartagdotgap);
     bartagdotwidth =
         (float)fmax(getnum(b, "bartagdotwidth", bartagdotwidth), 1);
+    bartagdotround =
+        (float)fmin(fmax(getnum(b, "bartagdotround", bartagdotround), 0), 1);
     barltsymbol = getbool(b, "barltsymbol", barltsymbol);
     barboxradius = getuint(b, "barboxradius", barboxradius);
     barpadding = getuint(b, "barpadding", barpadding);
