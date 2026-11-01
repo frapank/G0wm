@@ -574,6 +574,19 @@ static void runnercut(int from, int to)
     runner_cur = from;
 }
 
+static void runnerexec(const char* cmd)
+{
+    char* argv[4];
+    Arg a;
+
+    argv[0] = (char*)(runner_shell && *runner_shell ? runner_shell : "/bin/sh");
+    argv[1] = "-c";
+    argv[2] = (char*)cmd;
+    argv[3] = NULL;
+    a.v = argv;
+    spawn(&a);
+}
+
 void runnertoggle(const Arg* arg)
 {
     if (!selmon)
@@ -605,10 +618,8 @@ void runnerkey(xkb_keysym_t sym, uint32_t mods, uint32_t codepoint)
 {
     const char* sug;
     const char* cmd;
-    char* argv[4];
     char before[sizeof runner_buf];
     int tab = 0;
-    Arg a;
 
     memcpy(before, runner_buf, runner_len + 1);
 
@@ -654,16 +665,11 @@ void runnerkey(xkb_keysym_t sym, uint32_t mods, uint32_t codepoint)
                 double calcval;
                 sug = runnersuggest();
                 cmd = sug ? sug : runner_buf;
-                /* A bare expression has no business reaching /bin/sh: it
+                /* A bare expression has no business reaching the shell: it
                  * would just fail as an unknown command. Tab already turns
                  * it into its result for anyone who wants that value. */
                 if (*cmd && !(!sug && runnercalc(&calcval))) {
-                    argv[0] = "/bin/sh";
-                    argv[1] = "-c";
-                    argv[2] = (char*)cmd;
-                    argv[3] = NULL;
-                    a.v = argv;
-                    spawn(&a);
+                    runnerexec(cmd);
                     runnerrecord(cmd);
                 }
                 runner_active = 0;
