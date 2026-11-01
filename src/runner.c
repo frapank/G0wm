@@ -13,11 +13,20 @@ static void runnerbuildcache(void);
 static void runnerfreecache(void);
 static int runnerpathstale(void);
 
+/* enums */
+enum { ModeRun, ModeTerm, NumModes };
+
 /* variables */
+static const char** runner_prefixes[NumModes] = {
+    [ModeTerm] = &runner_termprefix,
+};
 static char** runner_cmds;
 static int runner_ncmds;
+static const char** runner_src; /* what the candidates are picked from */
+static int runner_nsrc;
 static int* runner_match;
 static int runner_nmatch;
+static int runner_room;
 static int runner_sel;
 static int runner_cycling;
 static int* runner_score;
@@ -123,11 +132,7 @@ static void runnerbuildcache(void)
     }
     runner_ncmds = w;
 
-    if (!(runner_match =
-              realloc(runner_match, MAX(runner_ncmds, 1) * sizeof(int))) ||
-        !(runner_score =
-              realloc(runner_score, MAX(runner_ncmds, 1) * sizeof(int))) ||
-        !(runner_use = realloc(runner_use, MAX(runner_ncmds, 1) * sizeof(int))))
+    if (!(runner_use = realloc(runner_use, MAX(runner_ncmds, 1) * sizeof(int))))
         die("realloc:");
 }
 
@@ -141,22 +146,45 @@ static void runnerfreecache(void)
     runner_sel = 0;
 }
 
-/* how far into s the command starts, past the terminal prefix if any */
-static int runnertermoff(const char* s)
+static int runnermodeon(int mode)
 {
-    size_t n;
+    switch (mode) {
+        case ModeTerm:
+            return runner_terminal && *runner_terminal;
+        default:
+            return 1;
+    }
+}
 
-    if (!runner_terminal || !*runner_terminal || !runner_termprefix ||
-        !(n = strlen(runner_termprefix)) || strncmp(s, runner_termprefix, n))
-        return 0;
-    while (s[n] == ' ' || s[n] == '\t')
-        n++;
-    return (int)n;
+/* The mode s asks for by its prefix, the longest one if several fit. *off
+ * is where the rest starts, past the prefix and any blanks after it. An
+ * empty prefix turns its mode off. */
+static int runnermode(const char* s, int* off)
+{
+    const char* p;
+    size_t n, len = 0;
+    int m, mode = ModeRun;
+
+    for (m = 0; m < NumModes; m++) {
+        p = runner_prefixes[m] ? *runner_prefixes[m] : NULL;
+        if (!p || !(n = strlen(p)) || n <= len || strncmp(s, p, n) ||
+            !runnermodeon(m))
+            continue;
+        mode = m;
+        len = n;
+    }
+    while (len && (s[len] == ' ' || s[len] == '\t'))
+        len++;
+    *off = (int)len;
+    return mode;
 }
 
 int runnerquery(void)
 {
-    return runnertermoff(runner_buf);
+    int off;
+
+    runnermode(runner_buf, &off);
+    return off;
 }
 
 static const char* runnerhistpath(void)
@@ -252,14 +280,17 @@ static void runnerweigh(void)
     const char* line;
     char** hit;
     size_t n;
-    int i;
+    int i, off, mode;
 
     for (i = 0; i < runner_ncmds; i++)
         runner_use[i] = 0;
     if (!runner_ncmds)
         return;
     for (i = 0; i < runner_nhist; i++) {
-        line = runner_hist[i] + runnertermoff(runner_hist[i]);
+        mode = runnermode(runner_hist[i], &off);
+        if (mode != ModeRun && mode != ModeTerm)
+            continue;
+        line = runner_hist[i] + off;
         n = strcspn(line, " \t");
         if (n >= sizeof word)
             continue;
@@ -328,23 +359,49 @@ static int runnerbyscore(const void* a, const void* b)
     return x - y;
 }
 
+static void runnersource(int mode)
+{
+    switch (mode) {
+        case ModeRun:
+        case ModeTerm:
+            runner_src = (const char**)runner_cmds;
+            runner_nsrc = runner_ncmds;
+            break;
+        default:
+            runner_src = NULL;
+            runner_nsrc = 0;
+            break;
+    }
+    if (runner_nsrc > runner_room) {
+        runner_room = runner_nsrc;
+        if (!(runner_match =
+                  realloc(runner_match, runner_room * sizeof(int))) ||
+            !(runner_score = realloc(runner_score, runner_room * sizeof(int))))
+            die("realloc:");
+    }
+}
+
 static void runnerfilter(void)
 {
-    int i, fold = 1, off = runnerquery(), qlen = runner_len - off;
+    int i, fold = 1, off, mode = runnermode(runner_buf, &off);
+    int qlen = runner_len - off, cmds;
     const char* q = runner_buf + off;
     double calcval;
 
     runner_nmatch = 0;
     runner_sel = 0;
+    runnersource(mode);
     if (!qlen || runnercalc(&calcval))
         return;
     /* an uppercase letter makes the match case sensitive */
     for (i = 0; i < qlen; i++)
         if (q[i] >= 'A' && q[i] <= 'Z')
             fold = 0;
-    for (i = 0; i < runner_ncmds; i++)
-        if ((runner_score[i] = runnerscore(runner_cmds[i], q, qlen, fold))) {
-            runner_score[i] += MIN(runner_use[i], 1 << 16) * 16;
+    cmds = runner_src == (const char**)runner_cmds;
+    for (i = 0; i < runner_nsrc; i++)
+        if ((runner_score[i] = runnerscore(runner_src[i], q, qlen, fold))) {
+            if (cmds)
+                runner_score[i] += MIN(runner_use[i], 1 << 16) * 16;
             runner_match[runner_nmatch++] = i;
         }
     qsort(runner_match, runner_nmatch, sizeof(int), runnerbyscore);
@@ -417,7 +474,7 @@ static int runnerpathstale(void)
 
 const char* runnersuggest(void)
 {
-    return runner_nmatch ? runner_cmds[runner_match[runner_sel]] : NULL;
+    return runner_nmatch ? runner_src[runner_match[runner_sel]] : NULL;
 }
 
 int runnercandidates(void)
@@ -427,7 +484,7 @@ int runnercandidates(void)
 
 const char* runnercandidate(int i)
 {
-    return i >= 0 && i < runner_nmatch ? runner_cmds[runner_match[i]] : NULL;
+    return i >= 0 && i < runner_nmatch ? runner_src[runner_match[i]] : NULL;
 }
 
 int runnerselected(void)
@@ -684,6 +741,34 @@ static void runnerexec(const char* cmd, int term)
     free(script);
 }
 
+static void runnerenter(void)
+{
+    const char* sug = runnersuggest();
+    const char* cmd;
+    char line[sizeof runner_buf];
+    double calcval;
+    int off, mode = runnermode(runner_buf, &off);
+
+    runner_active = 0;
+    cmd = sug ? sug : runner_buf + off;
+    switch (mode) {
+        case ModeRun:
+            /* A bare expression has no business reaching the shell: it
+             * would just fail as an unknown command. Tab already turns
+             * it into its result for anyone who wants that value. */
+            if (!*cmd || (!sug && runnercalc(&calcval)))
+                return;
+            runnerexec(cmd, 0);
+            break;
+        case ModeTerm:
+            runnerexec(cmd, 1);
+            break;
+    }
+    /* with the prefix, so a recalled line keeps its mode */
+    snprintf(line, sizeof line, "%.*s%s", off, runner_buf, cmd);
+    runnerrecord(line);
+}
+
 void runnertoggle(const Arg* arg)
 {
     if (!selmon)
@@ -714,7 +799,6 @@ void runnertoggle(const Arg* arg)
 void runnerkey(xkb_keysym_t sym, uint32_t mods, uint32_t codepoint)
 {
     const char* sug;
-    const char* cmd;
     char before[sizeof runner_buf];
     int tab = 0;
 
@@ -758,24 +842,9 @@ void runnerkey(xkb_keysym_t sym, uint32_t mods, uint32_t codepoint)
                 runner_active = 0;
                 break;
             case XKB_KEY_Return:
-            case XKB_KEY_KP_Enter: {
-                double calcval;
-                char line[sizeof runner_buf];
-                int off = runnerquery();
-                sug = runnersuggest();
-                cmd = sug ? sug : runner_buf + off;
-                /* A bare expression has no business reaching the shell: it
-                 * would just fail as an unknown command. Tab already turns
-                 * it into its result for anyone who wants that value. */
-                if (off || (*cmd && !(!sug && runnercalc(&calcval)))) {
-                    runnerexec(cmd, off > 0);
-                    /* with the prefix, so a recalled line keeps it */
-                    snprintf(line, sizeof line, "%.*s%s", off, runner_buf, cmd);
-                    runnerrecord(line);
-                }
-                runner_active = 0;
+            case XKB_KEY_KP_Enter:
+                runnerenter();
                 break;
-            }
             case XKB_KEY_BackSpace:
                 runnercut(runnerprev(runner_cur), runner_cur);
                 break;
