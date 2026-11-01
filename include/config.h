@@ -142,6 +142,7 @@ unsigned int runner_history_size   = 100;
 const char* runner_shell           = "/bin/sh";
 const char* runner_terminal        = "foot";
 const char* runner_termprefix      = "!";
+const char* runner_paths           = "";
 
 int opacity_enabled = 1;
 
