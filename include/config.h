@@ -143,6 +143,7 @@ const char* runner_shell           = "/bin/sh";
 const char* runner_terminal        = "foot";
 const char* runner_termprefix      = "!";
 const char* runner_paths           = "";
+unsigned int runner_calc_precision = 10;
 
 int opacity_enabled = 1;
 

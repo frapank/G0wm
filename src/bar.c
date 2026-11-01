@@ -459,7 +459,8 @@ void drawbar(Monitor* m)
                 double calcval;
                 char calcbuf[48];
                 if (runnercalc(&calcval)) {
-                    snprintf(calcbuf, sizeof calcbuf, "= %.10g", calcval);
+                    memcpy(calcbuf, "= ", 2);
+                    runnercalcformat(calcbuf + 2, sizeof calcbuf - 2, calcval);
                     drwl_text(
                         m->drw, tx, 0, end - tx, m->b.height, 0, calcbuf, 0);
                 }

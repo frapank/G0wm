@@ -585,6 +585,12 @@ static int runnerisexpr(void)
     return digit && op;
 }
 
+/* a double has no more than 17 significant digits */
+void runnercalcformat(char* out, size_t n, double v)
+{
+    snprintf(out, n, "%.*g", (int)MIN(MAX(runner_calc_precision, 1), 17), v);
+}
+
 int runnercalc(double* out)
 {
     struct RunnerCalcState c = { runner_buf, 0, 0 };
@@ -820,7 +826,7 @@ void runnerkey(xkb_keysym_t sym, uint32_t mods, uint32_t codepoint)
                     double calcval;
                     char calcbuf[48];
                     if (runnercalc(&calcval)) {
-                        snprintf(calcbuf, sizeof calcbuf, "%.10g", calcval);
+                        runnercalcformat(calcbuf, sizeof calcbuf, calcval);
                         if (strlen(calcbuf) < sizeof(runner_buf)) {
                             runner_len = (int)strlen(calcbuf);
                             memcpy(runner_buf, calcbuf, runner_len + 1);
