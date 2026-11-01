@@ -71,6 +71,9 @@ static uint64_t notifyview_ms; /* last input, the view times out */
 static dbus_uint32_t notifyliveid;
 /* animates the line and times out the history view */
 static struct wl_event_source* notifytimer;
+/* redraws the bars while an urgent dot pulses */
+static struct wl_event_source* pulsetimer;
+#define PULSE_FRAME_MS 40
 /* picked action, -1 when closed; the picker belongs to notifypickid */
 static long notifypicksel = -1;
 static dbus_uint32_t notifypickid;
@@ -180,6 +183,39 @@ static uint32_t fade(uint32_t rgba)
     return (rgba & ~0xffu) | (rgba & 0xffu) / 3;
 }
 
+/* the urgent colour breathing between full and a quarter of its alpha, one
+ * cycle every barurgentpulse ms */
+static uint32_t pulse(uint32_t rgba)
+{
+    double t = (double)(notify_now() % barurgentpulse) / barurgentpulse;
+    double k = 0.25 + 0.75 * (0.5 + 0.5 * cos(2 * 3.14159265358979 * t));
+
+    return (rgba & ~0xffu) | (uint32_t)((rgba & 0xffu) * k);
+}
+
+static int pulsetick(void* data)
+{
+    drawbars();
+    return 0;
+}
+
+/* One shot: each drawbar() that still shows an urgent dot asks for the next
+ * frame, so the timer dies with the last urgent window. */
+static void pulsearm(void)
+{
+    if (!pulsetimer)
+        pulsetimer = wl_event_loop_add_timer(event_loop, pulsetick, NULL);
+    if (pulsetimer)
+        wl_event_source_timer_update(pulsetimer, PULSE_FRAME_MS);
+}
+
+void barfini(void)
+{
+    if (pulsetimer)
+        wl_event_source_remove(pulsetimer);
+    pulsetimer = NULL;
+}
+
 /* the dot of tag i, a pill when selected; returns its cell's width */
 static int tagdot(Monitor* m,
                   Monitor* s,
@@ -219,6 +255,7 @@ void drawbar(Monitor* m)
     int boxy = (m->b.height - m->drw->font->height) / 2 + boxs;
     double boxr = barboxradius * m->wlr_output->scale;
     uint32_t i, occ = 0, urg = 0;
+    int pulsing = 0;
     Client* c;
     Buffer* buf;
     /* what the bar reports on: its own monitor, or the focused one when
@@ -267,9 +304,13 @@ void drawbar(Monitor* m)
         w = tagdot(m, s, i, &d, &lead, &sw);
         drwl_setscheme(m->drw, colors[SchemeNorm]);
         drwl_rect(m->drw, x, 0, w, m->b.height, 1, 1);
-        if (urg & 1 << i)
+        if (urg & 1 << i) {
             clr = colors[SchemeUrg][ColBorder];
-        else if (s->tagset[s->seltags] & 1 << i)
+            if (barurgentpulse) {
+                clr = pulse(clr);
+                pulsing = 1;
+            }
+        } else if (s->tagset[s->seltags] & 1 << i)
             clr = colors[SchemeSel][ColFg];
         else if (occ & 1 << i)
             clr = colors[SchemeNorm][ColFg];
@@ -285,6 +326,8 @@ void drawbar(Monitor* m)
                  clr);
         x += w;
     }
+    if (pulsing)
+        pulsearm();
     for (i = 0; i < ntags && !bartagdots; i++) {
         w = TEXTW(m, tags[i]);
         drwl_setscheme(

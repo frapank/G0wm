@@ -240,6 +240,7 @@ static void cleanup(void)
     if (watcher.running)
         watcher_stop(&watcher);
     notifyfini();
+    barfini();
     if (shownotifications)
         notify_stop();
     if (bus_conn) {
