@@ -66,6 +66,11 @@ static const Enum runnericons[] = { { RunnerIconsNone, "none" },
                                     { RunnerIconsAll, "all" },
                                     { 0, NULL } };
 
+static const Enum barstatuses[] = { { BarStatusFocus, "focus" },
+                                    { BarStatusAll, "all" },
+                                    { BarStatusMain, "main" },
+                                    { 0, NULL } };
+
 static const Enum cornerstyles[] = { { CornerNormal, "normal" },
                                      { CornerSquircle, "squircle" },
                                      { 0, NULL } };
@@ -537,6 +542,8 @@ static void wbar(void)
     wnum("barheight", barheight);
     note("barsinglemon", "one bar only, on the first monitor");
     wbool("barsinglemon", barsinglemon);
+    note("barstatus", "focus, all or main");
+    wstr("barstatus", enumname(barstatuses, barstatus));
     wbool("showsystray", showsystray);
     wint("systrayspacing", systrayspacing);
     wint("systraypadding", systraypadding);
@@ -1185,6 +1192,8 @@ static void applybar(const struct scfg_block* b)
     barpadding = getuint(b, "barpadding", barpadding);
     barheight = (float)getnum(b, "barheight", barheight);
     barsinglemon = getbool(b, "barsinglemon", barsinglemon);
+    barstatus =
+        getenum(b, "barstatus", barstatuses, barstatus, "bar status setting");
     showsystray = getbool(b, "showsystray", showsystray);
     systrayspacing = getuint(b, "systrayspacing", systrayspacing);
     systraypadding = getuint(b, "systraypadding", systraypadding);
