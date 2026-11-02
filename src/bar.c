@@ -8,6 +8,7 @@
 #include <strings.h>
 
 /* function declarations */
+static Monitor* mainmon(void);
 static Monitor* barmonitor(void);
 static int barvisible(Monitor* m);
 static int statusescape(const char* p, uint32_t* scm);
@@ -90,15 +91,11 @@ bool baracceptsinput(struct wlr_scene_buffer* buffer, double* sx, double* sy)
     return true;
 }
 
-/* The monitor the bar is drawn on: the first output matched by monrules[] with
- * barsinglemon, the focused one without it. NULL when no output is enabled. */
-static Monitor* barmonitor(void)
+/* The first enabled output matched by monrules[], NULL if there is none. */
+static Monitor* mainmon(void)
 {
     const MonitorRule* r;
     Monitor* m;
-
-    if (!barsinglemon)
-        return selmon;
 
     for (r = monrules; r < monrules + nmonrules; r++) {
         /* mons grows at its head, so backwards is the order the outputs
@@ -111,6 +108,13 @@ static Monitor* barmonitor(void)
         }
     }
     return NULL;
+}
+
+/* The monitor the bar is drawn on: the main one with barsinglemon, the
+ * focused one without it. */
+static Monitor* barmonitor(void)
+{
+    return barsinglemon ? mainmon() : selmon;
 }
 
 /* Whether m carries a bar. barsinglemon leaves every other monitor without
@@ -398,7 +402,7 @@ void drawbar(Monitor* m)
     traywidth = tray_get_width(m->tray);
 
     /* draw status first so it can be overdrawn by tags later */
-    if (sel) { /* status is only drawn on selected monitor */
+    if (statusshown(m)) {
         tw = STATUSW(m);
         drawstatus(m, stext, m->b.width - (tw + traywidth), tw, 1);
     }
@@ -622,6 +626,16 @@ void drawbar(Monitor* m)
 #endif
 }
 
+/* whether the bar on m shows the status text */
+int statusshown(Monitor* m)
+{
+    if (barstatus == BarStatusMain)
+        return m == mainmon();
+    if (barstatus == BarStatusFocus)
+        return barsinglemon || m == selmon;
+    return 1;
+}
+
 void drawbars(void)
 {
     Monitor* m = NULL;
@@ -800,10 +814,8 @@ static int statusarea(Monitor* m,
 
 static int statuscmd(Monitor* pm, int x, int button, char* cmd, size_t sz)
 {
-    Monitor* m = barmonitor();
-
-    return m && m == pm && button >= 1 && button <= STATUS_BUTTONS &&
-           statusarea(m, stext, x, button, cmd, sz);
+    return pm && statusshown(pm) && button >= 1 && button <= STATUS_BUTTONS &&
+           statusarea(pm, stext, x, button, cmd, sz);
 }
 
 static void statusrun(char* cmd)

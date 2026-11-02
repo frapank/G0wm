@@ -69,7 +69,7 @@ static unsigned int barclick(Monitor* pm, Arg* arg)
 
     cx = (cursor->x - pm->m.x - barpadding) * pm->wlr_output->scale;
     traywidth = tray_get_width(pm->tray);
-    statusw = STATUSW(pm);
+    statusw = statusshown(pm) ? STATUSW(pm) : 0;
     do
         x += tagwidth(pm, s, i);
     while (cx >= x && ++i < ntags);
@@ -902,7 +902,7 @@ void cursormoved(void)
         selmon = xytomon(cursor->x, cursor->y);
         /* the single bar follows the focus, and crossing into empty
          * space changes it without going through focusclient() */
-        if (barsinglemon && selmon != old)
+        if ((barsinglemon || barstatus == BarStatusFocus) && selmon != old)
             drawbars();
     }
 }
