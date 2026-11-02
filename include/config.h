@@ -52,6 +52,8 @@ uint32_t colors[NumSchemes][3] = {
     [SchemeRunner]        = { 0xffffffff, 0x000000ff, 0x000000ff },
     [SchemeRunnerSuggest] = { 0xaaaaaaff, 0x000000ff, 0x000000ff },
     [SchemeRunnerSel]     = { 0x000000ff, 0xffffffff, 0x000000ff },
+    /* the stand in for a missing icon */
+    [SchemeRunnerIcon]    = { 0xffffffff, 0x2e2e2eff, 0x4a4a4aff },
 };
 
 float rootcolor[]     = COLOR(0x000000ff);
@@ -138,6 +140,10 @@ unsigned int runner_pillheight     = 1;
 unsigned int runner_pillpadding    = 1;
 float runner_pillround             = -1.0f;
 int runner_fuzzy                   = 1;
+int runner_icons                   = RunnerIconsSelected;
+unsigned int runner_iconsize       = 0;
+float runner_iconround             = 0.4f;
+unsigned int runner_iconborder     = 1;
 unsigned int runner_history_size   = 100;
 const char* runner_shell           = "/bin/sh";
 const char* runner_terminal        = "foot";

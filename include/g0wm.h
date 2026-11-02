@@ -166,6 +166,7 @@ enum {
     SchemeRunner,
     SchemeRunnerSuggest,
     SchemeRunnerSel,
+    SchemeRunnerIcon,
     NumSchemes
 }; /* color schemes */
 enum { CornerNormal, CornerSquircle };              /* corner curve */
@@ -180,6 +181,7 @@ enum {
     PinchIn,
     PinchOut
 }; /* gesture motions */
+enum { RunnerIconsNone, RunnerIconsSelected, RunnerIconsAll };
 enum {
     LyrBg,
     LyrBottom,
@@ -566,6 +568,8 @@ const char* runnersuggest(void);
 int runnercandidates(void);
 const char* runnercandidate(int i);
 int runnerselected(void);
+int runnerhasicons(void);
+Icon* runnericon(int i);
 int runnerquery(void);
 void runnertoggle(const Arg* arg);
 void seatcaps(void);
@@ -790,6 +794,10 @@ extern unsigned int runner_pillheight;
 extern unsigned int runner_pillpadding;
 extern float runner_pillround;
 extern int runner_fuzzy;
+extern int runner_icons;
+extern unsigned int runner_iconsize;
+extern float runner_iconround;
+extern unsigned int runner_iconborder;
 extern unsigned int runner_history_size;
 extern const char* runner_shell;
 extern const char* runner_terminal;
