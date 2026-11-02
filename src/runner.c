@@ -23,6 +23,7 @@ enum {
     ModeSearch,
     ModeWindow,
     ModeTag,
+    ModeFile,
     NumModes
 };
 
@@ -75,6 +76,10 @@ static int runner_napps;
 static int* runner_appuse;
 static struct timespec runner_appstamp;
 static char* runner_appcache;
+static char** runner_entries;
+static int runner_nentries;
+static char* runner_entrydir;
+static int runner_entryhidden;
 
 /* function implementations */
 static int runnercmp(const void* a, const void* b)
@@ -461,6 +466,13 @@ static int runnermode(const char* s, int* off)
         mode = m;
         len = n;
     }
+    /* a path is matched by the name after its last slash */
+    if (mode == ModeApp && runner_files &&
+        (*s == '/' || (*s == '~' && (!s[1] || s[1] == '/')))) {
+        p = strrchr(s, '/');
+        *off = p ? (int)(p - s) + 1 : 0;
+        return ModeFile;
+    }
     while (len && (s[len] == ' ' || s[len] == '\t'))
         len++;
     *off = (int)len;
@@ -690,6 +702,74 @@ static void runnerwindows(void)
     runner_nwins = i;
 }
 
+/* the first len bytes of s, ~ standing for $HOME */
+static char* runnerexpand(const char* s, size_t len)
+{
+    const char* home = getenv("HOME");
+    char* out = NULL;
+    size_t n = 0;
+
+    if (len && *s == '~' && home) {
+        runnerappend(&out, &n, home, strlen(home));
+        s++;
+        len--;
+    }
+    runnerappend(&out, &n, s, len);
+    return out;
+}
+
+static void runnerfreeentries(void)
+{
+    while (runner_nentries)
+        free(runner_entries[--runner_nentries]);
+    free(runner_entrydir);
+    runner_entrydir = NULL;
+}
+
+/* what is in the typed directory, dot files only once the name starts with a
+ * dot, and a slash after each directory */
+static void runnerentries(int off)
+{
+    int hidden = runner_buf[off] == '.';
+    struct dirent* e;
+    struct stat st;
+    char* dir;
+    size_t n;
+    DIR* d;
+
+    if (!off) {
+        runnerfreeentries();
+        return;
+    }
+    dir = runnerexpand(runner_buf, off);
+    if (runner_entrydir && runner_entryhidden == hidden &&
+        !strcmp(dir, runner_entrydir)) {
+        free(dir);
+        return;
+    }
+    runnerfreeentries();
+    runner_entrydir = dir;
+    runner_entryhidden = hidden;
+    if (!(d = opendir(dir)))
+        return;
+    while ((e = readdir(d))) {
+        if (!strcmp(e->d_name, ".") || !strcmp(e->d_name, "..") ||
+            (*e->d_name == '.' && !hidden))
+            continue;
+        if (!(runner_entries = realloc(
+                  runner_entries, (runner_nentries + 1) * sizeof(char*))))
+            die("realloc:");
+        n = strlen(e->d_name);
+        runner_entries[runner_nentries] = ecalloc(1, n + 2);
+        memcpy(runner_entries[runner_nentries], e->d_name, n);
+        if (fstatat(dirfd(d), e->d_name, &st, 0) == 0 && S_ISDIR(st.st_mode))
+            runner_entries[runner_nentries][n] = '/';
+        runner_nentries++;
+    }
+    closedir(d);
+    qsort(runner_entries, runner_nentries, sizeof(char*), runnercmp);
+}
+
 static void runnersource(int mode)
 {
     runner_alt = NULL;
@@ -712,6 +792,11 @@ static void runnersource(int mode)
         case ModeTag:
             runner_src = (const char**)tags;
             runner_nsrc = (int)ntags;
+            break;
+        case ModeFile:
+            runnerentries(runnerquery());
+            runner_src = (const char**)runner_entries;
+            runner_nsrc = runner_nentries;
             break;
         default:
             runner_src = NULL;
@@ -738,7 +823,7 @@ static void runnerfilter(void)
     runner_sel = 0;
     runnersource(mode);
     /* with nothing typed yet a short list shows all of it */
-    if (!qlen && (mode == ModeWindow || mode == ModeTag))
+    if (!qlen && (mode == ModeWindow || mode == ModeTag || mode == ModeFile))
         for (i = 0; i < runner_nsrc; i++)
             runner_match[runner_nmatch++] = i;
     if (!qlen || runnercalc(&calcval))
@@ -1121,14 +1206,19 @@ static void runnerexec(const char* cmd, int term)
     free(script);
 }
 
+static void runneropen(const char* what)
+{
+    char* argv[] = { "xdg-open", (char*)what, NULL };
+
+    spawn(&(Arg){ .v = argv });
+}
+
 /* runner_searchurl with q in place of its %s, or after it without one */
 static void runnersearch(const char* q)
 {
     const char* url = runner_searchurl;
     const char* at = strstr(url, "%s");
     char *s, *p;
-    char* argv[3];
-    Arg a;
 
     p = s = ecalloc(1, strlen(url) + 3 * strlen(q) + 1);
     if (at) {
@@ -1144,11 +1234,7 @@ static void runnersearch(const char* q)
             p += sprintf(p, "%%%02X", (unsigned char)*q);
     if (at)
         strcpy(p, at + 2);
-    argv[0] = "xdg-open";
-    argv[1] = s;
-    argv[2] = NULL;
-    a.v = argv;
-    spawn(&a);
+    runneropen(s);
     free(s);
 }
 
@@ -1191,7 +1277,7 @@ static void runnerenter(void)
     const char* cmd;
     char line[sizeof runner_buf];
     RunnerApp* app;
-    char* exec;
+    char *exec, *path;
     int off, mode = runnermode(runner_buf, &off);
 
     runner_active = 0;
@@ -1233,6 +1319,12 @@ static void runnerenter(void)
             if (sug)
                 view(&(Arg){ .ui = 1u << runner_match[runner_sel] });
             return;
+        case ModeFile:
+            snprintf(line, sizeof line, "%.*s%s", off, runner_buf, cmd);
+            path = runnerexpand(line, strlen(line));
+            runneropen(path);
+            free(path);
+            break;
     }
     /* with the prefix, so a recalled line keeps its mode */
     snprintf(line, sizeof line, "%.*s%s", off, runner_buf, cmd);
@@ -1259,6 +1351,7 @@ void runnertoggle(const Arg* arg)
         /* runner_history_size may have shrunk on a reload */
         runnertrimhist();
         runnerweigh();
+        runnerfreeentries();
         runner_histpos = -1;
         runner_len = 0;
         runner_cur = 0;
@@ -1366,7 +1459,8 @@ void runnerkey(xkb_keysym_t sym, uint32_t mods, uint32_t codepoint)
                     memcpy(runner_buf + runnerquery(), sug, strlen(sug) + 1);
                     runner_cur = runner_len;
                     runner_cycling = 1;
-                    tab = 1;
+                    /* a completed directory lists what is inside it */
+                    tab = runnerquery() < runner_len;
                 } else if (!sug) {
                     runnercalcfill();
                 }
