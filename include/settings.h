@@ -4,5 +4,6 @@
 
 void settingsload(void);
 int settingswrite(void);
+int mkdirp(char* path);
 
 #endif /* G0WM_SETTINGS_H */
