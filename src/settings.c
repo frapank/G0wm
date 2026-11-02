@@ -61,6 +61,11 @@ static const Enum gesturemotions[] = { { SwipeLeft, "swipe-left" },
                                        { PinchOut, "pinch-out" },
                                        { 0, NULL } };
 
+static const Enum runnericons[] = { { RunnerIconsNone, "none" },
+                                    { RunnerIconsSelected, "selected" },
+                                    { RunnerIconsAll, "all" },
+                                    { 0, NULL } };
+
 static const Enum cornerstyles[] = { { CornerNormal, "normal" },
                                      { CornerSquircle, "squircle" },
                                      { 0, NULL } };
@@ -271,6 +276,8 @@ static const char* const schemenames[] = {
     [SchemeNotifyCrit] = "notifycrit",
     [SchemeRunner] = "runner",
     [SchemeRunnerSuggest] = "runnersuggest",
+    [SchemeRunnerSel] = "runnersel",
+    [SchemeRunnerIcon] = "runnericon",
 };
 
 /* repeatable, so never missing */
@@ -543,6 +550,42 @@ static void wbar(void)
     wstr("notification_actionsign", notification_actionsign);
     note("runner_placeholder", "shown while nothing is typed");
     wstr("runner_placeholder", runner_placeholder);
+    note("runner_max_candidates", "0 for none");
+    wint("runner_max_candidates", runner_max_candidates);
+    note("runner_pillheight", "0 fits the font");
+    wint("runner_pillheight", runner_pillheight);
+    note("runner_pillpadding", "0 for automatic");
+    wint("runner_pillpadding", runner_pillpadding);
+    note("runner_pillround", "below 0 follows bartagdotround");
+    wnum("runner_pillround", runner_pillround);
+    wbool("runner_fuzzy", runner_fuzzy);
+    note("runner_icons", "none, selected or all");
+    wstr("runner_icons", enumname(runnericons, runner_icons));
+    note("runner_iconsize", "0 fits the font");
+    wint("runner_iconsize", runner_iconsize);
+    note("runner_iconround", "0 square to 1 round, for a missing icon");
+    wnum("runner_iconround", runner_iconround);
+    wint("runner_iconborder", runner_iconborder);
+    note("runner_history_size", "0 for none");
+    wint("runner_history_size", runner_history_size);
+    wstr("runner_shell", runner_shell);
+    note("runner_terminal", "runs a line starting with runner_termprefix");
+    wstr("runner_terminal", runner_terminal);
+    wstr("runner_termprefix", runner_termprefix);
+    note("runner_runprefix", "runs a command without a terminal");
+    wstr("runner_runprefix", runner_runprefix);
+    wstr("runner_calcprefix", runner_calcprefix);
+    wstr("runner_searchprefix", runner_searchprefix);
+    note("runner_searchurl", "%s is the query, opened with xdg-open");
+    wstr("runner_searchurl", runner_searchurl);
+    wstr("runner_windowprefix", runner_windowprefix);
+    wstr("runner_tagprefix", runner_tagprefix);
+    note("runner_files", "lists the files of a path starting with / or ~");
+    wbool("runner_files", runner_files);
+    note("runner_paths", "searched after $PATH");
+    wstr("runner_paths", runner_paths);
+    note("runner_calc_precision", "significant digits, up to 17");
+    wint("runner_calc_precision", runner_calc_precision);
     wclose();
 }
 
@@ -1156,6 +1199,34 @@ static void applybar(const struct scfg_block* b)
     notification_actionsign =
         getstr(b, "notification_actionsign", notification_actionsign);
     runner_placeholder = getstr(b, "runner_placeholder", runner_placeholder);
+    runner_max_candidates =
+        getuint(b, "runner_max_candidates", runner_max_candidates);
+    runner_pillheight = getuint(b, "runner_pillheight", runner_pillheight);
+    runner_pillpadding = getuint(b, "runner_pillpadding", runner_pillpadding);
+    runner_pillround =
+        (float)fmin(getnum(b, "runner_pillround", runner_pillround), 1);
+    runner_fuzzy = getbool(b, "runner_fuzzy", runner_fuzzy);
+    runner_icons = getenum(
+        b, "runner_icons", runnericons, runner_icons, "runner icon setting");
+    runner_iconsize = getuint(b, "runner_iconsize", runner_iconsize);
+    runner_iconround = (float)fmin(
+        fmax(getnum(b, "runner_iconround", runner_iconround), 0), 1);
+    runner_iconborder = getuint(b, "runner_iconborder", runner_iconborder);
+    runner_history_size =
+        getuint(b, "runner_history_size", runner_history_size);
+    runner_shell = getstr(b, "runner_shell", runner_shell);
+    runner_terminal = getstr(b, "runner_terminal", runner_terminal);
+    runner_termprefix = getstr(b, "runner_termprefix", runner_termprefix);
+    runner_runprefix = getstr(b, "runner_runprefix", runner_runprefix);
+    runner_calcprefix = getstr(b, "runner_calcprefix", runner_calcprefix);
+    runner_searchprefix = getstr(b, "runner_searchprefix", runner_searchprefix);
+    runner_searchurl = getstr(b, "runner_searchurl", runner_searchurl);
+    runner_windowprefix = getstr(b, "runner_windowprefix", runner_windowprefix);
+    runner_tagprefix = getstr(b, "runner_tagprefix", runner_tagprefix);
+    runner_files = getbool(b, "runner_files", runner_files);
+    runner_paths = getstr(b, "runner_paths", runner_paths);
+    runner_calc_precision =
+        getuint(b, "runner_calc_precision", runner_calc_precision);
 }
 
 static void applyopacity(const struct scfg_block* b)
@@ -1543,7 +1614,7 @@ static const char* settingspath(void)
 }
 
 /* mkdir -p, on a copy the caller owns */
-static int mkdirp(char* path)
+int mkdirp(char* path)
 {
     char* p;
 

@@ -20,6 +20,10 @@ static void drawpill(Monitor* m,
                      int hollow,
                      uint32_t rgba);
 static void traynotify(void* data);
+static void drawcandidates(Monitor* m, int x, int end);
+static void drawicon(Monitor* m, Icon* icon, int x, int size);
+static void drawiconholder(Monitor* m, int x, int size);
+static int runnericonsize(Monitor* m);
 static void drawtitle(Client* c);
 typedef struct {
     int linex, linew;
@@ -216,6 +220,119 @@ void barfini(void)
     pulsetimer = NULL;
 }
 
+/* icon scaled to fit size, centered in the bar */
+static void drawicon(Monitor* m, Icon* icon, int x, int size)
+{
+    pixman_image_t* img = icon->img;
+    pixman_transform_t t;
+    int iw = pixman_image_get_width(img), ih = pixman_image_get_height(img);
+    int w, h;
+
+    if (iw <= 0 || ih <= 0 || size <= 0)
+        return;
+    w = iw >= ih ? size : MAX(iw * size / ih, 1);
+    h = ih >= iw ? size : MAX(ih * size / iw, 1);
+    pixman_transform_init_scale(&t,
+                                pixman_double_to_fixed((double)iw / w),
+                                pixman_double_to_fixed((double)ih / h));
+    pixman_image_set_transform(img, &t);
+    pixman_image_set_filter(img, PIXMAN_FILTER_BILINEAR, NULL, 0);
+    pixman_image_composite32(PIXMAN_OP_OVER,
+                             img,
+                             NULL,
+                             m->drw->image,
+                             0,
+                             0,
+                             0,
+                             0,
+                             x + (size - w) / 2,
+                             ((int)m->b.height - h) / 2,
+                             w,
+                             h);
+    pixman_image_set_transform(img, NULL);
+}
+
+/* a rounded square where an icon is missing, colored by runnericon */
+static void drawiconholder(Monitor* m, int x, int size)
+{
+    int y = ((int)m->b.height - size) / 2;
+    int bw =
+        MIN((int)round(runner_iconborder * m->wlr_output->scale), size / 2);
+    double r = size / 2.0 * runner_iconround;
+
+    if (bw > 0)
+        drawpill(
+            m, x, y, size, size, r, 0, colors[SchemeRunnerIcon][ColBorder]);
+    drawpill(m,
+             x + bw,
+             y + bw,
+             size - 2 * bw,
+             size - 2 * bw,
+             MAX(r - bw, 0),
+             0,
+             colors[SchemeRunnerIcon][ColBg]);
+}
+
+static int runnericonsize(Monitor* m)
+{
+    int size = runner_iconsize
+                   ? (int)round(runner_iconsize * m->wlr_output->scale)
+                   : m->drw->font->height;
+
+    return MIN(size, (int)m->b.height);
+}
+
+/* The candidates after the prompt, a page at a time. The selected one sits
+ * in a pill shaped like the selected tag dot. */
+static void drawcandidates(Monitor* m, int x, int end)
+{
+    int n = runnercandidates(), sel = runnerselected();
+    int per = (int)MIN(runner_max_candidates, (unsigned int)n);
+    int fh = m->drw->font->height, bh = (int)m->b.height;
+    int i, ph, pad, mg, tw, isz, iw, holder;
+    double scale = m->wlr_output->scale, r;
+    const char* s;
+    Icon* icon;
+
+    ph = runner_pillheight ? (int)round(runner_pillheight * scale) : fh * 4 / 3;
+    ph = MIN(MAX(ph, fh), bh);
+    pad = runner_pillpadding ? (int)round(runner_pillpadding * scale)
+                             : m->lrpad / 2;
+    r = ph / 2.0 * (runner_pillround < 0 ? bartagdotround : runner_pillround);
+    /* drwl_text() paints behind the text too, keep that off the round ends */
+    mg = (ph - fh) / 2;
+    if (mg < r)
+        pad = MAX(pad, (int)ceil(r - sqrt(r * r - (r - mg) * (r - mg))));
+
+    isz = MIN(runnericonsize(m), ph);
+    for (i = sel / per * per; i < n && i < sel / per * per + per; i++) {
+        s = runnercandidate(i);
+        icon = runner_icons == RunnerIconsAll ? runnericon(i) : NULL;
+        holder = runner_icons == RunnerIconsAll && !icon && runnerhasicons();
+        iw = icon || holder ? isz + pad / 2 : 0;
+        tw = MIN((int)drwl_font_getwidth(m->drw, s), end - x - 2 * pad - iw);
+        if (tw <= 0)
+            break;
+        if (i == sel)
+            drawpill(m,
+                     x,
+                     (bh - ph) / 2,
+                     iw + tw + 2 * pad,
+                     ph,
+                     r,
+                     0,
+                     colors[SchemeRunnerSel][ColBg]);
+        if (icon)
+            drawicon(m, icon, x + pad, isz);
+        else if (holder)
+            drawiconholder(m, x + pad, isz);
+        drwl_setscheme(
+            m->drw, colors[i == sel ? SchemeRunnerSel : SchemeRunnerSuggest]);
+        drwl_text(m->drw, x + pad + iw, (bh - fh) / 2, tw, fh, 0, s, 0);
+        x += iw + tw + 2 * pad;
+    }
+}
+
 /* the dot of tag i, a pill when selected; returns its cell's width */
 static int tagdot(Monitor* m,
                   Monitor* s,
@@ -363,22 +480,39 @@ void drawbar(Monitor* m)
          * and outranks one if both would want it at once. */
         if (runner_active && sel) {
             const char* sug = runnersuggest();
+            int qlen = runner_len - runnerquery();
             /* the caret scales with the font, which is loaded at the output's
              * dpi, so it keeps its proportions on every monitor */
             int fh = m->drw->font->height, cw = MAX(fh / 12, 2);
-            int tx, cx, end = x + w;
+            int tx, cx, end = x + w, isz = runnericonsize(m), px = x;
+            Icon* icon;
             char save;
 
             drwl_setscheme(m->drw, colors[SchemeRunner]);
-            drwl_text(
-                m->drw, x, 0, w, m->b.height, m->lrpad / 2, runner_buf, 0);
-            tx = x + m->lrpad / 2 + drwl_font_getwidth(m->drw, runner_buf);
+            drwl_rect(m->drw, x, 0, w, m->b.height, 1, 1);
+            /* the slot stays in every mode, so the text never jumps */
+            if (runner_icons != RunnerIconsNone && isz + m->lrpad < w) {
+                if (sug && (icon = runnericon(runnerselected())))
+                    drawicon(m, icon, x + m->lrpad / 2, isz);
+                else
+                    drawiconholder(m, x + m->lrpad / 2, isz);
+                px += isz + m->lrpad / 2;
+            }
+            drwl_text(m->drw,
+                      px,
+                      0,
+                      end - px,
+                      m->b.height,
+                      m->lrpad / 2,
+                      runner_buf,
+                      0);
+            tx = px + m->lrpad / 2 + drwl_font_getwidth(m->drw, runner_buf);
 
             /* the caret tracks the cursor, which need not be at the end of
              * the text; measure just the part before it */
             save = runner_buf[runner_cur];
             runner_buf[runner_cur] = '\0';
-            cx = x + m->lrpad / 2 + drwl_font_getwidth(m->drw, runner_buf);
+            cx = px + m->lrpad / 2 + drwl_font_getwidth(m->drw, runner_buf);
             runner_buf[runner_cur] = save;
 
             if (cx + cw <= end)
@@ -402,27 +536,27 @@ void drawbar(Monitor* m)
                           0,
                           runner_placeholder,
                           0);
-            } else if (sug && (size_t)runner_len < strlen(sug) && tx < end) {
-                drwl_text(m->drw,
-                          tx,
-                          0,
-                          end - tx,
-                          m->b.height,
-                          0,
-                          sug + runner_len,
-                          0);
+            } else if (!runner_max_candidates && sug &&
+                       (size_t)qlen < strlen(sug) &&
+                       !strncmp(sug, runner_buf + runner_len - qlen, qlen) &&
+                       tx < end) {
+                drwl_text(
+                    m->drw, tx, 0, end - tx, m->b.height, 0, sug + qlen, 0);
             } else if (!sug && tx < end) {
                 /* Not a completion of what's typed, so it can't reuse the
-                 * "sug + runner_len" tail above: it's an unrelated answer,
+                 * "sug + qlen" tail above: it's an unrelated answer,
                  * appended rather than spliced in. */
                 double calcval;
                 char calcbuf[48];
                 if (runnercalc(&calcval)) {
-                    snprintf(calcbuf, sizeof calcbuf, "= %.10g", calcval);
+                    memcpy(calcbuf, "= ", 2);
+                    runnercalcformat(calcbuf + 2, sizeof calcbuf - 2, calcval);
                     drwl_text(
                         m->drw, tx, 0, end - tx, m->b.height, 0, calcbuf, 0);
                 }
             }
+            if (runner_max_candidates && runnercandidates())
+                drawcandidates(m, tx + m->lrpad / 2, end);
         } else {
             /* A notification takes the box over for as long as it lasts, so the
              * window title (if barwintitle is on) steps aside and comes back

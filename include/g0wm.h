@@ -165,6 +165,8 @@ enum {
     SchemeNotifyCrit,
     SchemeRunner,
     SchemeRunnerSuggest,
+    SchemeRunnerSel,
+    SchemeRunnerIcon,
     NumSchemes
 }; /* color schemes */
 enum { CornerNormal, CornerSquircle };              /* corner curve */
@@ -179,6 +181,7 @@ enum {
     PinchIn,
     PinchOut
 }; /* gesture motions */
+enum { RunnerIconsNone, RunnerIconsSelected, RunnerIconsAll };
 enum {
     LyrBg,
     LyrBottom,
@@ -559,8 +562,15 @@ void resizeheight(const Arg* arg);
 void resizewidth(const Arg* arg);
 void run(void);
 int runnercalc(double* out);
+void runnercalcformat(char* out, size_t n, double v);
 void runnerkey(xkb_keysym_t sym, uint32_t mods, uint32_t codepoint);
 const char* runnersuggest(void);
+int runnercandidates(void);
+const char* runnercandidate(int i);
+int runnerselected(void);
+int runnerhasicons(void);
+Icon* runnericon(int i);
+int runnerquery(void);
 void runnertoggle(const Arg* arg);
 void seatcaps(void);
 void scenebuffersetopacity(struct wlr_scene_buffer* buffer,
@@ -779,6 +789,28 @@ extern unsigned int notification_linewidth;
 extern unsigned int notification_lineradius;
 extern const char* notification_actionsign;
 extern const char* runner_placeholder;
+extern unsigned int runner_max_candidates;
+extern unsigned int runner_pillheight;
+extern unsigned int runner_pillpadding;
+extern float runner_pillround;
+extern int runner_fuzzy;
+extern int runner_icons;
+extern unsigned int runner_iconsize;
+extern float runner_iconround;
+extern unsigned int runner_iconborder;
+extern unsigned int runner_history_size;
+extern const char* runner_shell;
+extern const char* runner_terminal;
+extern const char* runner_termprefix;
+extern const char* runner_runprefix;
+extern const char* runner_calcprefix;
+extern const char* runner_searchprefix;
+extern const char* runner_searchurl;
+extern const char* runner_windowprefix;
+extern const char* runner_tagprefix;
+extern int runner_files;
+extern const char* runner_paths;
+extern unsigned int runner_calc_precision;
 extern int opacity_enabled;
 extern float opacity_focus;
 extern float opacity_unfocus;
