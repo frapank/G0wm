@@ -36,6 +36,8 @@ typedef struct {
     int term;
     int hide;
     int order;
+    Icon* img;
+    int imgread;
 } RunnerApp;
 
 /* variables */
@@ -358,6 +360,8 @@ static void runnerfreeapp(RunnerApp* a)
     free(a->gname);
     free(a->exec);
     free(a->icon);
+    if (a->img)
+        destroyicon(a->img);
 }
 
 static void runnerbuildapps(void)
@@ -844,6 +848,26 @@ const char* runnercandidate(int i)
 int runnerselected(void)
 {
     return runner_sel;
+}
+
+int runnerhasicons(void)
+{
+    return runner_src == (const char**)runner_appnames;
+}
+
+/* the icon of candidate i, read the first time it's asked for */
+Icon* runnericon(int i)
+{
+    RunnerApp* a;
+
+    if (!runnerhasicons() || i < 0 || i >= runner_nmatch)
+        return NULL;
+    a = &runner_apps[runner_match[i]];
+    if (!a->imgread) {
+        a->imgread = 1;
+        a->img = createiconfromname(a->icon, NULL, 64);
+    }
+    return a->img;
 }
 
 /* +, -, *, /, %, parens, a decimal point and whitespace: nothing here can

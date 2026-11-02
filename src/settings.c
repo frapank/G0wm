@@ -61,6 +61,11 @@ static const Enum gesturemotions[] = { { SwipeLeft, "swipe-left" },
                                        { PinchOut, "pinch-out" },
                                        { 0, NULL } };
 
+static const Enum runnericons[] = { { RunnerIconsNone, "none" },
+                                    { RunnerIconsSelected, "selected" },
+                                    { RunnerIconsAll, "all" },
+                                    { 0, NULL } };
+
 static const Enum cornerstyles[] = { { CornerNormal, "normal" },
                                      { CornerSquircle, "squircle" },
                                      { 0, NULL } };
@@ -272,6 +277,7 @@ static const char* const schemenames[] = {
     [SchemeRunner] = "runner",
     [SchemeRunnerSuggest] = "runnersuggest",
     [SchemeRunnerSel] = "runnersel",
+    [SchemeRunnerIcon] = "runnericon",
 };
 
 /* repeatable, so never missing */
@@ -553,6 +559,13 @@ static void wbar(void)
     note("runner_pillround", "below 0 follows bartagdotround");
     wnum("runner_pillround", runner_pillround);
     wbool("runner_fuzzy", runner_fuzzy);
+    note("runner_icons", "none, selected or all");
+    wstr("runner_icons", enumname(runnericons, runner_icons));
+    note("runner_iconsize", "0 fits the font");
+    wint("runner_iconsize", runner_iconsize);
+    note("runner_iconround", "0 square to 1 round, for a missing icon");
+    wnum("runner_iconround", runner_iconround);
+    wint("runner_iconborder", runner_iconborder);
     note("runner_history_size", "0 for none");
     wint("runner_history_size", runner_history_size);
     wstr("runner_shell", runner_shell);
@@ -1191,6 +1204,12 @@ static void applybar(const struct scfg_block* b)
     runner_pillround =
         (float)fmin(getnum(b, "runner_pillround", runner_pillround), 1);
     runner_fuzzy = getbool(b, "runner_fuzzy", runner_fuzzy);
+    runner_icons = getenum(
+        b, "runner_icons", runnericons, runner_icons, "runner icon setting");
+    runner_iconsize = getuint(b, "runner_iconsize", runner_iconsize);
+    runner_iconround = (float)fmin(
+        fmax(getnum(b, "runner_iconround", runner_iconround), 0), 1);
+    runner_iconborder = getuint(b, "runner_iconborder", runner_iconborder);
     runner_history_size =
         getuint(b, "runner_history_size", runner_history_size);
     runner_shell = getstr(b, "runner_shell", runner_shell);
