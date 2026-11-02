@@ -118,8 +118,8 @@ unsigned int barboxradius = 2;
 unsigned int barpadding   = 0;
 float barheight           = 1.1f; // times the font height, 0 for automatic
 
-/* one bar only, on the first monitor */
 int barsinglemon = 0;
+int barstatus = BarStatusMain;
 
 int showsystray              = 1;
 unsigned int systrayspacing  = 2;
