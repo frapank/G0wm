@@ -11,6 +11,11 @@
 ![Status](https://img.shields.io/badge/status-stable-green?style=flat-square)
 [![License](https://img.shields.io/badge/license-GPL--3.0-blue?style=flat-square)](LICENSE)
 
+**[<kbd> <br> Features <br> </kbd>][Features]** 
+**[<kbd> <br> Build <br> </kbd>][Build]** 
+**[<kbd> <br> Configure <br> </kbd>][Configure]** 
+**[<kbd> <br> Release <br> </kbd>][Release]**
+
 </div>
 
 ## What this is
@@ -22,21 +27,10 @@ and a customizable status bar. It also includes the tabbed mode from i3,
 with window titles and close buttons that appear on the right side of the bar
 when hovered.
 
-Settings and docs can be found at:
-[`Features`](docs/FEATURES.md)
-
-## Screenshots
-
-<table align="center">
-<tr>
-<td align="center"><b>Windowed</b></td>
-<td align="center"><b>Tabbed</b></td>
-</tr>
-<tr>
-<td><img src=".github/assets/windows.png" alt="g0wm in the tiling layout"></td>
-<td><img src=".github/assets/tabbed.png" alt="g0wm in the tabbed layout"></td>
-</tr>
-</table>
+<p align="center">
+  <img src=".github/assets/windows.png" alt="g0wm in the tiling layout" width="49%">
+  <img src=".github/assets/tabbed.png" alt="g0wm in the tabbed layout" width="49%">
+</p>
 
 ## Build
 
@@ -75,8 +69,10 @@ g0wm -c             # write it if it is not there
 The status text shown in the bar is read from standard input, one line at a
 time. No status script ships with g0wm.
 
-To run G0wm `share/g0wm.desktop` to `/usr/share/wayland-sessions/` and pick g0wm in
-your display manager, or run `g0wm` from a VT.
+`make install` puts `g0wm.desktop` in `~/.local/share/wayland-sessions/`. Most
+display managers only look in `/usr/share/wayland-sessions/`, so copy
+`share/g0wm.desktop` there and pick g0wm from the session list. You can also
+just run `g0wm` from a VT.
 
 ## Roadmap
 
@@ -85,6 +81,10 @@ on-screen keyboard, the magnifier) is listed step by step in
 [`ROADMAP.md`](ROADMAP.md).
 
 [scfg]: https://git.sr.ht/~emersion/scfg
+[Features]: docs/FEATURES.md
+[Build]: #build
+[Configure]: docs/settings.md
+[Release]: https://github.com/frapank/G0wm/releases/latest
 
 ## License
 
