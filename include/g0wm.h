@@ -182,6 +182,7 @@ enum {
     PinchOut
 }; /* gesture motions */
 enum { RunnerIconsNone, RunnerIconsSelected, RunnerIconsAll };
+enum { BarStatusFocus, BarStatusAll, BarStatusMain };
 enum {
     LyrBg,
     LyrBottom,
@@ -502,6 +503,7 @@ void drawbar(Monitor* m);
 void drawbars(void);
 void drawcorners(Client* c);
 void drawselbar(void);
+int statusshown(Monitor* m);
 int drawstatus(Monitor* m, const char* text, int x, int w, int render);
 int tagwidth(Monitor* m, Monitor* s, uint32_t i);
 void focusclient(Client* c, int lift);
@@ -779,6 +781,7 @@ extern unsigned int barboxradius;
 extern unsigned int barpadding;
 extern float barheight;
 extern int barsinglemon;
+extern int barstatus;
 extern int showsystray;
 extern unsigned int systrayspacing;
 extern unsigned int systraypadding;
