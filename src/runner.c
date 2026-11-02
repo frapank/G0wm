@@ -756,8 +756,8 @@ static void runnerentries(int off)
         if (!strcmp(e->d_name, ".") || !strcmp(e->d_name, "..") ||
             (*e->d_name == '.' && !hidden))
             continue;
-        if (!(runner_entries = realloc(
-                  runner_entries, (runner_nentries + 1) * sizeof(char*))))
+        if (!(runner_entries = realloc(runner_entries,
+                                       (runner_nentries + 1) * sizeof(char*))))
             die("realloc:");
         n = strlen(e->d_name);
         runner_entries[runner_nentries] = ecalloc(1, n + 2);

@@ -347,8 +347,7 @@ static int tagdot(Monitor* m,
     *d = bartagdotsize ? MAX((int)round(bartagdotsize * scale), 1)
                        : MAX(m->drw->font->height * 2 / 5, 4);
     gap = bartagdotgap ? (int)round(bartagdotgap * scale) : *d * 3 / 2;
-    *sw = s->tagset[s->seltags] & 1 << i ? (int)round(*d * bartagdotwidth)
-                                         : *d;
+    *sw = s->tagset[s->seltags] & 1 << i ? (int)round(*d * bartagdotwidth) : *d;
     *lead = i ? gap / 2 : m->lrpad / 2;
     return *lead + *sw + (i == ntags - 1 ? m->lrpad / 2 : gap - gap / 2);
 }
