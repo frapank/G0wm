@@ -12,16 +12,37 @@
 /* function declarations */
 static void runnerbuildcache(void);
 static void runnerfreecache(void);
-static int runnerpathstale(void);
+static int runnerstale(char* p, char** cache, struct timespec* stamp);
 
 /* enums */
-enum { ModeRun, ModeTerm, ModeCalc, ModeSearch, ModeWindow, ModeTag, NumModes };
+enum {
+    ModeApp,
+    ModeRun,
+    ModeTerm,
+    ModeCalc,
+    ModeSearch,
+    ModeWindow,
+    ModeTag,
+    NumModes
+};
+
+/* types */
+typedef struct {
+    char* id;
+    char* name;
+    char* gname; /* the untranslated Name when it differs */
+    char* exec;
+    char* icon;
+    int term;
+    int hide;
+    int order;
+} RunnerApp;
 
 /* variables */
 static const char** runner_prefixes[NumModes] = {
-    [ModeTerm] = &runner_termprefix,     [ModeCalc] = &runner_calcprefix,
-    [ModeSearch] = &runner_searchprefix, [ModeWindow] = &runner_windowprefix,
-    [ModeTag] = &runner_tagprefix,
+    [ModeRun] = &runner_runprefix,       [ModeTerm] = &runner_termprefix,
+    [ModeCalc] = &runner_calcprefix,     [ModeSearch] = &runner_searchprefix,
+    [ModeWindow] = &runner_windowprefix, [ModeTag] = &runner_tagprefix,
 };
 static char** runner_cmds;
 static int runner_ncmds;
@@ -44,6 +65,14 @@ static int runner_histpos = -1;
 static struct timespec runner_stamp; /* newest PATH mtime the cache was built
                                         from */
 static char* runner_cachepath;
+static RunnerApp* runner_apps; /* sorted by name */
+static char** runner_appnames;
+static char** runner_appgnames;
+static const char** runner_alt; /* other names the candidates go by */
+static int runner_napps;
+static int* runner_appuse;
+static struct timespec runner_appstamp;
+static char* runner_appcache;
 
 /* function implementations */
 static int runnercmp(const void* a, const void* b)
@@ -152,6 +181,253 @@ static void runnerfreecache(void)
     runner_sel = 0;
 }
 
+/* the applications directories, the user's first */
+static char* runnerappdirs(void)
+{
+    const char* home = getenv("HOME");
+    const char* datahome = getenv("XDG_DATA_HOME");
+    const char* datadirs = getenv("XDG_DATA_DIRS");
+    char *dirs, *dir, *saveptr, *out = NULL;
+    size_t n = 0;
+
+    if (datahome && *datahome) {
+        runnerappend(&out, &n, datahome, strlen(datahome));
+    } else if (home && *home) {
+        runnerappend(&out, &n, home, strlen(home));
+        runnerappend(&out, &n, "/.local/share", 13);
+    }
+    if (n)
+        runnerappend(&out, &n, "/applications", 13);
+    if (!(dirs = strdup(datadirs && *datadirs ? datadirs
+                                              : "/usr/local/share:/usr/share")))
+        die("strdup:");
+    for (dir = strtok_r(dirs, ":", &saveptr); dir;
+         dir = strtok_r(NULL, ":", &saveptr)) {
+        if (n)
+            runnerappend(&out, &n, ":", 1);
+        runnerappend(&out, &n, dir, strlen(dir));
+        runnerappend(&out, &n, "/applications", 13);
+    }
+    free(dirs);
+    if (!out)
+        runnerappend(&out, &n, "", 0);
+    return out;
+}
+
+static char* runnertrim(char* s)
+{
+    char* e;
+
+    while (*s == ' ' || *s == '\t')
+        s++;
+    e = s + strlen(s);
+    while (e > s && (e[-1] == ' ' || e[-1] == '\t'))
+        *--e = '\0';
+    return s;
+}
+
+/* how well a Name key fits the locale, 0 when it doesn't */
+static int runnernamerank(const char* k)
+{
+    const char* lang = getenv("LC_ALL");
+    size_t n;
+
+    if (!strcmp(k, "Name"))
+        return 1;
+    if (strncmp(k, "Name[", 5) || !*(k + 5))
+        return 0;
+    if (!lang || !*lang)
+        lang = getenv("LC_MESSAGES");
+    if (!lang || !*lang)
+        lang = getenv("LANG");
+    if (!lang)
+        return 0;
+    k += 5;
+    n = strcspn(lang, ".@");
+    if (strlen(k) == n + 1 && !strncmp(k, lang, n))
+        return 3;
+    n = strcspn(lang, "_.@");
+    if (strlen(k) == n + 1 && !strncmp(k, lang, n))
+        return 2;
+    return 0;
+}
+
+static void runnerreadapp(const char* path, const char* id, int order)
+{
+    char line[4096], *k, *v, *eq;
+    int group = 0, app = 0, rank = 0, r;
+    RunnerApp a = { 0 };
+    FILE* f;
+
+    if (!(f = fopen(path, "r")))
+        return;
+    while (fgets(line, sizeof line, f)) {
+        line[strcspn(line, "\r\n")] = '\0';
+        if (*line == '[') {
+            group = !strcmp(line, "[Desktop Entry]");
+            continue;
+        }
+        if (!group || *line == '#' || !(eq = strchr(line, '=')))
+            continue;
+        *eq = '\0';
+        k = runnertrim(line);
+        v = runnertrim(eq + 1);
+        if (!strcmp(k, "Type")) {
+            app = !strcmp(v, "Application");
+        } else if (!strcmp(k, "Exec") && !a.exec) {
+            a.exec = strdup(v);
+        } else if (!strcmp(k, "Icon") && !a.icon) {
+            a.icon = strdup(v);
+        } else if (!strcmp(k, "Terminal")) {
+            a.term = !strcmp(v, "true");
+        } else if (!strcmp(k, "NoDisplay") || !strcmp(k, "Hidden")) {
+            a.hide |= !strcmp(v, "true");
+        } else if ((r = runnernamerank(k)) > rank) {
+            free(a.name);
+            a.name = strdup(v);
+            rank = r;
+        }
+        if (!strcmp(k, "Name") && !a.gname)
+            a.gname = strdup(v);
+    }
+    fclose(f);
+    if (a.gname && a.name && !strcmp(a.gname, a.name)) {
+        free(a.gname);
+        a.gname = NULL;
+    }
+
+    /* kept even when hidden, it still hides the same id further down */
+    a.hide |= !app || !a.name || !a.exec || !*a.exec;
+    if (!(a.id = strdup(id)))
+        die("strdup:");
+    a.order = order;
+    if (!(runner_apps =
+              realloc(runner_apps, (runner_napps + 1) * sizeof(RunnerApp))))
+        die("realloc:");
+    runner_apps[runner_napps++] = a;
+}
+
+/* desktop file ids take the path below applications/ with / turned to - */
+static void runnerscanapps(const char* dir, const char* prefix, int* order)
+{
+    char path[PATH_MAX], id[PATH_MAX];
+    struct dirent* e;
+    struct stat st;
+    size_t n;
+    DIR* d;
+
+    if (!(d = opendir(dir)))
+        return;
+    while ((e = readdir(d))) {
+        if (e->d_name[0] == '.')
+            continue;
+        if (snprintf(path, sizeof path, "%s/%s", dir, e->d_name) >=
+                (int)sizeof path ||
+            snprintf(id, sizeof id, "%s%s", prefix, e->d_name) >=
+                (int)sizeof id ||
+            stat(path, &st) != 0)
+            continue;
+        n = strlen(id);
+        if (S_ISDIR(st.st_mode) && n + 1 < sizeof id) {
+            strcat(id, "-");
+            runnerscanapps(path, id, order);
+        } else if (n > 8 && !strcmp(id + n - 8, ".desktop")) {
+            runnerreadapp(path, id, (*order)++);
+        }
+    }
+    closedir(d);
+}
+
+static int runnerbyid(const void* a, const void* b)
+{
+    const RunnerApp *x = a, *y = b;
+    int c = strcmp(x->id, y->id);
+
+    return c ? c : x->order - y->order;
+}
+
+static int runnerbyname(const void* a, const void* b)
+{
+    return strcmp(((const RunnerApp*)a)->name, ((const RunnerApp*)b)->name);
+}
+
+static void runnerfreeapp(RunnerApp* a)
+{
+    free(a->id);
+    free(a->name);
+    free(a->gname);
+    free(a->exec);
+    free(a->icon);
+}
+
+static void runnerbuildapps(void)
+{
+    char *p = runnerappdirs(), *dir, *saveptr;
+    int i, w, order = 0;
+
+    for (dir = strtok_r(p, ":", &saveptr); dir;
+         dir = strtok_r(NULL, ":", &saveptr))
+        runnerscanapps(dir, "", &order);
+    free(p);
+
+    /* the first of an id wins, then the hidden ones go */
+    qsort(runner_apps, runner_napps, sizeof(RunnerApp), runnerbyid);
+    for (i = 0, w = 0; i < runner_napps; i++) {
+        if ((w && !strcmp(runner_apps[w - 1].id, runner_apps[i].id)) ||
+            runner_apps[i].hide)
+            runnerfreeapp(&runner_apps[i]);
+        else
+            runner_apps[w++] = runner_apps[i];
+    }
+    runner_napps = w;
+    qsort(runner_apps, runner_napps, sizeof(RunnerApp), runnerbyname);
+
+    if (!(runner_appnames =
+              realloc(runner_appnames, MAX(runner_napps, 1) * sizeof(char*))) ||
+        !(runner_appgnames = realloc(runner_appgnames,
+                                     MAX(runner_napps, 1) * sizeof(char*))) ||
+        !(runner_appuse =
+              realloc(runner_appuse, MAX(runner_napps, 1) * sizeof(int))))
+        die("realloc:");
+    for (i = 0; i < runner_napps; i++) {
+        runner_appnames[i] = runner_apps[i].name;
+        runner_appgnames[i] = runner_apps[i].gname;
+    }
+}
+
+static void runnerfreeapps(void)
+{
+    while (runner_napps)
+        runnerfreeapp(&runner_apps[--runner_napps]);
+    free(runner_apps);
+    runner_apps = NULL;
+    runner_nmatch = 0;
+    runner_sel = 0;
+}
+
+/* Exec with the escapes of the file undone and the field codes dropped,
+ * there being no files or urls to hand it */
+static char* runnerappexec(const char* exec)
+{
+    char *out = ecalloc(1, strlen(exec) + 1), *p = out;
+
+    for (; *exec; exec++) {
+        if (*exec == '\\' && exec[1]) {
+            exec++;
+            *p++ = *exec == 's'   ? ' '
+                   : *exec == 'n' ? '\n'
+                   : *exec == 't' ? '\t'
+                                  : *exec;
+        } else if (*exec == '%' && exec[1]) {
+            if (*++exec == '%')
+                *p++ = '%';
+        } else {
+            *p++ = *exec;
+        }
+    }
+    return out;
+}
+
 static int runnermodeon(int mode)
 {
     switch (mode) {
@@ -171,7 +447,7 @@ static int runnermode(const char* s, int* off)
 {
     const char* p;
     size_t n, len = 0;
-    int m, mode = ModeRun;
+    int m, mode = ModeApp;
 
     for (m = 0; m < NumModes; m++) {
         p = runner_prefixes[m] ? *runner_prefixes[m] : NULL;
@@ -279,8 +555,8 @@ static void runnerwritehist(void)
     }
 }
 
-/* Every run counts for the command in its first word, a recent one up to
- * five times as much as the oldest. */
+/* Every run counts for the application it opened or the command in its
+ * first word, a recent one up to five times as much as the oldest. */
 static void runnerweigh(void)
 {
     char word[sizeof runner_buf];
@@ -288,17 +564,28 @@ static void runnerweigh(void)
     const char* line;
     char** hit;
     size_t n;
-    int i, off, mode;
+    int i, off, mode, w;
 
     for (i = 0; i < runner_ncmds; i++)
         runner_use[i] = 0;
-    if (!runner_ncmds)
-        return;
+    for (i = 0; i < runner_napps; i++)
+        runner_appuse[i] = 0;
     for (i = 0; i < runner_nhist; i++) {
+        w = 1 + (i + 1) * 4 / runner_nhist;
         mode = runnermode(runner_hist[i], &off);
-        if (mode != ModeRun && mode != ModeTerm)
-            continue;
         line = runner_hist[i] + off;
+        if (mode == ModeApp && runner_napps) {
+            key = line;
+            if ((hit = bsearch(&key,
+                               runner_appnames,
+                               runner_napps,
+                               sizeof(char*),
+                               runnercmp)))
+                runner_appuse[hit - runner_appnames] += w;
+            key = word;
+        }
+        if ((mode != ModeRun && mode != ModeTerm) || !runner_ncmds)
+            continue;
         n = strcspn(line, " \t");
         if (n >= sizeof word)
             continue;
@@ -306,7 +593,7 @@ static void runnerweigh(void)
         word[n] = '\0';
         if ((hit = bsearch(
                  &key, runner_cmds, runner_ncmds, sizeof(char*), runnercmp)))
-            runner_use[hit - runner_cmds] += 1 + (i + 1) * 4 / runner_nhist;
+            runner_use[hit - runner_cmds] += w;
     }
 }
 
@@ -401,7 +688,13 @@ static void runnerwindows(void)
 
 static void runnersource(int mode)
 {
+    runner_alt = NULL;
     switch (mode) {
+        case ModeApp:
+            runner_src = (const char**)runner_appnames;
+            runner_alt = (const char**)runner_appgnames;
+            runner_nsrc = runner_napps;
+            break;
         case ModeRun:
         case ModeTerm:
             runner_src = (const char**)runner_cmds;
@@ -433,7 +726,7 @@ static void runnersource(int mode)
 static void runnerfilter(void)
 {
     int i, fold = 1, off, mode = runnermode(runner_buf, &off);
-    int qlen = runner_len - off, cmds;
+    int qlen = runner_len - off, *use = NULL;
     const char* q = runner_buf + off;
     double calcval;
 
@@ -450,13 +743,21 @@ static void runnerfilter(void)
     for (i = 0; i < qlen; i++)
         if (q[i] >= 'A' && q[i] <= 'Z')
             fold = 0;
-    cmds = runner_src == (const char**)runner_cmds;
-    for (i = 0; i < runner_nsrc; i++)
-        if ((runner_score[i] = runnerscore(runner_src[i], q, qlen, fold))) {
-            if (cmds)
-                runner_score[i] += MIN(runner_use[i], 1 << 16) * 16;
+    if (runner_src == (const char**)runner_cmds)
+        use = runner_use;
+    else if (runner_src == (const char**)runner_appnames)
+        use = runner_appuse;
+    for (i = 0; i < runner_nsrc; i++) {
+        runner_score[i] = runnerscore(runner_src[i], q, qlen, fold);
+        if (runner_alt && runner_alt[i])
+            runner_score[i] =
+                MAX(runner_score[i], runnerscore(runner_alt[i], q, qlen, fold));
+        if (runner_score[i]) {
+            if (use)
+                runner_score[i] += MIN(use[i], 1 << 16) * 16;
             runner_match[runner_nmatch++] = i;
         }
+    }
     qsort(runner_match, runner_nmatch, sizeof(int), runnerbyscore);
 }
 
@@ -491,21 +792,21 @@ static void runnerrecall(int step)
     runner_cur = runner_len;
 }
 
-static int runnerpathstale(void)
+static int runnerstale(char* p, char** cache, struct timespec* stamp)
 {
     /* A directory's mtime moves whenever an entry is added or removed, so
      * stat()ing the PATH entries - a syscall each, no readdir - answers
      * whether a rescan would turn anything up. That keeps the cost of
      * noticing a newly installed program off every prompt but the one that
      * follows the install. */
-    char *p = runnersearchpath(), *dir, *saveptr;
+    char *dir, *saveptr;
     struct stat st;
     struct timespec newest = { 0, 0 };
-    int moved = !runner_cachepath || strcmp(p, runner_cachepath);
+    int moved = !*cache || strcmp(p, *cache);
 
     if (moved) {
-        free(runner_cachepath);
-        if (!(runner_cachepath = strdup(p)))
+        free(*cache);
+        if (!(*cache = strdup(p)))
             die("strdup:");
     }
     for (dir = strtok_r(p, ":", &saveptr); dir;
@@ -518,10 +819,10 @@ static int runnerpathstale(void)
             newest = st.st_mtim;
     free(p);
 
-    if (!moved && newest.tv_sec == runner_stamp.tv_sec &&
-        newest.tv_nsec == runner_stamp.tv_nsec)
+    if (!moved && newest.tv_sec == stamp->tv_sec &&
+        newest.tv_nsec == stamp->tv_nsec)
         return 0;
-    runner_stamp = newest;
+    *stamp = newest;
     return 1;
 }
 
@@ -707,8 +1008,8 @@ int runnercalc(double* out)
     struct RunnerCalcState c = { runner_buf + off, 0, 0 };
     double v;
 
-    if ((mode != ModeRun && mode != ModeCalc) ||
-        !runnerisexpr(c.s, mode == ModeRun))
+    if ((mode != ModeApp && mode != ModeCalc) ||
+        !runnerisexpr(c.s, mode == ModeApp))
         return 0;
     v = runnercalcexpr(&c);
     while (*c.s == ' ' || *c.s == '\t')
@@ -865,17 +1166,25 @@ static void runnerenter(void)
     const char* sug = runnersuggest();
     const char* cmd;
     char line[sizeof runner_buf];
-    double calcval;
+    RunnerApp* app;
+    char* exec;
     int off, mode = runnermode(runner_buf, &off);
 
     runner_active = 0;
     cmd = sug ? sug : runner_buf + off;
     switch (mode) {
+        case ModeApp:
+            /* nothing to open, or a bare expression that Tab turns into
+             * its result */
+            if (!sug)
+                return;
+            app = &runner_apps[runner_match[runner_sel]];
+            exec = runnerappexec(app->exec);
+            runnerexec(exec, app->term);
+            free(exec);
+            break;
         case ModeRun:
-            /* A bare expression has no business reaching the shell: it
-             * would just fail as an unknown command. Tab already turns
-             * it into its result for anyone who wants that value. */
-            if (!*cmd || (!sug && runnercalc(&calcval)))
+            if (!*cmd)
                 return;
             runnerexec(cmd, 0);
             break;
@@ -911,9 +1220,15 @@ void runnertoggle(const Arg* arg)
     if (!selmon)
         return;
     if (!runner_active) {
-        if (runnerpathstale() || !runner_cmds) {
+        if (runnerstale(runnersearchpath(), &runner_cachepath, &runner_stamp) ||
+            !runner_cmds) {
             runnerfreecache();
             runnerbuildcache();
+        }
+        if (runnerstale(runnerappdirs(), &runner_appcache, &runner_appstamp) ||
+            !runner_apps) {
+            runnerfreeapps();
+            runnerbuildapps();
         }
         if (!runner_histread && runner_history_size)
             runnerreadhist();

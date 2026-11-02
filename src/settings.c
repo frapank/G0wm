@@ -559,6 +559,8 @@ static void wbar(void)
     note("runner_terminal", "runs a line starting with runner_termprefix");
     wstr("runner_terminal", runner_terminal);
     wstr("runner_termprefix", runner_termprefix);
+    note("runner_runprefix", "runs a command without a terminal");
+    wstr("runner_runprefix", runner_runprefix);
     wstr("runner_calcprefix", runner_calcprefix);
     wstr("runner_searchprefix", runner_searchprefix);
     note("runner_searchurl", "%s is the query, opened with xdg-open");
@@ -1194,6 +1196,7 @@ static void applybar(const struct scfg_block* b)
     runner_shell = getstr(b, "runner_shell", runner_shell);
     runner_terminal = getstr(b, "runner_terminal", runner_terminal);
     runner_termprefix = getstr(b, "runner_termprefix", runner_termprefix);
+    runner_runprefix = getstr(b, "runner_runprefix", runner_runprefix);
     runner_calcprefix = getstr(b, "runner_calcprefix", runner_calcprefix);
     runner_searchprefix = getstr(b, "runner_searchprefix", runner_searchprefix);
     runner_searchurl = getstr(b, "runner_searchurl", runner_searchurl);
