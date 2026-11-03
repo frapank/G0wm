@@ -82,6 +82,7 @@ int titlecenter           = 1;
 int titleclose            = 1; // shown with the pointer over it
 uint32_t titleclosecolor  = 0xff5f57ff;
 uint32_t privatecolor     = 0x9b59f6ff;
+const char* privatetitle  = "{app}";
 
 static Layout layouts_def[] = {
     { "[ ]", tile },

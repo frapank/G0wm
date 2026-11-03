@@ -512,6 +512,8 @@ static void wwindows(void)
     wbool("titleclose", titleclose);
     whex("titleclosecolor", titleclosecolor);
     whex("privatecolor", privatecolor);
+    note("privatetitle", "shown for a private window, {app} is its app id");
+    wstr("privatetitle", privatetitle);
     note("movethreshold", "px dragged on a title before the window moves");
     wint("movethreshold", movethreshold);
     note("movesnap", "px at which a moved floating window sticks, 0 off");
@@ -1172,6 +1174,7 @@ static void applywindows(const struct scfg_block* b)
     titleclose = getbool(b, "titleclose", titleclose);
     titleclosecolor = gethex(b, "titleclosecolor", titleclosecolor);
     privatecolor = gethex(b, "privatecolor", privatecolor);
+    privatetitle = getstr(b, "privatetitle", privatetitle);
     movethreshold = (int)getnum(b, "movethreshold", movethreshold);
     movesnap = (int)getnum(b, "movesnap", movesnap);
 }
@@ -1851,7 +1854,7 @@ void reloadsettings(const Arg* arg)
         wlr_scene_rect_set_color(m->fullscreen_bg, fullscreen_bg);
     }
     /* what a client copied out of the settings when it was mapped: its
-     * border and its own opacity */
+     * border, its own opacity and the title shown when private */
     wl_list_for_each(c, &clients, link)
     {
         if (!(c->tags & TAGMASK))
@@ -1860,6 +1863,7 @@ void reloadsettings(const Arg* arg)
         c->opacity_focus = opacity_focus;
         if (!c->isfullscreen)
             c->bw = client_is_unmanaged(c) ? 0 : borderwidth();
+        toplevelupdate(c);
     }
     wlr_scene_rect_set_color(root_bg, rootcolor);
 

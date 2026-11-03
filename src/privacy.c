@@ -304,6 +304,28 @@ static void shielddestroy(struct wl_listener* listener, void* data)
     free(s);
 }
 
+/* title that others get to see */
+const char* showntitle(Client* c)
+{
+    static char buf[256];
+    const char* s;
+    size_t n = 0;
+
+    if (!c->isprivate)
+        return client_get_title(c);
+    for (s = privatetitle; *s && n < sizeof(buf) - 1; s++) {
+        if (!strncmp(s, "{app}", 5)) {
+            n += snprintf(buf + n, sizeof(buf) - n, "%s", client_get_appid(c));
+            n = MIN(n, sizeof(buf) - 1);
+            s += 4;
+        } else {
+            buf[n++] = *s;
+        }
+    }
+    buf[n] = '\0';
+    return buf;
+}
+
 void toggleprivate(const Arg* arg)
 {
     Client* sel = focustop(selmon);
@@ -311,6 +333,7 @@ void toggleprivate(const Arg* arg)
     if (!sel)
         return;
     sel->isprivate = !sel->isprivate;
+    toplevelupdate(sel);
     privacydamage();
     drawbars();
 }

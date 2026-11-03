@@ -611,6 +611,7 @@ void setwallpaper(Monitor* m);
 #endif /* INTEGRATED_BACKGROUND */
 void shifttag(const Arg* arg);
 void shiftview(const Arg* arg);
+const char* showntitle(Client* c);
 void spawn(const Arg* arg);
 void startdrag(struct wl_listener* listener, void* data);
 int statusin(int fd, unsigned int mask, void* data);
@@ -774,6 +775,7 @@ extern int titlecenter;
 extern int titleclose;
 extern uint32_t titleclosecolor;
 extern uint32_t privatecolor;
+extern const char* privatetitle;
 extern Layout* layouts;
 extern size_t nlayouts;
 extern Rule* rules;

@@ -577,7 +577,7 @@ void drawbar(Monitor* m)
                           w,
                           m->b.height,
                           m->lrpad / 2,
-                          client_get_title(c),
+                          showntitle(c),
                           0);
                 if (c->isfloating)
                     drawpill(m,
@@ -940,7 +940,7 @@ static void drawtitle(Client* c)
     tab = m->lt[m->sellt]->arrange == tabbed && !c->isfloating &&
           c->titlew < c->geom.width - 2 * (int)c->bw;
     fg = colors[sel ? SchemeTitleSel : SchemeTitle][ColFg];
-    title = client_get_title(c);
+    title = showntitle(c);
     end = titleclosex(c, w, &d);
     fd = MAX(m->drw->font->height / 3, 3);
 

@@ -150,7 +150,7 @@ OBS.
   config (`private` block) and overridable per rule. The text can use `{app}`
   and `{title}`, is drawn with fcft, and the shape follows the window border
   (rounded or squircle).
-- [ ] Show the placeholder text instead of the real title in the bar, the tabs
+- [x] Show the placeholder text instead of the real title in the bar, the tabs
   and the foreign toplevel list, since the title often holds the sensitive part.
 - [x] Spike: the output capture source and screencopy copy the buffer
   already composed for the screen. ext-image-copy-capture can still be masked
