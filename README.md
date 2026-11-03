@@ -68,7 +68,7 @@ projects keep their original licenses, stored in `license/`. Where each part
 comes from, and the thanks owed to the patch authors, is in
 [docs/credits.md](docs/credits.md).
 
-[Features]: docs/FEATURES.md
+[Features]: docs/features.md
 [Build]: #build
 [Configure]: docs/settings.md
 [Release]: https://github.com/frapank/G0wm/releases/latest
