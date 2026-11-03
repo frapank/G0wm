@@ -436,6 +436,7 @@ typedef struct {
     const char* title;
     uint32_t tags;
     int isfloating;
+    int isprivate;
     float opacity_focus;   /* 0 keeps the default from config.h */
     float opacity_unfocus; /* 0 keeps the default from config.h */
     int monitor;

@@ -707,6 +707,7 @@ static void wrules(void)
         wstr("title", rules[i].title);
         wint("tags", rules[i].tags);
         wbool("isfloating", rules[i].isfloating);
+        wbool("private", rules[i].isprivate);
         wnum("opacity_focus", rules[i].opacity_focus);
         wnum("opacity_unfocus", rules[i].opacity_unfocus);
         wint("monitor", rules[i].monitor);
@@ -1382,6 +1383,7 @@ static void applyrules(const struct scfg_block* b)
         out[n].title = getstr(r, "title", NULL);
         out[n].tags = getuint(r, "tags", 0);
         out[n].isfloating = getbool(r, "isfloating", 0);
+        out[n].isprivate = getbool(r, "private", 0);
         out[n].opacity_focus = (float)getnum(r, "opacity_focus", 0);
         out[n].opacity_unfocus = (float)getnum(r, "opacity_unfocus", 0);
         out[n].monitor = (int)getnum(r, "monitor", -1);

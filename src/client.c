@@ -60,6 +60,7 @@ static void applyrules(Client* c)
         if ((!r->title || strstr(title, r->title)) &&
             (!r->id || strstr(appid, r->id))) {
             c->isfloating = r->isfloating;
+            c->isprivate |= r->isprivate;
             if (r->opacity_focus > 0)
                 c->opacity_focus = r->opacity_focus;
             if (r->opacity_unfocus > 0)

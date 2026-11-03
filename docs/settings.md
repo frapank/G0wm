@@ -373,6 +373,7 @@ rule {
 | `title` | any | Title of the window. |
 | `tags` | `0` | Tags to open on, as a bitmask (see [Tags as bitmasks](#tags-as-bitmasks)). `0` for the current tags. |
 | `isfloating` | `false` | Open floating. |
+| `private` | `false` | Open as a private window, see `toggleprivate`. |
 | `opacity_focus` | `0` | Opacity when focused. `0` keeps the global one. |
 | `opacity_unfocus` | `0` | Opacity when unfocused. `0` keeps the global one. |
 | `monitor` | `-1` | Monitor to open on, counted from `0`. `-1` for the focused one. |
