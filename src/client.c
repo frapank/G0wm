@@ -717,6 +717,7 @@ void unmapnotify(struct wl_listener* listener, void* data)
     c->titleblurbuf = NULL;
 #endif
     bufpooldrop(c->titlepool, LENGTH(c->titlepool));
+    bufpooldrop(c->sharepool, LENGTH(c->sharepool));
     c->titlebufw = 0;
     for (i = 0; i < 4; i++) {
         c->corner[i] = NULL;

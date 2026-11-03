@@ -146,7 +146,7 @@ Borders, gaps and title bars.
 | `titlecenter` | `true` | Center the title text. |
 | `titleclose` | `true` | Show a close button on the title bar while the pointer is over it. |
 | `titleclosecolor` | <img src="../.github/assets/color-ff5f57.svg" width="12" height="12"> `#ff5f57ff` | Color of the close button. |
-| `privatetitle` | `{app}` | Shown instead of the title of a private window, in the title bar, the tabs, the bar, the runner and the window list given to other apps. `{app}` is replaced by the app id. |
+| `privatetitle` | `{app}` | Shown instead of the title of a private window in screen sharing (title bar, tabs and bar), in the runner and in the window list given to other apps. Your screen keeps the real title. `{app}` is replaced by the app id. |
 | `privatecolor` | <img src="../.github/assets/color-9b59f6.svg" width="12" height="12"> `#9b59f6ff` | Color of the dot on a private window. |
 | `privateround` | `-1` | Roundness of that dot, from `0` (square) to `1` (round). Below `0` it follows `bartagdotround`. |
 | `alwaysprivate` | `false` | Every window opens private and `toggleprivate` makes it public instead, marked by a dot in `publiccolor`. Changing it on reload resets all the open windows. |

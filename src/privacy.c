@@ -17,6 +17,12 @@ typedef struct {
     struct wl_listener destroy;
 } Shield;
 
+/* black box, or buf drawn over it */
+typedef struct {
+    struct wlr_box box;
+    Buffer* buf;
+} Patch;
+
 typedef struct {
     struct wlr_screencopy_frame_v1* frame;
     struct wlr_buffer* buf;
@@ -24,11 +30,13 @@ typedef struct {
 } Copy;
 
 /* function declarations */
-static int blackout(struct wlr_buffer* buf, struct wlr_box* b, int n);
+static int blackout(struct wlr_buffer* buf, Patch* p, int n);
 static void copyframe(struct wlr_ext_image_capture_source_v1* source,
                       struct wlr_ext_image_copy_capture_frame_v1* frame,
                       struct wlr_ext_image_capture_source_v1_frame_event* ev);
-static int privateboxes(Monitor* m, struct wlr_box* out);
+static pixman_format_code_t pixfmt(uint32_t format);
+static int privateboxes(Monitor* m, Patch* out);
+static int tobuffer(Monitor* m, struct wlr_box b, struct wlr_box* out);
 static void shield(struct wlr_ext_image_capture_source_v1* source,
                    struct wlr_output* output,
                    Client* c);
@@ -37,62 +45,93 @@ static void wipe(struct wlr_buffer* buf);
 
 /* variables */
 static struct wl_array copies;
-static struct wlr_box masks[MAXBOXES];
+static Patch masks[MAXBOXES];
 static int nmasks;
 
 /* function implementations */
 
-static int blackout(struct wlr_buffer* buf, struct wlr_box* b, int n)
+static int blackout(struct wlr_buffer* buf, Patch* p, int n)
 {
-    struct wlr_box all = { 0, 0, buf->width, buf->height };
+    static const pixman_color_t black = { 0, 0, 0, 0xffff };
+    struct wlr_box all = { 0, 0, buf->width, buf->height }, b;
     struct wlr_render_pass* pass;
-    uint32_t format, px, *row;
+    struct wlr_texture* tex[MAXBOXES];
+    pixman_format_code_t fmt;
+    pixman_image_t* img;
+    uint32_t format;
     size_t stride;
     void* data;
-    int i, x, y;
-
-    for (i = 0; i < n; i++)
-        if (!wlr_box_intersection(&b[i], &b[i], &all))
-            b[i] = (struct wlr_box){ 0 };
+    double sx, sy;
+    int i, ntex = 0, ok;
 
     if (wlr_buffer_begin_data_ptr_access(
             buf, WLR_BUFFER_DATA_PTR_ACCESS_WRITE, &data, &format, &stride)) {
-        switch (format) {
-            case DRM_FORMAT_ARGB8888:
-            case DRM_FORMAT_XRGB8888:
-            case DRM_FORMAT_ABGR8888:
-            case DRM_FORMAT_XBGR8888:
-                px = 0xff000000;
-                break;
-            case DRM_FORMAT_ARGB2101010:
-            case DRM_FORMAT_XRGB2101010:
-            case DRM_FORMAT_ABGR2101010:
-            case DRM_FORMAT_XBGR2101010:
-                px = 0xc0000000;
-                break;
-            default:
-                wlr_buffer_end_data_ptr_access(buf);
-                return 0;
+        if (!(fmt = pixfmt(format)) ||
+            !(img = pixman_image_create_bits_no_clear(
+                  fmt, buf->width, buf->height, data, (int)stride))) {
+            wlr_buffer_end_data_ptr_access(buf);
+            return 0;
         }
-        for (i = 0; i < n; i++)
-            for (y = b[i].y; y < b[i].y + b[i].height; y++) {
-                row = (uint32_t*)((uint8_t*)data + y * stride) + b[i].x;
-                for (x = 0; x < b[i].width; x++)
-                    row[x] = px;
-            }
+        for (i = 0; i < n; i++) {
+            if (!wlr_box_intersection(&b, &p[i].box, &all))
+                continue;
+            if (!p[i].buf)
+                pixman_image_fill_rectangles(
+                    PIXMAN_OP_SRC,
+                    img,
+                    &black,
+                    1,
+                    &(pixman_rectangle16_t){ b.x, b.y, b.width, b.height });
+            else
+                pixman_image_composite32(
+                    PIXMAN_OP_SRC,
+                    p[i].buf->image,
+                    NULL,
+                    img,
+                    0,
+                    0,
+                    0,
+                    0,
+                    p[i].box.x,
+                    p[i].box.y,
+                    MIN(p[i].box.width, p[i].buf->base.width),
+                    MIN(p[i].box.height, p[i].buf->base.height));
+        }
+        pixman_image_unref(img);
         wlr_buffer_end_data_ptr_access(buf);
         return 1;
     }
 
     if (!(pass = wlr_renderer_begin_buffer_pass(drw, buf, NULL)))
         return 0;
-    for (i = 0; i < n; i++)
-        if (!wlr_box_empty(&b[i]))
-            wlr_render_pass_add_rect(
-                pass,
-                &(struct wlr_render_rect_options){ .box = b[i],
-                                                   .color = { 0, 0, 0, 1 } });
-    return wlr_render_pass_submit(pass);
+    for (i = 0; i < n; i++) {
+        if (!wlr_box_intersection(&b, &p[i].box, &all))
+            continue;
+        if (!p[i].buf ||
+            !(tex[ntex] = wlr_texture_from_buffer(drw, &p[i].buf->base))) {
+            wlr_render_pass_add_rect(pass,
+                                     &(struct wlr_render_rect_options){
+                                         .box = b, .color = { 0, 0, 0, 1 } });
+            continue;
+        }
+        sx = (double)tex[ntex]->width / p[i].box.width;
+        sy = (double)tex[ntex]->height / p[i].box.height;
+        wlr_render_pass_add_texture(
+            pass,
+            &(struct wlr_render_texture_options){
+                .texture = tex[ntex++],
+                .src_box = { (b.x - p[i].box.x) * sx,
+                             (b.y - p[i].box.y) * sy,
+                             b.width * sx,
+                             b.height * sy },
+                .dst_box = b,
+                .blend_mode = WLR_RENDER_BLEND_MODE_NONE });
+    }
+    /* in use until the pass is submitted */
+    ok = wlr_render_pass_submit(pass);
+    while (ntex)
+        wlr_texture_destroy(tex[--ntex]);
+    return ok;
 }
 
 /* fail the frame rather than leak it */
@@ -101,7 +140,7 @@ static void copyframe(struct wlr_ext_image_capture_source_v1* source,
                       struct wlr_ext_image_capture_source_v1_frame_event* ev)
 {
     Shield* s = wl_container_of(source->impl, s, impl);
-    struct wlr_box b[MAXBOXES];
+    Patch b[MAXBOXES];
     struct timespec now;
     Monitor* m;
     int n;
@@ -112,9 +151,8 @@ static void copyframe(struct wlr_ext_image_capture_source_v1* source,
             s->orig->copy_frame(source, frame, ev);
             return;
         }
-        b[0] = (struct wlr_box){
-            0, 0, frame->buffer->width, frame->buffer->height
-        };
+        b[0] = (Patch){ { 0, 0, frame->buffer->width, frame->buffer->height },
+                        NULL };
         if (!blackout(frame->buffer, b, 1))
             goto fail;
         wlr_ext_image_copy_capture_frame_v1_ready(
@@ -142,11 +180,35 @@ fail:
         frame, EXT_IMAGE_COPY_CAPTURE_FRAME_V1_FAILURE_REASON_UNKNOWN);
 }
 
+static pixman_format_code_t pixfmt(uint32_t format)
+{
+    switch (format) {
+        case DRM_FORMAT_ARGB8888:
+            return PIXMAN_a8r8g8b8;
+        case DRM_FORMAT_XRGB8888:
+            return PIXMAN_x8r8g8b8;
+        case DRM_FORMAT_ABGR8888:
+            return PIXMAN_a8b8g8r8;
+        case DRM_FORMAT_XBGR8888:
+            return PIXMAN_x8b8g8r8;
+        case DRM_FORMAT_ARGB2101010:
+            return PIXMAN_a2r10g10b10;
+        case DRM_FORMAT_XRGB2101010:
+            return PIXMAN_x2r10g10b10;
+        case DRM_FORMAT_ABGR2101010:
+            return PIXMAN_a2b10g10r10;
+        case DRM_FORMAT_XBGR2101010:
+            return PIXMAN_x2b10g10r10;
+        default:
+            return 0;
+    }
+}
+
 /* screencopy copies during the commit: mask before ready is sent */
 void privacyafter(Monitor* m)
 {
     struct wlr_screencopy_frame_v1* f;
-    struct wlr_box b[MAXBOXES];
+    Patch b[MAXBOXES];
     Copy* cp;
     int i, gone;
 
@@ -162,8 +224,8 @@ void privacyafter(Monitor* m)
         if (gone) {
             for (i = 0; i < nmasks; i++) {
                 b[i] = masks[i];
-                b[i].x -= cp->box.x;
-                b[i].y -= cp->box.y;
+                b[i].box.x -= cp->box.x;
+                b[i].box.y -= cp->box.y;
             }
             if (!blackout(cp->buf, b, nmasks))
                 wipe(cp->buf);
@@ -223,51 +285,79 @@ void privacyfini(void)
     wl_array_release(&copies);
 }
 
-/* contents of private windows on m, in buffer pixels */
-static int privateboxes(Monitor* m, struct wlr_box* out)
+/* areas of m hidden from screen sharing, in buffer pixels */
+static int privateboxes(Monitor* m, Patch* out)
 {
-    struct wlr_output* o = m->wlr_output;
-    struct wlr_box b, all;
-    float sc = o->scale;
+    struct wlr_box b[3];
+    Buffer* share[3];
+    Buffer* sp;
     Client* c;
-    int n = 0, tw, th, t, x0, y0, x1, y1;
+    double k;
+    int i, n = 0, nb, t, x, y;
 
-    wlr_output_transformed_resolution(o, &tw, &th);
-    all = (struct wlr_box){ 0, 0, tw, th };
     wl_list_for_each(c, &clients, link)
     {
-        if (!c->isprivate || !c->scene->node.enabled ||
-            !c->scene_surface->node.enabled)
+        if (!c->isprivate || !c->scene->node.enabled)
             continue;
+        nb = 0;
         t = titleheight(c);
-        b = (struct wlr_box){ c->geom.x + (int)c->bw,
-                              c->geom.y + (int)c->bw + t,
-                              c->geom.width - 2 * (int)c->bw,
-                              c->geom.height - 2 * (int)c->bw - t };
-        x0 = (int)floor((b.x - m->m.x) * sc);
-        y0 = (int)floor((b.y - m->m.y) * sc);
-        x1 = (int)ceil((b.x + b.width - m->m.x) * sc);
-        y1 = (int)ceil((b.y + b.height - m->m.y) * sc);
-        b = (struct wlr_box){ x0, y0, x1 - x0, y1 - y0 };
-        if (!wlr_box_intersection(&b, &b, &all))
-            continue;
-        wlr_box_transform(
-            &b, &b, wlr_output_transform_invert(o->transform), tw, th);
-        if (m->zoom > 1 && m->zoomtex) {
-            x0 = (int)floor((b.x - m->zoomsrc.x) * m->zoom);
-            y0 = (int)floor((b.y - m->zoomsrc.y) * m->zoom);
-            x1 = (int)ceil((b.x + b.width - m->zoomsrc.x) * m->zoom);
-            y1 = (int)ceil((b.y + b.height - m->zoomsrc.y) * m->zoom);
-            b = (struct wlr_box){ x0, y0, x1 - x0, y1 - y0 };
+        if (c->scene_surface->node.enabled) {
+            b[nb] = (struct wlr_box){ c->geom.x + (int)c->bw,
+                                      c->geom.y + (int)c->bw + t,
+                                      c->geom.width - 2 * (int)c->bw,
+                                      c->geom.height - 2 * (int)c->bw - t };
+            share[nb++] = NULL;
         }
-        /* too many, mask everything */
-        if (n == MAXBOXES) {
-            out[0] = (struct wlr_box){ 0, 0, o->width, o->height };
-            return 1;
+        if (c->title && c->title->node.enabled &&
+            wlr_scene_node_coords(&c->title->node, &x, &y)) {
+            /* the scene drops the title buffer once it is a texture */
+            sp = c->sharepool[0];
+            b[nb] = (struct wlr_box){ x, y, c->titlew, t };
+            share[nb++] = sp && c->mon && sp->base.width == c->titlebufw &&
+                                  sp->base.height == c->mon->t.height
+                              ? sp
+                              : NULL;
         }
-        out[n++] = b;
+        for (i = 0; i < nb; i++) {
+            if (n == MAXBOXES)
+                goto full;
+            switch (tobuffer(m, b[i], &out[n].box)) {
+                case 1:
+                    out[n++].buf = share[i];
+                    break;
+                case -1:
+                    out[n++].buf = NULL;
+                    break;
+            }
+        }
+    }
+
+    sp = m->sharepool[0];
+    if (m->sharew && sp && sp->base.width == m->sharew &&
+        sp->base.height == m->b.height && m->scene_buffer->node.enabled) {
+        if (n == MAXBOXES)
+            goto full;
+        k = (double)m->b.real_width / m->b.width;
+        b[0] = (struct wlr_box){ m->scene_buffer->node.x +
+                                     (int)floor(m->sharex * k),
+                                 m->scene_buffer->node.y,
+                                 (int)ceil(m->sharew * k),
+                                 m->b.real_height };
+        switch (tobuffer(m, b[0], &out[n].box)) {
+            case 1:
+                out[n++].buf = sp;
+                break;
+            case -1:
+                out[n++].buf = NULL;
+                break;
+        }
     }
     return n;
+
+full:
+    out[0] =
+        (Patch){ { 0, 0, m->wlr_output->width, m->wlr_output->height }, NULL };
+    return 1;
 }
 
 static void shield(struct wlr_ext_image_capture_source_v1* source,
@@ -305,7 +395,7 @@ static void shielddestroy(struct wl_listener* listener, void* data)
 }
 
 /* title that others get to see */
-const char* showntitle(Client* c)
+const char* sharetitle(Client* c)
 {
     static char buf[256];
     const char* s;
@@ -324,6 +414,41 @@ const char* showntitle(Client* c)
     }
     buf[n] = '\0';
     return buf;
+}
+
+/* b in buffer pixels, 0 when off m, -1 when rotated or zoomed */
+static int tobuffer(Monitor* m, struct wlr_box b, struct wlr_box* out)
+{
+    struct wlr_output* o = m->wlr_output;
+    struct wlr_box all, clip;
+    float sc = o->scale;
+    int tw, th, x0, y0, x1, y1;
+
+    wlr_output_transformed_resolution(o, &tw, &th);
+    all = (struct wlr_box){ 0, 0, tw, th };
+    x0 = (int)floor((b.x - m->m.x) * sc);
+    y0 = (int)floor((b.y - m->m.y) * sc);
+    x1 = (int)ceil((b.x + b.width - m->m.x) * sc);
+    y1 = (int)ceil((b.y + b.height - m->m.y) * sc);
+    b = (struct wlr_box){ x0, y0, x1 - x0, y1 - y0 };
+    if (!wlr_box_intersection(&clip, &b, &all))
+        return 0;
+    if (o->transform == WL_OUTPUT_TRANSFORM_NORMAL &&
+        !(m->zoom > 1 && m->zoomtex)) {
+        *out = b;
+        return 1;
+    }
+    wlr_box_transform(
+        &b, &clip, wlr_output_transform_invert(o->transform), tw, th);
+    if (m->zoom > 1 && m->zoomtex) {
+        x0 = (int)floor((b.x - m->zoomsrc.x) * m->zoom);
+        y0 = (int)floor((b.y - m->zoomsrc.y) * m->zoom);
+        x1 = (int)ceil((b.x + b.width - m->zoomsrc.x) * m->zoom);
+        y1 = (int)ceil((b.y + b.height - m->zoomsrc.y) * m->zoom);
+        b = (struct wlr_box){ x0, y0, x1 - x0, y1 - y0 };
+    }
+    *out = b;
+    return -1;
 }
 
 void toggleprivate(const Arg* arg)

@@ -205,6 +205,24 @@ static double privateradius(int d)
     return d / 2.0 * (privateround < 0 ? bartagdotround : privateround);
 }
 
+/* scheme with an opaque background */
+static uint32_t* opaquescheme(int scheme)
+{
+    static uint32_t scm[NumSchemes][3];
+
+    memcpy(scm[scheme], colors[scheme], sizeof(scm[scheme]));
+    scm[scheme][ColBg] |= 0xff;
+    return scm[scheme];
+}
+
+/* a pool of one, dropped when the size changes */
+static Buffer* sharebuf(Buffer** pool, int w, int h)
+{
+    if (*pool && ((*pool)->base.width != w || (*pool)->base.height != h))
+        bufpooldrop(pool, 1);
+    return bufget(pool, 1, w, h);
+}
+
 /* the urgent colour breathing between full and a quarter of its alpha, one
  * cycle every barurgentpulse ms */
 static uint32_t pulse(uint32_t rgba)
@@ -370,6 +388,43 @@ static int tagdot(Monitor* m,
     return *lead + *sw + (i == ntags - 1 ? m->lrpad / 2 : gap - gap / 2);
 }
 
+/* title of c in the bar */
+static void drawbartitle(Monitor* m,
+                         Client* c,
+                         int x,
+                         int w,
+                         int sel,
+                         int share)
+{
+    int boxs = m->drw->font->height / 9;
+    int boxw = m->drw->font->height / 6 + 2;
+    int boxy = (m->b.height - m->drw->font->height) / 2 + boxs;
+    double boxr = barboxradius * m->wlr_output->scale;
+    int scheme = sel ? SchemeSel : SchemeNorm;
+    uint32_t pc;
+
+    drwl_setscheme(m->drw, share ? opaquescheme(scheme) : colors[scheme]);
+    drwl_text(m->drw,
+              x,
+              0,
+              w,
+              m->b.height,
+              m->lrpad / 2,
+              share ? sharetitle(c) : client_get_title(c),
+              0);
+    if (c->isfloating)
+        drawpill(m, x + boxs, boxy, boxw, boxw, boxr, 1, m->drw->scheme[ColFg]);
+    if (privatedot(c, &pc))
+        drawpill(m,
+                 x + boxs + (c->isfloating ? boxw + boxs : 0),
+                 boxy,
+                 boxw,
+                 boxw,
+                 privateradius(boxw),
+                 0,
+                 pc);
+}
+
 /* shared with barclick() */
 int tagwidth(Monitor* m, Monitor* s, uint32_t i)
 {
@@ -388,10 +443,10 @@ void drawbar(Monitor* m)
     /* the little squares follow the text, which drwl centers */
     int boxy = (m->b.height - m->drw->font->height) / 2 + boxs;
     double boxr = barboxradius * m->wlr_output->scale;
-    uint32_t i, occ = 0, urg = 0, pc;
+    uint32_t i, occ = 0, urg = 0;
     int pulsing = 0;
     Client* c;
-    Buffer* buf;
+    Buffer *buf, *share;
     /* what the bar reports on: its own monitor, or the focused one when
      * barsinglemon leaves a single bar standing in for the lot */
     Monitor* s = barsinglemon && selmon ? selmon : m;
@@ -401,6 +456,7 @@ void drawbar(Monitor* m)
     /* Title bars are refreshed on the same events as the bar */
     wl_list_for_each(c, &clients, link) if (c->mon == m) drawtitle(c);
 
+    m->sharew = 0;
     if (!m->scene_buffer->node.enabled) {
 #ifdef INTEGRATED_BACKGROUND
         /* a hidden bar has no backdrop either, and togglebar() comes through
@@ -584,33 +640,16 @@ void drawbar(Monitor* m)
             if (n) {
                 drawnotify(m, x, w, n, hist);
             } else if (barwintitle && c) {
-                drwl_setscheme(m->drw, colors[sel ? SchemeSel : SchemeNorm]);
-                drwl_text(m->drw,
-                          x,
-                          0,
-                          w,
-                          m->b.height,
-                          m->lrpad / 2,
-                          showntitle(c),
-                          0);
-                if (c->isfloating)
-                    drawpill(m,
-                             x + boxs,
-                             boxy,
-                             boxw,
-                             boxw,
-                             boxr,
-                             1,
-                             m->drw->scheme[ColFg]);
-                if (privatedot(c, &pc))
-                    drawpill(m,
-                             x + boxs + (c->isfloating ? boxw + boxs : 0),
-                             boxy,
-                             boxw,
-                             boxw,
-                             privateradius(boxw),
-                             0,
-                             pc);
+                drawbartitle(m, c, x, w, sel, 0);
+                if (c->isprivate &&
+                    (share = sharebuf(m->sharepool, w, m->b.height))) {
+                    drwl_setimage(m->drw, share->image);
+                    drawbartitle(m, c, 0, w, sel, 1);
+                    drwl_setimage(m->drw, buf->image);
+                    wlr_buffer_unlock(&share->base);
+                    m->sharex = x;
+                    m->sharew = w;
+                }
             } else {
                 drwl_setscheme(m->drw, colors[SchemeNorm]);
                 drwl_rect(m->drw, x, 0, w, m->b.height, 1, 1);
@@ -922,39 +961,21 @@ static int titleclosex(Client* c, int w, int* d)
     return x > w / 2 ? x : w;
 }
 
-/* Renders the client's own title bar. In the tabbed layout every client of the
- * group shares one row, so these end up drawn side by side as tabs. */
-static void drawtitle(Client* c)
+/* draws the title bar of c into buf */
+static void painttitle(Client* c, Buffer* buf, int share)
 {
     Monitor* m = c->mon;
-    Buffer* buf;
     const char* title;
-    int w, h, sel, tab, end, lead, tw, d, fd, pd, dots;
+    int w = buf->base.width, h = buf->base.height;
+    int sel, scheme, tab, end, lead, tw, d, fd, pd, dots;
     uint32_t fg, pc;
 
-    if (!c->title)
-        return;
-    settitle(c);
-    if (!m || !titlebar || c->isfullscreen || c->titlew <= 0 ||
-        !c->scene->node.enabled) {
-        wlr_scene_node_set_enabled(&c->title->node, 0);
-        return;
-    }
-
-    w = (int)((float)c->titlew * m->wlr_output->scale);
-    h = m->t.height;
-    if (w != c->titlebufw) {
-        bufpooldrop(c->titlepool, LENGTH(c->titlepool));
-        c->titlebufw = w;
-    }
-    if (!(buf = bufget(c->titlepool, LENGTH(c->titlepool), w, h)))
-        return;
-
     sel = titlesel(c);
+    scheme = sel ? SchemeTitleSel : SchemeTitle;
     tab = m->lt[m->sellt]->arrange == tabbed && !c->isfloating &&
           c->titlew < c->geom.width - 2 * (int)c->bw;
-    fg = colors[sel ? SchemeTitleSel : SchemeTitle][ColFg];
-    title = showntitle(c);
+    fg = colors[scheme][ColFg];
+    title = share ? sharetitle(c) : client_get_title(c);
     end = titleclosex(c, w, &d);
     fd = MAX(m->drw->font->height / 3, 3);
 
@@ -967,7 +988,7 @@ static void drawtitle(Client* c)
     }
 
     drwl_setimage(m->drw, buf->image);
-    drwl_setscheme(m->drw, colors[sel ? SchemeTitleSel : SchemeTitle]);
+    drwl_setscheme(m->drw, share ? opaquescheme(scheme) : colors[scheme]);
     drwl_rect(m->drw, 0, 0, w, h, 1, 1);
     if (end > lead)
         drwl_text(m->drw, 0, 0, end, h, lead, title, 0);
@@ -1001,6 +1022,38 @@ static void drawtitle(Client* c)
                  fade(colors[SchemeTitle][ColFg]));
     if (end < w && c == hovered)
         drawpill(m, end, (h - d) / 2, d, d, d / 2.0, 0, titleclosecolor);
+}
+
+/* Renders the client's own title bar. In the tabbed layout every client of the
+ * group shares one row, so these end up drawn side by side as tabs. */
+static void drawtitle(Client* c)
+{
+    Monitor* m = c->mon;
+    Buffer *buf, *share;
+    int w, h;
+
+    if (!c->title)
+        return;
+    settitle(c);
+    if (!m || !titlebar || c->isfullscreen || c->titlew <= 0 ||
+        !c->scene->node.enabled) {
+        wlr_scene_node_set_enabled(&c->title->node, 0);
+        return;
+    }
+
+    w = (int)((float)c->titlew * m->wlr_output->scale);
+    h = m->t.height;
+    if (w != c->titlebufw) {
+        bufpooldrop(c->titlepool, LENGTH(c->titlepool));
+        c->titlebufw = w;
+    }
+    if (!(buf = bufget(c->titlepool, LENGTH(c->titlepool), w, h)))
+        return;
+    painttitle(c, buf, 0);
+    if (c->isprivate && (share = sharebuf(c->sharepool, w, h))) {
+        painttitle(c, share, 1);
+        wlr_buffer_unlock(&share->base);
+    }
 
     wlr_scene_node_set_enabled(&c->title->node, 1);
     wlr_scene_buffer_set_opacity(c->title, decoopacity());
@@ -1867,6 +1920,7 @@ void updatebar(Monitor* m)
     wlr_scene_node_set_enabled(&m->scene_buffer->node, barvisible(m));
 
     bufpooldrop(m->pool, LENGTH(m->pool));
+    bufpooldrop(m->sharepool, LENGTH(m->sharepool));
 
     if (m->b.scale == m->wlr_output->scale && m->drw)
         return;
