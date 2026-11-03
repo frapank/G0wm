@@ -191,6 +191,15 @@ static uint32_t fade(uint32_t rgba)
     return (rgba & ~0xffu) | (rgba & 0xffu) / 3;
 }
 
+/* the dot marks the windows that differ from alwaysprivate */
+static int privatedot(Client* c, uint32_t* rgba)
+{
+    if (!c->isprivate == !alwaysprivate)
+        return 0;
+    *rgba = c->isprivate ? privatecolor : publiccolor;
+    return 1;
+}
+
 static double privateradius(int d)
 {
     return d / 2.0 * (privateround < 0 ? bartagdotround : privateround);
@@ -379,7 +388,7 @@ void drawbar(Monitor* m)
     /* the little squares follow the text, which drwl centers */
     int boxy = (m->b.height - m->drw->font->height) / 2 + boxs;
     double boxr = barboxradius * m->wlr_output->scale;
-    uint32_t i, occ = 0, urg = 0;
+    uint32_t i, occ = 0, urg = 0, pc;
     int pulsing = 0;
     Client* c;
     Buffer* buf;
@@ -593,7 +602,7 @@ void drawbar(Monitor* m)
                              boxr,
                              1,
                              m->drw->scheme[ColFg]);
-                if (c->isprivate)
+                if (privatedot(c, &pc))
                     drawpill(m,
                              x + boxs + (c->isfloating ? boxw + boxs : 0),
                              boxy,
@@ -601,7 +610,7 @@ void drawbar(Monitor* m)
                              boxw,
                              privateradius(boxw),
                              0,
-                             privatecolor);
+                             pc);
             } else {
                 drwl_setscheme(m->drw, colors[SchemeNorm]);
                 drwl_rect(m->drw, x, 0, w, m->b.height, 1, 1);
@@ -920,8 +929,8 @@ static void drawtitle(Client* c)
     Monitor* m = c->mon;
     Buffer* buf;
     const char* title;
-    int w, h, sel, tab, end, lead, tw, d, fd, dots;
-    uint32_t fg;
+    int w, h, sel, tab, end, lead, tw, d, fd, pd, dots;
+    uint32_t fg, pc;
 
     if (!c->title)
         return;
@@ -949,7 +958,8 @@ static void drawtitle(Client* c)
     end = titleclosex(c, w, &d);
     fd = MAX(m->drw->font->height / 3, 3);
 
-    dots = !!c->isfloating + !!c->isprivate;
+    pd = privatedot(c, &pc);
+    dots = !!c->isfloating + pd;
     lead = m->lrpad / 2 + dots * (fd + m->lrpad / 3);
     if (titlecenter) {
         tw = (int)drwl_font_getwidth(m->drw, title);
@@ -962,7 +972,7 @@ static void drawtitle(Client* c)
     if (end > lead)
         drwl_text(m->drw, 0, 0, end, h, lead, title, 0);
 
-    if (c->isprivate)
+    if (pd)
         drawpill(m,
                  lead - fd - m->lrpad / 3,
                  (h - fd) / 2,
@@ -970,7 +980,7 @@ static void drawtitle(Client* c)
                  fd,
                  privateradius(fd),
                  0,
-                 privatecolor);
+                 pc);
     if (c->isfloating)
         drawpill(m,
                  lead - dots * (fd + m->lrpad / 3),

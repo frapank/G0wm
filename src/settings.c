@@ -514,6 +514,9 @@ static void wwindows(void)
     whex("privatecolor", privatecolor);
     note("privateround", "below 0 follows bartagdotround");
     wnum("privateround", privateround);
+    note("alwaysprivate", "every window private, the dot marks public ones");
+    wbool("alwaysprivate", alwaysprivate);
+    whex("publiccolor", publiccolor);
     note("privatetitle", "shown for a private window, {app} is its app id");
     wstr("privatetitle", privatetitle);
     note("movethreshold", "px dragged on a title before the window moves");
@@ -704,14 +707,16 @@ static void wrules(void)
     size_t i;
 
     note("rule",
-         "rule: opacity 0 keeps the default, monitor -1 is the focused one");
+         "rule: opacity 0 keeps the default, monitor -1 is the focused one, "
+         "without private it follows alwaysprivate");
     for (i = 0; i < nrules; i++) {
         wopen("rule");
         wstr("id", rules[i].id);
         wstr("title", rules[i].title);
         wint("tags", rules[i].tags);
         wbool("isfloating", rules[i].isfloating);
-        wbool("private", rules[i].isprivate);
+        if (rules[i].isprivate >= 0)
+            wbool("private", rules[i].isprivate);
         wnum("opacity_focus", rules[i].opacity_focus);
         wnum("opacity_unfocus", rules[i].opacity_unfocus);
         wint("monitor", rules[i].monitor);
@@ -1177,6 +1182,8 @@ static void applywindows(const struct scfg_block* b)
     titleclosecolor = gethex(b, "titleclosecolor", titleclosecolor);
     privatecolor = gethex(b, "privatecolor", privatecolor);
     privateround = (float)fmin(getnum(b, "privateround", privateround), 1);
+    alwaysprivate = getbool(b, "alwaysprivate", alwaysprivate);
+    publiccolor = gethex(b, "publiccolor", publiccolor);
     privatetitle = getstr(b, "privatetitle", privatetitle);
     movethreshold = (int)getnum(b, "movethreshold", movethreshold);
     movesnap = (int)getnum(b, "movesnap", movesnap);
@@ -1389,7 +1396,7 @@ static void applyrules(const struct scfg_block* b)
         out[n].title = getstr(r, "title", NULL);
         out[n].tags = getuint(r, "tags", 0);
         out[n].isfloating = getbool(r, "isfloating", 0);
-        out[n].isprivate = getbool(r, "private", 0);
+        out[n].isprivate = getbool(r, "private", -1);
         out[n].opacity_focus = (float)getnum(r, "opacity_focus", 0);
         out[n].opacity_unfocus = (float)getnum(r, "opacity_unfocus", 0);
         out[n].monitor = (int)getnum(r, "monitor", -1);
@@ -1846,6 +1853,7 @@ void reloadsettings(const Arg* arg)
 {
     Monitor* m;
     Client* c;
+    int wasprivate = alwaysprivate;
 
     settingsload();
 
@@ -1866,8 +1874,12 @@ void reloadsettings(const Arg* arg)
         c->opacity_focus = opacity_focus;
         if (!c->isfullscreen)
             c->bw = client_is_unmanaged(c) ? 0 : borderwidth();
+        if (alwaysprivate != wasprivate)
+            c->isprivate = alwaysprivate;
         toplevelupdate(c);
     }
+    if (alwaysprivate != wasprivate)
+        privacydamage();
     wlr_scene_rect_set_color(root_bg, rootcolor);
 
     reloadkeyboard();
