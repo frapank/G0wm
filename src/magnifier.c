@@ -7,7 +7,6 @@
  * from there, scaled, onto the output.
  */
 #include <pixman.h>
-#include <stddef.h>
 #include <wlr/render/pass.h>
 #include <wlr/render/swapchain.h>
 #include <wlr/render/wlr_texture.h>
@@ -23,7 +22,7 @@
 #include "magnifier.h"
 #include "monitor.h"
 
-#define ZOOMMAX 16.0f
+constexpr float ZOOMMAX = 16.0f;
 
 /* function declarations */
 static void wholedamage(struct wlr_output* o, struct wlr_output_state* state);
@@ -34,9 +33,9 @@ void magnifierdrop(Monitor* m)
     wlr_texture_destroy(m->zoomtex);
     wlr_buffer_unlock(m->zoombuf);
     wlr_swapchain_destroy(m->zoomchain);
-    m->zoomtex = NULL;
-    m->zoombuf = NULL;
-    m->zoomchain = NULL;
+    m->zoomtex = nullptr;
+    m->zoombuf = nullptr;
+    m->zoomchain = nullptr;
 }
 
 /* The frame of a zoomed monitor, or of one just leaving the zoom. 0 when
@@ -44,7 +43,7 @@ void magnifierdrop(Monitor* m)
 int magnifierframe(Monitor* m, struct wlr_output_state* state)
 {
     struct wlr_output* o = m->wlr_output;
-    struct wlr_scene_output_state_options opts = { 0 };
+    struct wlr_scene_output_state_options opts = {};
     struct wlr_render_pass* pass;
     struct wlr_fbox src;
     double fx, fy;
@@ -54,7 +53,7 @@ int magnifierframe(Monitor* m, struct wlr_output_state* state)
         /* the output's own buffers still hold zoomed frames */
         magnifierdrop(m);
         wlr_damage_ring_add_whole(&m->scene_output->damage_ring);
-        if (!wlr_scene_output_build_state(m->scene_output, state, NULL))
+        if (!wlr_scene_output_build_state(m->scene_output, state, nullptr))
             return 0;
         wholedamage(o, state);
         return 1;
@@ -106,7 +105,7 @@ int magnifierframe(Monitor* m, struct wlr_output_state* state)
     }
     m->zoomsrc = src;
 
-    if (!(pass = wlr_output_begin_render_pass(o, state, NULL)))
+    if (!(pass = wlr_output_begin_render_pass(o, state, nullptr)))
         return 0;
     wlr_render_pass_add_texture(
         pass,

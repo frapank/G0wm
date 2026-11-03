@@ -5,7 +5,6 @@
  *
  * client lifecycle: mapping, geometry, focus and decorations
  */
-#include <stddef.h>
 #include <stdint.h>
 #include <stdlib.h>
 #include <string.h>
@@ -38,7 +37,8 @@
 #include "util.h"
 #include "xdg-shell-protocol.h"
 
-#define MAPWAIT_MS 200 /* longest a new client may take to fit its tile */
+constexpr int MAPWAIT_MS =
+    200; /* longest a new client may take to fit its tile */
 
 /* function declarations */
 static void applybounds(Client* c, struct wlr_box* bbox);
@@ -115,7 +115,7 @@ static void applyrules(Client* c)
     setmon(c, mon, newtags);
 }
 
-static void commitnotify(struct wl_listener* listener, void* data)
+static void commitnotify(struct wl_listener* listener, void*)
 {
     Client* c = wl_container_of(listener, c, commit);
 
@@ -130,7 +130,7 @@ static void commitnotify(struct wl_listener* listener, void* data)
         if (c->mon) {
             client_set_scale(client_surface(c), c->mon->wlr_output->scale);
         }
-        setmon(c, NULL, 0); /* Make sure to reapply rules in mapnotify() */
+        setmon(c, nullptr, 0); /* Make sure to reapply rules in mapnotify() */
 
         wlr_xdg_toplevel_set_wm_capabilities(
             c->surface.xdg->toplevel,
@@ -155,8 +155,8 @@ static void commitpopup(struct wl_listener* listener, void* data)
 {
     struct wlr_surface* surface = data;
     struct wlr_xdg_popup* popup = wlr_xdg_popup_try_from_wlr_surface(surface);
-    LayerSurface* l = NULL;
-    Client* c = NULL;
+    LayerSurface* l = nullptr;
+    Client* c = nullptr;
     struct wlr_box box;
     int type = -1;
 
@@ -186,7 +186,7 @@ static void commitpopup(struct wl_listener* listener, void* data)
     free(listener);
 }
 
-void createdecoration(struct wl_listener* listener, void* data)
+void createdecoration(struct wl_listener*, void* data)
 {
     struct wlr_xdg_toplevel_decoration_v1* deco = data;
     Client* c = deco->toplevel->base->data;
@@ -200,12 +200,12 @@ void createdecoration(struct wl_listener* listener, void* data)
     requestdecorationmode(&c->set_decoration_mode, deco);
 }
 
-void createnotify(struct wl_listener* listener, void* data)
+void createnotify(struct wl_listener*, void* data)
 {
     /* This event is raised when a client creates a new toplevel (application
      * window). */
     struct wlr_xdg_toplevel* toplevel = data;
-    Client* c = NULL;
+    Client* c = nullptr;
 
     /* Allocate a Client for this surface */
     c = toplevel->base->data = ecalloc(1, sizeof(*c));
@@ -225,7 +225,7 @@ void createnotify(struct wl_listener* listener, void* data)
     LISTEN(&toplevel->events.set_title, &c->set_title, updatetitle);
 }
 
-void createpopup(struct wl_listener* listener, void* data)
+void createpopup(struct wl_listener*, void* data)
 {
     /* This event is raised when a client (either xdg-shell or layer-shell)
      * creates a new popup. */
@@ -233,7 +233,7 @@ void createpopup(struct wl_listener* listener, void* data)
     LISTEN_STATIC(&popup->base->surface->events.commit, commitpopup);
 }
 
-static void destroydecoration(struct wl_listener* listener, void* data)
+static void destroydecoration(struct wl_listener* listener, void*)
 {
     Client* c = wl_container_of(listener, c, destroy_decoration);
 
@@ -241,7 +241,7 @@ static void destroydecoration(struct wl_listener* listener, void* data)
     wl_list_remove(&c->set_decoration_mode.link);
 }
 
-void destroynotify(struct wl_listener* listener, void* data)
+void destroynotify(struct wl_listener* listener, void*)
 {
     /* Called when the xdg_toplevel is destroyed. */
     Client* c = wl_container_of(listener, c, destroy);
@@ -271,8 +271,8 @@ void focusclient(Client* c, int lift)
 {
     struct wlr_surface* old = seat->keyboard_state.focused_surface;
     int unused_lx, unused_ly, old_client_type;
-    Client* old_c = NULL;
-    LayerSurface* old_l = NULL;
+    Client* old_c = nullptr;
+    LayerSurface* old_l = nullptr;
 
     if (locked)
         return;
@@ -344,13 +344,13 @@ void focusclient(Client* c, int lift)
 
     if (!c) {
         /* With no client, all we have left is to clear focus */
-        toplevelfocus(NULL);
+        toplevelfocus(nullptr);
         wlr_seat_keyboard_notify_clear_focus(seat);
         return;
     }
 
     /* Change cursor surface */
-    motionnotify(0, NULL, 0, 0, 0, 0);
+    motionnotify(0, nullptr, 0, 0, 0, 0);
 
     /* Have a client, so focus its top-level wlr_surface */
     client_notify_enter(client_surface(c), wlr_seat_get_keyboard(seat));
@@ -371,26 +371,26 @@ Client* focustop(Monitor* m)
         if (VISIBLEON(c, m))
             return c;
     }
-    return NULL;
+    return nullptr;
 }
 
-void fullscreennotify(struct wl_listener* listener, void* data)
+void fullscreennotify(struct wl_listener* listener, void*)
 {
     Client* c = wl_container_of(listener, c, fullscreen);
     setfullscreen(c, client_wants_fullscreen(c));
 }
 
-void killclient(const Arg* arg)
+void killclient(const Arg*)
 {
     Client* sel = focustop(selmon);
     if (sel)
         client_send_close(sel);
 }
 
-void mapnotify(struct wl_listener* listener, void* data)
+void mapnotify(struct wl_listener* listener, void*)
 {
     /* Called when the surface is mapped, or ready to display on-screen. */
-    Client* p = NULL;
+    Client* p = nullptr;
     Client *w, *c = wl_container_of(listener, c, map);
     Monitor* m;
     int i;
@@ -426,27 +426,27 @@ void mapnotify(struct wl_listener* listener, void* data)
             c->scene, 0, 0, (float[]){ 0.0f, 0.0f, 0.0f, 0.0f });
         c->border[i]->node.data = c;
         /* above the borders, which stop short of the curve */
-        c->corner[i] = wlr_scene_buffer_create(c->scene, NULL);
+        c->corner[i] = wlr_scene_buffer_create(c->scene, nullptr);
         c->corner[i]->node.data = c;
         wlr_scene_node_set_enabled(&c->corner[i]->node, 0);
     }
     /* the colour comes from here, once all four exist */
     setbordercolor(c, c->isurgent ? SchemeUrg : SchemeNorm);
 
-    c->title = wlr_scene_buffer_create(c->scene, NULL);
+    c->title = wlr_scene_buffer_create(c->scene, nullptr);
     c->title->node.data = c;
     wlr_scene_node_set_enabled(&c->title->node, 0);
 
 #ifdef INTEGRATED_BACKGROUND
     /* the frosted backdrop goes under the lot: the surface, which is what it
      * shows through, and the decorations, which opacity_deco may fade too */
-    c->blur = wlr_scene_buffer_create(c->scene, NULL);
+    c->blur = wlr_scene_buffer_create(c->scene, nullptr);
     c->blur->node.data = c;
     wlr_scene_node_set_enabled(&c->blur->node, 0);
     wlr_scene_node_lower_to_bottom(&c->blur->node);
 
     /* backs the title bar alone, which is what tabs need */
-    c->titleblur = wlr_scene_buffer_create(c->scene, NULL);
+    c->titleblur = wlr_scene_buffer_create(c->scene, nullptr);
     c->titleblur->node.data = c;
     wlr_scene_node_set_enabled(&c->titleblur->node, 0);
     wlr_scene_node_lower_to_bottom(&c->titleblur->node);
@@ -507,7 +507,7 @@ static int mapwaitdone(void* data)
     Client* c = data;
 
     wl_event_source_remove(c->mapwait);
-    c->mapwait = NULL;
+    c->mapwait = nullptr;
     if (c->mon) {
         wlr_scene_node_set_enabled(&c->scene->node, VISIBLEON(c, c->mon));
         /* drawtitle() skipped the title bar while the client was hidden */
@@ -516,7 +516,7 @@ static int mapwaitdone(void* data)
     return 0;
 }
 
-static void maximizenotify(struct wl_listener* listener, void* data)
+static void maximizenotify(struct wl_listener* listener, void*)
 {
     /* This event is raised when a client would like to maximize itself,
      * typically because the user clicked on the maximize button on
@@ -552,7 +552,7 @@ static Client* modaltop(Client* c)
     return c;
 }
 
-static void requestdecorationmode(struct wl_listener* listener, void* data)
+static void requestdecorationmode(struct wl_listener* listener, void*)
 {
     Client* c = wl_container_of(listener, c, set_decoration_mode);
     if (c->surface.xdg->initialized)
@@ -607,13 +607,13 @@ void resize(Client* c, struct wlr_box geo, int interact)
     textinputarrange();
 }
 
-void ringbell(struct wl_listener* listener, void* data)
+void ringbell(struct wl_listener*, void* data)
 {
     struct wlr_xdg_system_bell_v1_ring_event* event = data;
-    Client* c = NULL;
+    Client* c = nullptr;
 
     if (event->surface)
-        toplevel_from_wlr_surface(event->surface, &c, NULL);
+        toplevel_from_wlr_surface(event->surface, &c, nullptr);
     if (!c || c == focustop(selmon))
         return;
     seturgent(c);
@@ -695,7 +695,7 @@ static void seturgent(Client* c)
         setbordercolor(c, SchemeUrg);
 }
 
-void togglefloating(const Arg* arg)
+void togglefloating(const Arg*)
 {
     Client* sel = focustop(selmon);
     /* return if fullscreen */
@@ -703,14 +703,14 @@ void togglefloating(const Arg* arg)
         setfloating(sel, !sel->isfloating);
 }
 
-void togglefullscreen(const Arg* arg)
+void togglefullscreen(const Arg*)
 {
     Client* sel = focustop(selmon);
     if (sel)
         setfullscreen(sel, !sel->isfullscreen);
 }
 
-void unmapnotify(struct wl_listener* listener, void* data)
+void unmapnotify(struct wl_listener* listener, void*)
 {
     /* Called when the surface is unmapped, and should no longer be shown. */
     Client* c = wl_container_of(listener, c, unmap);
@@ -719,21 +719,21 @@ void unmapnotify(struct wl_listener* listener, void* data)
     toplevelunmap(c);
     if (c->mapwait) {
         wl_event_source_remove(c->mapwait);
-        c->mapwait = NULL;
+        c->mapwait = nullptr;
     }
     if (c == grabc) {
         cursor_mode = CurNormal;
-        grabc = NULL;
+        grabc = nullptr;
     }
 
     if (client_is_unmanaged(c)) {
         if (c == exclusive_focus) {
-            exclusive_focus = NULL;
+            exclusive_focus = nullptr;
             focusclient(focustop(selmon), 1);
         }
     } else {
         wl_list_remove(&c->link);
-        setmon(c, NULL, 0);
+        setmon(c, nullptr, 0);
         wl_list_remove(&c->flink);
     }
 
@@ -742,28 +742,28 @@ void unmapnotify(struct wl_listener* listener, void* data)
      * about to free instead of leaving it dangling. mapnotify() sets it again
      * on the next map. */
     if (client_surface(c))
-        client_surface(c)->data = NULL;
+        client_surface(c)->data = nullptr;
     wlr_scene_node_destroy(&c->scene->node);
-    c->title = NULL;
+    c->title = nullptr;
 #ifdef INTEGRATED_BACKGROUND
-    c->blur = NULL;
-    c->blurbuf = NULL;
-    c->titleblur = NULL;
-    c->titleblurbuf = NULL;
+    c->blur = nullptr;
+    c->blurbuf = nullptr;
+    c->titleblur = nullptr;
+    c->titleblurbuf = nullptr;
 #endif
     bufpooldrop(c->titlepool, LENGTH(c->titlepool));
     bufpooldrop(c->sharepool, LENGTH(c->sharepool));
     c->titlebufw = 0;
     for (i = 0; i < 4; i++) {
-        c->corner[i] = NULL;
+        c->corner[i] = nullptr;
         bufpooldrop(c->cornerpool[i], LENGTH(c->cornerpool[i]));
     }
     c->cornerbufr = 0;
     drawbars();
-    motionnotify(0, NULL, 0, 0, 0, 0);
+    motionnotify(0, nullptr, 0, 0, 0, 0);
 }
 
-void updatetitle(struct wl_listener* listener, void* data)
+void updatetitle(struct wl_listener* listener, void*)
 {
     Client* c = wl_container_of(listener, c, set_title);
     toplevelupdate(c);
@@ -771,11 +771,11 @@ void updatetitle(struct wl_listener* listener, void* data)
         drawbars();
 }
 
-void urgent(struct wl_listener* listener, void* data)
+void urgent(struct wl_listener*, void* data)
 {
     struct wlr_xdg_activation_v1_request_activate_event* event = data;
-    Client* c = NULL;
-    toplevel_from_wlr_surface(event->surface, &c, NULL);
+    Client* c = nullptr;
+    toplevel_from_wlr_surface(event->surface, &c, nullptr);
     if (!c || c == focustop(selmon))
         return;
 

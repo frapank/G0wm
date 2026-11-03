@@ -30,7 +30,7 @@
 #include "settings.h"
 #include "util.h"
 
-#define OPACITY_MIN 0.1f /* floor for the opacity keybindings */
+constexpr float OPACITY_MIN = 0.1f; /* floor for the opacity keybindings */
 
 /* function declarations */
 #ifdef INTEGRATED_BACKGROUND
@@ -109,7 +109,7 @@ static void blurbox(Client* c,
 {
     struct wlr_fbox src;
     Monitor* m = c->mon;
-    Buffer* buf = m ? m->blurpool[0] : NULL;
+    Buffer* buf = m ? m->blurpool[0] : nullptr;
     int x, y, w, h, x1, y1;
 
     if (!node || !m)
@@ -341,14 +341,14 @@ static void blurwallpaper(Monitor* m)
 
     /* the bar's node is what owns the buffer, so it lets go of it first */
     if (m->barblur)
-        wlr_scene_buffer_set_buffer(m->barblur, NULL);
+        wlr_scene_buffer_set_buffer(m->barblur, nullptr);
     bufpooldrop(m->blurpool, LENGTH(m->blurpool));
     m->blurw = m->blurh = 0;
 
     /* the nodes pick the new buffer up next frame; the pointer they compare
      * against has to go now, or a reused address would read as unchanged */
     wl_list_for_each(c, &clients, link) if (c->mon == m) c->blurbuf =
-        c->titleblurbuf = NULL;
+        c->titleblurbuf = nullptr;
 
     if (opacity_type != OpacityBlur || !m->wallpaperpool[0] || w <= 0 || h <= 0)
         return;
@@ -424,7 +424,7 @@ static int decotranslucent(void)
 void setwallpaper(Monitor* m)
 {
     GdkPixbuf* scaled;
-    GError* error = NULL;
+    GError* error = nullptr;
     Buffer* buf;
     int mw = m->m.width, mh = m->m.height;
     int pw, ph, sw, sh, ox, oy, x, y, rowstride, nch;
@@ -433,8 +433,8 @@ void setwallpaper(Monitor* m)
     uint32_t* dst;
 
     if (!wallpaper || !*wallpaper || mw <= 0 || mh <= 0) {
-        wlr_scene_buffer_set_buffer(m->wallpaper, NULL);
-        m->wallpaperbuf = NULL;
+        wlr_scene_buffer_set_buffer(m->wallpaper, nullptr);
+        m->wallpaperbuf = nullptr;
         bufpooldrop(m->wallpaperpool, LENGTH(m->wallpaperpool));
         m->wallpaperw = m->wallpaperh = 0;
         blurwallpaper(m);
@@ -533,8 +533,8 @@ static void opacityrefresh(void)
 }
 
 void scenebuffersetopacity(struct wlr_scene_buffer* buffer,
-                           int sx,
-                           int sy,
+                           int,
+                           int,
                            void* data)
 {
     Client* c = data;
@@ -594,14 +594,14 @@ void reloadopacity(void)
 
     if (wallpaper_src) {
         g_object_unref(wallpaper_src);
-        wallpaper_src = NULL;
+        wallpaper_src = nullptr;
     }
     wallpaper_load_failed = 0;
     wl_list_for_each(m, &mons, link)
     {
         bufpooldrop(m->wallpaperpool, LENGTH(m->wallpaperpool));
         bufpooldrop(m->blurpool, LENGTH(m->blurpool));
-        m->wallpaperbuf = NULL;
+        m->wallpaperbuf = nullptr;
         m->wallpaperw = m->wallpaperh = 0;
         m->blurw = m->blurh = 0;
         setwallpaper(m);
@@ -610,7 +610,7 @@ void reloadopacity(void)
     opacityrefresh();
 }
 
-void toggleopacity(const Arg* arg)
+void toggleopacity(const Arg*)
 {
     opacity_enabled = !opacity_enabled;
     opacityrefresh();

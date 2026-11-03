@@ -4,7 +4,6 @@
  *
  * foreign toplevel handles, for docks, taskbars and window capture
  */
-#include <stddef.h>
 #include <string.h>
 #include <wayland-server-core.h>
 #include <wlr/types/wlr_ext_foreign_toplevel_list_v1.h>
@@ -26,7 +25,7 @@ static void requestfullscreen(struct wl_listener* listener, void* data);
 static Client* activetop;
 
 /* function implementations */
-void capturetoplevel(struct wl_listener* listener, void* data)
+void capturetoplevel(struct wl_listener*, void* data)
 {
     struct wlr_ext_foreign_toplevel_image_capture_source_manager_v1_request*
         req = data;
@@ -43,13 +42,13 @@ void capturetoplevel(struct wl_listener* listener, void* data)
         req, c->capture);
 }
 
-static void requestactivate(struct wl_listener* listener, void* data)
+static void requestactivate(struct wl_listener* listener, void*)
 {
     Client* c = wl_container_of(listener, c, ftl_activate);
     activateclient(c);
 }
 
-static void requestclose(struct wl_listener* listener, void* data)
+static void requestclose(struct wl_listener* listener, void*)
 {
     Client* c = wl_container_of(listener, c, ftl_close);
     client_send_close(c);
@@ -67,7 +66,7 @@ void toplevelfocus(Client* c)
     if (c && client_is_unmanaged(c))
         return;
     if (c && !c->ftl)
-        c = NULL;
+        c = nullptr;
     if (c == activetop)
         return;
     if (activetop)
@@ -108,26 +107,26 @@ void toplevelmap(Client* c)
 void toplevelunmap(Client* c)
 {
     if (c == activetop)
-        activetop = NULL;
+        activetop = nullptr;
     if (c->ftl) {
         wl_list_remove(&c->ftl_activate.link);
         wl_list_remove(&c->ftl_close.link);
         wl_list_remove(&c->ftl_fullscreen.link);
         wlr_foreign_toplevel_handle_v1_destroy(c->ftl);
-        c->ftl = NULL;
+        c->ftl = nullptr;
     }
     if (c->eftl) {
         wlr_ext_foreign_toplevel_handle_v1_destroy(c->eftl);
-        c->eftl = NULL;
+        c->eftl = nullptr;
     }
-    c->capture = NULL; /* freed with the scene node */
+    c->capture = nullptr; /* freed with the scene node */
 }
 
 void toplevelupdate(Client* c)
 {
     const char* title = sharetitle(c);
     const char* appid = client_get_appid(c);
-    struct wlr_output* out = c->mon ? c->mon->wlr_output : NULL;
+    struct wlr_output* out = c->mon ? c->mon->wlr_output : nullptr;
     struct wlr_foreign_toplevel_handle_v1_output *o, *tmp;
     int on = 0;
 

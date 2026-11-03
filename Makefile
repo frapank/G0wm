@@ -46,7 +46,7 @@ G0WMCPPFLAGS = -I$(INCDIR) -isystem $(EXTDIR) -I$(GENDIR) \
 	-DWLR_USE_UNSTABLE -D_POSIX_C_SOURCE=200809L \
 	-DVERSION=\"$(VERSION)\" $(XWAYLAND) $(BACKGROUND) -MMD -MP
 G0WMDEVCFLAGS = -g -Wpedantic -Wall -Wextra -Wdeclaration-after-statement \
-	-Wno-unused-parameter -Wshadow -Wunused-macros -Werror=strict-prototypes \
+	-Wshadow -Wunused-macros -Werror=strict-prototypes \
 	-Werror=implicit -Werror=return-type -Werror=incompatible-pointer-types \
 	-Wfloat-conversion
 
@@ -55,7 +55,7 @@ PKGS      = wayland-server xkbcommon libinput pixman-1 fcft dbus-1 gdk-pixbuf-2.
 	scfg $(XLIBS)
 PKG_CFLAGS := $(shell $(PKG_CONFIG) --cflags $(PKGS))
 PKG_LIBS   := $(shell $(PKG_CONFIG) --libs $(PKGS))
-G0WMCFLAGS = $(PKG_CFLAGS) $(WLR_INCS) $(G0WMCPPFLAGS) $(G0WMDEVCFLAGS) $(CFLAGS)
+G0WMCFLAGS = -std=gnu23 $(PKG_CFLAGS) $(WLR_INCS) $(G0WMCPPFLAGS) $(G0WMDEVCFLAGS) $(CFLAGS)
 LDLIBS    = $(PKG_LIBS) $(WLR_LIBS) -lm $(LIBS)
 
 # Sources. The systray and its dbus glue come from the bar-systray patch.

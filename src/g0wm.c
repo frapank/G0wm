@@ -10,7 +10,6 @@
 #include <fcntl.h>
 #include <gdk-pixbuf/gdk-pixbuf.h>
 #include <signal.h>
-#include <stdbool.h>
 #include <stddef.h>
 #include <stdio.h>
 #include <stdlib.h>
@@ -265,7 +264,7 @@ static void autostartexec(void)
             setsid();
             execvp(*p, (char* const*)p);
             fprintf(stderr, "g0wm: execvp %s: ", *p);
-            perror(NULL);
+            perror(nullptr);
             _exit(1);
         }
         /* skip arguments */
@@ -311,7 +310,7 @@ static void cleanup(void)
     cleanuplisteners();
 #ifdef XWAYLAND
     wlr_xwayland_destroy(xwayland);
-    xwayland = NULL;
+    xwayland = nullptr;
 #endif
     wl_display_destroy_clients(dpy);
 
@@ -319,14 +318,14 @@ static void cleanup(void)
     for (i = 0; i < autostart_len; i++) {
         if (0 < autostart_pids[i]) {
             kill(autostart_pids[i], SIGTERM);
-            waitpid(autostart_pids[i], NULL, 0);
+            waitpid(autostart_pids[i], nullptr, 0);
         }
     }
 
     wlr_xcursor_manager_destroy(cursor_mgr);
 
-    destroykeyboardgroup(&kb_group->destroy, NULL);
-    kb_group = NULL; /* seatcaps() runs as the backend drops the devices */
+    destroykeyboardgroup(&kb_group->destroy, nullptr);
+    kb_group = nullptr; /* seatcaps() runs as the backend drops the devices */
 
     /* before the watcher, an open menu still holds a bus connection */
     traypopup_cleanup();
@@ -420,12 +419,12 @@ static void cleanuplisteners(void)
 #endif
 }
 
-static void createidleinhibitor(struct wl_listener* listener, void* data)
+static void createidleinhibitor(struct wl_listener*, void* data)
 {
     struct wlr_idle_inhibitor_v1* idle_inhibitor = data;
     LISTEN_STATIC(&idle_inhibitor->events.destroy, destroyidleinhibitor);
 
-    checkidleinhibitor(NULL);
+    checkidleinhibitor(nullptr);
 }
 
 static void destroyidleinhibitor(struct wl_listener* listener, void* data)
@@ -439,7 +438,7 @@ static void destroyidleinhibitor(struct wl_listener* listener, void* data)
 
 static bool globalfilter(const struct wl_client* client,
                          const struct wl_global* global,
-                         void* data)
+                         void*)
 {
     static const char* const privileged[] = {
         "ext_data_control_manager_v1",
@@ -479,16 +478,17 @@ static bool globalfilter(const struct wl_client* client,
  * in it. Recreate once the loop is idle instead. */
 static struct wl_event_source* gpu_reset_idle;
 
-static void gpureset(struct wl_listener* listener, void* data)
+static void gpureset(struct wl_listener*, void*)
 {
     if (!gpu_reset_idle)
-        gpu_reset_idle = wl_event_loop_add_idle(event_loop, gpurecreate, NULL);
+        gpu_reset_idle =
+            wl_event_loop_add_idle(event_loop, gpurecreate, nullptr);
 }
 
 /* Scene buffers cache the texture made from our own (shm) buffers, and it dies
  * with the old renderer. Re-handing the same buffer drops it, so the next
  * frame re-uploads. Client buffers carry their texture themselves. */
-static void droptexture(struct wlr_scene_buffer* sb, int sx, int sy, void* data)
+static void droptexture(struct wlr_scene_buffer* sb, int, int, void*)
 {
     struct wlr_buffer* b = sb->buffer;
     if (!b || wlr_client_buffer_get(b))
@@ -498,12 +498,12 @@ static void droptexture(struct wlr_scene_buffer* sb, int sx, int sy, void* data)
     wlr_buffer_unlock(b);
 }
 
-static void gpurecreate(void* data)
+static void gpurecreate(void*)
 {
     struct wlr_renderer* old_drw = drw;
     struct wlr_allocator* old_alloc = alloc;
     struct Monitor* m;
-    gpu_reset_idle = NULL;
+    gpu_reset_idle = nullptr;
     if (!(drw = wlr_renderer_autocreate(backend)))
         die("couldn't recreate renderer");
 
@@ -521,7 +521,7 @@ static void gpurecreate(void* data)
     }
 
     /* before the old renderer goes, so the textures are freed while it lives */
-    wlr_scene_node_for_each_buffer(&scene->tree.node, droptexture, NULL);
+    wlr_scene_node_for_each_buffer(&scene->tree.node, droptexture, nullptr);
 
     wlr_allocator_destroy(old_alloc);
     wlr_renderer_destroy(old_drw);
@@ -531,7 +531,7 @@ static void handlesig(int signo)
 {
     if (signo == SIGCHLD) {
         pid_t pid, *p, *lim;
-        while ((pid = waitpid(-1, NULL, WNOHANG)) > 0) {
+        while ((pid = waitpid(-1, nullptr, WNOHANG)) > 0) {
             if (!(p = autostart_pids))
                 continue;
             lim = &p[autostart_len];
@@ -544,7 +544,7 @@ static void handlesig(int signo)
             }
         }
     } else if (signo == SIGINT || signo == SIGTERM) {
-        quit(NULL);
+        quit(nullptr);
     }
 }
 
@@ -556,7 +556,7 @@ static const char* notifytoken(void)
         wlr_xdg_activation_token_v1_create(activation);
 
     if (!token)
-        return NULL;
+        return nullptr;
     token->data = &notifytokentag;
     return wlr_xdg_activation_token_v1_get_name(token);
 }
@@ -567,7 +567,7 @@ int notifytokenmine(const struct wlr_xdg_activation_token_v1* token)
     return token && token->data == &notifytokentag;
 }
 
-void quit(const Arg* arg)
+void quit(const Arg*)
 {
     wl_display_terminate(dpy);
 }
@@ -598,7 +598,7 @@ static void run(void)
      * instead of (0, 0) and then jumping. Still may not be fully
      * initialized, as the image/coordinates are not transformed for the
      * monitor when displayed here */
-    wlr_cursor_warp_closest(cursor, NULL, cursor->x, cursor->y);
+    wlr_cursor_warp_closest(cursor, nullptr, cursor->x, cursor->y);
     wlr_cursor_set_xcursor(cursor, cursor_mgr, "default");
 
     /* Run the Wayland event loop. This does not return until you exit the
@@ -616,9 +616,9 @@ static void setup(void)
     sigemptyset(&sa.sa_mask);
 
     for (i = 0; i < (int)LENGTH(sig); i++)
-        sigaction(sig[i], &sa, NULL);
+        sigaction(sig[i], &sa, nullptr);
 
-    wlr_log_init(log_level, NULL);
+    wlr_log_init(log_level, nullptr);
 
     /* The Wayland display is managed by libwayland. It handles accepting
      * clients from the Unix socket, managing Wayland globals, and so on. */
@@ -698,7 +698,7 @@ static void setup(void)
     content_type_mgr = wlr_content_type_manager_v1_create(dpy, 1);
     tearing_mgr = wlr_tearing_control_manager_v1_create(dpy, 1);
     security_context_mgr = wlr_security_context_manager_v1_create(dpy);
-    wl_display_set_global_filter(dpy, globalfilter, NULL);
+    wl_display_set_global_filter(dpy, globalfilter, nullptr);
 
     /* Initializes the interface used to implement urgency hints */
     activation = wlr_xdg_activation_v1_create(dpy);
@@ -798,10 +798,10 @@ static void setup(void)
      * Xcursor themes to source cursor images from and makes sure that cursor
      * images are available at all scale factors on the screen (necessary for
      * HiDPI support). Scaled cursors will be loaded with each output. */
-    /* Passing NULL as the theme name makes libxcursor look for a theme called
-     * "default", which many systems don't ship; wlroots then falls back to a
-     * fixed-size built-in cursor that ignores cursor_size entirely. Naming a
-     * theme explicitly in config.h avoids that. */
+    /* Passing nullptr as the theme name makes libxcursor look for a theme
+     * called "default", which many systems don't ship; wlroots then falls back
+     * to a fixed-size built-in cursor that ignores cursor_size entirely. Naming
+     * a theme explicitly in config.h avoids that. */
     snprintf(cursor_size_str, sizeof(cursor_size_str), "%d", cursor_size);
     cursor_mgr = wlr_xcursor_manager_create(cursor_theme, cursor_size);
     setenv("XCURSOR_SIZE", cursor_size_str, 1);
@@ -894,12 +894,12 @@ static void setup(void)
                                                STDIN_FILENO,
                                                WL_EVENT_READABLE,
                                                statusin,
-                                               NULL);
+                                               nullptr);
 
     /* Missing the session bus is not fatal: g0wm comes up without a tray
      * and/or bar notifications. */
     if (showbar && (showsystray || shownotifications)) {
-        if ((bus_conn = dbus_bus_get(DBUS_BUS_SESSION, NULL)) &&
+        if ((bus_conn = dbus_bus_get(DBUS_BUS_SESSION, nullptr)) &&
             (bus_source = startbus(bus_conn, event_loop))) {
             if (showsystray)
                 watcher_start(&watcher, bus_conn, event_loop);
@@ -945,7 +945,7 @@ void spawn(const Arg* arg)
         setsid();
         execvp(((char**)arg->v)[0], (char**)arg->v);
         fprintf(stderr, "g0wm: execvp %s failed: ", ((char**)arg->v)[0]);
-        perror(NULL);
+        perror(nullptr);
         _exit(1);
     }
 }

@@ -9,7 +9,6 @@
 #include <errno.h>
 #include <limits.h>
 #include <math.h>
-#include <stdbool.h>
 #include <stddef.h>
 #include <stdint.h>
 #include <stdio.h>
@@ -130,7 +129,7 @@ static char* runnersearchpath(void)
     const char* path = getenv("PATH");
     const char* home = getenv("HOME");
     const char* e = runner_paths;
-    char* out = NULL;
+    char* out = nullptr;
     size_t n = 0, len;
 
     runnerappend(&out, &n, path ? path : "", path ? strlen(path) : 0);
@@ -166,7 +165,7 @@ static void runnerbuildcache(void)
     size_t cap = 0;
 
     for (dir = strtok_r(p, ":", &saveptr); dir;
-         dir = strtok_r(NULL, ":", &saveptr)) {
+         dir = strtok_r(nullptr, ":", &saveptr)) {
         if (!(d = opendir(dir)))
             continue;
         while ((e = readdir(d))) {
@@ -211,7 +210,7 @@ static void runnerfreecache(void)
     while (runner_ncmds)
         free(runner_cmds[--runner_ncmds]);
     free(runner_cmds);
-    runner_cmds = NULL;
+    runner_cmds = nullptr;
     runner_nmatch = 0;
     runner_sel = 0;
 }
@@ -222,7 +221,7 @@ static char* runnerappdirs(void)
     const char* home = getenv("HOME");
     const char* datahome = getenv("XDG_DATA_HOME");
     const char* datadirs = getenv("XDG_DATA_DIRS");
-    char *dirs, *dir, *saveptr, *out = NULL;
+    char *dirs, *dir, *saveptr, *out = nullptr;
     size_t n = 0;
 
     if (datahome && *datahome) {
@@ -237,7 +236,7 @@ static char* runnerappdirs(void)
                                               : "/usr/local/share:/usr/share")))
         die("strdup:");
     for (dir = strtok_r(dirs, ":", &saveptr); dir;
-         dir = strtok_r(NULL, ":", &saveptr)) {
+         dir = strtok_r(nullptr, ":", &saveptr)) {
         if (n)
             runnerappend(&out, &n, ":", 1);
         runnerappend(&out, &n, dir, strlen(dir));
@@ -291,7 +290,7 @@ static void runnerreadapp(const char* path, const char* id, int order)
 {
     char line[4096], *k, *v, *eq;
     int group = 0, app = 0, rank = 0, r;
-    RunnerApp a = { 0 };
+    RunnerApp a = {};
     FILE* f;
 
     if (!(f = fopen(path, "r")))
@@ -328,7 +327,7 @@ static void runnerreadapp(const char* path, const char* id, int order)
     fclose(f);
     if (a.gname && a.name && !strcmp(a.gname, a.name)) {
         free(a.gname);
-        a.gname = NULL;
+        a.gname = nullptr;
     }
 
     /* kept even when hidden, it still hides the same id further down */
@@ -403,7 +402,7 @@ static void runnerbuildapps(void)
     int i, w, order = 0;
 
     for (dir = strtok_r(p, ":", &saveptr); dir;
-         dir = strtok_r(NULL, ":", &saveptr))
+         dir = strtok_r(nullptr, ":", &saveptr))
         runnerscanapps(dir, "", &order);
     free(p);
 
@@ -437,7 +436,7 @@ static void runnerfreeapps(void)
     while (runner_napps)
         runnerfreeapp(&runner_apps[--runner_napps]);
     free(runner_apps);
-    runner_apps = NULL;
+    runner_apps = nullptr;
     runner_nmatch = 0;
     runner_sel = 0;
 }
@@ -487,7 +486,7 @@ static int runnermode(const char* s, int* off)
     int m, mode = ModeApp;
 
     for (m = 0; m < NumModes; m++) {
-        p = runner_prefixes[m] ? *runner_prefixes[m] : NULL;
+        p = runner_prefixes[m] ? *runner_prefixes[m] : nullptr;
         if (!p || !(n = strlen(p)) || n <= len || strncmp(s, p, n) ||
             !runnermodeon(m))
             continue;
@@ -527,7 +526,7 @@ static const char* runnerhistpath(void)
         snprintf(
             path, sizeof path, "%s/.local/state/g0wm/runner_history", home);
     else
-        return NULL;
+        return nullptr;
     return path;
 }
 
@@ -734,7 +733,7 @@ static void runnerwindows(void)
 static char* runnerexpand(const char* s, size_t len)
 {
     const char* home = getenv("HOME");
-    char* out = NULL;
+    char* out = nullptr;
     size_t n = 0;
 
     if (len && *s == '~' && home) {
@@ -751,7 +750,7 @@ static void runnerfreeentries(void)
     while (runner_nentries)
         free(runner_entries[--runner_nentries]);
     free(runner_entrydir);
-    runner_entrydir = NULL;
+    runner_entrydir = nullptr;
 }
 
 /* what is in the typed directory, dot files only once the name starts with a
@@ -800,7 +799,7 @@ static void runnerentries(int off)
 
 static void runnersource(int mode)
 {
-    runner_alt = NULL;
+    runner_alt = nullptr;
     switch (mode) {
         case ModeApp:
             runner_src = (const char**)runner_appnames;
@@ -827,7 +826,7 @@ static void runnersource(int mode)
             runner_nsrc = runner_nentries;
             break;
         default:
-            runner_src = NULL;
+            runner_src = nullptr;
             runner_nsrc = 0;
             break;
     }
@@ -843,7 +842,7 @@ static void runnersource(int mode)
 static void runnerfilter(void)
 {
     int i, fold = 1, off, mode = runnermode(runner_buf, &off);
-    int qlen = runner_len - off, *use = NULL;
+    int qlen = runner_len - off, *use = nullptr;
     const char* q = runner_buf + off;
     double calcval;
 
@@ -927,7 +926,7 @@ static int runnerstale(char* p, char** cache, struct timespec* stamp)
             die("strdup:");
     }
     for (dir = strtok_r(p, ":", &saveptr); dir;
-         dir = strtok_r(NULL, ":", &saveptr))
+         dir = strtok_r(nullptr, ":", &saveptr))
         /* to the nanosecond: at second granularity an install and the removal
          * that follows it within the same second cancel out */
         if (stat(dir, &st) == 0 && (st.st_mtim.tv_sec > newest.tv_sec ||
@@ -945,7 +944,7 @@ static int runnerstale(char* p, char** cache, struct timespec* stamp)
 
 const char* runnersuggest(void)
 {
-    return runner_nmatch ? runner_src[runner_match[runner_sel]] : NULL;
+    return runner_nmatch ? runner_src[runner_match[runner_sel]] : nullptr;
 }
 
 int runnercandidates(void)
@@ -955,7 +954,7 @@ int runnercandidates(void)
 
 const char* runnercandidate(int i)
 {
-    return i >= 0 && i < runner_nmatch ? runner_src[runner_match[i]] : NULL;
+    return i >= 0 && i < runner_nmatch ? runner_src[runner_match[i]] : nullptr;
 }
 
 int runnerselected(void)
@@ -974,11 +973,11 @@ Icon* runnericon(int i)
     RunnerApp* a;
 
     if (!runnerhasicons() || i < 0 || i >= runner_nmatch)
-        return NULL;
+        return nullptr;
     a = &runner_apps[runner_match[i]];
     if (!a->imgread) {
         a->imgread = 1;
-        a->img = createiconfromname(a->icon, NULL, 64);
+        a->img = createiconfromname(a->icon, nullptr, 64);
     }
     return a->img;
 }
@@ -1193,15 +1192,15 @@ static void runnerexec(const char* cmd, int term)
     char* sh =
         (char*)(runner_shell && *runner_shell ? runner_shell : "/bin/sh");
     char* argv[6];
-    char* script = NULL;
-    char *path = NULL, *saved = NULL;
+    char* script = nullptr;
+    char *path = nullptr, *saved = nullptr;
     size_t n;
     Arg a;
 
     argv[0] = sh;
     argv[1] = "-c";
     argv[2] = (char*)cmd;
-    argv[3] = NULL;
+    argv[3] = nullptr;
     if (term) {
         n = strlen(runner_terminal) + 32;
         script = ecalloc(1, n);
@@ -1212,7 +1211,7 @@ static void runnerexec(const char* cmd, int term)
         argv[2] = script;
         argv[3] = sh;
         argv[4] = (char*)cmd;
-        argv[5] = NULL;
+        argv[5] = nullptr;
     }
     a.v = argv;
     /* only the child gets the wider PATH */
@@ -1236,7 +1235,7 @@ static void runnerexec(const char* cmd, int term)
 
 static void runneropen(const char* what)
 {
-    char* argv[] = { "xdg-open", (char*)what, NULL };
+    char* argv[] = { "xdg-open", (char*)what, nullptr };
 
     spawn(&(Arg){ .v = argv });
 }
@@ -1359,7 +1358,7 @@ static void runnerenter(void)
     runnerrecord(line);
 }
 
-void runnertoggle(const Arg* arg)
+void runnertoggle(const Arg*)
 {
     if (!selmon)
         return;

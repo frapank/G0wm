@@ -6,7 +6,6 @@
  * outputs, their layout and the layer-shell surfaces on them
  */
 #include <drwl.h>
-#include <stdbool.h>
 #include <stddef.h>
 #include <stdint.h>
 #include <stdio.h>
@@ -68,7 +67,8 @@ static void unmaplayersurfacenotify(struct wl_listener* listener, void* data);
 
 /* variables */
 /* Map from ZWLR_LAYER_SHELL_* constants to Lyr* enum */
-static const int layermap[] = { LyrBg, LyrBottom, LyrTop, LyrOverlay };
+constexpr int layermap[] = { LyrBg, LyrBottom, LyrTop, LyrOverlay };
+static_assert(LENGTH(layermap) == ZWLR_LAYER_SHELL_V1_LAYER_OVERLAY + 1);
 
 /* function implementations */
 static void arrangelayer(Monitor* m,
@@ -135,7 +135,7 @@ void arrangelayers(Monitor* m)
                 !l->mapped)
                 continue;
             /* Deactivate the focused client. */
-            focusclient(NULL, 0);
+            focusclient(nullptr, 0);
             exclusive_focus = l;
             client_notify_enter(l->layer_surface->surface,
                                 wlr_seat_get_keyboard(seat));
@@ -144,7 +144,7 @@ void arrangelayers(Monitor* m)
     }
 }
 
-static void cleanupmon(struct wl_listener* listener, void* data)
+static void cleanupmon(struct wl_listener* listener, void*)
 {
     Monitor* m = wl_container_of(listener, m, destroy);
     LayerSurface *l, *tmp;
@@ -169,7 +169,7 @@ static void cleanupmon(struct wl_listener* listener, void* data)
 
     magnifierdrop(m);
 
-    drwl_setimage(m->drw, NULL);
+    drwl_setimage(m->drw, nullptr);
     drwl_destroy(m->drw);
 
     wl_list_remove(&m->destroy.link);
@@ -177,8 +177,8 @@ static void cleanupmon(struct wl_listener* listener, void* data)
     wl_list_remove(&m->link);
     wl_list_remove(&m->request_state.link);
     if (m->lock_surface)
-        destroylocksurface(&m->destroy_lock_surface, NULL);
-    m->wlr_output->data = NULL;
+        destroylocksurface(&m->destroy_lock_surface, nullptr);
+    m->wlr_output->data = nullptr;
     wlr_output_layout_remove(output_layout, m->wlr_output);
     wlr_scene_output_destroy(m->scene_output);
 
@@ -199,14 +199,14 @@ static void closemon(Monitor* m)
     Client* c;
     int i = 0, nmons = wl_list_length(&mons);
     if (!nmons) {
-        selmon = NULL;
+        selmon = nullptr;
     } else if (m == selmon) {
         do /* don't switch to disabled mons */
             selmon = wl_container_of(mons.next, selmon, link);
         while (!selmon->wlr_output->enabled && i++ < nmons);
 
         if (!selmon->wlr_output->enabled)
-            selmon = NULL;
+            selmon = nullptr;
     }
 
     wl_list_for_each(c, &clients, link)
@@ -225,7 +225,7 @@ static void closemon(Monitor* m)
     drawbars();
 }
 
-static void commitlayersurfacenotify(struct wl_listener* listener, void* data)
+static void commitlayersurfacenotify(struct wl_listener* listener, void*)
 {
     LayerSurface* l = wl_container_of(listener, l, surface_commit);
     struct wlr_layer_surface_v1* layer_surface = l->layer_surface;
@@ -264,7 +264,7 @@ static void commitlayersurfacenotify(struct wl_listener* listener, void* data)
     arrangelayers(l->mon);
 }
 
-void createlayersurface(struct wl_listener* listener, void* data)
+void createlayersurface(struct wl_listener*, void* data)
 {
     struct wlr_layer_surface_v1* layer_surface = data;
     LayerSurface* l;
@@ -273,7 +273,7 @@ void createlayersurface(struct wl_listener* listener, void* data)
         layers[layermap[layer_surface->pending.layer]];
 
     if (!layer_surface->output &&
-        !(layer_surface->output = selmon ? selmon->wlr_output : NULL)) {
+        !(layer_surface->output = selmon ? selmon->wlr_output : nullptr)) {
         wlr_layer_surface_v1_destroy(layer_surface);
         return;
     }
@@ -306,7 +306,7 @@ void createlayersurface(struct wl_listener* listener, void* data)
 static void applymonrules(Monitor* m, struct wlr_output_state* state)
 {
     struct wlr_output* wlr_output = m->wlr_output;
-    struct wlr_output_mode* mode = NULL;
+    struct wlr_output_mode* mode = nullptr;
     const MonitorRule* r;
     size_t i;
 
@@ -393,7 +393,7 @@ void reloadmons(void)
     }
 }
 
-void createmon(struct wl_listener* listener, void* data)
+void createmon(struct wl_listener*, void* data)
 {
     /* This event is raised by the backend when a new output (aka a display or
      * monitor) becomes available. */
@@ -431,13 +431,13 @@ void createmon(struct wl_listener* listener, void* data)
 
 #ifdef INTEGRATED_BACKGROUND
     /* created before the bar so that it stays underneath it */
-    m->barblur = wlr_scene_buffer_create(layers[LyrBottom], NULL);
+    m->barblur = wlr_scene_buffer_create(layers[LyrBottom], nullptr);
     wlr_scene_node_set_enabled(&m->barblur->node, 0);
 #endif
-    m->scene_buffer = wlr_scene_buffer_create(layers[LyrBottom], NULL);
+    m->scene_buffer = wlr_scene_buffer_create(layers[LyrBottom], nullptr);
     m->scene_buffer->point_accepts_input = baracceptsinput;
 #ifdef INTEGRATED_BACKGROUND
-    m->wallpaper = wlr_scene_buffer_create(layers[LyrBg], NULL);
+    m->wallpaper = wlr_scene_buffer_create(layers[LyrBg], nullptr);
 #endif
     updatebar(m);
 
@@ -470,7 +470,7 @@ void createmon(struct wl_listener* listener, void* data)
         wlr_output_layout_add(output_layout, wlr_output, m->m.x, m->m.y);
 }
 
-static void destroylayersurfacenotify(struct wl_listener* listener, void* data)
+static void destroylayersurfacenotify(struct wl_listener* listener, void*)
 {
     LayerSurface* l = wl_container_of(listener, l, destroy);
 
@@ -481,7 +481,7 @@ static void destroylayersurfacenotify(struct wl_listener* listener, void* data)
     /* Same as in unmapnotify(): the wl_surface may outlive the layer surface,
      * don't leave it pointing at the freed popup tree. */
     if (l->layer_surface->surface)
-        l->layer_surface->surface->data = NULL;
+        l->layer_surface->surface->data = nullptr;
     wlr_scene_node_destroy(&l->scene->node);
     wlr_scene_node_destroy(&l->popups->node);
     free(l);
@@ -521,13 +521,13 @@ static Client* fullscreentop(Monitor* m)
     Client* c;
 
     if (locked)
-        return NULL;
+        return nullptr;
     wl_list_for_each(c, &fstack, flink)
     {
         if (VISIBLEON(c, m) && c->isfullscreen && client_surface(c))
             return c;
     }
-    return NULL;
+    return nullptr;
 }
 
 static void gamemode(Monitor* m, struct wlr_output_state* state)
@@ -567,7 +567,7 @@ static void gamemode(Monitor* m, struct wlr_output_state* state)
         state->tearing_page_flip = false;
 }
 
-void outputmgrapply(struct wl_listener* listener, void* data)
+void outputmgrapply(struct wl_listener*, void* data)
 {
     struct wlr_output_configuration_v1* config = data;
     outputmgrapplyortest(config, 0);
@@ -639,19 +639,19 @@ static void outputmgrapplyortest(struct wlr_output_configuration_v1* config,
     wlr_output_configuration_v1_destroy(config);
 
     /* https://codeberg.org/dwl/dwl/issues/577 */
-    updatemons(NULL, NULL);
+    updatemons(nullptr, nullptr);
 }
 
-void outputmgrtest(struct wl_listener* listener, void* data)
+void outputmgrtest(struct wl_listener*, void* data)
 {
     struct wlr_output_configuration_v1* config = data;
     outputmgrapplyortest(config, 1);
 }
 
-void powermgrsetmode(struct wl_listener* listener, void* data)
+void powermgrsetmode(struct wl_listener*, void* data)
 {
     struct wlr_output_power_v1_set_mode_event* event = data;
-    struct wlr_output_state state = { 0 };
+    struct wlr_output_state state = {};
     Monitor* m = event->output->data;
 
     if (!m)
@@ -672,10 +672,10 @@ void powermgrsetmode(struct wl_listener* listener, void* data)
     m->asleep = !m->wlr_output->enabled;
     if (m->wlr_output->enabled)
         wlr_output_schedule_frame(m->wlr_output);
-    updatemons(NULL, NULL);
+    updatemons(nullptr, nullptr);
 }
 
-static void rendermon(struct wl_listener* listener, void* data)
+static void rendermon(struct wl_listener* listener, void*)
 {
     /* This function is called every time an output is ready to display a frame,
      * generally at the output's refresh rate (e.g. 60Hz). */
@@ -710,7 +710,8 @@ static void rendermon(struct wl_listener* listener, void* data)
         if (!magnifierframe(m, &pending))
             goto skip;
     } else if (!wlr_scene_output_needs_frame(m->scene_output) ||
-               !wlr_scene_output_build_state(m->scene_output, &pending, NULL)) {
+               !wlr_scene_output_build_state(
+                   m->scene_output, &pending, nullptr)) {
         goto skip;
     }
     gamemode(m, &pending);
@@ -736,11 +737,11 @@ skip:
     wlr_output_state_finish(&pending);
 }
 
-static void requestmonstate(struct wl_listener* listener, void* data)
+static void requestmonstate(struct wl_listener*, void* data)
 {
     struct wlr_output_event_request_state* event = data;
     wlr_output_commit_state(event->output, event->state);
-    updatemons(NULL, NULL);
+    updatemons(nullptr, nullptr);
 }
 
 void tagmon(const Arg* arg)
@@ -750,22 +751,22 @@ void tagmon(const Arg* arg)
         setmon(sel, dirtomon(arg->i), 0);
 }
 
-static void unmaplayersurfacenotify(struct wl_listener* listener, void* data)
+static void unmaplayersurfacenotify(struct wl_listener* listener, void*)
 {
     LayerSurface* l = wl_container_of(listener, l, unmap);
 
     l->mapped = 0;
     wlr_scene_node_set_enabled(&l->scene->node, 0);
     if (l == exclusive_focus)
-        exclusive_focus = NULL;
+        exclusive_focus = nullptr;
     if (l->layer_surface->output && (l->mon = l->layer_surface->output->data))
         arrangelayers(l->mon);
     if (l->layer_surface->surface == seat->keyboard_state.focused_surface)
         focusclient(focustop(selmon), 1);
-    motionnotify(0, NULL, 0, 0, 0, 0);
+    motionnotify(0, nullptr, 0, 0, 0, 0);
 }
 
-void updatemons(struct wl_listener* listener, void* data)
+void updatemons(struct wl_listener*, void*)
 {
     /*
      * Called whenever the output layout changes: adding or removing a
@@ -791,7 +792,7 @@ void updatemons(struct wl_listener* listener, void* data)
         /* Remove this output from the layout to avoid cursor enter inside it */
         wlr_output_layout_remove(output_layout, m->wlr_output);
         closemon(m);
-        m->m = m->w = (struct wlr_box){ 0 };
+        m->m = m->w = (struct wlr_box){};
     }
     /* Insert outputs that need to */
     wl_list_for_each(m, &mons, link)
@@ -802,7 +803,7 @@ void updatemons(struct wl_listener* listener, void* data)
     }
 
     /* Now that we update the output layout we can get its box */
-    wlr_output_layout_get_box(output_layout, NULL, &sgeom);
+    wlr_output_layout_get_box(output_layout, nullptr, &sgeom);
 
     wlr_scene_node_set_position(&root_bg->node, sgeom.x, sgeom.y);
     wlr_scene_rect_set_size(root_bg, sgeom.width, sgeom.height);
@@ -888,7 +889,7 @@ void updatemons(struct wl_listener* listener, void* data)
      * Move the cursor image where it used to be. It does not generate a
      * wl_pointer.motion event for the clients, it's only the image what it's
      * at the wrong position after all. */
-    wlr_cursor_move(cursor, NULL, 0, 0);
+    wlr_cursor_move(cursor, nullptr, 0, 0);
 
     wlr_output_manager_v1_set_configuration(output_mgr, config);
 }
@@ -896,5 +897,5 @@ void updatemons(struct wl_listener* listener, void* data)
 Monitor* xytomon(double x, double y)
 {
     struct wlr_output* o = wlr_output_layout_output_at(output_layout, x, y);
-    return o ? o->data : NULL;
+    return o ? o->data : nullptr;
 }

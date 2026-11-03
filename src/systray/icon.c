@@ -13,6 +13,7 @@
 #include <ctype.h>
 #include <limits.h>
 #include <stdarg.h>
+#include <stdckdint.h>
 #include <stdint.h>
 #include <stdio.h>
 #include <stdlib.h>
@@ -28,12 +29,12 @@
  */
 static uint32_t* to_pixman(const uint8_t* src, int n_pixels, size_t* pix_size)
 {
-    uint32_t* dest = NULL;
+    uint32_t* dest = nullptr;
 
     *pix_size = n_pixels * sizeof(uint32_t);
     dest = malloc(*pix_size);
     if (!dest)
-        return NULL;
+        return nullptr;
 
     for (int i = 0; i < n_pixels; i++) {
         uint8_t a = src[i * 4 + 0];
@@ -65,13 +66,13 @@ static uint32_t* to_pixman(const uint8_t* src, int n_pixels, size_t* pix_size)
 
 Icon* createicon(const uint8_t* buf, int width, int height, int size)
 {
-    Icon* icon = NULL;
+    Icon* icon = nullptr;
 
     int n_pixels;
-    pixman_image_t* img = NULL;
+    pixman_image_t* img = nullptr;
     size_t pixbuf_size;
-    uint32_t* buf_pixman = NULL;
-    uint8_t* buf_orig = NULL;
+    uint32_t* buf_pixman = nullptr;
+    uint8_t* buf_orig = nullptr;
 
     n_pixels = size / 4;
 
@@ -102,13 +103,16 @@ fail:
         pixman_image_unref(img);
     free(buf_pixman);
     free(icon);
-    return NULL;
+    return nullptr;
 }
 
 /* Sizes an icon theme keeps raster icons under, best first. */
-static const int iconsizes[] = { 24, 32, 22, 48, 64, 16, 128, 256 };
+constexpr int iconsizes[] = { 24, 32, 22, 48, 64, 16, 128, 256 };
 
-static int tryicon(char* out, size_t outsz, const char* fmt, ...)
+[[gnu::format(printf, 3, 4)]] static int tryicon(char* out,
+                                                 size_t outsz,
+                                                 const char* fmt,
+                                                 ...)
 {
     va_list ap;
     int n;
@@ -172,7 +176,7 @@ static int iconfile(char* out,
     }
 
     for (base = strtok_r(bases, ":", &saveptr); base;
-         base = strtok_r(NULL, ":", &saveptr)) {
+         base = strtok_r(nullptr, ":", &saveptr)) {
         for (i = 0; i < LENGTH(iconsizes); i++)
             if (tryicon(out,
                         outsz,
@@ -202,7 +206,7 @@ static Icon* iconfrompixbuf(GdkPixbuf* pb)
     const guchar *src, *srow;
     uint8_t* argb;
     Icon* icon;
-    int w, h, rowstride, nch, x, y;
+    int w, h, rowstride, nch, x, y, size;
     size_t i = 0;
 
     w = gdk_pixbuf_get_width(pb);
@@ -210,8 +214,9 @@ static Icon* iconfrompixbuf(GdkPixbuf* pb)
     rowstride = gdk_pixbuf_get_rowstride(pb);
     nch = gdk_pixbuf_get_n_channels(pb);
     src = gdk_pixbuf_get_pixels(pb);
-    if (w <= 0 || h <= 0 || nch < 3 || !(argb = malloc((size_t)w * h * 4)))
-        return NULL;
+    if (w <= 0 || h <= 0 || nch < 3 || ckd_mul(&size, w, h) ||
+        ckd_mul(&size, size, 4) || !(argb = malloc((size_t)size)))
+        return nullptr;
 
     for (y = 0; y < h; y++) {
         srow = src + (size_t)y * rowstride;
@@ -223,7 +228,7 @@ static Icon* iconfrompixbuf(GdkPixbuf* pb)
         }
     }
 
-    icon = createicon(argb, w, h, (int)((size_t)w * h * 4));
+    icon = createicon(argb, w, h, size);
     free(argb);
     return icon;
 }
@@ -231,13 +236,13 @@ static Icon* iconfrompixbuf(GdkPixbuf* pb)
 /* Builds an icon from IconName (or a path). */
 Icon* createiconfromname(const char* name, const char* themepath, int size)
 {
-    GError* err = NULL;
+    GError* err = nullptr;
     GdkPixbuf* pb;
     Icon* icon;
     char path[PATH_MAX];
 
     if (!name || !*name || !iconfile(path, sizeof(path), name, themepath))
-        return NULL;
+        return nullptr;
 
     /* decoded at tray size, the pixman filter samples where this averages */
     if (size > 0)
@@ -247,7 +252,7 @@ Icon* createiconfromname(const char* name, const char* themepath, int size)
     if (!pb) {
         fprintf(stderr, "g0wm: %s: %s\n", path, err->message);
         g_error_free(err);
-        return NULL;
+        return nullptr;
     }
 
     icon = iconfrompixbuf(pb);
@@ -274,10 +279,10 @@ Icon* createiconfromdata(const uint8_t* data,
                                   width,
                                   height,
                                   rowstride,
-                                  NULL,
-                                  NULL);
+                                  nullptr,
+                                  nullptr);
     if (!pb)
-        return NULL;
+        return nullptr;
     if (size > 0 && (w > size || h > size)) {
         if (w >= h) {
             h = h * size / w > 0 ? h * size / w : 1;
@@ -289,7 +294,7 @@ Icon* createiconfromdata(const uint8_t* data,
         scaled = gdk_pixbuf_scale_simple(pb, w, h, GDK_INTERP_BILINEAR);
         g_object_unref(pb);
         if (!(pb = scaled))
-            return NULL;
+            return nullptr;
     }
 
     icon = iconfrompixbuf(pb);
@@ -307,7 +312,7 @@ void destroyicon(Icon* icon)
 }
 
 FallbackIcon* createfallbackicon(const char* appname,
-                                 int fgcolor,
+                                 int,
                                  struct fcft_font* font)
 {
     const struct fcft_glyph* glyph;
@@ -322,7 +327,7 @@ FallbackIcon* createfallbackicon(const char* appname,
 
     glyph = fcft_rasterize_char_utf32(font, initial, FCFT_SUBPIXEL_DEFAULT);
     if (!glyph)
-        return NULL;
+        return nullptr;
 
     return glyph;
 }
@@ -341,7 +346,7 @@ int resize_image(pixman_image_t* image, int new_width, int new_height)
     scale_y = pixman_double_to_fixed((double)src_height / new_height);
 
     pixman_transform_init_scale(&transform, scale_x, scale_y);
-    if (!pixman_image_set_filter(image, PIXMAN_FILTER_BEST, NULL, 0) ||
+    if (!pixman_image_set_filter(image, PIXMAN_FILTER_BEST, nullptr, 0) ||
         !pixman_image_set_transform(image, &transform)) {
         return -1;
     }

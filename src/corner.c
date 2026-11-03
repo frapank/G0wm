@@ -22,7 +22,8 @@
 #include "settings.h"
 #include "util.h"
 
-#define CORNER_SAMPLES 4 /* per axis, so sixteen coverage samples a pixel */
+constexpr int CORNER_SAMPLES =
+    4; /* per axis, so sixteen coverage samples a pixel */
 
 /* function declarations */
 static uint32_t cornercolor(int scheme);

@@ -10,7 +10,6 @@
 #define G0WM_INPUT_H
 
 #include <linux/input-event-codes.h>
-#include <stdbool.h>
 #include <stdint.h>
 #include <wayland-server-core.h>
 #include <wlr/types/wlr_compositor.h>
@@ -25,7 +24,7 @@
 
 #define CLEANMASK(mask) (mask & ~WLR_MODIFIER_CAPS)
 
-enum { CurNormal, CurPressed, CurMove, CurResize }; /* cursor */
+enum : unsigned int { CurNormal, CurPressed, CurMove, CurResize }; /* cursor */
 
 struct KeyboardGroup {
     struct wlr_keyboard_group* wlr_group;
@@ -41,6 +40,7 @@ struct KeyboardGroup {
     struct wl_listener key;
     struct wl_listener destroy;
 };
+static_assert(KEY_CNT % 32 == 0);
 
 struct last_cursor_state {
     enum wp_cursor_shape_device_v1_shape shape;

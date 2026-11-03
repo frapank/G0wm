@@ -6,7 +6,6 @@
  * method, with its keyboard grab and candidate popup
  */
 #include <linux/input-event-codes.h>
-#include <stddef.h>
 #include <stdint.h>
 #include <stdlib.h>
 #include <wayland-server-core.h>
@@ -121,8 +120,8 @@ static int surfacecoords(struct wlr_surface* surface, int* x, int* y)
 
 static void popupplace(InputPopup* p)
 {
-    struct wlr_surface* focus = served ? served->wlr->focused_surface : NULL;
-    struct wlr_box rect = { 0 };
+    struct wlr_surface* focus = served ? served->wlr->focused_surface : nullptr;
+    struct wlr_box rect = {};
     struct wlr_box box;
     Monitor* m;
     int sx, sy, w, h, x, y;
@@ -180,28 +179,28 @@ static void popupsupdate(void)
     wl_list_for_each(p, &popups, link) popupplace(p);
 }
 
-static void popupmap(struct wl_listener* listener, void* data)
+static void popupmap(struct wl_listener* listener, void*)
 {
     InputPopup* p = wl_container_of(listener, p, map);
 
     popupplace(p);
 }
 
-static void popupunmap(struct wl_listener* listener, void* data)
+static void popupunmap(struct wl_listener* listener, void*)
 {
     InputPopup* p = wl_container_of(listener, p, unmap);
 
     popupplace(p);
 }
 
-static void popupcommit(struct wl_listener* listener, void* data)
+static void popupcommit(struct wl_listener* listener, void*)
 {
     InputPopup* p = wl_container_of(listener, p, commit);
 
     popupplace(p);
 }
 
-static void popupdestroy(struct wl_listener* listener, void* data)
+static void popupdestroy(struct wl_listener* listener, void*)
 {
     InputPopup* p = wl_container_of(listener, p, destroy);
 
@@ -214,7 +213,7 @@ static void popupdestroy(struct wl_listener* listener, void* data)
     free(p);
 }
 
-static void imnewpopup(struct wl_listener* listener, void* data)
+static void imnewpopup(struct wl_listener*, void* data)
 {
     struct wlr_input_popup_surface_v2* s = data;
     InputPopup* p = ecalloc(1, sizeof(*p));
@@ -255,7 +254,7 @@ static void imdeactivate(void)
 {
     if (!served)
         return;
-    served = NULL;
+    served = nullptr;
     if (im) {
         wlr_input_method_v2_send_deactivate(im);
         wlr_input_method_v2_send_done(im);
@@ -282,21 +281,21 @@ static void tiupdate(TextInput* ti)
         imstate(ti);
 }
 
-static void tienable(struct wl_listener* listener, void* data)
+static void tienable(struct wl_listener* listener, void*)
 {
     TextInput* ti = wl_container_of(listener, ti, enable);
 
     tiupdate(ti);
 }
 
-static void ticommit(struct wl_listener* listener, void* data)
+static void ticommit(struct wl_listener* listener, void*)
 {
     TextInput* ti = wl_container_of(listener, ti, commit);
 
     tiupdate(ti);
 }
 
-static void tidisable(struct wl_listener* listener, void* data)
+static void tidisable(struct wl_listener* listener, void*)
 {
     TextInput* ti = wl_container_of(listener, ti, disable);
 
@@ -304,7 +303,7 @@ static void tidisable(struct wl_listener* listener, void* data)
         imdeactivate();
 }
 
-static void tidestroy(struct wl_listener* listener, void* data)
+static void tidestroy(struct wl_listener* listener, void*)
 {
     TextInput* ti = wl_container_of(listener, ti, destroy);
 
@@ -322,7 +321,7 @@ static void tidestroy(struct wl_listener* listener, void* data)
  * and only enter a surface of their own client */
 static void tisync(struct wlr_surface* focus)
 {
-    struct wlr_surface* surface = im ? focus : NULL;
+    struct wlr_surface* surface = im ? focus : nullptr;
     TextInput* ti;
 
     if (served && (!served->wlr->focused_surface ||
@@ -341,7 +340,7 @@ static void tisync(struct wlr_surface* focus)
     popupsupdate();
 }
 
-static void imcommit(struct wl_listener* listener, void* data)
+static void imcommit(struct wl_listener*, void*)
 {
     if (!served || !served->wlr->focused_surface)
         return;
@@ -361,10 +360,11 @@ static void imcommit(struct wl_listener* listener, void* data)
     wlr_text_input_v3_send_done(served->wlr);
 }
 
-static void imgrabkeyboard(struct wl_listener* listener, void* data)
+static void imgrabkeyboard(struct wl_listener*, void* data)
 {
     struct wlr_input_method_keyboard_grab_v2* grab = data;
-    struct wlr_keyboard* kb = kb_group ? &kb_group->wlr_group->keyboard : NULL;
+    struct wlr_keyboard* kb =
+        kb_group ? &kb_group->wlr_group->keyboard : nullptr;
 
     wlr_input_method_keyboard_grab_v2_set_keyboard(grab, kb);
     if (kb)
@@ -373,7 +373,7 @@ static void imgrabkeyboard(struct wl_listener* listener, void* data)
 }
 
 /* resend the real modifiers, the grab may have changed them */
-static void imgrabdestroy(struct wl_listener* listener, void* data)
+static void imgrabdestroy(struct wl_listener*, void*)
 {
     struct wlr_keyboard* kb = wlr_seat_get_keyboard(seat);
 
@@ -382,18 +382,18 @@ static void imgrabdestroy(struct wl_listener* listener, void* data)
         wlr_seat_keyboard_notify_modifiers(seat, &kb->modifiers);
 }
 
-static void imdestroy(struct wl_listener* listener, void* data)
+static void imdestroy(struct wl_listener*, void*)
 {
     wl_list_remove(&im_commit.link);
     wl_list_remove(&im_destroy.link);
     wl_list_remove(&im_grab.link);
     wl_list_remove(&im_popup.link);
-    im = NULL;
-    served = NULL;
-    tisync(NULL);
+    im = nullptr;
+    served = nullptr;
+    tisync(nullptr);
 }
 
-void createinputmethod(struct wl_listener* listener, void* data)
+void createinputmethod(struct wl_listener*, void* data)
 {
     if (im) {
         wlr_input_method_v2_send_unavailable(data);
@@ -407,7 +407,7 @@ void createinputmethod(struct wl_listener* listener, void* data)
     tisync(seat->keyboard_state.focused_surface);
 }
 
-void createtextinput(struct wl_listener* listener, void* data)
+void createtextinput(struct wl_listener*, void* data)
 {
     struct wlr_text_input_v3* wlr = data;
     TextInput* ti;
@@ -430,7 +430,7 @@ void textinputarrange(void)
     popupsupdate();
 }
 
-void textinputfocus(struct wl_listener* listener, void* data)
+void textinputfocus(struct wl_listener*, void* data)
 {
     struct wlr_seat_keyboard_focus_change_event* event = data;
 
@@ -442,11 +442,11 @@ static struct wlr_input_method_keyboard_grab_v2* keygrab(KeyboardGroup* g)
     struct wlr_input_method_keyboard_grab_v2* grab;
 
     if (locked || !im || !(grab = im->keyboard_grab))
-        return NULL;
+        return nullptr;
     /* the input method types through its own virtual keyboard */
     if (g->vkb && wl_resource_get_client(g->vkb->resource) ==
                       wl_resource_get_client(grab->resource))
-        return NULL;
+        return nullptr;
     return grab;
 }
 

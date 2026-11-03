@@ -39,7 +39,7 @@
 #include "toplevel.h"
 #include "util.h"
 
-#define MAXBOXES 64
+constexpr int MAXBOXES = 64;
 
 typedef struct {
     struct wlr_ext_image_capture_source_v1_interface impl;
@@ -85,7 +85,7 @@ static int nmasks;
 
 static int blackout(struct wlr_buffer* buf, Patch* p, int n)
 {
-    static const pixman_color_t black = { 0, 0, 0, 0xffff };
+    static constexpr pixman_color_t black = { 0, 0, 0, 0xffff };
     struct wlr_box all = { 0, 0, buf->width, buf->height }, b;
     struct wlr_render_pass* pass;
     struct wlr_texture* tex[MAXBOXES];
@@ -119,7 +119,7 @@ static int blackout(struct wlr_buffer* buf, Patch* p, int n)
                 pixman_image_composite32(
                     PIXMAN_OP_SRC,
                     p[i].buf->image,
-                    NULL,
+                    nullptr,
                     img,
                     0,
                     0,
@@ -135,7 +135,7 @@ static int blackout(struct wlr_buffer* buf, Patch* p, int n)
         return 1;
     }
 
-    if (!(pass = wlr_renderer_begin_buffer_pass(drw, buf, NULL)))
+    if (!(pass = wlr_renderer_begin_buffer_pass(drw, buf, nullptr)))
         return 0;
     for (i = 0; i < n; i++) {
         if (!wlr_box_intersection(&b, &p[i].box, &all))
@@ -185,7 +185,7 @@ static void copyframe(struct wlr_ext_image_capture_source_v1* source,
             return;
         }
         b[0] = (Patch){ { 0, 0, frame->buffer->width, frame->buffer->height },
-                        NULL };
+                        nullptr };
         if (!blackout(frame->buffer, b, 1))
             goto fail;
         wlr_ext_image_copy_capture_frame_v1_ready(
@@ -245,7 +245,7 @@ void privacyafter(Monitor* m)
     Copy* cp;
     int i, gone;
 
-    m->shown = NULL;
+    m->shown = nullptr;
     wl_array_for_each(cp, &copies)
     {
         gone = 1;
@@ -292,14 +292,14 @@ int privacybefore(Monitor* m, struct wlr_output_state* state)
     return 1;
 }
 
-void privacycapture(struct wl_listener* listener, void* data)
+void privacycapture(struct wl_listener*, void* data)
 {
     struct wlr_ext_image_copy_capture_session_v1* session = data;
     struct wlr_output* o =
         wlr_output_try_from_ext_image_capture_source_v1(session->source);
 
     if (o)
-        shield(session->source, o, NULL);
+        shield(session->source, o, nullptr);
 }
 
 void privacydamage(void)
@@ -339,7 +339,7 @@ static int privateboxes(Monitor* m, Patch* out)
                                       c->geom.y + (int)c->bw + t,
                                       c->geom.width - 2 * (int)c->bw,
                                       c->geom.height - 2 * (int)c->bw - t };
-            share[nb++] = NULL;
+            share[nb++] = nullptr;
         }
         if (c->title && c->title->node.enabled &&
             wlr_scene_node_coords(&c->title->node, &x, &y)) {
@@ -349,7 +349,7 @@ static int privateboxes(Monitor* m, Patch* out)
             share[nb++] = sp && c->mon && sp->base.width == c->titlebufw &&
                                   sp->base.height == c->mon->t.height
                               ? sp
-                              : NULL;
+                              : nullptr;
         }
         for (i = 0; i < nb; i++) {
             if (n == MAXBOXES)
@@ -359,7 +359,7 @@ static int privateboxes(Monitor* m, Patch* out)
                     out[n++].buf = share[i];
                     break;
                 case -1:
-                    out[n++].buf = NULL;
+                    out[n++].buf = nullptr;
                     break;
             }
         }
@@ -381,15 +381,15 @@ static int privateboxes(Monitor* m, Patch* out)
                 out[n++].buf = sp;
                 break;
             case -1:
-                out[n++].buf = NULL;
+                out[n++].buf = nullptr;
                 break;
         }
     }
     return n;
 
 full:
-    out[0] =
-        (Patch){ { 0, 0, m->wlr_output->width, m->wlr_output->height }, NULL };
+    out[0] = (Patch){ { 0, 0, m->wlr_output->width, m->wlr_output->height },
+                      nullptr };
     return 1;
 }
 
@@ -414,11 +414,11 @@ static void shield(struct wlr_ext_image_capture_source_v1* source,
 void shieldclient(Client* c)
 {
     if (c->capture)
-        shield(c->capture, NULL, c);
+        shield(c->capture, nullptr, c);
 }
 
 /* the source is still used after this signal */
-static void shielddestroy(struct wl_listener* listener, void* data)
+static void shielddestroy(struct wl_listener* listener, void*)
 {
     Shield* s = wl_container_of(listener, s, destroy);
 
@@ -484,7 +484,7 @@ static int tobuffer(Monitor* m, struct wlr_box b, struct wlr_box* out)
     return -1;
 }
 
-void toggleprivate(const Arg* arg)
+void toggleprivate(const Arg*)
 {
     Client* sel = focustop(selmon);
 
@@ -509,7 +509,7 @@ static void wipe(struct wlr_buffer* buf)
         wlr_buffer_end_data_ptr_access(buf);
         return;
     }
-    if (!(pass = wlr_renderer_begin_buffer_pass(drw, buf, NULL))) {
+    if (!(pass = wlr_renderer_begin_buffer_pass(drw, buf, nullptr))) {
         wlr_log(WLR_ERROR, "privacy: cannot black out a screencopy frame");
         return;
     }

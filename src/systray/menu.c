@@ -21,7 +21,7 @@
 #define DBUSMENU_IFACE "com.canonical.dbusmenu"
 #define LABEL_MAX MENU_LABEL_MAX
 /* Entries a level shows, past which the tail is dropped. */
-#define ITEMS_MAX 64
+constexpr int ITEMS_MAX = 64;
 
 struct Menu {
     struct wl_array layout;
@@ -78,14 +78,14 @@ static void send_clicked(const char* busname,
                          int itemid,
                          DBusConnection* conn)
 {
-    DBusMessage* msg = NULL;
+    DBusMessage* msg = nullptr;
     DBusMessageIter iter = DBUS_MESSAGE_ITER_INIT_CLOSED;
     DBusMessageIter sub = DBUS_MESSAGE_ITER_INIT_CLOSED;
     const char* data = "";
     const char* eventid = "clicked";
     time_t timestamp;
 
-    timestamp = time(NULL);
+    timestamp = time(nullptr);
 
     msg =
         dbus_message_new_method_call(busname, busobj, DBUSMENU_IFACE, "Event");
@@ -103,7 +103,7 @@ static void send_clicked(const char* busname,
         goto fail;
     }
 
-    if (!dbus_connection_send_with_reply(conn, msg, NULL, -1))
+    if (!dbus_connection_send_with_reply(conn, msg, nullptr, -1))
         goto fail;
 
     dbus_message_unref(msg);
@@ -214,7 +214,8 @@ static int read_dict(DBusMessageIter* dict,
                      int* has_submenu)
 {
     DBusMessageIter member, val;
-    const char *children_display = NULL, *label = NULL, *toggle_type = NULL;
+    const char *children_display = nullptr, *label = nullptr,
+               *toggle_type = nullptr;
     const char* key;
     dbus_bool_t visible = TRUE, enabled = TRUE;
     dbus_int32_t toggle_state = 1;
@@ -409,7 +410,7 @@ static void layout_ready(DBusPendingCall* pending, void* data)
 {
     Menu* menu = data;
 
-    DBusMessage* reply = NULL;
+    DBusMessage* reply = nullptr;
     DBusMessageIter iter, strct;
     dbus_uint32_t revision;
     int r;
@@ -471,10 +472,10 @@ fail:
 
 static int request_layout(Menu* menu)
 {
-    DBusMessage* msg = NULL;
+    DBusMessage* msg = nullptr;
     DBusMessageIter iter = DBUS_MESSAGE_ITER_INIT_CLOSED;
     DBusMessageIter strings = DBUS_MESSAGE_ITER_INIT_CLOSED;
-    DBusPendingCall* pending = NULL;
+    DBusPendingCall* pending = nullptr;
     dbus_int32_t parentid, depth;
     int r;
 
@@ -505,7 +506,7 @@ static int request_layout(Menu* menu)
     }
 
     if (!dbus_connection_send_with_reply(menu->conn, msg, &pending, -1) ||
-        !dbus_pending_call_set_notify(pending, layout_ready, menu, NULL)) {
+        !dbus_pending_call_set_notify(pending, layout_ready, menu, nullptr)) {
         r = -ENOMEM;
         goto fail;
     }
@@ -529,7 +530,7 @@ static void about_to_show_handle(DBusPendingCall* pending, void* data)
 {
     Menu* menu = data;
 
-    DBusMessage* reply = NULL;
+    DBusMessage* reply = nullptr;
 
     reply = dbus_pending_call_steal_reply(pending);
     if (!reply)
@@ -554,10 +555,10 @@ void menu_show(DBusConnection* conn,
                const char* busobj,
                MenuPresentFn present)
 {
-    DBusMessage* msg = NULL;
-    DBusPendingCall* pending = NULL;
-    Menu* menu = NULL;
-    char *busname_dup = NULL, *busobj_dup = NULL;
+    DBusMessage* msg = nullptr;
+    DBusPendingCall* pending = nullptr;
+    Menu* menu = nullptr;
+    char *busname_dup = nullptr, *busobj_dup = nullptr;
     dbus_int32_t parentid = 0;
 
     /* the item may expose no menu, or its Menu property is still in flight */
@@ -584,7 +585,7 @@ void menu_show(DBusConnection* conn,
             msg, DBUS_TYPE_INT32, &parentid, DBUS_TYPE_INVALID) ||
         !dbus_connection_send_with_reply(menu->conn, msg, &pending, -1) ||
         !dbus_pending_call_set_notify(
-            pending, about_to_show_handle, menu, NULL)) {
+            pending, about_to_show_handle, menu, nullptr)) {
         goto fail;
     }
 

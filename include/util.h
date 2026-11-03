@@ -9,9 +9,9 @@
 
 #include <stddef.h>
 
-void die(const char* fmt, ...);
-void* ecalloc(size_t nmemb, size_t size);
-int fd_set_nonblock(int fd);
-size_t putcp(char* dst, size_t room, unsigned long cp);
+[[noreturn, gnu::format(printf, 1, 2)]] void die(const char* fmt, ...);
+[[nodiscard]] void* ecalloc(size_t nmemb, size_t size);
+[[nodiscard]] int fd_set_nonblock(int fd);
+[[nodiscard]] size_t putcp(char* dst, size_t room, unsigned long cp);
 
 #endif

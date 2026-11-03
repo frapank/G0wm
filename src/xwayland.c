@@ -39,7 +39,7 @@ static void sethints(struct wl_listener* listener, void* data);
 
 /* function implementations */
 #ifdef XWAYLAND
-static void activatex11(struct wl_listener* listener, void* data)
+static void activatex11(struct wl_listener* listener, void*)
 {
     Client* c = wl_container_of(listener, c, activate);
 
@@ -48,7 +48,7 @@ static void activatex11(struct wl_listener* listener, void* data)
         wlr_xwayland_surface_activate(c->surface.xwayland, 1);
 }
 
-static void associatex11(struct wl_listener* listener, void* data)
+static void associatex11(struct wl_listener* listener, void*)
 {
     Client* c = wl_container_of(listener, c, associate);
 
@@ -111,7 +111,7 @@ static void configurex11(struct wl_listener* listener, void* data)
     }
 }
 
-void createnotifyx11(struct wl_listener* listener, void* data)
+void createnotifyx11(struct wl_listener*, void* data)
 {
     struct wlr_xwayland_surface* xsurface = data;
     Client* c;
@@ -138,7 +138,7 @@ void createnotifyx11(struct wl_listener* listener, void* data)
     LISTEN(&xsurface->events.set_title, &c->set_title, updatetitle);
 }
 
-static void dissociatex11(struct wl_listener* listener, void* data)
+static void dissociatex11(struct wl_listener* listener, void*)
 {
     Client* c = wl_container_of(listener, c, dissociate);
     wl_list_remove(&c->map.link);
@@ -159,7 +159,7 @@ static void minimizex11(struct wl_listener* listener, void* data)
             client_surface(c) != seat->keyboard_state.focused_surface);
 }
 
-static void sethints(struct wl_listener* listener, void* data)
+static void sethints(struct wl_listener* listener, void*)
 {
     Client* c = wl_container_of(listener, c, set_hints);
     struct wlr_surface* surface = client_surface(c);
@@ -173,7 +173,7 @@ static void sethints(struct wl_listener* listener, void* data)
         setbordercolor(c, SchemeUrg);
 }
 
-void xwaylandready(struct wl_listener* listener, void* data)
+void xwaylandready(struct wl_listener*, void*)
 {
     struct wlr_xcursor* xcursor;
 

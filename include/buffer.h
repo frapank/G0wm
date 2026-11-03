@@ -8,7 +8,6 @@
 #define G0WM_BUFFER_H
 
 #include <drwl.h>
-#include <stdbool.h>
 #include <stddef.h>
 #include <stdint.h>
 #include <wayland-server-core.h>
@@ -22,7 +21,10 @@ typedef struct {
     uint32_t data[];
 } Buffer;
 
-Buffer* bufget(Buffer** pool, size_t poollen, int width, int height);
+[[nodiscard]] Buffer* bufget(Buffer** pool,
+                             size_t poollen,
+                             int width,
+                             int height);
 void bufpooldrop(Buffer** pool, size_t poollen);
 
 #endif

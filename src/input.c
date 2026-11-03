@@ -10,7 +10,6 @@
 #include <libinput.h>
 #include <linux/input-event-codes.h>
 #include <math.h>
-#include <stdbool.h>
 #include <stddef.h>
 #include <stdint.h>
 #include <stdlib.h>
@@ -124,8 +123,11 @@ static unsigned int barclick(Monitor* pm, Arg* arg)
     Monitor* s = barsinglemon && selmon ? selmon : pm;
 
     if (exclusive_focus || !pm ||
-        !(node = wlr_scene_node_at(
-              &layers[LyrBottom]->node, cursor->x, cursor->y, NULL, NULL)) ||
+        !(node = wlr_scene_node_at(&layers[LyrBottom]->node,
+                                   cursor->x,
+                                   cursor->y,
+                                   nullptr,
+                                   nullptr)) ||
         !(buffer = wlr_scene_buffer_from_node(node)) ||
         buffer != pm->scene_buffer)
         return ClkRoot;
@@ -153,7 +155,7 @@ static unsigned int barclick(Monitor* pm, Arg* arg)
     return ClkTitle;
 }
 
-void axisnotify(struct wl_listener* listener, void* data)
+void axisnotify(struct wl_listener*, void* data)
 {
     /* This event is forwarded by the cursor when a pointer emits an axis event,
      * for example when you move the scroll wheel. */
@@ -170,7 +172,7 @@ void axisnotify(struct wl_listener* listener, void* data)
             (keyboard &&
              wlr_keyboard_get_modifiers(keyboard) & WLR_MODIFIER_SHIFT);
 
-        xytonode(cursor->x, cursor->y, NULL, &c, NULL, NULL, NULL);
+        xytonode(cursor->x, cursor->y, nullptr, &c, nullptr, nullptr, nullptr);
         if (!locked && !c && barclick(pm, &arg) == ClkTitle &&
             notifywheel(pm, event->delta, horizontal))
             return;
@@ -180,7 +182,7 @@ void axisnotify(struct wl_listener* listener, void* data)
         Arg arg;
         Monitor* pm = xytomon(cursor->x, cursor->y);
 
-        xytonode(cursor->x, cursor->y, NULL, &c, NULL, NULL, NULL);
+        xytonode(cursor->x, cursor->y, nullptr, &c, nullptr, nullptr, nullptr);
         if (!c && barclick(pm, &arg) == ClkStatus &&
             statusscroll(pm, arg.i, event->delta))
             return;
@@ -198,7 +200,7 @@ void axisnotify(struct wl_listener* listener, void* data)
                                  event->relative_direction);
 }
 
-void buttonpress(struct wl_listener* listener, void* data)
+void buttonpress(struct wl_listener*, void* data)
 {
     unsigned int click;
     struct wlr_pointer_button_event* event = data;
@@ -206,7 +208,7 @@ void buttonpress(struct wl_listener* listener, void* data)
     Monitor* pm; /* the monitor the pointer is on, bar included */
     uint32_t mods;
     Arg arg = {
-        .v = NULL
+        .v = nullptr
     }; /* .v is the widest member: zeroes the whole union */
     Client* c;
     const Button* b;
@@ -222,7 +224,7 @@ void buttonpress(struct wl_listener* listener, void* data)
     }
 
     click = ClkRoot;
-    xytonode(cursor->x, cursor->y, NULL, &c, NULL, NULL, NULL);
+    xytonode(cursor->x, cursor->y, nullptr, &c, nullptr, nullptr, nullptr);
     if (c)
         click = ClkClient;
 
@@ -246,7 +248,8 @@ void buttonpress(struct wl_listener* listener, void* data)
             }
 
             /* Change focus if the button was _pressed_ over a client */
-            xytonode(cursor->x, cursor->y, NULL, &c, NULL, NULL, NULL);
+            xytonode(
+                cursor->x, cursor->y, nullptr, &c, nullptr, nullptr, nullptr);
             if (click == ClkClient &&
                 (!client_is_unmanaged(c) || client_wants_focus(c)))
                 focusclient(c, 1);
@@ -290,11 +293,11 @@ void buttonpress(struct wl_listener* listener, void* data)
                 /* Drop the window off on its new monitor */
                 selmon = xytomon(cursor->x, cursor->y);
                 setmon(grabc, selmon, 0);
-                grabc = NULL;
+                grabc = nullptr;
                 return;
             }
             cursor_mode = CurNormal;
-            grabc = NULL;
+            grabc = nullptr;
             break;
     }
     /* If the event wasn't handled by the compositor, notify the client with
@@ -352,7 +355,7 @@ KeyboardGroup* createkeyboardgroup(void)
     return group;
 }
 
-void createkbinhibitor(struct wl_listener* listener, void* data)
+void createkbinhibitor(struct wl_listener*, void* data)
 {
     wlr_keyboard_shortcuts_inhibitor_v1_activate(data);
 }
@@ -412,7 +415,7 @@ static void createpointer(struct wlr_pointer* pointer)
     wlr_cursor_attach_input_device(cursor, &pointer->base);
 }
 
-void createpointerconstraint(struct wl_listener* listener, void* data)
+void createpointerconstraint(struct wl_listener*, void* data)
 {
     PointerConstraint* pointer_constraint =
         ecalloc(1, sizeof(*pointer_constraint));
@@ -434,7 +437,7 @@ static void cursorconstrain(struct wlr_pointer_constraint_v1* constraint)
     wlr_pointer_constraint_v1_send_activated(constraint);
 }
 
-void cursorframe(struct wl_listener* listener, void* data)
+void cursorframe(struct wl_listener*, void*)
 {
     /* This event is forwarded by the cursor when a pointer emits a frame
      * event. Frame events are sent after regular pointer events to group
@@ -447,9 +450,9 @@ void cursorframe(struct wl_listener* listener, void* data)
 /* Gestures with a binding are not sent to the client, the binding runs when
  * the fingers lift. */
 
-#define SWIPE_MIN 100.0
-#define PINCH_IN 0.8
-#define PINCH_OUT 1.25
+constexpr double SWIPE_MIN = 100.0;
+constexpr double PINCH_IN = 0.8;
+constexpr double PINCH_OUT = 1.25;
 
 static int gesturebound(int pinch, uint32_t fingers)
 {
@@ -472,7 +475,7 @@ static void gesturerun(unsigned int motion)
             g->func(&g->arg);
 }
 
-void swipebegin(struct wl_listener* listener, void* data)
+void swipebegin(struct wl_listener*, void* data)
 {
     struct wlr_pointer_swipe_begin_event* event = data;
 
@@ -486,7 +489,7 @@ void swipebegin(struct wl_listener* listener, void* data)
         pointer_gestures, seat, event->time_msec, event->fingers);
 }
 
-void swipeupdate(struct wl_listener* listener, void* data)
+void swipeupdate(struct wl_listener*, void* data)
 {
     struct wlr_pointer_swipe_update_event* event = data;
 
@@ -500,7 +503,7 @@ void swipeupdate(struct wl_listener* listener, void* data)
         pointer_gestures, seat, event->time_msec, event->dx, event->dy);
 }
 
-void swipeend(struct wl_listener* listener, void* data)
+void swipeend(struct wl_listener*, void* data)
 {
     struct wlr_pointer_swipe_end_event* event = data;
 
@@ -519,7 +522,7 @@ void swipeend(struct wl_listener* listener, void* data)
         gesturerun(gesture.dy < 0 ? SwipeUp : SwipeDown);
 }
 
-void pinchbegin(struct wl_listener* listener, void* data)
+void pinchbegin(struct wl_listener*, void* data)
 {
     struct wlr_pointer_pinch_begin_event* event = data;
     struct wlr_keyboard* keyboard = wlr_seat_get_keyboard(seat);
@@ -542,7 +545,7 @@ void pinchbegin(struct wl_listener* listener, void* data)
         pointer_gestures, seat, event->time_msec, event->fingers);
 }
 
-void pinchupdate(struct wl_listener* listener, void* data)
+void pinchupdate(struct wl_listener*, void* data)
 {
     struct wlr_pointer_pinch_update_event* event = data;
     Monitor* m;
@@ -567,7 +570,7 @@ void pinchupdate(struct wl_listener* listener, void* data)
                                               event->rotation);
 }
 
-void pinchend(struct wl_listener* listener, void* data)
+void pinchend(struct wl_listener*, void* data)
 {
     struct wlr_pointer_pinch_end_event* event = data;
 
@@ -589,7 +592,7 @@ void pinchend(struct wl_listener* listener, void* data)
         gesturerun(PinchOut);
 }
 
-void holdbegin(struct wl_listener* listener, void* data)
+void holdbegin(struct wl_listener*, void* data)
 {
     struct wlr_pointer_hold_begin_event* event = data;
 
@@ -598,7 +601,7 @@ void holdbegin(struct wl_listener* listener, void* data)
         pointer_gestures, seat, event->time_msec, event->fingers);
 }
 
-void holdend(struct wl_listener* listener, void* data)
+void holdend(struct wl_listener*, void* data)
 {
     struct wlr_pointer_hold_end_event* event = data;
 
@@ -608,42 +611,42 @@ void holdend(struct wl_listener* listener, void* data)
 
 static void cursorwarptohint(void)
 {
-    Client* c = NULL;
+    Client* c = nullptr;
     double sx = active_constraint->current.cursor_hint.x;
     double sy = active_constraint->current.cursor_hint.y;
 
-    toplevel_from_wlr_surface(active_constraint->surface, &c, NULL);
+    toplevel_from_wlr_surface(active_constraint->surface, &c, nullptr);
     if (c && active_constraint->current.cursor_hint.enabled) {
         wlr_cursor_warp(
-            cursor, NULL, sx + c->geom.x + c->bw, sy + c->geom.y + c->bw);
+            cursor, nullptr, sx + c->geom.x + c->bw, sy + c->geom.y + c->bw);
         wlr_seat_pointer_warp(active_constraint->seat, sx, sy);
     }
 }
 
-static void destroydragicon(struct wl_listener* listener, void* data)
+static void destroydragicon(struct wl_listener* listener, void*)
 {
     /* Focus enter isn't sent during drag, so refocus the focused node. */
     focusclient(focustop(selmon), 1);
-    motionnotify(0, NULL, 0, 0, 0, 0);
+    motionnotify(0, nullptr, 0, 0, 0, 0);
     wl_list_remove(&listener->link);
     free(listener);
 }
 
-static void destroypointerconstraint(struct wl_listener* listener, void* data)
+static void destroypointerconstraint(struct wl_listener* listener, void*)
 {
     PointerConstraint* pointer_constraint =
         wl_container_of(listener, pointer_constraint, destroy);
 
     if (active_constraint == pointer_constraint->constraint) {
         cursorwarptohint();
-        active_constraint = NULL;
+        active_constraint = nullptr;
     }
 
     wl_list_remove(&pointer_constraint->destroy.link);
     free(pointer_constraint);
 }
 
-void destroykeyboardgroup(struct wl_listener* listener, void* data)
+void destroykeyboardgroup(struct wl_listener* listener, void*)
 {
     KeyboardGroup* group = wl_container_of(listener, group, destroy);
     wl_event_source_remove(group->key_repeat_source);
@@ -677,14 +680,14 @@ static void handlecursoractivity(void)
     }
 }
 
-static int hidecursor(void* data)
+static int hidecursor(void*)
 {
     wlr_cursor_unset_image(cursor);
     cursor_hidden = true;
     return 1;
 }
 
-void inputdevice(struct wl_listener* listener, void* data)
+void inputdevice(struct wl_listener*, void* data)
 {
     /* This event is raised by the backend when a new input device becomes
      * available. */
@@ -739,7 +742,7 @@ static struct wlr_keyboard_shortcuts_inhibitor_v1* focusedinhibitor(void)
             inhibitor->surface == seat->keyboard_state.focused_surface)
             return inhibitor;
     }
-    return NULL;
+    return nullptr;
 }
 
 static int keybinding(uint32_t mods, xkb_keysym_t sym)
@@ -786,7 +789,7 @@ static void keypress(struct wl_listener* listener, void* data)
     /* hide cursor when typing starts */
     if (hide_cursor_when_typing && !cursor_hidden &&
         event->state == WL_KEYBOARD_KEY_STATE_PRESSED)
-        hidecursor(NULL);
+        hidecursor(nullptr);
 
     /* While the prompt is open, every key belongs to it: swallow press and
      * release instead of matching keybindings or forwarding to the client.
@@ -875,7 +878,7 @@ static void keypress(struct wl_listener* listener, void* data)
         seat, event->time_msec, event->keycode, event->state);
 }
 
-static void keypressmod(struct wl_listener* listener, void* data)
+static void keypressmod(struct wl_listener* listener, void*)
 {
     /* This event is raised when a modifier key, such as shift or alt, is
      * pressed. We simply communicate this to the client. */
@@ -926,7 +929,7 @@ static int keyrepeat(void* data)
     return 0;
 }
 
-void motionabsolute(struct wl_listener* listener, void* data)
+void motionabsolute(struct wl_listener*, void* data)
 {
     /* This event is forwarded by the cursor when a pointer emits an _absolute_
      * motion event, from 0..1 on each axis. This happens, for example, when
@@ -978,14 +981,14 @@ void motionnotify(uint32_t time,
                   double dy_unaccel)
 {
     double sx = 0, sy = 0, sx_confined, sy_confined;
-    Client *c = NULL, *w = NULL;
-    LayerSurface* l = NULL;
-    struct wlr_surface* surface = NULL;
+    Client *c = nullptr, *w = nullptr;
+    LayerSurface* l = nullptr;
+    struct wlr_surface* surface = nullptr;
     struct wlr_pointer_constraint_v1* constraint;
     struct wlr_box box;
 
     /* Find the client under the pointer and send the event along. */
-    xytonode(cursor->x, cursor->y, &surface, &c, NULL, &sx, &sy);
+    xytonode(cursor->x, cursor->y, &surface, &c, nullptr, &sx, &sy);
     titlehover(c, cursor->x, cursor->y);
 
     if (cursor_mode == CurPressed && !seat->drag &&
@@ -1016,8 +1019,8 @@ void motionnotify(uint32_t time,
             cursor_mode != CurMove) {
             /* own variable: c is the client under the cursor, and the
              * constraint may sit on an unmapped one (gamescope) */
-            Client* cc = NULL;
-            toplevel_from_wlr_surface(active_constraint->surface, &cc, NULL);
+            Client* cc = nullptr;
+            toplevel_from_wlr_surface(active_constraint->surface, &cc, nullptr);
             if (cc && active_constraint->surface ==
                           seat->pointer_state.focused_surface) {
                 sx = cursor->x - cc->geom.x - cc->bw;
@@ -1100,7 +1103,7 @@ void motionnotify(uint32_t time,
     pointerfocus(c, surface, sx, sy, time);
 }
 
-void motionrelative(struct wl_listener* listener, void* data)
+void motionrelative(struct wl_listener*, void* data)
 {
     /* This event is forwarded by the cursor when a pointer emits a _relative_
      * pointer motion event (i.e. a delta) */
@@ -1108,8 +1111,8 @@ void motionrelative(struct wl_listener* listener, void* data)
     /* The cursor doesn't move unless we tell it to. The cursor automatically
      * handles constraining the motion to the output layout, as well as any
      * special configuration applied for the specific input device which
-     * generated the event. You can pass NULL for the device if you want to move
-     * the cursor around without any input. */
+     * generated the event. You can pass nullptr for the device if you want to
+     * move the cursor around without any input. */
     motionnotify(event->time_msec,
                  &event->pointer->base,
                  event->delta_x,
@@ -1124,7 +1127,7 @@ void moveresize(const Arg* arg)
 
     if (cursor_mode != CurNormal && cursor_mode != CurPressed)
         return;
-    xytonode(cursor->x, cursor->y, NULL, &c, NULL, NULL, NULL);
+    xytonode(cursor->x, cursor->y, nullptr, &c, nullptr, nullptr, nullptr);
     pressx = cursor->x;
     pressy = cursor->y;
     grab(c, arg->ui);
@@ -1142,7 +1145,7 @@ void titlegrab(Client* c)
 
 static void grab(Client* c, unsigned int mode)
 {
-    grabc = NULL;
+    grabc = nullptr;
     if (!c || client_is_unmanaged(c) || c->isfullscreen)
         return;
     grabc = c;
@@ -1162,7 +1165,7 @@ static void grab(Client* c, unsigned int mode)
             /* Doesn't work for X11 output - the next absolute motion event
              * returns the cursor to where it started */
             wlr_cursor_warp_closest(cursor,
-                                    NULL,
+                                    nullptr,
                                     c->geom.x + c->geom.width,
                                     c->geom.y + c->geom.height);
             wlr_cursor_set_xcursor(cursor, cursor_mgr, "se-resize");
@@ -1192,7 +1195,7 @@ static void pointerfocus(Client* c,
 
     if (!time) {
         clock_gettime(CLOCK_MONOTONIC, &now);
-        time = now.tv_sec * 1000 + now.tv_nsec / 1000000;
+        time = now.tv_sec * 1000 + now.tv_nsec / 1'000'000;
     }
 
     /* Let the client know that the mouse cursor has entered one
@@ -1202,7 +1205,7 @@ static void pointerfocus(Client* c,
     wlr_seat_pointer_notify_motion(seat, time, sx, sy);
 }
 
-void requeststartdrag(struct wl_listener* listener, void* data)
+void requeststartdrag(struct wl_listener*, void* data)
 {
     struct wlr_seat_request_start_drag_event* event = data;
     struct wlr_touch_point* point;
@@ -1217,15 +1220,15 @@ void requeststartdrag(struct wl_listener* listener, void* data)
         wlr_data_source_destroy(event->drag->source);
 }
 
-static void unlastcursor(struct wl_listener* listener, void* data)
+static void unlastcursor(struct wl_listener*, void*)
 {
     /* When the surface is destroyed, clear our reference to it */
-    last_cursor.surface = NULL;
+    last_cursor.surface = nullptr;
     wl_list_remove(&last_cursor.destroy.link);
     wl_list_init(&last_cursor.destroy.link);
 }
 
-void setcursor(struct wl_listener* listener, void* data)
+void setcursor(struct wl_listener*, void* data)
 {
     /* This event is raised by the seat when a client provides a cursor image */
     struct wlr_seat_pointer_request_set_cursor_event* event = data;
@@ -1263,7 +1266,7 @@ void setclientcursor(struct wlr_surface* surface, int hotspot_x, int hotspot_y)
         wlr_cursor_set_surface(cursor, surface, hotspot_x, hotspot_y);
 }
 
-void setcursorshape(struct wl_listener* listener, void* data)
+void setcursorshape(struct wl_listener*, void* data)
 {
     struct wlr_cursor_shape_manager_v1_request_set_shape_event* event = data;
     if (cursor_mode != CurNormal && cursor_mode != CurPressed)
@@ -1276,7 +1279,7 @@ void setcursorshape(struct wl_listener* listener, void* data)
             ? toolfocusedby(event->tablet_tool, event->seat_client)
             : event->seat_client == seat->pointer_state.focused_client) {
         last_cursor.shape = event->shape;
-        last_cursor.surface = NULL;
+        last_cursor.surface = nullptr;
 
         if (!cursor_hidden)
             wlr_cursor_set_xcursor(
@@ -1284,7 +1287,7 @@ void setcursorshape(struct wl_listener* listener, void* data)
     }
 }
 
-void setpsel(struct wl_listener* listener, void* data)
+void setpsel(struct wl_listener*, void* data)
 {
     /* This event is raised by the seat when a client wants to set the
      * selection, usually when the user copies something. wlroots allows
@@ -1295,7 +1298,7 @@ void setpsel(struct wl_listener* listener, void* data)
     wlr_seat_set_primary_selection(seat, event->source, event->serial);
 }
 
-void setsel(struct wl_listener* listener, void* data)
+void setsel(struct wl_listener*, void* data)
 {
     /* This event is raised by the seat when a client wants to set the
      * selection, usually when the user copies something. wlroots allows
@@ -1306,7 +1309,7 @@ void setsel(struct wl_listener* listener, void* data)
     wlr_seat_set_selection(seat, event->source, event->serial);
 }
 
-void startdrag(struct wl_listener* listener, void* data)
+void startdrag(struct wl_listener*, void* data)
 {
     struct wlr_drag* drag = data;
     if (!drag->icon)
@@ -1316,7 +1319,7 @@ void startdrag(struct wl_listener* listener, void* data)
     LISTEN_STATIC(&drag->icon->events.destroy, destroydragicon);
 }
 
-void toggleinhibit(const Arg* arg)
+void toggleinhibit(const Arg*)
 {
     struct wlr_keyboard_shortcuts_inhibitor_v1* inhibitor = focusedinhibitor();
 
@@ -1328,7 +1331,7 @@ void toggleinhibit(const Arg* arg)
         wlr_keyboard_shortcuts_inhibitor_v1_activate(inhibitor);
 }
 
-void virtualkeyboard(struct wl_listener* listener, void* data)
+void virtualkeyboard(struct wl_listener*, void* data)
 {
     struct wlr_virtual_keyboard_v1* kb = data;
     /* virtual keyboards shouldn't share keyboard group */
@@ -1344,7 +1347,7 @@ void virtualkeyboard(struct wl_listener* listener, void* data)
     wlr_keyboard_group_add_keyboard(group->wlr_group, &kb->keyboard);
 }
 
-void virtualpointer(struct wl_listener* listener, void* data)
+void virtualpointer(struct wl_listener*, void* data)
 {
     struct wlr_virtual_pointer_v1_new_pointer_event* event = data;
     struct wlr_input_device* device = &event->new_pointer->pointer.base;
@@ -1405,7 +1408,7 @@ void warpcursor(const Client* c)
 
     if (!c && selmon) {
         wlr_cursor_warp_closest(cursor,
-                                NULL,
+                                nullptr,
                                 selmon->w.x + selmon->w.width / 2.0,
                                 selmon->w.y + selmon->w.height / 2.0);
     } else if (c && (cursor->x < c->geom.x ||
@@ -1413,7 +1416,7 @@ void warpcursor(const Client* c)
                      cursor->y < c->geom.y ||
                      cursor->y > c->geom.y + c->geom.height)) {
         wlr_cursor_warp_closest(cursor,
-                                NULL,
+                                nullptr,
                                 c->geom.x + c->geom.width / 2.0,
                                 c->geom.y + c->geom.height / 2.0);
     }
@@ -1436,7 +1439,7 @@ static int wheelbinding(const struct wlr_pointer_axis_event* event)
     Client* c;
     Arg arg;
 
-    xytonode(cursor->x, cursor->y, NULL, &c, NULL, NULL, NULL);
+    xytonode(cursor->x, cursor->y, nullptr, &c, nullptr, nullptr, nullptr);
     click = c ? ClkClient : barclick(xytomon(cursor->x, cursor->y), &arg);
     title = c && ontitle(c, cursor->x, cursor->y);
     for (b = buttons; b < buttons + nbuttons; b++) {
@@ -1468,10 +1471,10 @@ void xytonode(double x,
               double* ny)
 {
     struct wlr_scene_node *node, *pnode;
-    struct wlr_surface* surface = NULL;
-    struct wlr_scene_surface* scene_surface = NULL;
-    Client* c = NULL;
-    LayerSurface* l = NULL;
+    struct wlr_surface* surface = nullptr;
+    struct wlr_scene_surface* scene_surface = nullptr;
+    Client* c = nullptr;
+    LayerSurface* l = nullptr;
     int layer;
 
     for (layer = NUM_LAYERS - 1; !surface && layer >= 0; layer--) {
@@ -1486,7 +1489,7 @@ void xytonode(double x,
                 for (pnode = node; pnode && !c; pnode = &pnode->parent->node)
                     c = pnode->data;
                 if (c && c->type == LayerShell)
-                    c = NULL;
+                    c = nullptr;
                 if (c)
                     break;
                 continue;
@@ -1497,7 +1500,7 @@ void xytonode(double x,
         for (pnode = node; pnode && !c; pnode = &pnode->parent->node)
             c = pnode->data;
         if (c && c->type == LayerShell) {
-            c = NULL;
+            c = nullptr;
             l = pnode->data;
         }
     }

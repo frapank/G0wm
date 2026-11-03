@@ -94,23 +94,23 @@ static Item* item_name_to_ptr(const Watcher* watcher, const char* busname)
     wl_list_for_each(item, &watcher->items, link)
     {
         if (!item || !item->busname)
-            return NULL;
+            return nullptr;
         if (strcmp(item->busname, busname) == 0)
             return item;
     }
 
-    return NULL;
+    return nullptr;
 }
 
 static DBusHandlerResult handle_nameowner_changed(Watcher* watcher,
-                                                  DBusConnection* conn,
+                                                  DBusConnection*,
                                                   DBusMessage* msg)
 {
     char *name, *old_owner, *new_owner;
     Item* item;
 
     if (!dbus_message_get_args(msg,
-                               NULL,
+                               nullptr,
                                DBUS_TYPE_STRING,
                                &name,
                                DBUS_TYPE_STRING,
@@ -152,13 +152,13 @@ static DBusHandlerResult respond_register_item(Watcher* watcher,
 {
     DBusHandlerResult res = DBUS_HANDLER_RESULT_HANDLED;
 
-    DBusMessage* reply = NULL;
+    DBusMessage* reply = nullptr;
     Item* item;
     const char *sender, *param, *busobj, *registree_name;
 
     if (!(sender = dbus_message_get_sender(msg)) ||
         !dbus_message_get_args(
-            msg, NULL, DBUS_TYPE_STRING, &param, DBUS_TYPE_INVALID)) {
+            msg, nullptr, DBUS_TYPE_STRING, &param, DBUS_TYPE_INVALID)) {
         reply = dbus_message_new_error(
             msg, DBUS_ERROR_INVALID_ARGS, "Malformed message");
         goto send;
@@ -181,7 +181,7 @@ static DBusHandlerResult respond_register_item(Watcher* watcher,
             break;
     }
 
-    if (!dbus_validate_bus_name(registree_name, NULL)) {
+    if (!dbus_validate_bus_name(registree_name, nullptr)) {
         reply = dbus_message_new_error_printf(
             msg, DBUS_ERROR_INVALID_ARGS, "Invalid busname %s", registree_name);
         goto send;
@@ -204,7 +204,7 @@ static DBusHandlerResult respond_register_item(Watcher* watcher,
     reply = dbus_message_new_method_return(msg);
 
 send:
-    if (!reply || !dbus_connection_send(conn, reply, NULL))
+    if (!reply || !dbus_connection_send(conn, reply, nullptr))
         res = DBUS_HANDLER_RESULT_NEED_MEMORY;
 
     if (reply)
@@ -311,7 +311,7 @@ static DBusHandlerResult respond_get_prop(Watcher* watcher,
                                           DBusMessage* msg)
 {
     DBusError err = DBUS_ERROR_INIT;
-    DBusMessage* reply = NULL;
+    DBusMessage* reply = nullptr;
     DBusMessageIter iter = DBUS_MESSAGE_ITER_INIT_CLOSED;
     const char *iface, *prop;
 
@@ -363,7 +363,7 @@ static DBusHandlerResult respond_get_prop(Watcher* watcher,
     }
 
 send:
-    if (!reply || !dbus_connection_send(conn, reply, NULL))
+    if (!reply || !dbus_connection_send(conn, reply, nullptr))
         goto fail;
 
     if (reply)
@@ -380,7 +380,7 @@ static DBusHandlerResult respond_all_props(Watcher* watcher,
                                            DBusConnection* conn,
                                            DBusMessage* msg)
 {
-    DBusMessage* reply = NULL;
+    DBusMessage* reply = nullptr;
     DBusMessageIter array = DBUS_MESSAGE_ITER_INIT_CLOSED;
     DBusMessageIter dict = DBUS_MESSAGE_ITER_INIT_CLOSED;
     DBusMessageIter iter = DBUS_MESSAGE_ITER_INIT_CLOSED;
@@ -397,7 +397,7 @@ static DBusHandlerResult respond_all_props(Watcher* watcher,
 
     prop = "ProtocolVersion";
     if (!dbus_message_iter_open_container(
-            &array, DBUS_TYPE_DICT_ENTRY, NULL, &dict) ||
+            &array, DBUS_TYPE_DICT_ENTRY, nullptr, &dict) ||
         !dbus_message_iter_append_basic(&dict, DBUS_TYPE_STRING, &prop) ||
         get_version(&dict) < 0 ||
         !dbus_message_iter_close_container(&array, &dict)) {
@@ -406,7 +406,7 @@ static DBusHandlerResult respond_all_props(Watcher* watcher,
 
     prop = "IsStatusNotifierHostRegistered";
     if (!dbus_message_iter_open_container(
-            &array, DBUS_TYPE_DICT_ENTRY, NULL, &dict) ||
+            &array, DBUS_TYPE_DICT_ENTRY, nullptr, &dict) ||
         !dbus_message_iter_append_basic(&dict, DBUS_TYPE_STRING, &prop) ||
         get_isregistered(&dict) < 0 ||
         !dbus_message_iter_close_container(&array, &dict)) {
@@ -415,7 +415,7 @@ static DBusHandlerResult respond_all_props(Watcher* watcher,
 
     prop = "RegisteredStatusNotifierItems";
     if (!dbus_message_iter_open_container(
-            &array, DBUS_TYPE_DICT_ENTRY, NULL, &dict) ||
+            &array, DBUS_TYPE_DICT_ENTRY, nullptr, &dict) ||
         !dbus_message_iter_append_basic(&dict, DBUS_TYPE_STRING, &prop) ||
         get_registered_items_variant(watcher, &dict) < 0 ||
         !dbus_message_iter_close_container(&array, &dict)) {
@@ -423,7 +423,7 @@ static DBusHandlerResult respond_all_props(Watcher* watcher,
     }
 
     if (!dbus_message_iter_close_container(&iter, &array) ||
-        !dbus_connection_send(conn, reply, NULL)) {
+        !dbus_connection_send(conn, reply, nullptr)) {
         goto fail;
     }
 
@@ -441,7 +441,7 @@ fail:
 static DBusHandlerResult respond_introspect(DBusConnection* conn,
                                             DBusMessage* msg)
 {
-    DBusMessage* reply = NULL;
+    DBusMessage* reply = nullptr;
 
     reply = dbus_message_new_method_return(msg);
     if (!reply)
@@ -449,7 +449,7 @@ static DBusHandlerResult respond_introspect(DBusConnection* conn,
 
     if (!dbus_message_append_args(
             reply, DBUS_TYPE_STRING, &snw_xml, DBUS_TYPE_INVALID) ||
-        !dbus_connection_send(conn, reply, NULL)) {
+        !dbus_connection_send(conn, reply, nullptr)) {
         goto fail;
     }
 
@@ -503,27 +503,27 @@ void watcher_start(Watcher* watcher,
     watcher->loop = loop;
 
     flags = DBUS_NAME_FLAG_REPLACE_EXISTING | DBUS_NAME_FLAG_DO_NOT_QUEUE;
-    r = dbus_bus_request_name(conn, SNW_NAME, flags, NULL);
+    r = dbus_bus_request_name(conn, SNW_NAME, flags, nullptr);
     if (r != DBUS_REQUEST_NAME_REPLY_PRIMARY_OWNER)
         goto fail;
 
-    if (!dbus_connection_add_filter(conn, filter_bus, watcher, NULL)) {
-        dbus_bus_release_name(conn, SNW_NAME, NULL);
+    if (!dbus_connection_add_filter(conn, filter_bus, watcher, nullptr)) {
+        dbus_bus_release_name(conn, SNW_NAME, nullptr);
         goto fail;
     }
 
     dbus_bus_add_match(conn, match_rule, &err);
     if (dbus_error_is_set(&err)) {
         dbus_connection_remove_filter(conn, filter_bus, watcher);
-        dbus_bus_release_name(conn, SNW_NAME, NULL);
+        dbus_bus_release_name(conn, SNW_NAME, nullptr);
         goto fail;
     }
 
     if (!dbus_connection_register_object_path(
             conn, SNW_OPATH, &snw_vtable, watcher)) {
-        dbus_bus_remove_match(conn, match_rule, NULL);
+        dbus_bus_remove_match(conn, match_rule, nullptr);
         dbus_connection_remove_filter(conn, filter_bus, watcher);
-        dbus_bus_release_name(conn, SNW_NAME, NULL);
+        dbus_bus_release_name(conn, SNW_NAME, nullptr);
         goto fail;
     }
 
@@ -539,9 +539,9 @@ fail:
 void watcher_stop(Watcher* watcher)
 {
     dbus_connection_unregister_object_path(watcher->conn, SNW_OPATH);
-    dbus_bus_remove_match(watcher->conn, match_rule, NULL);
+    dbus_bus_remove_match(watcher->conn, match_rule, nullptr);
     dbus_connection_remove_filter(watcher->conn, filter_bus, watcher);
-    dbus_bus_release_name(watcher->conn, SNW_NAME, NULL);
+    dbus_bus_release_name(watcher->conn, SNW_NAME, nullptr);
     watcher->running = 0;
 }
 
