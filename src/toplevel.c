@@ -26,6 +26,7 @@ void capturetoplevel(struct wl_listener* listener, void* data)
         !(c->capture = wlr_ext_image_capture_source_v1_create_with_scene_node(
               &c->scene_surface->node, event_loop, alloc, drw)))
         return;
+    shieldclient(c);
     wlr_ext_foreign_toplevel_image_capture_source_manager_v1_request_accept(
         req, c->capture);
 }

@@ -133,8 +133,9 @@ OBS.
 - [ ] Add a `private` option to the window rules.
 - [x] Add `toggleprivate` (<kbd>Super</kbd> <kbd>Shift</kbd> <kbd>P</kbd>), with
   a purple dot next to the title, in the tabs too.
-- [ ] In `capturetoplevel` (`toplevel.c`), refuse the request or accept an
-  empty source for a private window, so sharing that one window shows nothing.
+- [x] Black out private windows in what ext-image-copy-capture hands out
+  (`src/privacy.c`): the whole frame when sharing that one window, its area
+  when sharing the screen. The screen itself is left alone.
 - [ ] Add a share mode (key and IPC command) with an indicator in the bar.
   While it is on, private windows, and notifications and popups marked
   private, are replaced by a placeholder on the output. This also hides them
@@ -145,7 +146,6 @@ OBS.
   (rounded or squircle).
 - [ ] Show the placeholder text instead of the real title in the bar, the tabs
   and the foreign toplevel list, since the title often holds the sensitive part.
-- [ ] Spike first: check in the wlroots sources whether the output capture
-  source and screencopy copy the buffer already composed for the screen. If
-  they do, masking a private window only in the capture needs a wlroots patch
-  and is out of scope here.
+- [x] Spike: the output capture source and screencopy copy the buffer
+  already composed for the screen. ext-image-copy-capture can still be masked
+  without patching wlroots, by wrapping the source's `copy_frame`.
