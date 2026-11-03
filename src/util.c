@@ -12,7 +12,7 @@
 
 #include "util.h"
 
-void die(const char* fmt, ...)
+void util_die(const char* fmt, ...)
 {
     va_list ap;
 
@@ -30,16 +30,16 @@ void die(const char* fmt, ...)
     exit(1);
 }
 
-void* ecalloc(size_t nmemb, size_t size)
+void* util_calloc(size_t nmemb, size_t size)
 {
     void* p;
 
     if (!(p = calloc(nmemb, size)))
-        die("calloc:");
+        util_die("calloc:");
     return p;
 }
 
-int fd_set_nonblock(int fd)
+int util_set_nonblock(int fd)
 {
     int flags = fcntl(fd, F_GETFL);
     if (flags < 0) {
@@ -55,7 +55,7 @@ int fd_set_nonblock(int fd)
 }
 
 /* UTF-8 encodes cp into dst, 0 if it doesn't fit or isn't valid */
-size_t putcp(char* dst, size_t room, unsigned long cp)
+size_t util_put_codepoint(char* dst, size_t room, unsigned long cp)
 {
     if (!cp || (cp >= 0xD800 && cp <= 0xDFFF) || cp > 0x10FFFF)
         return 0;

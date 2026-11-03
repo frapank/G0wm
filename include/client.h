@@ -108,26 +108,26 @@ struct Client {
     struct wl_listener ftl_fullscreen;
 };
 
-void activateclient(Client* c);
-void createdecoration(struct wl_listener* listener, void* data);
-void createnotify(struct wl_listener* listener, void* data);
-void createpopup(struct wl_listener* listener, void* data);
-void destroynotify(struct wl_listener* listener, void* data);
-void focusclient(Client* c, int lift);
-Client* focustop(Monitor* m);
-void fullscreennotify(struct wl_listener* listener, void* data);
-void killclient(const Arg* arg);
-void mapnotify(struct wl_listener* listener, void* data);
-void resize(Client* c, struct wlr_box geo, int interact);
-void ringbell(struct wl_listener* listener, void* data);
-void setfloating(Client* c, int floating);
-void setfullscreen(Client* c, int fullscreen);
-void setmon(Client* c, Monitor* m, uint32_t newtags);
-void togglefloating(const Arg* arg);
-void togglefullscreen(const Arg* arg);
-void unmapnotify(struct wl_listener* listener, void* data);
-void updatetitle(struct wl_listener* listener, void* data);
-void urgent(struct wl_listener* listener, void* data);
+void client_activate(Client* c);
+void client_handle_new_decoration(struct wl_listener* listener, void* data);
+void client_handle_new_toplevel(struct wl_listener* listener, void* data);
+void client_handle_new_popup(struct wl_listener* listener, void* data);
+void client_handle_destroy(struct wl_listener* listener, void* data);
+void client_focus(Client* c, int lift);
+Client* client_top(Monitor* m);
+void client_handle_request_fullscreen(struct wl_listener* listener, void* data);
+void client_kill(const Arg* arg);
+void client_handle_map(struct wl_listener* listener, void* data);
+void client_resize(Client* c, struct wlr_box geo, int interact);
+void client_handle_ring_bell(struct wl_listener* listener, void* data);
+void client_set_floating(Client* c, int floating);
+void client_set_fullscreen(Client* c, int fullscreen);
+void client_set_monitor(Client* c, Monitor* m, uint32_t newtags);
+void client_toggle_floating(const Arg* arg);
+void client_toggle_fullscreen(const Arg* arg);
+void client_handle_unmap(struct wl_listener* listener, void* data);
+void client_handle_set_title(struct wl_listener* listener, void* data);
+void client_handle_request_activate(struct wl_listener* listener, void* data);
 
 /*
  * Attempt to consolidate unavoidable suck into one file, away from g0wm.c. This
@@ -154,9 +154,9 @@ static inline struct wlr_surface* client_surface(Client* c)
     return c->surface.xdg->surface;
 }
 
-static inline int toplevel_from_wlr_surface(struct wlr_surface* s,
-                                            Client** pc,
-                                            LayerSurface** pl)
+static inline int client_from_surface(struct wlr_surface* s,
+                                      Client** pc,
+                                      LayerSurface** pl)
 {
     struct wlr_xdg_surface *xdg_surface, *tmp_xdg_surface;
     struct wlr_surface* root_surface;
@@ -199,7 +199,7 @@ static inline int toplevel_from_wlr_surface(struct wlr_surface* s,
                     xdg_surface->popup->parent);
 
                 if (!tmp_xdg_surface)
-                    return toplevel_from_wlr_surface(
+                    return client_from_surface(
                         xdg_surface->popup->parent, pc, pl);
 
                 xdg_surface = tmp_xdg_surface;
@@ -260,7 +260,7 @@ static inline uint32_t client_set_bounds(Client* c,
     return 0;
 }
 
-static inline const char* client_get_appid(Client* c)
+static inline const char* client_get_app_id(Client* c)
 {
 #ifdef XWAYLAND
     if (client_is_x11(c))
@@ -309,13 +309,13 @@ static inline Client* client_get_parent(Client* c)
 #ifdef XWAYLAND
     if (client_is_x11(c)) {
         if (c->surface.xwayland->parent)
-            toplevel_from_wlr_surface(
+            client_from_surface(
                 c->surface.xwayland->parent->surface, &p, nullptr);
         return p;
     }
 #endif
     if (c->surface.xdg->toplevel->parent)
-        toplevel_from_wlr_surface(
+        client_from_surface(
             c->surface.xdg->toplevel->parent->base->surface, &p, nullptr);
     return p;
 }
@@ -379,7 +379,7 @@ static inline int client_is_float_type(Client* c)
                                  state.min_height == state.max_height));
 }
 
-static inline int client_is_rendered_on_mon(Client* c, Monitor* m)
+static inline int client_is_rendered_on_monitor(Client* c, Monitor* m)
 {
     /* This is needed for when you don't want to check formal assignment,
      * but rather actual displaying of the pixels.
@@ -459,7 +459,7 @@ static inline void client_set_border_color(Client* c,
         wlr_scene_rect_set_color(c->border[i], color);
 }
 
-static inline void client_set_fullscreen(Client* c, int fullscreen)
+static inline void client_send_fullscreen(Client* c, int fullscreen)
 {
 #ifdef XWAYLAND
     if (client_is_x11(c)) {

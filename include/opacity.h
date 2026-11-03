@@ -11,20 +11,20 @@
 
 #include "g0wm.h"
 
-float decoopacity(void);
-void reloadopacity(void);
-void scenebuffersetopacity(struct wlr_scene_buffer* buffer,
-                           int sx,
-                           int sy,
-                           void* data);
-void setbordercolor(Client* c, int scheme);
-void setopacityfocus(const Arg* arg);
-void setopacityunfocus(const Arg* arg);
-void toggleopacity(const Arg* arg);
+float opacity_decorations_current(void);
+void opacity_reload(void);
+void opacity_set_scene_buffer(struct wlr_scene_buffer* buffer,
+                              int sx,
+                              int sy,
+                              void* data);
+void opacity_set_border_color(Client* c, int scheme);
+void opacity_change_focused(const Arg* arg);
+void opacity_change_unfocused(const Arg* arg);
+void opacity_toggle(const Arg* arg);
 #ifdef INTEGRATED_BACKGROUND
-void blurbar(Monitor* m);
-void blurclient(Client* c);
-void setwallpaper(Monitor* m);
+void opacity_blur_bar(Monitor* m);
+void opacity_blur_client(Client* c);
+void opacity_set_wallpaper(Monitor* m);
 #endif
 
 #endif

@@ -13,22 +13,23 @@
 #include "g0wm.h"
 #include "systray/icon.h"
 
-int runnercalc(double* out);
-void runnercalcformat(char* out, size_t n, double v);
-const char* runnercandidate(int i);
-int runnercandidates(void);
-int runnerhasicons(void);
-Icon* runnericon(int i);
-void runnerkey(xkb_keysym_t sym, uint32_t mods, uint32_t codepoint);
-int runnerquery(void);
-int runnerselected(void);
-const char* runnersuggest(void);
-void runnertoggle(const Arg* arg);
+int runner_calc(double* out);
+void runner_calc_format(char* out, size_t n, double v);
+const char* runner_candidate(int i);
+int runner_candidate_count(void);
+int runner_has_icons(void);
+Icon* runner_icon(int i);
+void runner_key(xkb_keysym_t sym, uint32_t mods, uint32_t codepoint);
+int runner_query(void);
+int runner_selected(void);
+const char* runner_suggest(void);
+void runner_toggle(const Arg* arg);
 
 extern int runner_active;
-extern char runner_buf[256];
-extern int runner_len;
-extern int runner_cur;       /* cursor offset into runner_buf, 0..runner_len */
+extern char runner_buffer[256];
+extern int runner_length;
+/* cursor offset into runner_buffer, 0..runner_length */
+extern int runner_cursor;
 extern int runner_repeating; /* the armed repeat belongs to the prompt */
 
 #endif

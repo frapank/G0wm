@@ -9,9 +9,9 @@
 
 #include <wayland-server-core.h>
 
-void destroylocksurface(struct wl_listener* listener, void* data);
-void locksession(struct wl_listener* listener, void* data);
+void lock_handle_surface_destroy(struct wl_listener* listener, void* data);
+void lock_handle_new_lock(struct wl_listener* listener, void* data);
 
-extern int locked;
+extern int lock_active;
 
 #endif

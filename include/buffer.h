@@ -21,10 +21,10 @@ typedef struct {
     uint32_t data[];
 } Buffer;
 
-[[nodiscard]] Buffer* bufget(Buffer** pool,
-                             size_t poollen,
-                             int width,
-                             int height);
-void bufpooldrop(Buffer** pool, size_t poollen);
+[[nodiscard]] Buffer* buffer_get(Buffer** pool,
+                                 size_t poollen,
+                                 int width,
+                                 int height);
+void buffer_pool_drop(Buffer** pool, size_t poollen);
 
 #endif

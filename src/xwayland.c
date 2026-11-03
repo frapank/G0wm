@@ -29,17 +29,22 @@
 
 /* function declarations */
 #ifdef XWAYLAND
-static void activatex11(struct wl_listener* listener, void* data);
-static void associatex11(struct wl_listener* listener, void* data);
-static void configurex11(struct wl_listener* listener, void* data);
-static void dissociatex11(struct wl_listener* listener, void* data);
-static void minimizex11(struct wl_listener* listener, void* data);
-static void sethints(struct wl_listener* listener, void* data);
+static void xwayland_handle_request_activate(struct wl_listener* listener,
+                                             void* data);
+static void xwayland_handle_associate(struct wl_listener* listener, void* data);
+static void xwayland_handle_request_configure(struct wl_listener* listener,
+                                              void* data);
+static void xwayland_handle_dissociate(struct wl_listener* listener,
+                                       void* data);
+static void xwayland_handle_request_minimize(struct wl_listener* listener,
+                                             void* data);
+static void xwayland_handle_set_hints(struct wl_listener* listener, void* data);
 #endif /* XWAYLAND */
 
 /* function implementations */
 #ifdef XWAYLAND
-static void activatex11(struct wl_listener* listener, void*)
+static void xwayland_handle_request_activate(struct wl_listener* listener,
+                                             void*)
 {
     Client* c = wl_container_of(listener, c, activate);
 
@@ -48,15 +53,16 @@ static void activatex11(struct wl_listener* listener, void*)
         wlr_xwayland_surface_activate(c->surface.xwayland, 1);
 }
 
-static void associatex11(struct wl_listener* listener, void*)
+static void xwayland_handle_associate(struct wl_listener* listener, void*)
 {
     Client* c = wl_container_of(listener, c, associate);
 
-    LISTEN(&client_surface(c)->events.map, &c->map, mapnotify);
-    LISTEN(&client_surface(c)->events.unmap, &c->unmap, unmapnotify);
+    LISTEN(&client_surface(c)->events.map, &c->map, client_handle_map);
+    LISTEN(&client_surface(c)->events.unmap, &c->unmap, client_handle_unmap);
 }
 
-static void configurex11(struct wl_listener* listener, void* data)
+static void xwayland_handle_request_configure(struct wl_listener* listener,
+                                              void* data)
 {
     Client* c = wl_container_of(listener, c, configure);
     struct wlr_xwayland_surface_configure_event* event = data;
@@ -79,8 +85,8 @@ static void configurex11(struct wl_listener* listener, void* data)
                                        event->height);
         return;
     }
-    /* c->mon is dereferenced below: closemon() leaves mapped clients without a
-     * monitor whenever the last output goes away. */
+    /* c->mon is dereferenced below: monitor_close() leaves mapped clients
+     * without a monitor whenever the last output goes away. */
     if (!c->mon) {
         wlr_xwayland_surface_configure(c->surface.xwayland,
                                        event->x,
@@ -95,57 +101,69 @@ static void configurex11(struct wl_listener* listener, void* data)
      * backdrop while the game happily keeps rendering. Restate the size it
      * actually has instead. */
     if (c->isfullscreen) {
-        resize(c, c->mon->m, 0);
+        client_resize(c, c->mon->m, 0);
         return;
     }
 
-    if (c->isfloating && c != grabc) {
-        resize(c,
-               (struct wlr_box){ .x = event->x - c->bw,
-                                 .y = event->y - c->bw,
-                                 .width = event->width + c->bw * 2,
-                                 .height = event->height + c->bw * 2 },
-               0);
+    if (c->isfloating && c != input_grab_client) {
+        client_resize(c,
+                      (struct wlr_box){ .x = event->x - c->bw,
+                                        .y = event->y - c->bw,
+                                        .width = event->width + c->bw * 2,
+                                        .height = event->height + c->bw * 2 },
+                      0);
     } else {
-        arrange(c->mon);
+        layout_arrange(c->mon);
     }
 }
 
-void createnotifyx11(struct wl_listener*, void* data)
+void xwayland_handle_new_surface(struct wl_listener*, void* data)
 {
     struct wlr_xwayland_surface* xsurface = data;
     Client* c;
 
     /* Allocate a Client for this surface */
-    c = xsurface->data = ecalloc(1, sizeof(*c));
+    c = xsurface->data = util_calloc(1, sizeof(*c));
     c->surface.xwayland = xsurface;
     c->type = X11;
-    c->bw = client_is_unmanaged(c) ? 0 : borderwidth();
+    c->bw = client_is_unmanaged(c) ? 0 : corner_border_width();
     c->opacity = c->opacity_unfocus = opacity_unfocus;
     c->opacity_focus = opacity_focus;
-    c->isprivate = alwaysprivate;
+    c->isprivate = always_private;
 
     /* Listen to the various events it can emit */
-    LISTEN(&xsurface->events.associate, &c->associate, associatex11);
-    LISTEN(&xsurface->events.destroy, &c->destroy, destroynotify);
-    LISTEN(&xsurface->events.dissociate, &c->dissociate, dissociatex11);
-    LISTEN(&xsurface->events.request_activate, &c->activate, activatex11);
-    LISTEN(&xsurface->events.request_configure, &c->configure, configurex11);
     LISTEN(
-        &xsurface->events.request_fullscreen, &c->fullscreen, fullscreennotify);
-    LISTEN(&xsurface->events.set_hints, &c->set_hints, sethints);
-    LISTEN(&xsurface->events.request_minimize, &c->minimize, minimizex11);
-    LISTEN(&xsurface->events.set_title, &c->set_title, updatetitle);
+        &xsurface->events.associate, &c->associate, xwayland_handle_associate);
+    LISTEN(&xsurface->events.destroy, &c->destroy, client_handle_destroy);
+    LISTEN(&xsurface->events.dissociate,
+           &c->dissociate,
+           xwayland_handle_dissociate);
+    LISTEN(&xsurface->events.request_activate,
+           &c->activate,
+           xwayland_handle_request_activate);
+    LISTEN(&xsurface->events.request_configure,
+           &c->configure,
+           xwayland_handle_request_configure);
+    LISTEN(&xsurface->events.request_fullscreen,
+           &c->fullscreen,
+           client_handle_request_fullscreen);
+    LISTEN(
+        &xsurface->events.set_hints, &c->set_hints, xwayland_handle_set_hints);
+    LISTEN(&xsurface->events.request_minimize,
+           &c->minimize,
+           xwayland_handle_request_minimize);
+    LISTEN(&xsurface->events.set_title, &c->set_title, client_handle_set_title);
 }
 
-static void dissociatex11(struct wl_listener* listener, void*)
+static void xwayland_handle_dissociate(struct wl_listener* listener, void*)
 {
     Client* c = wl_container_of(listener, c, dissociate);
     wl_list_remove(&c->map.link);
     wl_list_remove(&c->unmap.link);
 }
 
-static void minimizex11(struct wl_listener* listener, void* data)
+static void xwayland_handle_request_minimize(struct wl_listener* listener,
+                                             void* data)
 {
     Client* c = wl_container_of(listener, c, minimize);
     struct wlr_xwayland_minimize_event* event = data;
@@ -159,21 +177,21 @@ static void minimizex11(struct wl_listener* listener, void* data)
             client_surface(c) != seat->keyboard_state.focused_surface);
 }
 
-static void sethints(struct wl_listener* listener, void*)
+static void xwayland_handle_set_hints(struct wl_listener* listener, void*)
 {
     Client* c = wl_container_of(listener, c, set_hints);
     struct wlr_surface* surface = client_surface(c);
-    if (c == focustop(selmon) || !c->surface.xwayland->hints)
+    if (c == client_top(selected_monitor) || !c->surface.xwayland->hints)
         return;
 
     c->isurgent = xcb_icccm_wm_hints_get_urgency(c->surface.xwayland->hints);
-    drawbars();
+    bar_draw_all();
 
     if (c->isurgent && surface && surface->mapped)
-        setbordercolor(c, SchemeUrg);
+        opacity_set_border_color(c, SchemeUrg);
 }
 
-void xwaylandready(struct wl_listener*, void*)
+void xwayland_handle_ready(struct wl_listener*, void*)
 {
     struct wlr_xcursor* xcursor;
 
@@ -181,7 +199,8 @@ void xwaylandready(struct wl_listener*, void*)
     wlr_xwayland_set_seat(xwayland, seat);
 
     /* Set the default XWayland cursor to match the rest of g0wm. */
-    if ((xcursor = wlr_xcursor_manager_get_xcursor(cursor_mgr, "default", 1)))
+    if ((xcursor =
+             wlr_xcursor_manager_get_xcursor(cursor_manager, "default", 1)))
         wlr_xwayland_set_cursor(
             xwayland,
             wlr_xcursor_image_get_buffer(xcursor->images[0]),

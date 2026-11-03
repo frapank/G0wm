@@ -55,7 +55,7 @@ void notify_start(DBusConnection* conn,
                   unsigned int timeout_secs,
                   void (*redraw)(void),
                   const char* (*token)(void));
-void notify_settimeout(unsigned int timeout_secs);
+void notify_set_timeout(unsigned int timeout_secs);
 void notify_stop(void);
 
 /* NULL if nothing is on screen */
@@ -63,12 +63,12 @@ const Notification* notify_current(void);
 size_t notify_queued(void);
 /* newest first, NULL past the end */
 const Notification* notify_history(size_t i);
-size_t notify_histlen(void);
-void notify_histremove(size_t i);
+size_t notify_history_length(void);
+void notify_history_remove(size_t i);
 
 /* Drops the current one; the next queued takes its place. */
 void notify_dismiss(void);
-void notify_dismissall(void);
+void notify_dismiss_all(void);
 /* Fires "default" (or action i) and drops the notification unless it is
  * resident. */
 void notify_invoke(void);

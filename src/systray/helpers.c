@@ -13,13 +13,13 @@
 // IWYU pragma: no_include "dbus/dbus-protocol.h"
 // IWYU pragma: no_include "dbus/dbus-shared.h"
 
-int request_property(DBusConnection* conn,
-                     const char* busname,
-                     const char* busobj,
-                     const char* prop,
-                     const char* iface,
-                     PropHandler handler,
-                     void* data)
+int helpers_request_property(DBusConnection* conn,
+                             const char* busname,
+                             const char* busobj,
+                             const char* prop,
+                             const char* iface,
+                             PropHandler handler,
+                             void* data)
 {
     DBusMessage* msg = nullptr;
     DBusPendingCall* pending = nullptr;

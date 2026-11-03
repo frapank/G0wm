@@ -26,58 +26,59 @@ constexpr int CORNER_SAMPLES =
     4; /* per axis, so sixteen coverage samples a pixel */
 
 /* function declarations */
-static uint32_t cornercolor(int scheme);
-static uint8_t* cornercoverage(int r, int bw);
-static double cornerexp(void);
-static void drawcorner(uint32_t* px,
-                       const uint8_t* cov,
-                       int r,
-                       int corner,
-                       uint32_t color);
+static uint32_t corner_color(int scheme);
+static uint8_t* corner_coverage(int r, int bw);
+static double corner_exponent(void);
+static void corner_draw(uint32_t* px,
+                        const uint8_t* cov,
+                        int r,
+                        int corner,
+                        uint32_t color);
 
 /* function implementations */
 
 /* The corner follows the superellipse |x/r|^n + |y/r|^n = 1: n = 2 is the
  * circular arc, a larger n eases the curvature into the turn (squircle). */
-static double cornerexp(void)
+static double corner_exponent(void)
 {
-    return cornerstyle == CornerSquircle ? 4.0 : 2.0;
+    return corner_style == CornerSquircle ? 4.0 : 2.0;
 }
 
 /* The contents stay square, so the border has to be at least as thick as the
  * curve cuts into the corner along the diagonal. */
-unsigned int borderwidth(void)
+unsigned int corner_border_width(void)
 {
     double bite;
 
-    if (!cornerpx)
-        return borderpx;
+    if (!corner_radius)
+        return border_width;
 
-    bite = 1.0 - pow(2.0, -1.0 / cornerexp());
-    return MAX(borderpx, (unsigned int)ceil(bite * (double)cornerpx));
+    bite = 1.0 - pow(2.0, -1.0 / corner_exponent());
+    return MAX(border_width, (unsigned int)ceil(bite * (double)corner_radius));
 }
 
 /* Radius c is drawn with: none without a border (fullscreen, unmanaged),
  * never more than half the box. */
-int cornerradius(Client* c)
+int corner_client_radius(Client* c)
 {
-    if (!cornerpx || !c->bw || !c->corner[0])
+    if (!corner_radius || !c->bw || !c->corner[0])
         return 0;
-    return MAX(0, MIN((int)cornerpx, MIN(c->geom.width, c->geom.height) / 2));
+    return MAX(0,
+               MIN((int)corner_radius, MIN(c->geom.width, c->geom.height) / 2));
 }
 
 /* Radius the bar is cut to, in layout coordinates. */
-int barcorner(Monitor* m)
+int corner_bar_radius(Monitor* m)
 {
-    if (!cornerpx)
+    if (!corner_radius)
         return 0;
-    return MAX(0,
-               MIN((int)cornerpx, MIN(m->b.real_width, m->b.real_height) / 2));
+    return MAX(
+        0, MIN((int)corner_radius, MIN(m->b.real_width, m->b.real_height) / 2));
 }
 
-/* Clear the four corner squares before drawing into a buffer: bufget() hands
- * back a used one and cornercut() only fades what it finds there. */
-void cornerclear(uint32_t* px, int w, int h, int r)
+/* Clear the four corner squares before drawing into a buffer: buffer_get()
+ * hands back a used one and corner_cut() only fades what it finds there. */
+void corner_clear(uint32_t* px, int w, int h, int r)
 {
     int i, x, y;
 
@@ -90,7 +91,7 @@ void cornerclear(uint32_t* px, int w, int h, int r)
 
 /* Cut the curve out of a buffer that already holds a drawing: the bar has no
  * border, it just fades out along it. */
-void cornercut(uint32_t* px, int w, int h, int r)
+void corner_cut(uint32_t* px, int w, int h, int r)
 {
     uint8_t* cov;
     uint32_t a, p;
@@ -101,7 +102,7 @@ void cornercut(uint32_t* px, int w, int h, int r)
         return;
 
     /* bw = r, no inner curve: the cut goes all the way through */
-    cov = cornercoverage(r, r);
+    cov = corner_coverage(r, r);
     for (i = 0; i < 4; i++) {
         for (y = 0; y < r; y++) {
             for (x = 0; x < r; x++) {
@@ -120,11 +121,12 @@ void cornercut(uint32_t* px, int w, int h, int r)
 }
 
 /* Border colour of a scheme as the premultiplied ARGB the buffers hold,
- * faded like the straight borders in setbordercolor(). */
-static uint32_t cornercolor(int scheme)
+ * faded like the straight borders in opacity_set_border_color(). */
+static uint32_t corner_color(int scheme)
 {
     uint32_t clr = colors[scheme][ColBorder];
-    uint32_t a = (uint32_t)((float)(clr & 0xff) * decoopacity());
+    uint32_t a =
+        (uint32_t)((float)(clr & 0xff) * opacity_decorations_current());
 
     return (a << 24) | ((((clr >> 24) & 0xff) * a / 255) << 16) |
            ((((clr >> 16) & 0xff) * a / 255) << 8) |
@@ -134,10 +136,10 @@ static uint32_t cornercolor(int scheme)
 /* Coverage of the ring between the outer curve and the inner one, a byte a
  * pixel, for the top left corner; the others are it mirrored. Sampling
  * antialiases both edges of the ring in one pass, whatever the curve. */
-static uint8_t* cornercoverage(int r, int bw)
+static uint8_t* corner_coverage(int r, int bw)
 {
-    uint8_t* cov = ecalloc((size_t)r * (size_t)r, 1);
-    double n = cornerexp(), ri = r - bw, sx, sy;
+    uint8_t* cov = util_calloc((size_t)r * (size_t)r, 1);
+    double n = corner_exponent(), ri = r - bw, sx, sy;
     int x, y, i, j, in;
 
     for (y = 0; y < r; y++) {
@@ -164,11 +166,11 @@ static uint8_t* cornercoverage(int r, int bw)
 
 /* Paint one corner from that coverage. 0 is the top left, the low bits of
  * the index mirror it: 1 right, 2 down, 3 both. */
-static void drawcorner(uint32_t* px,
-                       const uint8_t* cov,
-                       int r,
-                       int corner,
-                       uint32_t color)
+static void corner_draw(uint32_t* px,
+                        const uint8_t* cov,
+                        int r,
+                        int corner,
+                        uint32_t color)
 {
     uint32_t a;
     int x, y, sx, sy;
@@ -189,13 +191,13 @@ static void drawcorner(uint32_t* px,
 
 /* Size, place and paint the four corners. Called on every resize and colour
  * change, so redraw only when the radius, border or colour changed. */
-void drawcorners(Client* c)
+void corner_draw_all(Client* c)
 {
     Monitor* m = c->mon;
     Buffer* buf;
     uint8_t* cov;
     uint32_t color;
-    int i, r = cornerradius(c), rp, bwp;
+    int i, r = corner_client_radius(c), rp, bwp;
     int pos[4][2];
 
     if (!c->corner[0])
@@ -223,23 +225,24 @@ void drawcorners(Client* c)
     /* drawn at output scale, like the bar */
     rp = (int)roundf((float)r * m->wlr_output->scale);
     bwp = (int)roundf((float)c->bw * m->wlr_output->scale);
-    color = cornercolor(c->borderscheme);
+    color = corner_color(c->borderscheme);
     if (rp <= 0 || (rp == c->cornerbufr && bwp == c->cornerbufbw &&
                     color == c->cornercolor))
         return;
 
     if (rp != c->cornerbufr)
         for (i = 0; i < 4; i++)
-            bufpooldrop(c->cornerpool[i], LENGTH(c->cornerpool[i]));
+            buffer_pool_drop(c->cornerpool[i], LENGTH(c->cornerpool[i]));
     c->cornerbufr = rp;
     c->cornerbufbw = bwp;
     c->cornercolor = color;
 
-    cov = cornercoverage(rp, bwp);
+    cov = corner_coverage(rp, bwp);
     for (i = 0; i < 4; i++) {
-        if (!(buf = bufget(c->cornerpool[i], LENGTH(c->cornerpool[i]), rp, rp)))
+        if (!(buf = buffer_get(
+                  c->cornerpool[i], LENGTH(c->cornerpool[i]), rp, rp)))
             continue;
-        drawcorner(buf->data, cov, rp, i, color);
+        corner_draw(buf->data, cov, rp, i, color);
         wlr_scene_buffer_set_buffer(c->corner[i], &buf->base);
         wlr_buffer_unlock(&buf->base);
     }

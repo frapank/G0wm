@@ -27,7 +27,9 @@
  * Converts pixels from uint8_t[4] to uint32_t and
  * straight alpha to premultiplied alpha.
  */
-static uint32_t* to_pixman(const uint8_t* src, int n_pixels, size_t* pix_size)
+static uint32_t* icon_to_pixman(const uint8_t* src,
+                                int n_pixels,
+                                size_t* pix_size)
 {
     uint32_t* dest = nullptr;
 
@@ -64,7 +66,7 @@ static uint32_t* to_pixman(const uint8_t* src, int n_pixels, size_t* pix_size)
     return dest;
 }
 
-Icon* createicon(const uint8_t* buf, int width, int height, int size)
+Icon* icon_create(const uint8_t* buf, int width, int height, int size)
 {
     Icon* icon = nullptr;
 
@@ -78,7 +80,7 @@ Icon* createicon(const uint8_t* buf, int width, int height, int size)
 
     icon = calloc(1, sizeof(Icon));
     buf_orig = malloc(size);
-    buf_pixman = to_pixman(buf, n_pixels, &pixbuf_size);
+    buf_pixman = icon_to_pixman(buf, n_pixels, &pixbuf_size);
     if (!icon || !buf_orig || !buf_pixman)
         goto fail;
 
@@ -107,12 +109,12 @@ fail:
 }
 
 /* Sizes an icon theme keeps raster icons under, best first. */
-constexpr int iconsizes[] = { 24, 32, 22, 48, 64, 16, 128, 256 };
+constexpr int icon_sizes[] = { 24, 32, 22, 48, 64, 16, 128, 256 };
 
-[[gnu::format(printf, 3, 4)]] static int tryicon(char* out,
-                                                 size_t outsz,
-                                                 const char* fmt,
-                                                 ...)
+[[gnu::format(printf, 3, 4)]] static int icon_try(char* out,
+                                                  size_t outsz,
+                                                  const char* fmt,
+                                                  ...)
 {
     va_list ap;
     int n;
@@ -128,10 +130,10 @@ constexpr int iconsizes[] = { 24, 32, 22, 48, 64, 16, 128, 256 };
  * Finds the file behind an IconName, there being no icon theme library here.
  * ponytail: hicolor only, add the index.theme walk if an item needs it.
  */
-static int iconfile(char* out,
-                    size_t outsz,
-                    const char* name,
-                    const char* themepath)
+static int icon_file(char* out,
+                     size_t outsz,
+                     const char* name,
+                     const char* themepath)
 {
     const char* datahome = getenv("XDG_DATA_HOME");
     const char* datadirs = getenv("XDG_DATA_DIRS");
@@ -142,21 +144,21 @@ static int iconfile(char* out,
 
     /* some items hand out a path where the spec asks for a name */
     if (*name == '/')
-        return tryicon(out, outsz, "%s", name);
+        return icon_try(out, outsz, "%s", name);
 
     if (themepath && *themepath) {
-        for (i = 0; i < LENGTH(iconsizes); i++)
-            if (tryicon(out,
-                        outsz,
-                        "%s/hicolor/%dx%d/apps/%s.png",
-                        themepath,
-                        iconsizes[i],
-                        iconsizes[i],
-                        name))
+        for (i = 0; i < LENGTH(icon_sizes); i++)
+            if (icon_try(out,
+                         outsz,
+                         "%s/hicolor/%dx%d/apps/%s.png",
+                         themepath,
+                         icon_sizes[i],
+                         icon_sizes[i],
+                         name))
                 return 1;
-        if (tryicon(out, outsz, "%s/%s.png", themepath, name) ||
-            tryicon(out, outsz, "%s/%s.svg", themepath, name) ||
-            tryicon(out, outsz, "%s/%s.xpm", themepath, name))
+        if (icon_try(out, outsz, "%s/%s.png", themepath, name) ||
+            icon_try(out, outsz, "%s/%s.svg", themepath, name) ||
+            icon_try(out, outsz, "%s/%s.xpm", themepath, name))
             return 1;
     }
 
@@ -177,31 +179,31 @@ static int iconfile(char* out,
 
     for (base = strtok_r(bases, ":", &saveptr); base;
          base = strtok_r(nullptr, ":", &saveptr)) {
-        for (i = 0; i < LENGTH(iconsizes); i++)
-            if (tryicon(out,
-                        outsz,
-                        "%s/icons/hicolor/%dx%d/apps/%s.png",
-                        base,
-                        iconsizes[i],
-                        iconsizes[i],
-                        name))
+        for (i = 0; i < LENGTH(icon_sizes); i++)
+            if (icon_try(out,
+                         outsz,
+                         "%s/icons/hicolor/%dx%d/apps/%s.png",
+                         base,
+                         icon_sizes[i],
+                         icon_sizes[i],
+                         name))
                 return 1;
-        if (tryicon(out,
-                    outsz,
-                    "%s/icons/hicolor/scalable/apps/%s.svg",
-                    base,
-                    name))
+        if (icon_try(out,
+                     outsz,
+                     "%s/icons/hicolor/scalable/apps/%s.svg",
+                     base,
+                     name))
             return 1;
-        if (tryicon(out, outsz, "%s/pixmaps/%s.png", base, name) ||
-            tryicon(out, outsz, "%s/pixmaps/%s.svg", base, name) ||
-            tryicon(out, outsz, "%s/pixmaps/%s.xpm", base, name))
+        if (icon_try(out, outsz, "%s/pixmaps/%s.png", base, name) ||
+            icon_try(out, outsz, "%s/pixmaps/%s.svg", base, name) ||
+            icon_try(out, outsz, "%s/pixmaps/%s.xpm", base, name))
             return 1;
     }
 
     return 0;
 }
 
-static Icon* iconfrompixbuf(GdkPixbuf* pb)
+static Icon* icon_from_pixbuf(GdkPixbuf* pb)
 {
     const guchar *src, *srow;
     uint8_t* argb;
@@ -228,20 +230,20 @@ static Icon* iconfrompixbuf(GdkPixbuf* pb)
         }
     }
 
-    icon = createicon(argb, w, h, size);
+    icon = icon_create(argb, w, h, size);
     free(argb);
     return icon;
 }
 
 /* Builds an icon from IconName (or a path). */
-Icon* createiconfromname(const char* name, const char* themepath, int size)
+Icon* icon_create_from_name(const char* name, const char* themepath, int size)
 {
     GError* err = nullptr;
     GdkPixbuf* pb;
     Icon* icon;
     char path[PATH_MAX];
 
-    if (!name || !*name || !iconfile(path, sizeof(path), name, themepath))
+    if (!name || !*name || !icon_file(path, sizeof(path), name, themepath))
         return nullptr;
 
     /* decoded at tray size, the pixman filter samples where this averages */
@@ -255,18 +257,18 @@ Icon* createiconfromname(const char* name, const char* themepath, int size)
         return nullptr;
     }
 
-    icon = iconfrompixbuf(pb);
+    icon = icon_from_pixbuf(pb);
     g_object_unref(pb);
     return icon;
 }
 
 /* 8 bit rgb(a) rows, scaled down to fit size (0 keeps it) */
-Icon* createiconfromdata(const uint8_t* data,
-                         int width,
-                         int height,
-                         int rowstride,
-                         int alpha,
-                         int size)
+Icon* icon_create_from_data(const uint8_t* data,
+                            int width,
+                            int height,
+                            int rowstride,
+                            int alpha,
+                            int size)
 {
     GdkPixbuf *pb, *scaled;
     Icon* icon;
@@ -297,12 +299,12 @@ Icon* createiconfromdata(const uint8_t* data,
             return nullptr;
     }
 
-    icon = iconfrompixbuf(pb);
+    icon = icon_from_pixbuf(pb);
     g_object_unref(pb);
     return icon;
 }
 
-void destroyicon(Icon* icon)
+void icon_destroy(Icon* icon)
 {
     if (icon->img)
         pixman_image_unref(icon->img);
@@ -311,9 +313,9 @@ void destroyicon(Icon* icon)
     free(icon);
 }
 
-FallbackIcon* createfallbackicon(const char* appname,
-                                 int,
-                                 struct fcft_font* font)
+FallbackIcon* icon_create_fallback(const char* appname,
+                                   int,
+                                   struct fcft_font* font)
 {
     const struct fcft_glyph* glyph;
     char initial;
@@ -332,7 +334,7 @@ FallbackIcon* createfallbackicon(const char* appname,
     return glyph;
 }
 
-int resize_image(pixman_image_t* image, int new_width, int new_height)
+int icon_resize_image(pixman_image_t* image, int new_width, int new_height)
 {
     int src_width = pixman_image_get_width(image);
     int src_height = pixman_image_get_height(image);

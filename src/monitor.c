@@ -47,34 +47,40 @@
 #include "util.h"
 
 /* function declarations */
-static void applymonrules(Monitor* m, struct wlr_output_state* state);
-static void arrangelayer(Monitor* m,
-                         struct wl_list* list,
-                         struct wlr_box* usable_area,
-                         int exclusive);
-static void cleanupmon(struct wl_listener* listener, void* data);
-static void closemon(Monitor* m);
-static void commitlayersurfacenotify(struct wl_listener* listener, void* data);
-static void destroylayersurfacenotify(struct wl_listener* listener, void* data);
-static Monitor* dirtomon(enum wlr_direction dir);
-static Client* fullscreentop(Monitor* m);
-static void gamemode(Monitor* m, struct wlr_output_state* state);
-static void outputmgrapplyortest(struct wlr_output_configuration_v1* config,
-                                 int test);
-static void rendermon(struct wl_listener* listener, void* data);
-static void requestmonstate(struct wl_listener* listener, void* data);
-static void unmaplayersurfacenotify(struct wl_listener* listener, void* data);
+static void monitor_apply_rules(Monitor* m, struct wlr_output_state* state);
+static void monitor_arrange_layer(Monitor* m,
+                                  struct wl_list* list,
+                                  struct wlr_box* usable_area,
+                                  int exclusive);
+static void monitor_handle_destroy(struct wl_listener* listener, void* data);
+static void monitor_close(Monitor* m);
+static void monitor_handle_layer_commit(struct wl_listener* listener,
+                                        void* data);
+static void monitor_handle_layer_destroy(struct wl_listener* listener,
+                                         void* data);
+static Monitor* monitor_in_direction(enum wlr_direction dir);
+static Client* monitor_fullscreen_client(Monitor* m);
+static void monitor_game_mode(Monitor* m, struct wlr_output_state* state);
+static void monitor_apply_or_test_config(
+    struct wlr_output_configuration_v1* config,
+    int test);
+static void monitor_handle_frame(struct wl_listener* listener, void* data);
+static void monitor_handle_request_state(struct wl_listener* listener,
+                                         void* data);
+static void monitor_handle_layer_unmap(struct wl_listener* listener,
+                                       void* data);
 
 /* variables */
 /* Map from ZWLR_LAYER_SHELL_* constants to Lyr* enum */
-constexpr int layermap[] = { LyrBg, LyrBottom, LyrTop, LyrOverlay };
-static_assert(LENGTH(layermap) == ZWLR_LAYER_SHELL_V1_LAYER_OVERLAY + 1);
+constexpr int monitor_layer_map[] = { LyrBg, LyrBottom, LyrTop, LyrOverlay };
+static_assert(LENGTH(monitor_layer_map) ==
+              ZWLR_LAYER_SHELL_V1_LAYER_OVERLAY + 1);
 
 /* function implementations */
-static void arrangelayer(Monitor* m,
-                         struct wl_list* list,
-                         struct wlr_box* usable_area,
-                         int exclusive)
+static void monitor_arrange_layer(Monitor* m,
+                                  struct wl_list* list,
+                                  struct wlr_box* usable_area,
+                                  int exclusive)
 {
     LayerSurface* l;
     struct wlr_box full_area = m->m;
@@ -96,7 +102,7 @@ static void arrangelayer(Monitor* m,
     }
 }
 
-void arrangelayers(Monitor* m)
+void monitor_arrange_layers(Monitor* m)
 {
     int i;
     struct wlr_box usable_area = m->m;
@@ -110,32 +116,32 @@ void arrangelayers(Monitor* m)
 
     if (m->scene_buffer->node.enabled) {
         /* the padding goes with the bar, so tiles keep the same gap */
-        usable_area.height -= m->b.real_height + (int)barpadding;
-        usable_area.y += topbar ? m->b.real_height + (int)barpadding : 0;
+        usable_area.height -= m->b.real_height + (int)bar_padding;
+        usable_area.y += bar_top ? m->b.real_height + (int)bar_padding : 0;
     }
 
     /* Arrange exclusive surfaces from top->bottom */
     for (i = 3; i >= 0; i--)
-        arrangelayer(m, &m->layers[i], &usable_area, 1);
+        monitor_arrange_layer(m, &m->layers[i], &usable_area, 1);
 
     if (!wlr_box_equal(&usable_area, &m->w)) {
         m->w = usable_area;
-        arrange(m);
+        layout_arrange(m);
     }
 
     /* Arrange non-exclusive surfaces from top->bottom */
     for (i = 3; i >= 0; i--)
-        arrangelayer(m, &m->layers[i], &usable_area, 0);
+        monitor_arrange_layer(m, &m->layers[i], &usable_area, 0);
 
     /* Find topmost keyboard interactive layer, if such a layer exists */
     for (i = 0; i < (int)LENGTH(layers_above_shell); i++) {
         wl_list_for_each_reverse(l, &m->layers[layers_above_shell[i]], link)
         {
-            if (locked || !l->layer_surface->current.keyboard_interactive ||
-                !l->mapped)
+            if (lock_active ||
+                !l->layer_surface->current.keyboard_interactive || !l->mapped)
                 continue;
             /* Deactivate the focused client. */
-            focusclient(nullptr, 0);
+            client_focus(nullptr, 0);
             exclusive_focus = l;
             client_notify_enter(l->layer_surface->surface,
                                 wlr_seat_get_keyboard(seat));
@@ -144,7 +150,7 @@ void arrangelayers(Monitor* m)
     }
 }
 
-static void cleanupmon(struct wl_listener* listener, void*)
+static void monitor_handle_destroy(struct wl_listener* listener, void*)
 {
     Monitor* m = wl_container_of(listener, m, destroy);
     LayerSurface *l, *tmp;
@@ -158,16 +164,16 @@ static void cleanupmon(struct wl_listener* listener, void*)
 
     for (i = 0; i < LENGTH(m->pool); i++)
         wlr_buffer_drop(&m->pool[i]->base);
-    bufpooldrop(m->sharepool, LENGTH(m->sharepool));
+    buffer_pool_drop(m->sharepool, LENGTH(m->sharepool));
 #ifdef INTEGRATED_BACKGROUND
-    bufpooldrop(m->wallpaperpool, LENGTH(m->wallpaperpool));
-    bufpooldrop(m->blurpool, LENGTH(m->blurpool));
+    buffer_pool_drop(m->wallpaperpool, LENGTH(m->wallpaperpool));
+    buffer_pool_drop(m->blurpool, LENGTH(m->blurpool));
 #endif
 
     if (m->tray)
-        destroytray(m->tray);
+        tray_destroy(m->tray);
 
-    magnifierdrop(m);
+    magnifier_drop(m);
 
     drwl_setimage(m->drw, nullptr);
     drwl_destroy(m->drw);
@@ -177,12 +183,12 @@ static void cleanupmon(struct wl_listener* listener, void*)
     wl_list_remove(&m->link);
     wl_list_remove(&m->request_state.link);
     if (m->lock_surface)
-        destroylocksurface(&m->destroy_lock_surface, nullptr);
+        lock_handle_surface_destroy(&m->destroy_lock_surface, nullptr);
     m->wlr_output->data = nullptr;
     wlr_output_layout_remove(output_layout, m->wlr_output);
     wlr_scene_output_destroy(m->scene_output);
 
-    closemon(m);
+    monitor_close(m);
     wlr_scene_node_destroy(&m->fullscreen_bg->node);
     wlr_scene_node_destroy(&m->scene_buffer->node);
 #ifdef INTEGRATED_BACKGROUND
@@ -192,45 +198,46 @@ static void cleanupmon(struct wl_listener* listener, void*)
     free(m);
 }
 
-static void closemon(Monitor* m)
+static void monitor_close(Monitor* m)
 {
-    /* update selmon if needed and
+    /* update selected_monitor if needed and
      * move closed monitor's clients to the focused one */
     Client* c;
-    int i = 0, nmons = wl_list_length(&mons);
+    int i = 0, nmons = wl_list_length(&monitors);
     if (!nmons) {
-        selmon = nullptr;
-    } else if (m == selmon) {
-        do /* don't switch to disabled mons */
-            selmon = wl_container_of(mons.next, selmon, link);
-        while (!selmon->wlr_output->enabled && i++ < nmons);
+        selected_monitor = nullptr;
+    } else if (m == selected_monitor) {
+        do /* don't switch to disabled monitors */
+            selected_monitor =
+                wl_container_of(monitors.next, selected_monitor, link);
+        while (!selected_monitor->wlr_output->enabled && i++ < nmons);
 
-        if (!selmon->wlr_output->enabled)
-            selmon = nullptr;
+        if (!selected_monitor->wlr_output->enabled)
+            selected_monitor = nullptr;
     }
 
     wl_list_for_each(c, &clients, link)
     {
         if (c->isfloating && c->geom.x > m->m.width)
-            resize(c,
-                   (struct wlr_box){ .x = c->geom.x - m->w.width,
-                                     .y = c->geom.y,
-                                     .width = c->geom.width,
-                                     .height = c->geom.height },
-                   0);
+            client_resize(c,
+                          (struct wlr_box){ .x = c->geom.x - m->w.width,
+                                            .y = c->geom.y,
+                                            .width = c->geom.width,
+                                            .height = c->geom.height },
+                          0);
         if (c->mon == m)
-            setmon(c, selmon, c->tags);
+            client_set_monitor(c, selected_monitor, c->tags);
     }
-    focusclient(focustop(selmon), 1);
-    drawbars();
+    client_focus(client_top(selected_monitor), 1);
+    bar_draw_all();
 }
 
-static void commitlayersurfacenotify(struct wl_listener* listener, void*)
+static void monitor_handle_layer_commit(struct wl_listener* listener, void*)
 {
     LayerSurface* l = wl_container_of(listener, l, surface_commit);
     struct wlr_layer_surface_v1* layer_surface = l->layer_surface;
     struct wlr_scene_tree* scene_layer =
-        layers[layermap[layer_surface->current.layer]];
+        layers[monitor_layer_map[layer_surface->current.layer]];
     struct wlr_layer_surface_v1_state old_state;
 
     if (l->layer_surface->initial_commit) {
@@ -240,7 +247,7 @@ static void commitlayersurfacenotify(struct wl_listener* listener, void*)
          * so that we can easily arrange it */
         old_state = l->layer_surface->current;
         l->layer_surface->current = l->layer_surface->pending;
-        arrangelayers(l->mon);
+        monitor_arrange_layers(l->mon);
         l->layer_surface->current = old_state;
         return;
     }
@@ -261,30 +268,33 @@ static void commitlayersurfacenotify(struct wl_listener* listener, void*)
                  : scene_layer));
     }
 
-    arrangelayers(l->mon);
+    monitor_arrange_layers(l->mon);
 }
 
-void createlayersurface(struct wl_listener*, void* data)
+void monitor_handle_new_layer_surface(struct wl_listener*, void* data)
 {
     struct wlr_layer_surface_v1* layer_surface = data;
     LayerSurface* l;
     struct wlr_surface* surface = layer_surface->surface;
     struct wlr_scene_tree* scene_layer =
-        layers[layermap[layer_surface->pending.layer]];
+        layers[monitor_layer_map[layer_surface->pending.layer]];
 
     if (!layer_surface->output &&
-        !(layer_surface->output = selmon ? selmon->wlr_output : nullptr)) {
+        !(layer_surface->output =
+              selected_monitor ? selected_monitor->wlr_output : nullptr)) {
         wlr_layer_surface_v1_destroy(layer_surface);
         return;
     }
 
-    l = layer_surface->data = ecalloc(1, sizeof(*l));
+    l = layer_surface->data = util_calloc(1, sizeof(*l));
     l->type = LayerShell;
-    LISTEN(
-        &surface->events.commit, &l->surface_commit, commitlayersurfacenotify);
-    LISTEN(&surface->events.unmap, &l->unmap, unmaplayersurfacenotify);
-    LISTEN(
-        &layer_surface->events.destroy, &l->destroy, destroylayersurfacenotify);
+    LISTEN(&surface->events.commit,
+           &l->surface_commit,
+           monitor_handle_layer_commit);
+    LISTEN(&surface->events.unmap, &l->unmap, monitor_handle_layer_unmap);
+    LISTEN(&layer_surface->events.destroy,
+           &l->destroy,
+           monitor_handle_layer_destroy);
 
     l->layer_surface = layer_surface;
     l->mon = layer_surface->output->data;
@@ -303,7 +313,7 @@ void createlayersurface(struct wl_listener*, void* data)
 
 /* the first matching rule onto the monitor and the state about to be
  * committed; also the path a reload takes */
-static void applymonrules(Monitor* m, struct wlr_output_state* state)
+static void monitor_apply_rules(Monitor* m, struct wlr_output_state* state)
 {
     struct wlr_output* wlr_output = m->wlr_output;
     struct wlr_output_mode* mode = nullptr;
@@ -311,7 +321,7 @@ static void applymonrules(Monitor* m, struct wlr_output_state* state)
     size_t i;
 
     m->gaps = gaps;
-    for (r = monrules; r < monrules + nmonrules; r++) {
+    for (r = monitor_rules; r < monitor_rules + monitor_rule_count; r++) {
         if (r->name && !strstr(wlr_output->name, r->name))
             continue;
         m->m.x = r->x;
@@ -319,7 +329,7 @@ static void applymonrules(Monitor* m, struct wlr_output_state* state)
         m->mfact = r->mfact;
         m->nmaster = r->nmaster;
         m->lt[0] = r->lt;
-        m->lt[1] = &layouts[nlayouts > 1 && r->lt != &layouts[1]];
+        m->lt[1] = &layouts[layout_count > 1 && r->lt != &layouts[1]];
         snprintf(
             m->ltsymbol, LENGTH(m->ltsymbol), "%s", m->lt[m->sellt]->symbol);
         for (i = 0; i < LENGTH(m->taglt); i++) {
@@ -331,7 +341,7 @@ static void applymonrules(Monitor* m, struct wlr_output_state* state)
         /* Load (or reuse, if already cached) the xcursor theme at this
          * monitor's scale so the cursor renders crisp and sized
          * relative to cursor_size * scale, not just cursor_size. */
-        wlr_xcursor_manager_load(cursor_mgr, r->scale);
+        wlr_xcursor_manager_load(cursor_manager, r->scale);
         if (r->width && r->height) {
             struct wlr_output_mode* m2;
             int32_t want = r->refresh * 1000, best_diff = INT32_MAX;
@@ -362,20 +372,20 @@ static void applymonrules(Monitor* m, struct wlr_output_state* state)
         state, mode ? mode : wlr_output_preferred_mode(wlr_output));
 }
 
-/* the monrules again, over monitors that already exist */
-void reloadmons(void)
+/* the monitor_rules again, over monitors that already exist */
+void monitor_reload_rules(void)
 {
     struct wlr_output_state state;
     Monitor* m;
 
-    wl_list_for_each(m, &mons, link)
+    wl_list_for_each(m, &monitors, link)
     {
         if (!m->wlr_output->enabled)
             continue;
         wlr_output_state_init(&state);
-        applymonrules(m, &state);
-        /* before the commit: a mode change runs updatemons(), which would
-         * overwrite the rule's m->m.x/y with the old layout position */
+        monitor_apply_rules(m, &state);
+        /* before the commit: a mode change runs monitor_update_layout(), which
+         * would overwrite the rule's m->m.x/y with the old layout position */
         if (m->m.x == -1 && m->m.y == -1)
             wlr_output_layout_add_auto(output_layout, m->wlr_output);
         else
@@ -386,14 +396,14 @@ void reloadmons(void)
             wlr_output_commit_state(m->wlr_output, &state);
         wlr_output_state_finish(&state);
 
-        /* a scale of 0 is what a scale change looks like to updatebar(), and
+        /* a scale of 0 is what a scale change looks like to bar_update(), and
          * the bar has to be its new height before anything is arranged */
         m->b.scale = 0;
-        updatebar(m);
+        bar_update(m);
     }
 }
 
-void createmon(struct wl_listener*, void* data)
+void monitor_handle_new_output(struct wl_listener*, void* data)
 {
     /* This event is raised by the backend when a new output (aka a display or
      * monitor) becomes available. */
@@ -402,10 +412,10 @@ void createmon(struct wl_listener*, void* data)
     Monitor* m;
     size_t i;
 
-    if (!wlr_output_init_render(wlr_output, alloc, drw))
+    if (!wlr_output_init_render(wlr_output, allocator, renderer))
         return;
 
-    m = wlr_output->data = ecalloc(1, sizeof(*m));
+    m = wlr_output->data = util_calloc(1, sizeof(*m));
     m->wlr_output = wlr_output;
 
     for (i = 0; i < LENGTH(m->layers); i++)
@@ -414,20 +424,21 @@ void createmon(struct wl_listener*, void* data)
     wlr_output_state_init(&state);
     m->tagset[0] = m->tagset[1] = 1;
     m->zoom = 1;
-    applymonrules(m, &state);
+    monitor_apply_rules(m, &state);
 
     /* Set up event listeners */
-    LISTEN(&wlr_output->events.frame, &m->frame, rendermon);
-    LISTEN(&wlr_output->events.destroy, &m->destroy, cleanupmon);
-    LISTEN(
-        &wlr_output->events.request_state, &m->request_state, requestmonstate);
+    LISTEN(&wlr_output->events.frame, &m->frame, monitor_handle_frame);
+    LISTEN(&wlr_output->events.destroy, &m->destroy, monitor_handle_destroy);
+    LISTEN(&wlr_output->events.request_state,
+           &m->request_state,
+           monitor_handle_request_state);
 
     wlr_output_state_set_enabled(&state, 1);
     wlr_output_commit_state(wlr_output, &state);
     wlr_output_state_finish(&state);
 
     if (!(m->drw = drwl_create()))
-        die("failed to create drwl context");
+        util_die("failed to create drwl context");
 
 #ifdef INTEGRATED_BACKGROUND
     /* created before the bar so that it stays underneath it */
@@ -435,14 +446,14 @@ void createmon(struct wl_listener*, void* data)
     wlr_scene_node_set_enabled(&m->barblur->node, 0);
 #endif
     m->scene_buffer = wlr_scene_buffer_create(layers[LyrBottom], nullptr);
-    m->scene_buffer->point_accepts_input = baracceptsinput;
+    m->scene_buffer->point_accepts_input = bar_accepts_input;
 #ifdef INTEGRATED_BACKGROUND
     m->wallpaper = wlr_scene_buffer_create(layers[LyrBg], nullptr);
 #endif
-    updatebar(m);
+    bar_update(m);
 
-    wl_list_insert(&mons, &m->link);
-    drawbars();
+    wl_list_insert(&monitors, &m->link);
+    bar_draw_all();
 
     /* The xdg-protocol specifies:
      *
@@ -452,9 +463,9 @@ void createmon(struct wl_listener*, void* data)
      * visible below the fullscreened surface.
      *
      */
-    /* updatemons() will resize and set correct position */
+    /* monitor_update_layout() will resize and set correct position */
     m->fullscreen_bg =
-        wlr_scene_rect_create(layers[LyrFS], 0, 0, fullscreen_bg);
+        wlr_scene_rect_create(layers[LyrFS], 0, 0, fullscreen_color);
     wlr_scene_node_set_enabled(&m->fullscreen_bg->node, 0);
 
     /* Adds this to the output layout in the order it was configured.
@@ -470,7 +481,7 @@ void createmon(struct wl_listener*, void* data)
         wlr_output_layout_add(output_layout, wlr_output, m->m.x, m->m.y);
 }
 
-static void destroylayersurfacenotify(struct wl_listener* listener, void*)
+static void monitor_handle_layer_destroy(struct wl_listener* listener, void*)
 {
     LayerSurface* l = wl_container_of(listener, l, destroy);
 
@@ -478,8 +489,8 @@ static void destroylayersurfacenotify(struct wl_listener* listener, void*)
     wl_list_remove(&l->destroy.link);
     wl_list_remove(&l->unmap.link);
     wl_list_remove(&l->surface_commit.link);
-    /* Same as in unmapnotify(): the wl_surface may outlive the layer surface,
-     * don't leave it pointing at the freed popup tree. */
+    /* Same as in client_handle_unmap(): the wl_surface may outlive the layer
+     * surface, don't leave it pointing at the freed popup tree. */
     if (l->layer_surface->surface)
         l->layer_surface->surface->data = nullptr;
     wlr_scene_node_destroy(&l->scene->node);
@@ -487,42 +498,45 @@ static void destroylayersurfacenotify(struct wl_listener* listener, void*)
     free(l);
 }
 
-static Monitor* dirtomon(enum wlr_direction dir)
+static Monitor* monitor_in_direction(enum wlr_direction dir)
 {
     struct wlr_output* next;
-    if (!wlr_output_layout_get(output_layout, selmon->wlr_output))
-        return selmon;
-    if ((next = wlr_output_layout_adjacent_output(
-             output_layout, dir, selmon->wlr_output, selmon->m.x, selmon->m.y)))
+    if (!wlr_output_layout_get(output_layout, selected_monitor->wlr_output))
+        return selected_monitor;
+    if ((next = wlr_output_layout_adjacent_output(output_layout,
+                                                  dir,
+                                                  selected_monitor->wlr_output,
+                                                  selected_monitor->m.x,
+                                                  selected_monitor->m.y)))
         return next->data;
     if ((next = wlr_output_layout_farthest_output(
              output_layout,
              dir ^ (WLR_DIRECTION_LEFT | WLR_DIRECTION_RIGHT),
-             selmon->wlr_output,
-             selmon->m.x,
-             selmon->m.y)))
+             selected_monitor->wlr_output,
+             selected_monitor->m.x,
+             selected_monitor->m.y)))
         return next->data;
-    return selmon;
+    return selected_monitor;
 }
 
-void focusmon(const Arg* arg)
+void monitor_focus(const Arg* arg)
 {
-    int i = 0, nmons = wl_list_length(&mons);
+    int i = 0, nmons = wl_list_length(&monitors);
     if (nmons) {
-        do /* don't switch to disabled mons */
-            selmon = dirtomon(arg->i);
-        while (!selmon->wlr_output->enabled && i++ < nmons);
+        do /* don't switch to disabled monitors */
+            selected_monitor = monitor_in_direction(arg->i);
+        while (!selected_monitor->wlr_output->enabled && i++ < nmons);
     }
-    focusclient(focustop(selmon), 1);
+    client_focus(client_top(selected_monitor), 1);
 }
 
-static Client* fullscreentop(Monitor* m)
+static Client* monitor_fullscreen_client(Monitor* m)
 {
     Client* c;
 
-    if (locked)
+    if (lock_active)
         return nullptr;
-    wl_list_for_each(c, &fstack, flink)
+    wl_list_for_each(c, &focus_stack, flink)
     {
         if (VISIBLEON(c, m) && c->isfullscreen && client_surface(c))
             return c;
@@ -530,15 +544,15 @@ static Client* fullscreentop(Monitor* m)
     return nullptr;
 }
 
-static void gamemode(Monitor* m, struct wlr_output_state* state)
+static void monitor_game_mode(Monitor* m, struct wlr_output_state* state)
 {
-    Client* c = fullscreentop(m);
+    Client* c = monitor_fullscreen_client(m);
     struct wlr_output* o = m->wlr_output;
     enum wp_content_type_v1_type type = WP_CONTENT_TYPE_V1_TYPE_NONE;
     int vrr;
 
     if (c)
-        type = wlr_surface_get_content_type_v1(content_type_mgr,
+        type = wlr_surface_get_content_type_v1(content_type_manager,
                                                client_surface(c));
     vrr = auto_vrr && (type == WP_CONTENT_TYPE_V1_TYPE_GAME ||
                        type == WP_CONTENT_TYPE_V1_TYPE_VIDEO);
@@ -561,26 +575,27 @@ static void gamemode(Monitor* m, struct wlr_output_state* state)
     state->tearing_page_flip =
         allow_tearing && c && m->zoom <= 1 &&
         wlr_tearing_control_manager_v1_surface_hint_from_surface(
-            tearing_mgr, client_surface(c)) ==
+            tearing_manager, client_surface(c)) ==
             WP_TEARING_CONTROL_V1_PRESENTATION_HINT_ASYNC;
     if (state->tearing_page_flip && !wlr_output_test_state(o, state))
         state->tearing_page_flip = false;
 }
 
-void outputmgrapply(struct wl_listener*, void* data)
+void monitor_handle_config_apply(struct wl_listener*, void* data)
 {
     struct wlr_output_configuration_v1* config = data;
-    outputmgrapplyortest(config, 0);
+    monitor_apply_or_test_config(config, 0);
 }
 
-static void outputmgrapplyortest(struct wlr_output_configuration_v1* config,
-                                 int test)
+static void monitor_apply_or_test_config(
+    struct wlr_output_configuration_v1* config,
+    int test)
 {
     /*
      * Called when a client such as wlr-randr requests a change in output
      * configuration. This is only one way that the layout can be changed,
-     * so any Monitor information should be updated by updatemons() after an
-     * output_layout.change event, not here.
+     * so any Monitor information should be updated by monitor_update_layout()
+     * after an output_layout.change event, not here.
      */
     struct wlr_output_configuration_head_v1* config_head;
     int ok = 1;
@@ -639,16 +654,16 @@ static void outputmgrapplyortest(struct wlr_output_configuration_v1* config,
     wlr_output_configuration_v1_destroy(config);
 
     /* https://codeberg.org/dwl/dwl/issues/577 */
-    updatemons(nullptr, nullptr);
+    monitor_update_layout(nullptr, nullptr);
 }
 
-void outputmgrtest(struct wl_listener*, void* data)
+void monitor_handle_config_test(struct wl_listener*, void* data)
 {
     struct wlr_output_configuration_v1* config = data;
-    outputmgrapplyortest(config, 1);
+    monitor_apply_or_test_config(config, 1);
 }
 
-void powermgrsetmode(struct wl_listener*, void* data)
+void monitor_handle_power_set_mode(struct wl_listener*, void* data)
 {
     struct wlr_output_power_v1_set_mode_event* event = data;
     struct wlr_output_state state = {};
@@ -672,10 +687,10 @@ void powermgrsetmode(struct wl_listener*, void* data)
     m->asleep = !m->wlr_output->enabled;
     if (m->wlr_output->enabled)
         wlr_output_schedule_frame(m->wlr_output);
-    updatemons(nullptr, nullptr);
+    monitor_update_layout(nullptr, nullptr);
 }
 
-static void rendermon(struct wl_listener* listener, void*)
+static void monitor_handle_frame(struct wl_listener* listener, void*)
 {
     /* This function is called every time an output is ready to display a frame,
      * generally at the output's refresh rate (e.g. 60Hz). */
@@ -690,14 +705,14 @@ static void rendermon(struct wl_listener* listener, void*)
      * this monitor. */
     wl_list_for_each(c, &clients, link)
     {
-        if (!client_is_rendered_on_mon(c, m))
+        if (!client_is_rendered_on_monitor(c, m))
             continue;
         /* done here rather than on focus changes so that buffers a client
          * adds later (subsurfaces, videos) are covered too */
         wlr_scene_node_for_each_buffer(
-            &c->scene_surface->node, scenebuffersetopacity, c);
+            &c->scene_surface->node, opacity_set_scene_buffer, c);
 #ifdef INTEGRATED_BACKGROUND
-        blurclient(c);
+        opacity_blur_client(c);
 #endif
         /* a tab below the top one is not drawn and gets no frame callbacks,
          * so it never acks */
@@ -707,27 +722,27 @@ static void rendermon(struct wl_listener* listener, void*)
     }
 
     if (m->zoom > 1 || m->zoomchain) {
-        if (!magnifierframe(m, &pending))
+        if (!magnifier_frame(m, &pending))
             goto skip;
     } else if (!wlr_scene_output_needs_frame(m->scene_output) ||
                !wlr_scene_output_build_state(
                    m->scene_output, &pending, nullptr)) {
         goto skip;
     }
-    gamemode(m, &pending);
-    if (!privacybefore(m, &pending))
+    monitor_game_mode(m, &pending);
+    if (!privacy_before_commit(m, &pending))
         goto skip;
     if (wlr_output_commit_state(m->wlr_output, &pending) &&
         (pending.committed & WLR_OUTPUT_STATE_ADAPTIVE_SYNC_ENABLED))
         m->autovrr = pending.adaptive_sync_enabled;
-    privacyafter(m);
+    privacy_after_commit(m);
 
 skip:
     /* Let clients know a frame has been rendered */
     clock_gettime(CLOCK_MONOTONIC, &now);
     wlr_scene_output_send_frame_done(m->scene_output, &now);
 
-    /* a client held back by mapnotify() still needs frame callbacks */
+    /* a client held back by client_handle_map() still needs frame callbacks */
     wl_list_for_each(
         c, &clients, link) if (c->mon == m && client_surface(c)->mapped &&
                                ((c->isfullscreen && !VISIBLEON(c, m)) ||
@@ -737,21 +752,21 @@ skip:
     wlr_output_state_finish(&pending);
 }
 
-static void requestmonstate(struct wl_listener*, void* data)
+static void monitor_handle_request_state(struct wl_listener*, void* data)
 {
     struct wlr_output_event_request_state* event = data;
     wlr_output_commit_state(event->output, event->state);
-    updatemons(nullptr, nullptr);
+    monitor_update_layout(nullptr, nullptr);
 }
 
-void tagmon(const Arg* arg)
+void monitor_send_client(const Arg* arg)
 {
-    Client* sel = focustop(selmon);
+    Client* sel = client_top(selected_monitor);
     if (sel)
-        setmon(sel, dirtomon(arg->i), 0);
+        client_set_monitor(sel, monitor_in_direction(arg->i), 0);
 }
 
-static void unmaplayersurfacenotify(struct wl_listener* listener, void*)
+static void monitor_handle_layer_unmap(struct wl_listener* listener, void*)
 {
     LayerSurface* l = wl_container_of(listener, l, unmap);
 
@@ -760,13 +775,13 @@ static void unmaplayersurfacenotify(struct wl_listener* listener, void*)
     if (l == exclusive_focus)
         exclusive_focus = nullptr;
     if (l->layer_surface->output && (l->mon = l->layer_surface->output->data))
-        arrangelayers(l->mon);
+        monitor_arrange_layers(l->mon);
     if (l->layer_surface->surface == seat->keyboard_state.focused_surface)
-        focusclient(focustop(selmon), 1);
-    motionnotify(0, nullptr, 0, 0, 0, 0);
+        client_focus(client_top(selected_monitor), 1);
+    input_motion(0, nullptr, 0, 0, 0, 0);
 }
 
-void updatemons(struct wl_listener*, void*)
+void monitor_update_layout(struct wl_listener*, void*)
 {
     /*
      * Called whenever the output layout changes: adding or removing a
@@ -782,7 +797,7 @@ void updatemons(struct wl_listener*, void*)
     Monitor* m;
 
     /* First remove from the layout the disabled monitors */
-    wl_list_for_each(m, &mons, link)
+    wl_list_for_each(m, &monitors, link)
     {
         if (m->wlr_output->enabled || m->asleep)
             continue;
@@ -791,11 +806,11 @@ void updatemons(struct wl_listener*, void*)
         config_head->state.enabled = 0;
         /* Remove this output from the layout to avoid cursor enter inside it */
         wlr_output_layout_remove(output_layout, m->wlr_output);
-        closemon(m);
+        monitor_close(m);
         m->m = m->w = (struct wlr_box){};
     }
     /* Insert outputs that need to */
-    wl_list_for_each(m, &mons, link)
+    wl_list_for_each(m, &monitors, link)
     {
         if (m->wlr_output->enabled &&
             !wlr_output_layout_get(output_layout, m->wlr_output))
@@ -803,16 +818,20 @@ void updatemons(struct wl_listener*, void*)
     }
 
     /* Now that we update the output layout we can get its box */
-    wlr_output_layout_get_box(output_layout, nullptr, &sgeom);
+    wlr_output_layout_get_box(output_layout, nullptr, &screen_geometry);
 
-    wlr_scene_node_set_position(&root_bg->node, sgeom.x, sgeom.y);
-    wlr_scene_rect_set_size(root_bg, sgeom.width, sgeom.height);
+    wlr_scene_node_set_position(
+        &root_background->node, screen_geometry.x, screen_geometry.y);
+    wlr_scene_rect_set_size(
+        root_background, screen_geometry.width, screen_geometry.height);
 
-    /* Make sure the clients are hidden when g0wm is locked */
-    wlr_scene_node_set_position(&locked_bg->node, sgeom.x, sgeom.y);
-    wlr_scene_rect_set_size(locked_bg, sgeom.width, sgeom.height);
+    /* Make sure the clients are hidden when g0wm is lock_active */
+    wlr_scene_node_set_position(
+        &locked_background->node, screen_geometry.x, screen_geometry.y);
+    wlr_scene_rect_set_size(
+        locked_background, screen_geometry.width, screen_geometry.height);
 
-    wl_list_for_each(m, &mons, link)
+    wl_list_for_each(m, &monitors, link)
     {
         if (!m->wlr_output->enabled)
             continue;
@@ -824,7 +843,7 @@ void updatemons(struct wl_listener*, void*)
         m->w = m->m;
         wlr_scene_output_set_position(m->scene_output, m->m.x, m->m.y);
 #ifdef INTEGRATED_BACKGROUND
-        setwallpaper(m);
+        opacity_set_wallpaper(m);
 #endif
 
         wlr_scene_node_set_position(&m->fullscreen_bg->node, m->m.x, m->m.y);
@@ -838,12 +857,12 @@ void updatemons(struct wl_listener*, void*)
         }
 
         /* Calculate the effective monitor geometry to use for clients */
-        arrangelayers(m);
+        monitor_arrange_layers(m);
         /* Don't move clients to the left output when plugging monitors */
-        arrange(m);
+        layout_arrange(m);
         /* make sure fullscreen clients have the right size */
-        if ((c = focustop(m)) && c->isfullscreen)
-            resize(c, m->m, 0);
+        if ((c = client_top(m)) && c->isfullscreen)
+            client_resize(c, m->m, 0);
 
         /* Try to re-set the gamma LUT when updating monitors,
          * it's only really needed when enabling a disabled output, but meh. */
@@ -852,36 +871,36 @@ void updatemons(struct wl_listener*, void*)
         config_head->state.x = m->m.x;
         config_head->state.y = m->m.y;
 
-        if (!selmon) {
-            selmon = m;
+        if (!selected_monitor) {
+            selected_monitor = m;
         }
     }
 
-    tabletremap();
+    tablet_remap();
 
-    if (selmon && selmon->wlr_output->enabled) {
+    if (selected_monitor && selected_monitor->wlr_output->enabled) {
         wl_list_for_each(c, &clients, link)
         {
             if (!c->mon && client_surface(c)->mapped)
-                setmon(c, selmon, c->tags);
+                client_set_monitor(c, selected_monitor, c->tags);
         }
-        focusclient(focustop(selmon), 1);
-        if (selmon->lock_surface) {
-            client_notify_enter(selmon->lock_surface->surface,
+        client_focus(client_top(selected_monitor), 1);
+        if (selected_monitor->lock_surface) {
+            client_notify_enter(selected_monitor->lock_surface->surface,
                                 wlr_seat_get_keyboard(seat));
-            client_activate_surface(selmon->lock_surface->surface, 1);
+            client_activate_surface(selected_monitor->lock_surface->surface, 1);
         }
     }
 
-    if (stext[0] == '\0')
-        strncpy(stext, "g0wm-" VERSION, sizeof(stext));
-    wl_list_for_each(m, &mons, link)
+    if (bar_status_text[0] == '\0')
+        strncpy(bar_status_text, "g0wm-" VERSION, sizeof(bar_status_text));
+    wl_list_for_each(m, &monitors, link)
     {
-        updatebar(m);
+        bar_update(m);
         /* this very change can hand a monitor the single bar, and with it
          * the strip of height its clients are kept out of */
-        arrangelayers(m);
-        drawbar(m);
+        monitor_arrange_layers(m);
+        bar_draw(m);
     }
 
     /* FIXME: figure out why the cursor image is at 0,0 after turning all
@@ -891,10 +910,10 @@ void updatemons(struct wl_listener*, void*)
      * at the wrong position after all. */
     wlr_cursor_move(cursor, nullptr, 0, 0);
 
-    wlr_output_manager_v1_set_configuration(output_mgr, config);
+    wlr_output_manager_v1_set_configuration(output_manager, config);
 }
 
-Monitor* xytomon(double x, double y)
+Monitor* monitor_at(double x, double y)
 {
     struct wlr_output* o = wlr_output_layout_output_at(output_layout, x, y);
     return o ? o->data : nullptr;

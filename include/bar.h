@@ -16,42 +16,43 @@
 constexpr int STATUS_MAX = 4096;
 #define TEXTW(mon, text) (drwl_font_getwidth(mon->drw, text) + mon->lrpad)
 constexpr int STATUS_BUTTONS = 5;
-/* the status box: drawbar() and buttonpress() agree on it to the pixel */
-#define STATUSW(mon) (drawstatus((mon), stext, 0, 0, 0) + 2)
+/* the status box: bar_draw() and input_handle_button() agree on it to the pixel
+ */
+#define STATUSW(mon) (bar_draw_status((mon), bar_status_text, 0, 0, 0) + 2)
 
-bool baracceptsinput(struct wlr_scene_buffer* buffer, double* sx, double* sy);
-void barfini(void);
-void drawbar(Monitor* m);
-void drawbars(void);
-void drawselbar(void);
-int drawstatus(Monitor* m, const char* text, int x, int w, int render);
-void notifyactions(const Arg* arg);
-void notifydismiss(const Arg* arg);
-void notifydismissall(const Arg* arg);
-void notifyfini(void);
-void notifynext(const Arg* arg);
-void notifyopen(const Arg* arg);
-int notifypicking(void);
-void notifypickkey(xkb_keysym_t sym);
-void notifyprev(const Arg* arg);
-void notifyscroll(const Arg* arg);
-int notifywheel(Monitor* pm, double delta, int horizontal);
-int ontitle(Client* c, double x, double y);
-void settitle(Client* c);
-int statusclick(Monitor* pm, int x, int button);
-int statusin(int fd, unsigned int mask, void* data);
-int statusscroll(Monitor* pm, int x, double delta);
-int statusshown(Monitor* m);
-int tagwidth(Monitor* m, Monitor* s, uint32_t i);
-int titleclick(Client* c, double x, double y);
-int titleheight(Client* c);
-void titlehover(Client* c, double x, double y);
-void togglebar(const Arg* arg);
-void toggletitlebar(const Arg* arg);
-void trayactivate(const Arg* arg);
-void traymenu(const Arg* arg);
-void updatebar(Monitor* m);
+bool bar_accepts_input(struct wlr_scene_buffer* buffer, double* sx, double* sy);
+void bar_finish(void);
+void bar_draw(Monitor* m);
+void bar_draw_all(void);
+void bar_draw_selected(void);
+int bar_draw_status(Monitor* m, const char* text, int x, int w, int render);
+void bar_notification_actions(const Arg* arg);
+void bar_notification_dismiss(const Arg* arg);
+void bar_notification_dismiss_all(const Arg* arg);
+void bar_notification_finish(void);
+void bar_notification_next(const Arg* arg);
+void bar_notification_open(const Arg* arg);
+int bar_notification_picking(void);
+void bar_notification_pick_key(xkb_keysym_t sym);
+void bar_notification_prev(const Arg* arg);
+void bar_notification_scroll(const Arg* arg);
+int bar_notification_wheel(Monitor* pm, double delta, int horizontal);
+int bar_on_title_bar(Client* c, double x, double y);
+void bar_place_title_bar(Client* c);
+int bar_status_click(Monitor* pm, int x, int button);
+int bar_handle_status_input(int fd, unsigned int mask, void* data);
+int bar_status_scroll(Monitor* pm, int x, double delta);
+int bar_status_shown(Monitor* m);
+int bar_tag_width(Monitor* m, Monitor* s, uint32_t i);
+int bar_title_click(Client* c, double x, double y);
+int bar_title_height(Client* c);
+void bar_title_hover(Client* c, double x, double y);
+void bar_toggle(const Arg* arg);
+void bar_toggle_title_bars(const Arg* arg);
+void bar_tray_activate(const Arg* arg);
+void bar_tray_menu(const Arg* arg);
+void bar_update(Monitor* m);
 
-extern char stext[STATUS_MAX];
+extern char bar_status_text[STATUS_MAX];
 
 #endif

@@ -65,62 +65,69 @@ typedef struct {
 } PointerConstraint;
 
 /* function declarations */
-static unsigned int barclick(Monitor* pm, Arg* arg);
-static void createkeyboard(struct wlr_keyboard* keyboard);
-static void createpointer(struct wlr_pointer* pointer);
-static void cursorconstrain(struct wlr_pointer_constraint_v1* constraint);
-static int gesturebound(int pinch, uint32_t fingers);
-static void gesturerun(unsigned int motion);
-static void cursorwarptohint(void);
-static void destroydragicon(struct wl_listener* listener, void* data);
-static void destroypointerconstraint(struct wl_listener* listener, void* data);
-static void grab(Client* c, unsigned int mode);
-static void handlecursoractivity(void);
-static int hidecursor(void* data);
-static struct wlr_keyboard_shortcuts_inhibitor_v1* focusedinhibitor(void);
-static int keybinding(uint32_t mods, xkb_keysym_t sym);
-static void keypress(struct wl_listener* listener, void* data);
-static void keypressmod(struct wl_listener* listener, void* data);
-static int keyrepeat(void* data);
-static void magnet(struct wlr_box* b);
-static void magnetedge(int pos, int size, int edge, int* dist, int* to);
-static void pointerfocus(Client* c,
-                         struct wlr_surface* surface,
-                         double sx,
-                         double sy,
-                         uint32_t time);
-static void unlastcursor(struct wl_listener* listener, void* data);
-static int wheelbinding(const struct wlr_pointer_axis_event* event);
+static unsigned int input_bar_click(Monitor* pm, Arg* arg);
+static void input_create_keyboard(struct wlr_keyboard* keyboard);
+static void input_create_pointer(struct wlr_pointer* pointer);
+static void input_cursor_constrain(
+    struct wlr_pointer_constraint_v1* constraint);
+static int input_gesture_bound(int pinch, uint32_t fingers);
+static void input_gesture_run(unsigned int motion);
+static void input_cursor_warp_to_hint(void);
+static void input_handle_drag_icon_destroy(struct wl_listener* listener,
+                                           void* data);
+static void input_handle_pointer_constraint_destroy(
+    struct wl_listener* listener,
+    void* data);
+static void input_grab(Client* c, unsigned int mode);
+static void input_cursor_activity(void);
+static int input_hide_cursor(void* data);
+static struct wlr_keyboard_shortcuts_inhibitor_v1* input_focused_inhibitor(
+    void);
+static int input_key_binding(uint32_t mods, xkb_keysym_t sym);
+static void input_handle_key(struct wl_listener* listener, void* data);
+static void input_handle_modifiers(struct wl_listener* listener, void* data);
+static int input_key_repeat(void* data);
+static void input_magnet(struct wlr_box* b);
+static void input_magnet_edge(int pos, int size, int edge, int* dist, int* to);
+static void input_pointer_focus(Client* c,
+                                struct wlr_surface* surface,
+                                double sx,
+                                double sy,
+                                uint32_t time);
+static void input_handle_last_cursor_destroy(struct wl_listener* listener,
+                                             void* data);
+static int input_wheel_binding(const struct wlr_pointer_axis_event* event);
 
 /* variables */
-struct last_cursor_state last_cursor;
-unsigned int cursor_mode;
-Client* grabc;
-static struct wlr_pointer_constraint_v1* active_constraint;
-static bool cursor_hidden = false;
-static int grabcx, grabcy; /* client-relative */
-static double pressx, pressy;
+struct last_cursor_state input_last_cursor;
+unsigned int input_cursor_mode;
+Client* input_grab_client;
+static struct wlr_pointer_constraint_v1* input_active_constraint;
+static bool input_cursor_hidden = false;
+static int input_grab_x, input_grab_y; /* client-relative */
+static double input_press_x, input_press_y;
 /* gesture taken by a binding or by the magnifier */
 static struct {
     int ours;
     uint32_t fingers;
     double dx, dy, scale;
     float zoom; /* magnifier level the pinch began at, 0 if not zooming */
-} gesture;
-static uint32_t runner_repeatcp; /* codepoint the armed key repeat types */
+} input_gesture;
+static uint32_t
+    input_runner_repeat_codepoint; /* codepoint the armed key repeat types */
 
 /* function implementations */
 /* The part of pm's bar the cursor is over, ClkRoot if it is not over it.
  * arg picks up the tag or tray item the part stands for. */
-static unsigned int barclick(Monitor* pm, Arg* arg)
+static unsigned int input_bar_click(Monitor* pm, Arg* arg)
 {
     unsigned int i = 0, x = 0;
     double cx;
     int traywidth = 0, statusw;
     struct wlr_scene_node* node;
     struct wlr_scene_buffer* buffer;
-    /* under barsinglemon the bar shows the focused monitor's tags */
-    Monitor* s = barsinglemon && selmon ? selmon : pm;
+    /* under bar_single_monitor the bar shows the focused monitor's tags */
+    Monitor* s = bar_single_monitor && selected_monitor ? selected_monitor : pm;
 
     if (exclusive_focus || !pm ||
         !(node = wlr_scene_node_at(&layers[LyrBottom]->node,
@@ -132,16 +139,16 @@ static unsigned int barclick(Monitor* pm, Arg* arg)
         buffer != pm->scene_buffer)
         return ClkRoot;
 
-    cx = (cursor->x - pm->m.x - barpadding) * pm->wlr_output->scale;
+    cx = (cursor->x - pm->m.x - bar_padding) * pm->wlr_output->scale;
     traywidth = tray_get_width(pm->tray);
-    statusw = statusshown(pm) ? STATUSW(pm) : 0;
+    statusw = bar_status_shown(pm) ? STATUSW(pm) : 0;
     do
-        x += tagwidth(pm, s, i);
-    while (cx >= x && ++i < ntags);
-    if (i < ntags) {
+        x += bar_tag_width(pm, s, i);
+    while (cx >= x && ++i < tag_count);
+    if (i < tag_count) {
         arg->ui = 1 << i;
         return ClkTagBar;
-    } else if (barltsymbol && cx < x + TEXTW(pm, s->ltsymbol))
+    } else if (bar_layout_symbol && cx < x + TEXTW(pm, s->ltsymbol))
         return ClkLtSymbol;
     else if (traywidth && cx > pm->b.width - traywidth) {
         arg->ui = tray_index_at(pm->tray, cx - (pm->b.width - traywidth));
@@ -155,40 +162,42 @@ static unsigned int barclick(Monitor* pm, Arg* arg)
     return ClkTitle;
 }
 
-void axisnotify(struct wl_listener*, void* data)
+void input_handle_axis(struct wl_listener*, void* data)
 {
     /* This event is forwarded by the cursor when a pointer emits an axis event,
      * for example when you move the scroll wheel. */
     struct wlr_pointer_axis_event* event = data;
     wlr_idle_notifier_v1_notify_activity(idle_notifier, seat);
-    handlecursoractivity();
+    input_cursor_activity();
     {
         Client* c;
         Arg arg;
-        Monitor* pm = xytomon(cursor->x, cursor->y);
+        Monitor* pm = monitor_at(cursor->x, cursor->y);
         struct wlr_keyboard* keyboard = wlr_seat_get_keyboard(seat);
         int horizontal =
             event->orientation == WL_POINTER_AXIS_HORIZONTAL_SCROLL ||
             (keyboard &&
              wlr_keyboard_get_modifiers(keyboard) & WLR_MODIFIER_SHIFT);
 
-        xytonode(cursor->x, cursor->y, nullptr, &c, nullptr, nullptr, nullptr);
-        if (!locked && !c && barclick(pm, &arg) == ClkTitle &&
-            notifywheel(pm, event->delta, horizontal))
+        input_node_at(
+            cursor->x, cursor->y, nullptr, &c, nullptr, nullptr, nullptr);
+        if (!lock_active && !c && input_bar_click(pm, &arg) == ClkTitle &&
+            bar_notification_wheel(pm, event->delta, horizontal))
             return;
     }
-    if (!locked && event->orientation == WL_POINTER_AXIS_VERTICAL_SCROLL) {
+    if (!lock_active && event->orientation == WL_POINTER_AXIS_VERTICAL_SCROLL) {
         Client* c;
         Arg arg;
-        Monitor* pm = xytomon(cursor->x, cursor->y);
+        Monitor* pm = monitor_at(cursor->x, cursor->y);
 
-        xytonode(cursor->x, cursor->y, nullptr, &c, nullptr, nullptr, nullptr);
-        if (!c && barclick(pm, &arg) == ClkStatus &&
-            statusscroll(pm, arg.i, event->delta))
+        input_node_at(
+            cursor->x, cursor->y, nullptr, &c, nullptr, nullptr, nullptr);
+        if (!c && input_bar_click(pm, &arg) == ClkStatus &&
+            bar_status_scroll(pm, arg.i, event->delta))
             return;
     }
-    if (!locked && event->orientation == WL_POINTER_AXIS_VERTICAL_SCROLL &&
-        wheelbinding(event))
+    if (!lock_active && event->orientation == WL_POINTER_AXIS_VERTICAL_SCROLL &&
+        input_wheel_binding(event))
         return;
     /* Notify the client with pointer focus of the axis event. */
     wlr_seat_pointer_notify_axis(seat,
@@ -200,7 +209,7 @@ void axisnotify(struct wl_listener*, void* data)
                                  event->relative_direction);
 }
 
-void buttonpress(struct wl_listener*, void* data)
+void input_handle_button(struct wl_listener*, void* data)
 {
     unsigned int click;
     struct wlr_pointer_button_event* event = data;
@@ -214,62 +223,63 @@ void buttonpress(struct wl_listener*, void* data)
     const Button* b;
 
     wlr_idle_notifier_v1_notify_activity(idle_notifier, seat);
-    handlecursoractivity();
+    input_cursor_activity();
 
     /* the open menu owns the pointer, nothing under it sees the click */
-    if (!locked && traypopup_active()) {
+    if (!lock_active && traypopup_active()) {
         if (event->state == WL_POINTER_BUTTON_STATE_PRESSED)
             traypopup_click(cursor->x, cursor->y);
         return;
     }
 
     click = ClkRoot;
-    xytonode(cursor->x, cursor->y, nullptr, &c, nullptr, nullptr, nullptr);
+    input_node_at(cursor->x, cursor->y, nullptr, &c, nullptr, nullptr, nullptr);
     if (c)
         click = ClkClient;
 
     switch (event->state) {
         case WL_POINTER_BUTTON_STATE_PRESSED:
-            cursor_mode = CurPressed;
-            pm = xytomon(cursor->x, cursor->y);
-            if (locked) {
-                selmon = pm;
+            input_cursor_mode = CurPressed;
+            pm = monitor_at(cursor->x, cursor->y);
+            if (lock_active) {
+                selected_monitor = pm;
                 break;
             }
 
-            if (!c && (click = barclick(pm, &arg)) != ClkRoot) {
-                /* The bar belongs to pm, but under barsinglemon it stands in
-                 * for the focused monitor: leaving selmon alone is what lands
-                 * the click on the monitor whose tags are on show. */
-                if (!barsinglemon || !selmon)
-                    selmon = pm;
+            if (!c && (click = input_bar_click(pm, &arg)) != ClkRoot) {
+                /* The bar belongs to pm, but under bar_single_monitor it stands
+                 * in for the focused monitor: leaving selected_monitor alone is
+                 * what lands the click on the monitor whose tags are on show.
+                 */
+                if (!bar_single_monitor || !selected_monitor)
+                    selected_monitor = pm;
             } else {
-                selmon = pm;
+                selected_monitor = pm;
             }
 
             /* Change focus if the button was _pressed_ over a client */
-            xytonode(
+            input_node_at(
                 cursor->x, cursor->y, nullptr, &c, nullptr, nullptr, nullptr);
             if (click == ClkClient &&
                 (!client_is_unmanaged(c) || client_wants_focus(c)))
-                focusclient(c, 1);
+                client_focus(c, 1);
 
             if (click == ClkStatus &&
-                statusclick(pm,
-                            arg.i,
-                            event->button == BTN_LEFT     ? 1
-                            : event->button == BTN_RIGHT  ? 2
-                            : event->button == BTN_MIDDLE ? 3
-                                                          : 0))
+                bar_status_click(pm,
+                                 arg.i,
+                                 event->button == BTN_LEFT     ? 1
+                                 : event->button == BTN_RIGHT  ? 2
+                                 : event->button == BTN_MIDDLE ? 3
+                                                               : 0))
                 return;
 
             keyboard = wlr_seat_get_keyboard(seat);
             mods = keyboard ? wlr_keyboard_get_modifiers(keyboard) : 0;
             if (click == ClkClient && !CLEANMASK(mods) &&
                 event->button == BTN_LEFT &&
-                titleclick(c, cursor->x, cursor->y))
+                bar_title_click(c, cursor->x, cursor->y))
                 return;
-            for (b = buttons; b < buttons + nbuttons; b++) {
+            for (b = buttons; b < buttons + button_count; b++) {
                 if (CLEANMASK(mods) == CLEANMASK(b->mod) &&
                     event->button == b->button && click == b->click &&
                     b->func) {
@@ -285,19 +295,20 @@ void buttonpress(struct wl_listener*, void* data)
         case WL_POINTER_BUTTON_STATE_RELEASED:
             /* If you released any buttons, we exit interactive move/resize
              * mode. */
-            /* TODO: should reset to the pointer focus's current setcursor */
-            if (!locked && cursor_mode != CurNormal &&
-                cursor_mode != CurPressed) {
-                wlr_cursor_set_xcursor(cursor, cursor_mgr, "default");
-                cursor_mode = CurNormal;
+            /* TODO: should reset to the pointer focus's current
+             * input_handle_request_cursor */
+            if (!lock_active && input_cursor_mode != CurNormal &&
+                input_cursor_mode != CurPressed) {
+                wlr_cursor_set_xcursor(cursor, cursor_manager, "default");
+                input_cursor_mode = CurNormal;
                 /* Drop the window off on its new monitor */
-                selmon = xytomon(cursor->x, cursor->y);
-                setmon(grabc, selmon, 0);
-                grabc = nullptr;
+                selected_monitor = monitor_at(cursor->x, cursor->y);
+                client_set_monitor(input_grab_client, selected_monitor, 0);
+                input_grab_client = nullptr;
                 return;
             }
-            cursor_mode = CurNormal;
-            grabc = nullptr;
+            input_cursor_mode = CurNormal;
+            input_grab_client = nullptr;
             break;
     }
     /* If the event wasn't handled by the compositor, notify the client with
@@ -306,18 +317,19 @@ void buttonpress(struct wl_listener*, void* data)
         seat, event->time_msec, event->button, event->state);
 }
 
-static void createkeyboard(struct wlr_keyboard* keyboard)
+static void input_create_keyboard(struct wlr_keyboard* keyboard)
 {
     /* Set the keymap to match the group keymap */
-    wlr_keyboard_set_keymap(keyboard, kb_group->wlr_group->keyboard.keymap);
+    wlr_keyboard_set_keymap(keyboard,
+                            keyboard_group->wlr_group->keyboard.keymap);
 
     /* Add the new keyboard to the group */
-    wlr_keyboard_group_add_keyboard(kb_group->wlr_group, keyboard);
+    wlr_keyboard_group_add_keyboard(keyboard_group->wlr_group, keyboard);
 }
 
-KeyboardGroup* createkeyboardgroup(void)
+KeyboardGroup* input_create_keyboard_group(void)
 {
-    KeyboardGroup* group = ecalloc(1, sizeof(*group));
+    KeyboardGroup* group = util_calloc(1, sizeof(*group));
     struct xkb_context* context;
     struct xkb_keymap* keymap;
 
@@ -328,7 +340,7 @@ KeyboardGroup* createkeyboardgroup(void)
     context = xkb_context_new(XKB_CONTEXT_NO_FLAGS);
     if (!(keymap = xkb_keymap_new_from_names(
               context, &xkb_rules, XKB_KEYMAP_COMPILE_NO_FLAGS)))
-        die("failed to compile keymap");
+        util_die("failed to compile keymap");
 
     wlr_keyboard_set_keymap(&group->wlr_group->keyboard, keymap);
     xkb_keymap_unref(keymap);
@@ -338,13 +350,14 @@ KeyboardGroup* createkeyboardgroup(void)
         &group->wlr_group->keyboard, repeat_rate, repeat_delay);
 
     /* Set up listeners for keyboard events */
-    LISTEN(&group->wlr_group->keyboard.events.key, &group->key, keypress);
+    LISTEN(
+        &group->wlr_group->keyboard.events.key, &group->key, input_handle_key);
     LISTEN(&group->wlr_group->keyboard.events.modifiers,
            &group->modifiers,
-           keypressmod);
+           input_handle_modifiers);
 
     group->key_repeat_source =
-        wl_event_loop_add_timer(event_loop, keyrepeat, group);
+        wl_event_loop_add_timer(event_loop, input_key_repeat, group);
 
     /* A seat can only have one keyboard, but this is a limitation of the
      * Wayland protocol - not wlroots. We assign all connected keyboards to the
@@ -355,12 +368,12 @@ KeyboardGroup* createkeyboardgroup(void)
     return group;
 }
 
-void createkbinhibitor(struct wl_listener*, void* data)
+void input_handle_new_keyboard_inhibitor(struct wl_listener*, void* data)
 {
     wlr_keyboard_shortcuts_inhibitor_v1_activate(data);
 }
 
-static void createpointer(struct wlr_pointer* pointer)
+static void input_create_pointer(struct wlr_pointer* pointer)
 {
     struct libinput_device* device;
     int touchpad;
@@ -373,7 +386,7 @@ static void createpointer(struct wlr_pointer* pointer)
             libinput_device_config_tap_set_enabled(device, tap_to_click);
             libinput_device_config_tap_set_drag_enabled(device, tap_and_drag);
             libinput_device_config_tap_set_drag_lock_enabled(device, drag_lock);
-            libinput_device_config_tap_set_button_map(device, button_map);
+            libinput_device_config_tap_set_button_map(device, tap_button_map);
         }
 
         if (libinput_device_config_scroll_has_natural_scroll(device))
@@ -415,29 +428,29 @@ static void createpointer(struct wlr_pointer* pointer)
     wlr_cursor_attach_input_device(cursor, &pointer->base);
 }
 
-void createpointerconstraint(struct wl_listener*, void* data)
+void input_handle_new_pointer_constraint(struct wl_listener*, void* data)
 {
     PointerConstraint* pointer_constraint =
-        ecalloc(1, sizeof(*pointer_constraint));
+        util_calloc(1, sizeof(*pointer_constraint));
     pointer_constraint->constraint = data;
     LISTEN(&pointer_constraint->constraint->events.destroy,
            &pointer_constraint->destroy,
-           destroypointerconstraint);
+           input_handle_pointer_constraint_destroy);
 }
 
-static void cursorconstrain(struct wlr_pointer_constraint_v1* constraint)
+static void input_cursor_constrain(struct wlr_pointer_constraint_v1* constraint)
 {
-    if (active_constraint == constraint)
+    if (input_active_constraint == constraint)
         return;
 
-    if (active_constraint)
-        wlr_pointer_constraint_v1_send_deactivated(active_constraint);
+    if (input_active_constraint)
+        wlr_pointer_constraint_v1_send_deactivated(input_active_constraint);
 
-    active_constraint = constraint;
+    input_active_constraint = constraint;
     wlr_pointer_constraint_v1_send_activated(constraint);
 }
 
-void cursorframe(struct wl_listener*, void*)
+void input_handle_frame(struct wl_listener*, void*)
 {
     /* This event is forwarded by the cursor when a pointer emits a frame
      * event. Frame events are sent after regular pointer events to group
@@ -454,75 +467,76 @@ constexpr double SWIPE_MIN = 100.0;
 constexpr double PINCH_IN = 0.8;
 constexpr double PINCH_OUT = 1.25;
 
-static int gesturebound(int pinch, uint32_t fingers)
+static int input_gesture_bound(int pinch, uint32_t fingers)
 {
     const Gesture* g;
 
-    if (locked)
+    if (lock_active)
         return 0;
-    for (g = gestures; g < gestures + ngestures; g++)
+    for (g = gestures; g < gestures + gesture_count; g++)
         if ((g->motion >= PinchIn) == pinch && g->fingers == fingers)
             return 1;
     return 0;
 }
 
-static void gesturerun(unsigned int motion)
+static void input_gesture_run(unsigned int motion)
 {
     const Gesture* g;
 
-    for (g = gestures; g < gestures + ngestures; g++)
-        if (g->motion == motion && g->fingers == gesture.fingers && g->func)
+    for (g = gestures; g < gestures + gesture_count; g++)
+        if (g->motion == motion && g->fingers == input_gesture.fingers &&
+            g->func)
             g->func(&g->arg);
 }
 
-void swipebegin(struct wl_listener*, void* data)
+void input_handle_swipe_begin(struct wl_listener*, void* data)
 {
     struct wlr_pointer_swipe_begin_event* event = data;
 
     wlr_idle_notifier_v1_notify_activity(idle_notifier, seat);
-    if ((gesture.ours = gesturebound(0, event->fingers))) {
-        gesture.fingers = event->fingers;
-        gesture.dx = gesture.dy = 0;
+    if ((input_gesture.ours = input_gesture_bound(0, event->fingers))) {
+        input_gesture.fingers = event->fingers;
+        input_gesture.dx = input_gesture.dy = 0;
         return;
     }
     wlr_pointer_gestures_v1_send_swipe_begin(
         pointer_gestures, seat, event->time_msec, event->fingers);
 }
 
-void swipeupdate(struct wl_listener*, void* data)
+void input_handle_swipe_update(struct wl_listener*, void* data)
 {
     struct wlr_pointer_swipe_update_event* event = data;
 
     wlr_idle_notifier_v1_notify_activity(idle_notifier, seat);
-    if (gesture.ours) {
-        gesture.dx += event->dx;
-        gesture.dy += event->dy;
+    if (input_gesture.ours) {
+        input_gesture.dx += event->dx;
+        input_gesture.dy += event->dy;
         return;
     }
     wlr_pointer_gestures_v1_send_swipe_update(
         pointer_gestures, seat, event->time_msec, event->dx, event->dy);
 }
 
-void swipeend(struct wl_listener*, void* data)
+void input_handle_swipe_end(struct wl_listener*, void* data)
 {
     struct wlr_pointer_swipe_end_event* event = data;
 
-    if (!gesture.ours) {
+    if (!input_gesture.ours) {
         wlr_pointer_gestures_v1_send_swipe_end(
             pointer_gestures, seat, event->time_msec, event->cancelled);
         return;
     }
-    gesture.ours = 0;
-    if (event->cancelled || locked ||
-        MAX(fabs(gesture.dx), fabs(gesture.dy)) < SWIPE_MIN)
+    input_gesture.ours = 0;
+    if (event->cancelled || lock_active ||
+        MAX(fabs(input_gesture.dx), fabs(input_gesture.dy)) < SWIPE_MIN)
         return;
-    if (fabs(gesture.dx) >= fabs(gesture.dy))
-        gesturerun(gesture.dx < 0 ? SwipeLeft : SwipeRight);
+    if (fabs(input_gesture.dx) >= fabs(input_gesture.dy))
+        input_gesture_run(input_gesture.dx < 0 ? SwipeLeft : SwipeRight);
     else
-        gesturerun(gesture.dy < 0 ? SwipeUp : SwipeDown);
+        input_gesture_run(input_gesture.dy < 0 ? SwipeUp : SwipeDown);
 }
 
-void pinchbegin(struct wl_listener*, void* data)
+void input_handle_pinch_begin(struct wl_listener*, void* data)
 {
     struct wlr_pointer_pinch_begin_event* event = data;
     struct wlr_keyboard* keyboard = wlr_seat_get_keyboard(seat);
@@ -530,35 +544,35 @@ void pinchbegin(struct wl_listener*, void* data)
     Monitor* m;
 
     wlr_idle_notifier_v1_notify_activity(idle_notifier, seat);
-    if (!locked && pinchzoom_mod &&
-        CLEANMASK(mods) == CLEANMASK(pinchzoom_mod) &&
-        (m = xytomon(cursor->x, cursor->y))) {
-        gesture.zoom = m->zoom;
+    if (!lock_active && pinch_zoom_modifier &&
+        CLEANMASK(mods) == CLEANMASK(pinch_zoom_modifier) &&
+        (m = monitor_at(cursor->x, cursor->y))) {
+        input_gesture.zoom = m->zoom;
         return;
     }
-    if ((gesture.ours = gesturebound(1, event->fingers))) {
-        gesture.fingers = event->fingers;
-        gesture.scale = 1.0;
+    if ((input_gesture.ours = input_gesture_bound(1, event->fingers))) {
+        input_gesture.fingers = event->fingers;
+        input_gesture.scale = 1.0;
         return;
     }
     wlr_pointer_gestures_v1_send_pinch_begin(
         pointer_gestures, seat, event->time_msec, event->fingers);
 }
 
-void pinchupdate(struct wl_listener*, void* data)
+void input_handle_pinch_update(struct wl_listener*, void* data)
 {
     struct wlr_pointer_pinch_update_event* event = data;
     Monitor* m;
 
     wlr_idle_notifier_v1_notify_activity(idle_notifier, seat);
-    if (gesture.zoom) {
+    if (input_gesture.zoom) {
         /* the zoom follows the fingers */
-        if ((m = xytomon(cursor->x, cursor->y)))
-            magnifierzoom(m, gesture.zoom * (float)event->scale);
+        if ((m = monitor_at(cursor->x, cursor->y)))
+            magnifier_zoom(m, input_gesture.zoom * (float)event->scale);
         return;
     }
-    if (gesture.ours) {
-        gesture.scale = event->scale;
+    if (input_gesture.ours) {
+        input_gesture.scale = event->scale;
         return;
     }
     wlr_pointer_gestures_v1_send_pinch_update(pointer_gestures,
@@ -570,29 +584,29 @@ void pinchupdate(struct wl_listener*, void* data)
                                               event->rotation);
 }
 
-void pinchend(struct wl_listener*, void* data)
+void input_handle_pinch_end(struct wl_listener*, void* data)
 {
     struct wlr_pointer_pinch_end_event* event = data;
 
-    if (gesture.zoom) {
-        gesture.zoom = 0;
+    if (input_gesture.zoom) {
+        input_gesture.zoom = 0;
         return;
     }
-    if (!gesture.ours) {
+    if (!input_gesture.ours) {
         wlr_pointer_gestures_v1_send_pinch_end(
             pointer_gestures, seat, event->time_msec, event->cancelled);
         return;
     }
-    gesture.ours = 0;
-    if (event->cancelled || locked)
+    input_gesture.ours = 0;
+    if (event->cancelled || lock_active)
         return;
-    if (gesture.scale <= PINCH_IN)
-        gesturerun(PinchIn);
-    else if (gesture.scale >= PINCH_OUT)
-        gesturerun(PinchOut);
+    if (input_gesture.scale <= PINCH_IN)
+        input_gesture_run(PinchIn);
+    else if (input_gesture.scale >= PINCH_OUT)
+        input_gesture_run(PinchOut);
 }
 
-void holdbegin(struct wl_listener*, void* data)
+void input_handle_hold_begin(struct wl_listener*, void* data)
 {
     struct wlr_pointer_hold_begin_event* event = data;
 
@@ -601,7 +615,7 @@ void holdbegin(struct wl_listener*, void* data)
         pointer_gestures, seat, event->time_msec, event->fingers);
 }
 
-void holdend(struct wl_listener*, void* data)
+void input_handle_hold_end(struct wl_listener*, void* data)
 {
     struct wlr_pointer_hold_end_event* event = data;
 
@@ -609,44 +623,46 @@ void holdend(struct wl_listener*, void* data)
         pointer_gestures, seat, event->time_msec, event->cancelled);
 }
 
-static void cursorwarptohint(void)
+static void input_cursor_warp_to_hint(void)
 {
     Client* c = nullptr;
-    double sx = active_constraint->current.cursor_hint.x;
-    double sy = active_constraint->current.cursor_hint.y;
+    double sx = input_active_constraint->current.cursor_hint.x;
+    double sy = input_active_constraint->current.cursor_hint.y;
 
-    toplevel_from_wlr_surface(active_constraint->surface, &c, nullptr);
-    if (c && active_constraint->current.cursor_hint.enabled) {
+    client_from_surface(input_active_constraint->surface, &c, nullptr);
+    if (c && input_active_constraint->current.cursor_hint.enabled) {
         wlr_cursor_warp(
             cursor, nullptr, sx + c->geom.x + c->bw, sy + c->geom.y + c->bw);
-        wlr_seat_pointer_warp(active_constraint->seat, sx, sy);
+        wlr_seat_pointer_warp(input_active_constraint->seat, sx, sy);
     }
 }
 
-static void destroydragicon(struct wl_listener* listener, void*)
+static void input_handle_drag_icon_destroy(struct wl_listener* listener, void*)
 {
     /* Focus enter isn't sent during drag, so refocus the focused node. */
-    focusclient(focustop(selmon), 1);
-    motionnotify(0, nullptr, 0, 0, 0, 0);
+    client_focus(client_top(selected_monitor), 1);
+    input_motion(0, nullptr, 0, 0, 0, 0);
     wl_list_remove(&listener->link);
     free(listener);
 }
 
-static void destroypointerconstraint(struct wl_listener* listener, void*)
+static void input_handle_pointer_constraint_destroy(
+    struct wl_listener* listener,
+    void*)
 {
     PointerConstraint* pointer_constraint =
         wl_container_of(listener, pointer_constraint, destroy);
 
-    if (active_constraint == pointer_constraint->constraint) {
-        cursorwarptohint();
-        active_constraint = nullptr;
+    if (input_active_constraint == pointer_constraint->constraint) {
+        input_cursor_warp_to_hint();
+        input_active_constraint = nullptr;
     }
 
     wl_list_remove(&pointer_constraint->destroy.link);
     free(pointer_constraint);
 }
 
-void destroykeyboardgroup(struct wl_listener* listener, void*)
+void input_handle_keyboard_group_destroy(struct wl_listener* listener, void*)
 {
     KeyboardGroup* group = wl_container_of(listener, group, destroy);
     wl_event_source_remove(group->key_repeat_source);
@@ -657,37 +673,39 @@ void destroykeyboardgroup(struct wl_listener* listener, void*)
     free(group);
 }
 
-static void handlecursoractivity(void)
+static void input_cursor_activity(void)
 {
-    if (!cursor_hidden)
+    if (!input_cursor_hidden)
         return;
 
-    cursor_hidden = false;
+    input_cursor_hidden = false;
 
-    if (last_cursor.shape) {
+    if (input_last_cursor.shape) {
         wlr_cursor_set_xcursor(
-            cursor, cursor_mgr, wlr_cursor_shape_v1_name(last_cursor.shape));
-    } else if (last_cursor.has_client_cursor) {
+            cursor,
+            cursor_manager,
+            wlr_cursor_shape_v1_name(input_last_cursor.shape));
+    } else if (input_last_cursor.has_client_cursor) {
         /* surface may be NULL here: the client explicitly hid its cursor
          * (e.g. a game with pointer lock), which must be honored rather
          * than falling back to the default arrow below. */
         wlr_cursor_set_surface(cursor,
-                               last_cursor.surface,
-                               last_cursor.hotspot_x,
-                               last_cursor.hotspot_y);
+                               input_last_cursor.surface,
+                               input_last_cursor.hotspot_x,
+                               input_last_cursor.hotspot_y);
     } else {
-        wlr_cursor_set_xcursor(cursor, cursor_mgr, "default");
+        wlr_cursor_set_xcursor(cursor, cursor_manager, "default");
     }
 }
 
-static int hidecursor(void*)
+static int input_hide_cursor(void*)
 {
     wlr_cursor_unset_image(cursor);
-    cursor_hidden = true;
+    input_cursor_hidden = true;
     return 1;
 }
 
-void inputdevice(struct wl_listener*, void* data)
+void input_handle_new_input(struct wl_listener*, void* data)
 {
     /* This event is raised by the backend when a new input device becomes
      * available. */
@@ -695,48 +713,48 @@ void inputdevice(struct wl_listener*, void* data)
 
     switch (device->type) {
         case WLR_INPUT_DEVICE_KEYBOARD:
-            createkeyboard(wlr_keyboard_from_input_device(device));
+            input_create_keyboard(wlr_keyboard_from_input_device(device));
             break;
         case WLR_INPUT_DEVICE_POINTER:
-            createpointer(wlr_pointer_from_input_device(device));
+            input_create_pointer(wlr_pointer_from_input_device(device));
             break;
         case WLR_INPUT_DEVICE_TABLET:
-            createtablet(wlr_tablet_from_input_device(device));
+            tablet_create(wlr_tablet_from_input_device(device));
             break;
         case WLR_INPUT_DEVICE_TABLET_PAD:
-            createtabletpad(wlr_tablet_pad_from_input_device(device));
+            tablet_create_pad(wlr_tablet_pad_from_input_device(device));
             break;
         case WLR_INPUT_DEVICE_TOUCH:
-            createtouch(wlr_touch_from_input_device(device));
+            tablet_create_touch(wlr_touch_from_input_device(device));
             break;
         default:
             /* switches are ignored */
             break;
     }
-    seatcaps();
+    input_update_seat_caps();
 }
 
-void seatcaps(void)
+void input_update_seat_caps(void)
 {
     /* We need to let the wlr_seat know what our capabilities are, which is
      * communiciated to the client. In g0wm we always have a cursor, even if
      * there are no pointer devices, so we always include that capability. */
     /* TODO do we actually require a cursor? */
     uint32_t caps = WL_SEAT_CAPABILITY_POINTER;
-    if (!kb_group) /* shutting down */
+    if (!keyboard_group) /* shutting down */
         return;
-    if (!wl_list_empty(&kb_group->wlr_group->devices))
+    if (!wl_list_empty(&keyboard_group->wlr_group->devices))
         caps |= WL_SEAT_CAPABILITY_KEYBOARD;
-    if (hastouch())
+    if (tablet_has_touch())
         caps |= WL_SEAT_CAPABILITY_TOUCH;
     wlr_seat_set_capabilities(seat, caps);
 }
 
-static struct wlr_keyboard_shortcuts_inhibitor_v1* focusedinhibitor(void)
+static struct wlr_keyboard_shortcuts_inhibitor_v1* input_focused_inhibitor(void)
 {
     struct wlr_keyboard_shortcuts_inhibitor_v1* inhibitor;
 
-    wl_list_for_each(inhibitor, &kb_inhibit_mgr->inhibitors, link)
+    wl_list_for_each(inhibitor, &keyboard_inhibit_manager->inhibitors, link)
     {
         if (inhibitor->seat == seat &&
             inhibitor->surface == seat->keyboard_state.focused_surface)
@@ -745,7 +763,7 @@ static struct wlr_keyboard_shortcuts_inhibitor_v1* focusedinhibitor(void)
     return nullptr;
 }
 
-static int keybinding(uint32_t mods, xkb_keysym_t sym)
+static int input_key_binding(uint32_t mods, xkb_keysym_t sym)
 {
     /*
      * Here we handle compositor keybindings. This is when the compositor is
@@ -753,13 +771,14 @@ static int keybinding(uint32_t mods, xkb_keysym_t sym)
      * processing.
      */
     const Key* k;
-    struct wlr_keyboard_shortcuts_inhibitor_v1* inhibitor = focusedinhibitor();
+    struct wlr_keyboard_shortcuts_inhibitor_v1* inhibitor =
+        input_focused_inhibitor();
     int inhibited = inhibitor && inhibitor->active;
 
-    for (k = keys; k < keys + nkeys; k++) {
+    for (k = keys; k < keys + key_count; k++) {
         if (CLEANMASK(mods) == CLEANMASK(k->mod) &&
             xkb_keysym_to_lower(sym) == xkb_keysym_to_lower(k->keysym) &&
-            k->func && (!inhibited || k->func == toggleinhibit)) {
+            k->func && (!inhibited || k->func == input_toggle_inhibit)) {
             k->func(&k->arg);
             return 1;
         }
@@ -767,7 +786,7 @@ static int keybinding(uint32_t mods, xkb_keysym_t sym)
     return 0;
 }
 
-static void keypress(struct wl_listener* listener, void* data)
+static void input_handle_key(struct wl_listener* listener, void* data)
 {
     int i;
     /* This event is raised when a key is pressed or released. */
@@ -787,9 +806,9 @@ static void keypress(struct wl_listener* listener, void* data)
     wlr_idle_notifier_v1_notify_activity(idle_notifier, seat);
 
     /* hide cursor when typing starts */
-    if (hide_cursor_when_typing && !cursor_hidden &&
+    if (hide_cursor_when_typing && !input_cursor_hidden &&
         event->state == WL_KEYBOARD_KEY_STATE_PRESSED)
-        hidecursor(nullptr);
+        input_hide_cursor(nullptr);
 
     /* While the prompt is open, every key belongs to it: swallow press and
      * release instead of matching keybindings or forwarding to the client.
@@ -798,24 +817,24 @@ static void keypress(struct wl_listener* listener, void* data)
      * as handled and left a repeat armed, which would replay the binding and
      * toggle the prompt straight back off. */
     if (runner_active) {
-        if (!locked && nsyms > 0 &&
+        if (!lock_active && nsyms > 0 &&
             event->state == WL_KEYBOARD_KEY_STATE_PRESSED) {
             /* only the primary keysym: the codepoint belongs to the key, not
              * to each of the syms it can produce, so looping would type it
              * once per sym */
             uint32_t codepoint = xkb_state_key_get_utf32(
                 group->wlr_group->keyboard.xkb_state, keycode);
-            runnerkey(syms[0], mods, codepoint);
+            runner_key(syms[0], mods, codepoint);
             /* Arm the repeat for the prompt the way a handled binding does,
              * so a held key (backspace above all) repeats into it. Return and
-             * Escape close the prompt from inside runnerkey(), and there is
+             * Escape close the prompt from inside runner_key(), and there is
              * nothing left to repeat into once they have. */
             if (runner_active &&
                 group->wlr_group->keyboard.repeat_info.delay > 0) {
                 group->mods = mods;
                 group->keysyms = syms;
                 group->nsyms = nsyms;
-                runner_repeatcp = codepoint;
+                input_runner_repeat_codepoint = codepoint;
                 runner_repeating = 1;
                 wl_event_source_timer_update(
                     group->key_repeat_source,
@@ -830,7 +849,7 @@ static void keypress(struct wl_listener* listener, void* data)
     }
 
     /* the open menu holds the keyboard, Escape closes it */
-    if (!locked && traypopup_active()) {
+    if (!lock_active && traypopup_active()) {
         if (nsyms > 0 && event->state == WL_KEYBOARD_KEY_STATE_PRESSED &&
             syms[0] == XKB_KEY_Escape)
             traypopup_dismiss();
@@ -839,9 +858,9 @@ static void keypress(struct wl_listener* listener, void* data)
         return;
     }
 
-    if (!locked && notifypicking()) {
+    if (!lock_active && bar_notification_picking()) {
         if (nsyms > 0 && event->state == WL_KEYBOARD_KEY_STATE_PRESSED)
-            notifypickkey(syms[0]);
+            bar_notification_pick_key(syms[0]);
         group->nsyms = 0;
         wl_event_source_timer_update(group->key_repeat_source, 0);
         return;
@@ -849,9 +868,9 @@ static void keypress(struct wl_listener* listener, void* data)
 
     /* On _press_ if there is no active screen locker,
      * attempt to process a compositor keybinding. */
-    if (!locked && event->state == WL_KEYBOARD_KEY_STATE_PRESSED) {
+    if (!lock_active && event->state == WL_KEYBOARD_KEY_STATE_PRESSED) {
         for (i = 0; i < nsyms; i++)
-            handled = keybinding(mods, syms[i]) || handled;
+            handled = input_key_binding(mods, syms[i]) || handled;
     }
 
     if (handled && group->wlr_group->keyboard.repeat_info.delay > 0) {
@@ -869,7 +888,7 @@ static void keypress(struct wl_listener* listener, void* data)
     if (handled)
         return;
 
-    if (textinputkey(group, event))
+    if (textinput_key(group, event))
         return;
 
     wlr_seat_set_keyboard(seat, &group->wlr_group->keyboard);
@@ -878,13 +897,13 @@ static void keypress(struct wl_listener* listener, void* data)
         seat, event->time_msec, event->keycode, event->state);
 }
 
-static void keypressmod(struct wl_listener* listener, void*)
+static void input_handle_modifiers(struct wl_listener* listener, void*)
 {
     /* This event is raised when a modifier key, such as shift or alt, is
      * pressed. We simply communicate this to the client. */
     KeyboardGroup* group = wl_container_of(listener, group, modifiers);
 
-    if (textinputmodifiers(group))
+    if (textinput_modifiers(group))
         return;
 
     wlr_seat_set_keyboard(seat, &group->wlr_group->keyboard);
@@ -893,14 +912,14 @@ static void keypressmod(struct wl_listener* listener, void*)
                                        &group->wlr_group->keyboard.modifiers);
 }
 
-static int keyrepeat(void* data)
+static int input_key_repeat(void* data)
 {
     KeyboardGroup* group = data;
     int i;
     if (!group->nsyms || group->wlr_group->keyboard.repeat_info.rate <= 0)
         return 0;
     /* the repeat of the key that opened the picker would close it */
-    if (notifypicking())
+    if (bar_notification_picking())
         return 0;
     if (runner_active) {
         /* Holding the binding down past the repeat delay would replay it
@@ -909,7 +928,8 @@ static int keyrepeat(void* data)
          * keeps a key that closed the prompt from repeating into nothing. */
         if (!runner_repeating)
             return 0;
-        runnerkey(group->keysyms[0], group->mods, runner_repeatcp);
+        runner_key(
+            group->keysyms[0], group->mods, input_runner_repeat_codepoint);
         if (runner_active)
             wl_event_source_timer_update(
                 group->key_repeat_source,
@@ -924,12 +944,12 @@ static int keyrepeat(void* data)
         1000 / group->wlr_group->keyboard.repeat_info.rate);
 
     for (i = 0; i < group->nsyms; i++)
-        keybinding(group->mods, group->keysyms[i]);
+        input_key_binding(group->mods, group->keysyms[i]);
 
     return 0;
 }
 
-void motionabsolute(struct wl_listener*, void* data)
+void input_handle_motion_absolute(struct wl_listener*, void* data)
 {
     /* This event is forwarded by the cursor when a pointer emits an _absolute_
      * motion event, from 0..1 on each axis. This happens, for example, when
@@ -948,32 +968,33 @@ void motionabsolute(struct wl_listener*, void* data)
         cursor, &event->pointer->base, event->x, event->y, &lx, &ly);
     dx = lx - cursor->x;
     dy = ly - cursor->y;
-    motionnotify(event->time_msec, &event->pointer->base, dx, dy, dx, dy);
+    input_motion(event->time_msec, &event->pointer->base, dx, dy, dx, dy);
 }
 
-void cursormoved(void)
+void input_cursor_moved(void)
 {
-    Monitor* m = xytomon(cursor->x, cursor->y);
+    Monitor* m = monitor_at(cursor->x, cursor->y);
 
     wlr_idle_notifier_v1_notify_activity(idle_notifier, seat);
-    handlecursoractivity();
+    input_cursor_activity();
 
     /* the part of a zoomed monitor on show follows the pointer */
     if (m && m->zoom > 1)
         wlr_output_schedule_frame(m->wlr_output);
 
-    /* Update selmon (even while dragging a window) */
-    if (sloppyfocus) {
-        Monitor* old = selmon;
-        selmon = xytomon(cursor->x, cursor->y);
+    /* Update selected_monitor (even while dragging a window) */
+    if (sloppy_focus) {
+        Monitor* old = selected_monitor;
+        selected_monitor = monitor_at(cursor->x, cursor->y);
         /* the single bar follows the focus, and crossing into empty
-         * space changes it without going through focusclient() */
-        if ((barsinglemon || barstatus == BarStatusFocus) && selmon != old)
-            drawbars();
+         * space changes it without going through client_focus() */
+        if ((bar_single_monitor || bar_status == BarStatusFocus) &&
+            selected_monitor != old)
+            bar_draw_all();
     }
 }
 
-void motionnotify(uint32_t time,
+void input_motion(uint32_t time,
                   struct wlr_input_device* device,
                   double dx,
                   double dy,
@@ -988,13 +1009,12 @@ void motionnotify(uint32_t time,
     struct wlr_box box;
 
     /* Find the client under the pointer and send the event along. */
-    xytonode(cursor->x, cursor->y, &surface, &c, nullptr, &sx, &sy);
-    titlehover(c, cursor->x, cursor->y);
+    input_node_at(cursor->x, cursor->y, &surface, &c, nullptr, &sx, &sy);
+    bar_title_hover(c, cursor->x, cursor->y);
 
-    if (cursor_mode == CurPressed && !seat->drag &&
+    if (input_cursor_mode == CurPressed && !seat->drag &&
         surface != seat->pointer_state.focused_surface &&
-        toplevel_from_wlr_surface(
-            seat->pointer_state.focused_surface, &w, &l) >= 0) {
+        client_from_surface(seat->pointer_state.focused_surface, &w, &l) >= 0) {
         c = w;
         surface = seat->pointer_state.focused_surface;
         sx = cursor->x - (l ? l->scene->node.x : w->geom.x);
@@ -1004,7 +1024,7 @@ void motionnotify(uint32_t time,
     /* time is 0 in internal calls meant to restore pointer focus. */
     if (time) {
         wlr_relative_pointer_manager_v1_send_relative_motion(
-            relative_pointer_mgr,
+            relative_pointer_manager,
             seat,
             (uint64_t)time * 1000,
             dx,
@@ -1013,19 +1033,19 @@ void motionnotify(uint32_t time,
             dy_unaccel);
 
         wl_list_for_each(constraint, &pointer_constraints->constraints, link)
-            cursorconstrain(constraint);
+            input_cursor_constrain(constraint);
 
-        if (active_constraint && cursor_mode != CurResize &&
-            cursor_mode != CurMove) {
+        if (input_active_constraint && input_cursor_mode != CurResize &&
+            input_cursor_mode != CurMove) {
             /* own variable: c is the client under the cursor, and the
              * constraint may sit on an unmapped one (gamescope) */
             Client* cc = nullptr;
-            toplevel_from_wlr_surface(active_constraint->surface, &cc, nullptr);
-            if (cc && active_constraint->surface ==
+            client_from_surface(input_active_constraint->surface, &cc, nullptr);
+            if (cc && input_active_constraint->surface ==
                           seat->pointer_state.focused_surface) {
                 sx = cursor->x - cc->geom.x - cc->bw;
                 sy = cursor->y - cc->geom.y - cc->bw;
-                if (wlr_region_confine(&active_constraint->region,
+                if (wlr_region_confine(&input_active_constraint->region,
                                        sx,
                                        sy,
                                        sx + dx,
@@ -1036,13 +1056,14 @@ void motionnotify(uint32_t time,
                     dy = sy_confined - sy;
                 }
 
-                if (active_constraint->type == WLR_POINTER_CONSTRAINT_V1_LOCKED)
+                if (input_active_constraint->type ==
+                    WLR_POINTER_CONSTRAINT_V1_LOCKED)
                     return;
             }
         }
 
         wlr_cursor_move(cursor, device, dx, dy);
-        cursormoved();
+        input_cursor_moved();
     }
 
     /* Update drag icon's position */
@@ -1050,46 +1071,49 @@ void motionnotify(uint32_t time,
         &drag_icon->node, (int)round(cursor->x), (int)round(cursor->y));
 
     /* hovering the open menu, so nothing below it takes focus */
-    if (!locked && traypopup_active()) {
+    if (!lock_active && traypopup_active()) {
         traypopup_motion(cursor->x, cursor->y);
-        if (!seat->drag && !cursor_hidden)
-            wlr_cursor_set_xcursor(cursor, cursor_mgr, "default");
+        if (!seat->drag && !input_cursor_hidden)
+            wlr_cursor_set_xcursor(cursor, cursor_manager, "default");
         return;
     }
 
-    if (cursor_mode == CurPressed && grabc && time && !locked &&
-        (cursor->x - pressx) * (cursor->x - pressx) +
-                (cursor->y - pressy) * (cursor->y - pressy) >=
-            movethreshold * movethreshold)
-        grab(grabc, CurMove);
+    if (input_cursor_mode == CurPressed && input_grab_client && time &&
+        !lock_active &&
+        (cursor->x - input_press_x) * (cursor->x - input_press_x) +
+                (cursor->y - input_press_y) * (cursor->y - input_press_y) >=
+            move_threshold * move_threshold)
+        input_grab(input_grab_client, CurMove);
 
     /* If we are currently grabbing the mouse, handle and return */
-    if (cursor_mode == CurMove) {
+    if (input_cursor_mode == CurMove) {
         /* A tiled client keeps its slot in the layout: dragging it just swaps
          * it with the tile under the cursor, i3/sway style. */
-        if (!grabc->isfloating) {
-            if (time && c && c != grabc && !c->isfloating &&
-                c->mon == grabc->mon && VISIBLEON(grabc, grabc->mon)) {
-                swapclients(grabc, c);
-                arrange(grabc->mon);
+        if (!input_grab_client->isfloating) {
+            if (time && c && c != input_grab_client && !c->isfloating &&
+                c->mon == input_grab_client->mon &&
+                VISIBLEON(input_grab_client, input_grab_client->mon)) {
+                layout_swap_clients(input_grab_client, c);
+                layout_arrange(input_grab_client->mon);
             }
             return;
         }
         /* Move the grabbed client to the new position. */
-        box = (struct wlr_box){ .x = (int)round(cursor->x) - grabcx,
-                                .y = (int)round(cursor->y) - grabcy,
-                                .width = grabc->geom.width,
-                                .height = grabc->geom.height };
-        magnet(&box);
-        resize(grabc, box, 1);
+        box = (struct wlr_box){ .x = (int)round(cursor->x) - input_grab_x,
+                                .y = (int)round(cursor->y) - input_grab_y,
+                                .width = input_grab_client->geom.width,
+                                .height = input_grab_client->geom.height };
+        input_magnet(&box);
+        client_resize(input_grab_client, box, 1);
         return;
-    } else if (cursor_mode == CurResize) {
-        resize(
-            grabc,
-            (struct wlr_box){ .x = grabc->geom.x,
-                              .y = grabc->geom.y,
-                              .width = (int)round(cursor->x) - grabc->geom.x,
-                              .height = (int)round(cursor->y) - grabc->geom.y },
+    } else if (input_cursor_mode == CurResize) {
+        client_resize(
+            input_grab_client,
+            (struct wlr_box){
+                .x = input_grab_client->geom.x,
+                .y = input_grab_client->geom.y,
+                .width = (int)round(cursor->x) - input_grab_client->geom.x,
+                .height = (int)round(cursor->y) - input_grab_client->geom.y },
             1);
         return;
     }
@@ -1097,13 +1121,13 @@ void motionnotify(uint32_t time,
     /* If there's no client surface under the cursor, set the cursor image to a
      * default. This is what makes the cursor image appear when you move it
      * off of a client or over its border. */
-    if (!surface && !seat->drag && !cursor_hidden)
-        wlr_cursor_set_xcursor(cursor, cursor_mgr, "default");
+    if (!surface && !seat->drag && !input_cursor_hidden)
+        wlr_cursor_set_xcursor(cursor, cursor_manager, "default");
 
-    pointerfocus(c, surface, sx, sy, time);
+    input_pointer_focus(c, surface, sx, sy, time);
 }
 
-void motionrelative(struct wl_listener*, void* data)
+void input_handle_motion(struct wl_listener*, void* data)
 {
     /* This event is forwarded by the cursor when a pointer emits a _relative_
      * pointer motion event (i.e. a delta) */
@@ -1113,7 +1137,7 @@ void motionrelative(struct wl_listener*, void* data)
      * special configuration applied for the specific input device which
      * generated the event. You can pass nullptr for the device if you want to
      * move the cursor around without any input. */
-    motionnotify(event->time_msec,
+    input_motion(event->time_msec,
                  &event->pointer->base,
                  event->delta_x,
                  event->delta_y,
@@ -1121,45 +1145,46 @@ void motionrelative(struct wl_listener*, void* data)
                  event->unaccel_dy);
 }
 
-void moveresize(const Arg* arg)
+void input_move_resize(const Arg* arg)
 {
     Client* c;
 
-    if (cursor_mode != CurNormal && cursor_mode != CurPressed)
+    if (input_cursor_mode != CurNormal && input_cursor_mode != CurPressed)
         return;
-    xytonode(cursor->x, cursor->y, nullptr, &c, nullptr, nullptr, nullptr);
-    pressx = cursor->x;
-    pressy = cursor->y;
-    grab(c, arg->ui);
+    input_node_at(cursor->x, cursor->y, nullptr, &c, nullptr, nullptr, nullptr);
+    input_press_x = cursor->x;
+    input_press_y = cursor->y;
+    input_grab(c, arg->ui);
 }
 
-/* Moving c from the title bar waits for movethreshold of motion, so a plain
- * click stays a click: until then grabc is set but cursor_mode is CurPressed.
+/* Moving c from the title bar waits for move_threshold of motion, so a plain
+ * click stays a click: until then input_grab_client is set but
+ * input_cursor_mode is CurPressed.
  */
-void titlegrab(Client* c)
+void input_title_grab(Client* c)
 {
-    grabc = c;
-    pressx = cursor->x;
-    pressy = cursor->y;
+    input_grab_client = c;
+    input_press_x = cursor->x;
+    input_press_y = cursor->y;
 }
 
-static void grab(Client* c, unsigned int mode)
+static void input_grab(Client* c, unsigned int mode)
 {
-    grabc = nullptr;
+    input_grab_client = nullptr;
     if (!c || client_is_unmanaged(c) || c->isfullscreen)
         return;
-    grabc = c;
+    input_grab_client = c;
 
-    /* Float the window and tell motionnotify to grab it - except when moving a
+    /* Float the window and tell input_motion to grab it - except when moving a
      * tiled client, which stays tiled and is swapped with the tile it is
      * dragged onto instead. */
     if (mode != CurMove || c->isfloating || !c->mon)
-        setfloating(c, 1);
-    switch (cursor_mode = mode) {
+        client_set_floating(c, 1);
+    switch (input_cursor_mode = mode) {
         case CurMove:
-            grabcx = (int)round(pressx) - c->geom.x;
-            grabcy = (int)round(pressy) - c->geom.y;
-            wlr_cursor_set_xcursor(cursor, cursor_mgr, "grabbing");
+            input_grab_x = (int)round(input_press_x) - c->geom.x;
+            input_grab_y = (int)round(input_press_y) - c->geom.y;
+            wlr_cursor_set_xcursor(cursor, cursor_manager, "grabbing");
             break;
         case CurResize:
             /* Doesn't work for X11 output - the next absolute motion event
@@ -1168,24 +1193,24 @@ static void grab(Client* c, unsigned int mode)
                                     nullptr,
                                     c->geom.x + c->geom.width,
                                     c->geom.y + c->geom.height);
-            wlr_cursor_set_xcursor(cursor, cursor_mgr, "se-resize");
+            wlr_cursor_set_xcursor(cursor, cursor_manager, "se-resize");
             break;
     }
 }
 
-static void pointerfocus(Client* c,
-                         struct wlr_surface* surface,
-                         double sx,
-                         double sy,
-                         uint32_t time)
+static void input_pointer_focus(Client* c,
+                                struct wlr_surface* surface,
+                                double sx,
+                                double sy,
+                                uint32_t time)
 {
     struct timespec now;
 
     /* Only a real client surface takes focus: hovering a title bar (a tab) or
      * a border has no surface, and must not select anything until clicked. */
     if (surface && surface != seat->pointer_state.focused_surface &&
-        sloppyfocus && time && c && !client_is_unmanaged(c))
-        focusclient(c, 0);
+        sloppy_focus && time && c && !client_is_unmanaged(c))
+        client_focus(c, 0);
 
     /* If surface is NULL, clear pointer focus */
     if (!surface) {
@@ -1205,7 +1230,7 @@ static void pointerfocus(Client* c,
     wlr_seat_pointer_notify_motion(seat, time, sx, sy);
 }
 
-void requeststartdrag(struct wl_listener*, void* data)
+void input_handle_request_start_drag(struct wl_listener*, void* data)
 {
     struct wlr_seat_request_start_drag_event* event = data;
     struct wlr_touch_point* point;
@@ -1220,15 +1245,15 @@ void requeststartdrag(struct wl_listener*, void* data)
         wlr_data_source_destroy(event->drag->source);
 }
 
-static void unlastcursor(struct wl_listener*, void*)
+static void input_handle_last_cursor_destroy(struct wl_listener*, void*)
 {
     /* When the surface is destroyed, clear our reference to it */
-    last_cursor.surface = nullptr;
-    wl_list_remove(&last_cursor.destroy.link);
-    wl_list_init(&last_cursor.destroy.link);
+    input_last_cursor.surface = nullptr;
+    wl_list_remove(&input_last_cursor.destroy.link);
+    wl_list_init(&input_last_cursor.destroy.link);
 }
 
-void setcursor(struct wl_listener*, void* data)
+void input_handle_request_cursor(struct wl_listener*, void* data)
 {
     /* This event is raised by the seat when a client provides a cursor image */
     struct wlr_seat_pointer_request_set_cursor_event* event = data;
@@ -1236,7 +1261,7 @@ void setcursor(struct wl_listener*, void* data)
      * restore it after "grabbing" sending a leave event, followed by a enter
      * event, which will result in the client requesting set the cursor surface
      */
-    if (cursor_mode != CurNormal && cursor_mode != CurPressed)
+    if (input_cursor_mode != CurNormal && input_cursor_mode != CurPressed)
         return;
     /* This can be sent by any client, so we check to make sure this one
      * actually has pointer focus first. If so, we can tell the cursor to
@@ -1244,50 +1269,53 @@ void setcursor(struct wl_listener*, void* data)
      * hardware cursor on the output that it's currently on and continue to
      * do so as the cursor moves between outputs. */
     if (event->seat_client == seat->pointer_state.focused_client)
-        setclientcursor(event->surface, event->hotspot_x, event->hotspot_y);
+        input_set_client_cursor(
+            event->surface, event->hotspot_x, event->hotspot_y);
 }
 
-void setclientcursor(struct wlr_surface* surface, int hotspot_x, int hotspot_y)
+void input_set_client_cursor(struct wlr_surface* surface,
+                             int hotspot_x,
+                             int hotspot_y)
 {
-    last_cursor.shape = 0;
-    last_cursor.surface = surface;
-    last_cursor.has_client_cursor = true;
-    last_cursor.hotspot_x = hotspot_x;
-    last_cursor.hotspot_y = hotspot_y;
+    input_last_cursor.shape = 0;
+    input_last_cursor.surface = surface;
+    input_last_cursor.has_client_cursor = true;
+    input_last_cursor.hotspot_x = hotspot_x;
+    input_last_cursor.hotspot_y = hotspot_y;
 
-    wl_list_remove(&last_cursor.destroy.link);
-    wl_list_init(&last_cursor.destroy.link);
+    wl_list_remove(&input_last_cursor.destroy.link);
+    wl_list_init(&input_last_cursor.destroy.link);
     if (surface) {
-        last_cursor.destroy.notify = unlastcursor;
-        wl_signal_add(&surface->events.destroy, &last_cursor.destroy);
+        input_last_cursor.destroy.notify = input_handle_last_cursor_destroy;
+        wl_signal_add(&surface->events.destroy, &input_last_cursor.destroy);
     }
 
-    if (!cursor_hidden)
+    if (!input_cursor_hidden)
         wlr_cursor_set_surface(cursor, surface, hotspot_x, hotspot_y);
 }
 
-void setcursorshape(struct wl_listener*, void* data)
+void input_handle_request_cursor_shape(struct wl_listener*, void* data)
 {
     struct wlr_cursor_shape_manager_v1_request_set_shape_event* event = data;
-    if (cursor_mode != CurNormal && cursor_mode != CurPressed)
+    if (input_cursor_mode != CurNormal && input_cursor_mode != CurPressed)
         return;
     /* This can be sent by any client, so we check to make sure this one
      * actually has pointer (or pen) focus first. If so, we can tell the
      * cursor to use the provided cursor shape. */
     if (event->device_type ==
                 WLR_CURSOR_SHAPE_MANAGER_V1_DEVICE_TYPE_TABLET_TOOL
-            ? toolfocusedby(event->tablet_tool, event->seat_client)
+            ? tablet_tool_focused_by(event->tablet_tool, event->seat_client)
             : event->seat_client == seat->pointer_state.focused_client) {
-        last_cursor.shape = event->shape;
-        last_cursor.surface = nullptr;
+        input_last_cursor.shape = event->shape;
+        input_last_cursor.surface = nullptr;
 
-        if (!cursor_hidden)
+        if (!input_cursor_hidden)
             wlr_cursor_set_xcursor(
-                cursor, cursor_mgr, wlr_cursor_shape_v1_name(event->shape));
+                cursor, cursor_manager, wlr_cursor_shape_v1_name(event->shape));
     }
 }
 
-void setpsel(struct wl_listener*, void* data)
+void input_handle_request_primary_selection(struct wl_listener*, void* data)
 {
     /* This event is raised by the seat when a client wants to set the
      * selection, usually when the user copies something. wlroots allows
@@ -1298,7 +1326,7 @@ void setpsel(struct wl_listener*, void* data)
     wlr_seat_set_primary_selection(seat, event->source, event->serial);
 }
 
-void setsel(struct wl_listener*, void* data)
+void input_handle_request_selection(struct wl_listener*, void* data)
 {
     /* This event is raised by the seat when a client wants to set the
      * selection, usually when the user copies something. wlroots allows
@@ -1309,19 +1337,20 @@ void setsel(struct wl_listener*, void* data)
     wlr_seat_set_selection(seat, event->source, event->serial);
 }
 
-void startdrag(struct wl_listener*, void* data)
+void input_handle_start_drag(struct wl_listener*, void* data)
 {
     struct wlr_drag* drag = data;
     if (!drag->icon)
         return;
 
     drag->icon->data = &wlr_scene_drag_icon_create(drag_icon, drag->icon)->node;
-    LISTEN_STATIC(&drag->icon->events.destroy, destroydragicon);
+    LISTEN_STATIC(&drag->icon->events.destroy, input_handle_drag_icon_destroy);
 }
 
-void toggleinhibit(const Arg*)
+void input_toggle_inhibit(const Arg*)
 {
-    struct wlr_keyboard_shortcuts_inhibitor_v1* inhibitor = focusedinhibitor();
+    struct wlr_keyboard_shortcuts_inhibitor_v1* inhibitor =
+        input_focused_inhibitor();
 
     if (!inhibitor)
         return;
@@ -1331,23 +1360,23 @@ void toggleinhibit(const Arg*)
         wlr_keyboard_shortcuts_inhibitor_v1_activate(inhibitor);
 }
 
-void virtualkeyboard(struct wl_listener*, void* data)
+void input_handle_new_virtual_keyboard(struct wl_listener*, void* data)
 {
     struct wlr_virtual_keyboard_v1* kb = data;
     /* virtual keyboards shouldn't share keyboard group */
-    KeyboardGroup* group = createkeyboardgroup();
+    KeyboardGroup* group = input_create_keyboard_group();
     group->vkb = kb;
     /* Set the keymap to match the group keymap */
     wlr_keyboard_set_keymap(&kb->keyboard, group->wlr_group->keyboard.keymap);
     LISTEN(&kb->keyboard.base.events.destroy,
            &group->destroy,
-           destroykeyboardgroup);
+           input_handle_keyboard_group_destroy);
 
     /* Add the new keyboard to the group */
     wlr_keyboard_group_add_keyboard(group->wlr_group, &kb->keyboard);
 }
 
-void virtualpointer(struct wl_listener*, void* data)
+void input_handle_new_virtual_pointer(struct wl_listener*, void* data)
 {
     struct wlr_virtual_pointer_v1_new_pointer_event* event = data;
     struct wlr_input_device* device = &event->new_pointer->pointer.base;
@@ -1359,29 +1388,32 @@ void virtualpointer(struct wl_listener*, void* data)
 
 /* Sticks a moved floating window to the nearby edges of the window area and
  * of the floating windows beside it */
-static void magnet(struct wlr_box* b)
+static void input_magnet(struct wlr_box* b)
 {
-    Monitor* m = xytomon(cursor->x, cursor->y);
+    Monitor* m = monitor_at(cursor->x, cursor->y);
     Client* c;
-    int dx = movesnap + 1, dy = movesnap + 1, x = b->x, y = b->y;
+    int dx = move_snap + 1, dy = move_snap + 1, x = b->x, y = b->y;
 
-    if (!m || movesnap <= 0)
+    if (!m || move_snap <= 0)
         return;
-    magnetedge(b->x, b->width, m->w.x, &dx, &x);
-    magnetedge(b->x, b->width, m->w.x + m->w.width, &dx, &x);
-    magnetedge(b->y, b->height, m->w.y, &dy, &y);
-    magnetedge(b->y, b->height, m->w.y + m->w.height, &dy, &y);
+    input_magnet_edge(b->x, b->width, m->w.x, &dx, &x);
+    input_magnet_edge(b->x, b->width, m->w.x + m->w.width, &dx, &x);
+    input_magnet_edge(b->y, b->height, m->w.y, &dy, &y);
+    input_magnet_edge(b->y, b->height, m->w.y + m->w.height, &dy, &y);
     wl_list_for_each(c, &clients, link)
     {
-        if (c == grabc || !c->isfloating || c->isfullscreen || !VISIBLEON(c, m))
+        if (c == input_grab_client || !c->isfloating || c->isfullscreen ||
+            !VISIBLEON(c, m))
             continue;
         if (b->y < c->geom.y + c->geom.height && c->geom.y < b->y + b->height) {
-            magnetedge(b->x, b->width, c->geom.x, &dx, &x);
-            magnetedge(b->x, b->width, c->geom.x + c->geom.width, &dx, &x);
+            input_magnet_edge(b->x, b->width, c->geom.x, &dx, &x);
+            input_magnet_edge(
+                b->x, b->width, c->geom.x + c->geom.width, &dx, &x);
         }
         if (b->x < c->geom.x + c->geom.width && c->geom.x < b->x + b->width) {
-            magnetedge(b->y, b->height, c->geom.y, &dy, &y);
-            magnetedge(b->y, b->height, c->geom.y + c->geom.height, &dy, &y);
+            input_magnet_edge(b->y, b->height, c->geom.y, &dy, &y);
+            input_magnet_edge(
+                b->y, b->height, c->geom.y + c->geom.height, &dy, &y);
         }
     }
     b->x = x;
@@ -1389,7 +1421,7 @@ static void magnet(struct wlr_box* b)
 }
 
 /* Either side of [pos, pos + size) onto edge, if closer than *dist */
-static void magnetedge(int pos, int size, int edge, int* dist, int* to)
+static void input_magnet_edge(int pos, int size, int edge, int* dist, int* to)
 {
     if (abs(edge - pos) < *dist) {
         *dist = abs(edge - pos);
@@ -1401,16 +1433,17 @@ static void magnetedge(int pos, int size, int edge, int* dist, int* to)
     }
 }
 
-void warpcursor(const Client* c)
+void input_warp_cursor(const Client* c)
 {
-    if (cursor_mode != CurNormal)
+    if (input_cursor_mode != CurNormal)
         return;
 
-    if (!c && selmon) {
-        wlr_cursor_warp_closest(cursor,
-                                nullptr,
-                                selmon->w.x + selmon->w.width / 2.0,
-                                selmon->w.y + selmon->w.height / 2.0);
+    if (!c && selected_monitor) {
+        wlr_cursor_warp_closest(
+            cursor,
+            nullptr,
+            selected_monitor->w.x + selected_monitor->w.width / 2.0,
+            selected_monitor->w.y + selected_monitor->w.height / 2.0);
     } else if (c && (cursor->x < c->geom.x ||
                      cursor->x > c->geom.x + c->geom.width ||
                      cursor->y < c->geom.y ||
@@ -1425,7 +1458,7 @@ void warpcursor(const Client* c)
 /* Runs the button bound to the wheel, if any. A notch is 120 in value120,
  * smooth scrolling without notches counts one every 15 units, the angle
  * libinput gives a notch, so a touchpad steps at about a wheel's pace. */
-static int wheelbinding(const struct wlr_pointer_axis_event* event)
+static int input_wheel_binding(const struct wlr_pointer_axis_event* event)
 {
     static double notches;
     double step = event->delta_discrete ? event->delta_discrete / 120.0
@@ -1439,10 +1472,11 @@ static int wheelbinding(const struct wlr_pointer_axis_event* event)
     Client* c;
     Arg arg;
 
-    xytonode(cursor->x, cursor->y, nullptr, &c, nullptr, nullptr, nullptr);
-    click = c ? ClkClient : barclick(xytomon(cursor->x, cursor->y), &arg);
-    title = c && ontitle(c, cursor->x, cursor->y);
-    for (b = buttons; b < buttons + nbuttons; b++) {
+    input_node_at(cursor->x, cursor->y, nullptr, &c, nullptr, nullptr, nullptr);
+    click =
+        c ? ClkClient : input_bar_click(monitor_at(cursor->x, cursor->y), &arg);
+    title = c && bar_on_title_bar(c, cursor->x, cursor->y);
+    for (b = buttons; b < buttons + button_count; b++) {
         if (CLEANMASK(mods) != CLEANMASK(b->mod) || b->button != wheel ||
             (b->click != click && !(b->click == ClkWinTitle && title)) ||
             !b->func)
@@ -1451,24 +1485,24 @@ static int wheelbinding(const struct wlr_pointer_axis_event* event)
             notches = 0;
         /* pressed, as for a click, so focusing does not warp the pointer
          * away from where it scrolls */
-        mode = cursor_mode;
-        cursor_mode = CurPressed;
+        mode = input_cursor_mode;
+        input_cursor_mode = CurPressed;
         for (notches += step; fabs(notches) >= 1;
              notches -= notches < 0 ? -1 : 1)
             b->func(&b->arg);
-        cursor_mode = mode;
+        input_cursor_mode = mode;
         return 1;
     }
     return 0;
 }
 
-void xytonode(double x,
-              double y,
-              struct wlr_surface** psurface,
-              Client** pc,
-              LayerSurface** pl,
-              double* nx,
-              double* ny)
+void input_node_at(double x,
+                   double y,
+                   struct wlr_surface** psurface,
+                   Client** pc,
+                   LayerSurface** pl,
+                   double* nx,
+                   double* ny)
 {
     struct wlr_scene_node *node, *pnode;
     struct wlr_surface* surface = nullptr;

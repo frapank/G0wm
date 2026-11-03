@@ -25,10 +25,11 @@
 constexpr float ZOOMMAX = 16.0f;
 
 /* function declarations */
-static void wholedamage(struct wlr_output* o, struct wlr_output_state* state);
+static void magnifier_damage_whole(struct wlr_output* o,
+                                   struct wlr_output_state* state);
 
 /* function implementations */
-void magnifierdrop(Monitor* m)
+void magnifier_drop(Monitor* m)
 {
     wlr_texture_destroy(m->zoomtex);
     wlr_buffer_unlock(m->zoombuf);
@@ -40,7 +41,7 @@ void magnifierdrop(Monitor* m)
 
 /* The frame of a zoomed monitor, or of one just leaving the zoom. 0 when
  * there is nothing new to show. */
-int magnifierframe(Monitor* m, struct wlr_output_state* state)
+int magnifier_frame(Monitor* m, struct wlr_output_state* state)
 {
     struct wlr_output* o = m->wlr_output;
     struct wlr_scene_output_state_options opts = {};
@@ -51,11 +52,11 @@ int magnifierframe(Monitor* m, struct wlr_output_state* state)
 
     if (m->zoom <= 1) {
         /* the output's own buffers still hold zoomed frames */
-        magnifierdrop(m);
+        magnifier_drop(m);
         wlr_damage_ring_add_whole(&m->scene_output->damage_ring);
         if (!wlr_scene_output_build_state(m->scene_output, state, nullptr))
             return 0;
-        wholedamage(o, state);
+        magnifier_damage_whole(o, state);
         return 1;
     }
 
@@ -63,11 +64,11 @@ int magnifierframe(Monitor* m, struct wlr_output_state* state)
         return 0;
     if (!m->zoomchain || m->zoomchain->width != o->width ||
         m->zoomchain->height != o->height) {
-        magnifierdrop(m);
+        magnifier_drop(m);
         /* ponytail: the output's format, taken to be one the renderer can
          * sample too; intersect with its texture formats if one is not */
         if (!(m->zoomchain = wlr_swapchain_create(
-                  alloc, o->width, o->height, &o->swapchain->format)))
+                  allocator, o->width, o->height, &o->swapchain->format)))
             return 0;
     }
 
@@ -95,7 +96,7 @@ int magnifierframe(Monitor* m, struct wlr_output_state* state)
         wlr_texture_destroy(m->zoomtex);
         wlr_buffer_unlock(m->zoombuf);
         m->zoombuf = wlr_buffer_lock(state->buffer);
-        if (!(m->zoomtex = wlr_texture_from_buffer(drw, m->zoombuf))) {
+        if (!(m->zoomtex = wlr_texture_from_buffer(renderer, m->zoombuf))) {
             wlr_log(WLR_ERROR, "magnifier: cannot draw from the frame");
             return 0;
         }
@@ -117,16 +118,16 @@ int magnifierframe(Monitor* m, struct wlr_output_state* state)
         });
     if (!wlr_render_pass_submit(pass))
         return 0;
-    wholedamage(o, state);
+    magnifier_damage_whole(o, state);
     return 1;
 }
 
-void magnify(const Arg* arg)
+void magnifier_magnify(const Arg* arg)
 {
-    Monitor* m = xytomon(cursor->x, cursor->y);
+    Monitor* m = monitor_at(cursor->x, cursor->y);
     float z;
 
-    if (!m && !(m = selmon))
+    if (!m && !(m = selected_monitor))
         return;
 
     /* a step and its opposite cancel out: +0.25 is x1.25, -0.25 is /1.25 */
@@ -136,10 +137,10 @@ void magnify(const Arg* arg)
         z = m->zoom * (1 + arg->f);
     else
         z = m->zoom / (1 - arg->f);
-    magnifierzoom(m, z);
+    magnifier_zoom(m, z);
 }
 
-void magnifierzoom(Monitor* m, float z)
+void magnifier_zoom(Monitor* m, float z)
 {
     z = z < 1.01f ? 1 : z > ZOOMMAX ? ZOOMMAX : z;
     if (z == m->zoom)
@@ -155,7 +156,8 @@ void magnifierzoom(Monitor* m, float z)
     wlr_output_schedule_frame(m->wlr_output);
 }
 
-static void wholedamage(struct wlr_output* o, struct wlr_output_state* state)
+static void magnifier_damage_whole(struct wlr_output* o,
+                                   struct wlr_output_state* state)
 {
     pixman_region32_t damage;
 

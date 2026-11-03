@@ -51,55 +51,63 @@ struct last_cursor_state {
     struct wl_listener destroy;
 };
 
-void axisnotify(struct wl_listener* listener, void* data);
-void buttonpress(struct wl_listener* listener, void* data);
-void createkbinhibitor(struct wl_listener* listener, void* data);
-KeyboardGroup* createkeyboardgroup(void);
-void createpointerconstraint(struct wl_listener* listener, void* data);
-void cursorframe(struct wl_listener* listener, void* data);
-void cursormoved(void);
-void destroykeyboardgroup(struct wl_listener* listener, void* data);
-void holdbegin(struct wl_listener* listener, void* data);
-void holdend(struct wl_listener* listener, void* data);
-void inputdevice(struct wl_listener* listener, void* data);
-void motionabsolute(struct wl_listener* listener, void* data);
-void motionnotify(uint32_t time,
+void input_handle_axis(struct wl_listener* listener, void* data);
+void input_handle_button(struct wl_listener* listener, void* data);
+void input_handle_new_keyboard_inhibitor(struct wl_listener* listener,
+                                         void* data);
+KeyboardGroup* input_create_keyboard_group(void);
+void input_handle_new_pointer_constraint(struct wl_listener* listener,
+                                         void* data);
+void input_handle_frame(struct wl_listener* listener, void* data);
+void input_cursor_moved(void);
+void input_handle_keyboard_group_destroy(struct wl_listener* listener,
+                                         void* data);
+void input_handle_hold_begin(struct wl_listener* listener, void* data);
+void input_handle_hold_end(struct wl_listener* listener, void* data);
+void input_handle_new_input(struct wl_listener* listener, void* data);
+void input_handle_motion_absolute(struct wl_listener* listener, void* data);
+void input_motion(uint32_t time,
                   struct wlr_input_device* device,
                   double sx,
                   double sy,
                   double sx_unaccel,
                   double sy_unaccel);
-void motionrelative(struct wl_listener* listener, void* data);
-void moveresize(const Arg* arg);
-void pinchbegin(struct wl_listener* listener, void* data);
-void pinchend(struct wl_listener* listener, void* data);
-void pinchupdate(struct wl_listener* listener, void* data);
-void requeststartdrag(struct wl_listener* listener, void* data);
-void seatcaps(void);
-void setclientcursor(struct wlr_surface* surface, int hotspot_x, int hotspot_y);
-void setcursor(struct wl_listener* listener, void* data);
-void setcursorshape(struct wl_listener* listener, void* data);
-void setpsel(struct wl_listener* listener, void* data);
-void setsel(struct wl_listener* listener, void* data);
-void startdrag(struct wl_listener* listener, void* data);
-void swipebegin(struct wl_listener* listener, void* data);
-void swipeend(struct wl_listener* listener, void* data);
-void swipeupdate(struct wl_listener* listener, void* data);
-void titlegrab(Client* c);
-void toggleinhibit(const Arg* arg);
-void virtualkeyboard(struct wl_listener* listener, void* data);
-void virtualpointer(struct wl_listener* listener, void* data);
-void warpcursor(const Client* c);
-void xytonode(double x,
-              double y,
-              struct wlr_surface** psurface,
-              Client** pc,
-              LayerSurface** pl,
-              double* nx,
-              double* ny);
+void input_handle_motion(struct wl_listener* listener, void* data);
+void input_move_resize(const Arg* arg);
+void input_handle_pinch_begin(struct wl_listener* listener, void* data);
+void input_handle_pinch_end(struct wl_listener* listener, void* data);
+void input_handle_pinch_update(struct wl_listener* listener, void* data);
+void input_handle_request_start_drag(struct wl_listener* listener, void* data);
+void input_update_seat_caps(void);
+void input_set_client_cursor(struct wlr_surface* surface,
+                             int hotspot_x,
+                             int hotspot_y);
+void input_handle_request_cursor(struct wl_listener* listener, void* data);
+void input_handle_request_cursor_shape(struct wl_listener* listener,
+                                       void* data);
+void input_handle_request_primary_selection(struct wl_listener* listener,
+                                            void* data);
+void input_handle_request_selection(struct wl_listener* listener, void* data);
+void input_handle_start_drag(struct wl_listener* listener, void* data);
+void input_handle_swipe_begin(struct wl_listener* listener, void* data);
+void input_handle_swipe_end(struct wl_listener* listener, void* data);
+void input_handle_swipe_update(struct wl_listener* listener, void* data);
+void input_title_grab(Client* c);
+void input_toggle_inhibit(const Arg* arg);
+void input_handle_new_virtual_keyboard(struct wl_listener* listener,
+                                       void* data);
+void input_handle_new_virtual_pointer(struct wl_listener* listener, void* data);
+void input_warp_cursor(const Client* c);
+void input_node_at(double x,
+                   double y,
+                   struct wlr_surface** psurface,
+                   Client** pc,
+                   LayerSurface** pl,
+                   double* nx,
+                   double* ny);
 
-extern struct last_cursor_state last_cursor;
-extern unsigned int cursor_mode;
-extern Client* grabc;
+extern struct last_cursor_state input_last_cursor;
+extern unsigned int input_cursor_mode;
+extern Client* input_grab_client;
 
 #endif

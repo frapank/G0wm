@@ -50,7 +50,7 @@ rewritten in this tree. The originals, and their authors:
 
 The tray was ported from dwl 0.7 with three changes: icons are drawn at a
 configurable size centered in the bar instead of always filling its height;
-`destroytray()` unlinks the tray before freeing it, where it used to be left on
+`tray_destroy()` unlinks the tray before freeing it, where it used to be left on
 the watcher's list so that re-creating a monitor's tray left a dangling
 pointer; and the watcher accepts registrations under a well-known bus name,
 which is what KStatusNotifierItem sends and which was previously rejected as a
