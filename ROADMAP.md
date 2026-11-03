@@ -131,6 +131,8 @@ screen shares, for any app that goes through the portal, such as Discord or
 OBS.
 
 - [ ] Add a `private` option to the window rules.
+- [x] Add `toggleprivate` (<kbd>Super</kbd> <kbd>Shift</kbd> <kbd>P</kbd>), with
+  a purple dot next to the title, in the tabs too.
 - [ ] In `capturetoplevel` (`toplevel.c`), refuse the request or accept an
   empty source for a private window, so sharing that one window shows nothing.
 - [ ] Add a share mode (key and IPC command) with an indicator in the bar.

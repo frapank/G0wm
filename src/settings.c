@@ -183,6 +183,7 @@ static const Action actions[] = {
     { togglegaps, "togglegaps", 0 },
     { toggleinhibit, "toggleinhibit", 0 },
     { toggleopacity, "toggleopacity", 0 },
+    { toggleprivate, "toggleprivate", 0 },
     { toggletabbed, "toggletabbed", 'l' },
     { toggletag, "toggletag", 'u' },
     { toggletitlebar, "toggletitlebar", 0 },
@@ -510,6 +511,7 @@ static void wwindows(void)
     note("titleclose", "shown with the pointer over it");
     wbool("titleclose", titleclose);
     whex("titleclosecolor", titleclosecolor);
+    whex("privatecolor", privatecolor);
     note("movethreshold", "px dragged on a title before the window moves");
     wint("movethreshold", movethreshold);
     note("movesnap", "px at which a moved floating window sticks, 0 off");
@@ -1168,6 +1170,7 @@ static void applywindows(const struct scfg_block* b)
     titlecenter = getbool(b, "titlecenter", titlecenter);
     titleclose = getbool(b, "titleclose", titleclose);
     titleclosecolor = gethex(b, "titleclosecolor", titleclosecolor);
+    privatecolor = gethex(b, "privatecolor", privatecolor);
     movethreshold = (int)getnum(b, "movethreshold", movethreshold);
     movesnap = (int)getnum(b, "movesnap", movesnap);
 }

@@ -146,6 +146,7 @@ Borders, gaps and title bars.
 | `titlecenter` | `true` | Center the title text. |
 | `titleclose` | `true` | Show a close button on the title bar while the pointer is over it. |
 | `titleclosecolor` | <img src="../.github/assets/color-ff5f57.svg" width="12" height="12"> `#ff5f57ff` | Color of the close button. |
+| `privatecolor` | <img src="../.github/assets/color-9b59f6.svg" width="12" height="12"> `#9b59f6ff` | Color of the dot on a private window. |
 | `movethreshold` | `4` | Pixels to drag a title bar before the window starts moving. |
 | `movesnap` | `12` | Distance in pixels at which a moved floating window sticks to an edge. `0` turns it off. |
 
@@ -551,6 +552,7 @@ doubling each time) and you add them up to pick more than one.
 | `zoom` | | Swap the focused window with the master. |
 | `togglefloating` | | Float or tile the window. |
 | `togglefullscreen` | | Toggle fullscreen. |
+| `toggleprivate` | | Make the window private, or not any more. Screen and window sharing show it as a black box. |
 | `moveresize` | `move` or `resize` | Move or resize the window with the pointer, for `button` bindings on `client`. |
 | `resizewidth` | pixels | Change the width of a floating window. On a tiled one, it changes the master area. |
 | `resizeheight` | pixels | Change the height of a floating window. |
@@ -616,6 +618,7 @@ In the config file, <kbd>Super</kbd> is called `logo`.
 | <kbd>Super</kbd> <kbd>T</kbd> | Tabbed layout |
 | <kbd>Super</kbd> <kbd>Shift</kbd> <kbd>V</kbd> | Float or tile |
 | <kbd>Super</kbd> <kbd>Shift</kbd> <kbd>F</kbd> | Fullscreen |
+| <kbd>Super</kbd> <kbd>Shift</kbd> <kbd>P</kbd> | Private window |
 | <kbd>Super</kbd> <kbd>Shift</kbd> <kbd>G</kbd> | Gaps |
 | <kbd>Super</kbd> <kbd>Shift</kbd> <kbd>B</kbd> | Bar |
 | <kbd>Super</kbd> <kbd>Shift</kbd> <kbd>T</kbd> | Title bars |

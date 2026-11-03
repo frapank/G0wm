@@ -579,7 +579,7 @@ void drawbar(Monitor* m)
                           m->lrpad / 2,
                           client_get_title(c),
                           0);
-                if (c && c->isfloating)
+                if (c->isfloating)
                     drawpill(m,
                              x + boxs,
                              boxy,
@@ -588,6 +588,15 @@ void drawbar(Monitor* m)
                              boxr,
                              1,
                              m->drw->scheme[ColFg]);
+                if (c->isprivate)
+                    drawpill(m,
+                             x + boxs + (c->isfloating ? boxw + boxs : 0),
+                             boxy,
+                             boxw,
+                             boxw,
+                             boxr,
+                             0,
+                             privatecolor);
             } else {
                 drwl_setscheme(m->drw, colors[SchemeNorm]);
                 drwl_rect(m->drw, x, 0, w, m->b.height, 1, 1);
@@ -906,7 +915,7 @@ static void drawtitle(Client* c)
     Monitor* m = c->mon;
     Buffer* buf;
     const char* title;
-    int w, h, sel, tab, end, lead, tw, d, fd;
+    int w, h, sel, tab, end, lead, tw, d, fd, dots;
     uint32_t fg;
 
     if (!c->title)
@@ -935,7 +944,8 @@ static void drawtitle(Client* c)
     end = titleclosex(c, w, &d);
     fd = MAX(m->drw->font->height / 3, 3);
 
-    lead = m->lrpad / 2 + (c->isfloating ? fd + m->lrpad / 3 : 0);
+    dots = !!c->isfloating + !!c->isprivate;
+    lead = m->lrpad / 2 + dots * (fd + m->lrpad / 3);
     if (titlecenter) {
         tw = (int)drwl_font_getwidth(m->drw, title);
         lead = MAX(MIN((w - tw) / 2, end - m->lrpad / 2 - tw), lead);
@@ -947,9 +957,24 @@ static void drawtitle(Client* c)
     if (end > lead)
         drwl_text(m->drw, 0, 0, end, h, lead, title, 0);
 
+    if (c->isprivate)
+        drawpill(m,
+                 lead - fd - m->lrpad / 3,
+                 (h - fd) / 2,
+                 fd,
+                 fd,
+                 fd / 2.0,
+                 0,
+                 privatecolor);
     if (c->isfloating)
-        drawpill(
-            m, lead - fd - m->lrpad / 3, (h - fd) / 2, fd, fd, fd / 2.0, 0, fg);
+        drawpill(m,
+                 lead - dots * (fd + m->lrpad / 3),
+                 (h - fd) / 2,
+                 fd,
+                 fd,
+                 fd / 2.0,
+                 0,
+                 fg);
     if (tab && c->titlex)
         drawpill(m,
                  0,
