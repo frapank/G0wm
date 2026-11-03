@@ -1,4 +1,8 @@
-/* See LICENSE file for copyright and license details. */
+/*
+ * SPDX-FileCopyrightText: 2026 frapank
+ * SPDX-License-Identifier: GPL-3.0-or-later
+ */
+
 #ifndef G0WM_SETTINGS_H
 #define G0WM_SETTINGS_H
 

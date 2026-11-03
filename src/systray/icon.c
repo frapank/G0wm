@@ -1,3 +1,9 @@
+/*
+ * SPDX-FileCopyrightText: janetski
+ * SPDX-FileCopyrightText: 2026 frapank
+ * SPDX-License-Identifier: GPL-3.0-or-later
+ */
+
 #include "icon.h"
 
 #include <fcft/fcft.h>

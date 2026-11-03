@@ -1,5 +1,6 @@
 /*
- * See LICENSE file for copyright and license details.
+ * SPDX-FileCopyrightText: 2026 frapank
+ * SPDX-License-Identifier: GPL-3.0-or-later
  *
  * foreign toplevel handles, for docks, taskbars and window capture
  */

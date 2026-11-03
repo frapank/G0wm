@@ -1,5 +1,7 @@
 /*
- * See LICENSE file for copyright and license details.
+ * SPDX-FileCopyrightText: dwl-patches contributors
+ * SPDX-FileCopyrightText: 2026 frapank
+ * SPDX-License-Identifier: GPL-3.0-or-later
  *
  * the bar, the status text, the window title bars and the tray
  */

@@ -1,3 +1,9 @@
+/*
+ * SPDX-FileCopyrightText: janetski
+ * SPDX-FileCopyrightText: 2026 frapank
+ * SPDX-License-Identifier: GPL-3.0-or-later
+ */
+
 #ifndef G0WMDBUS_H
 #define G0WMDBUS_H
 

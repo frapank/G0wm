@@ -1,5 +1,9 @@
 /*
- * See LICENSE file for copyright and license details.
+ * SPDX-FileCopyrightText: 2020 dwl team
+ * SPDX-FileCopyrightText: unixchad
+ * SPDX-FileCopyrightText: Ben Collerson
+ * SPDX-FileCopyrightText: 2026 frapank
+ * SPDX-License-Identifier: GPL-3.0-or-later
  *
  * keyboard, pointer, gesture and drag-and-drop handling
  */

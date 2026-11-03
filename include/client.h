@@ -1,4 +1,8 @@
 /*
+ * SPDX-FileCopyrightText: 2020 dwl team
+ * SPDX-FileCopyrightText: 2026 frapank
+ * SPDX-License-Identifier: GPL-3.0-or-later
+ *
  * Attempt to consolidate unavoidable suck into one file, away from g0wm.c. This
  * file is not meant to be pretty.  We use a .h file with static inline
  * functions instead of a separate .c module, or function pointers like sway, so
