@@ -149,6 +149,8 @@ Borders, gaps and title bars.
 | `privatetitle` | `{app}` | Shown instead of the title of a private window, in the title bar, the tabs, the bar, the runner and the window list given to other apps. `{app}` is replaced by the app id. |
 | `privatecolor` | <img src="../.github/assets/color-9b59f6.svg" width="12" height="12"> `#9b59f6ff` | Color of the dot on a private window. |
 | `privateround` | `-1` | Roundness of that dot, from `0` (square) to `1` (round). Below `0` it follows `bartagdotround`. |
+| `alwaysprivate` | `false` | Every window opens private and `toggleprivate` makes it public instead, marked by a dot in `publiccolor`. Changing it on reload resets all the open windows. |
+| `publiccolor` | <img src="../.github/assets/color-5bc8f5.svg" width="12" height="12"> `#5bc8f5ff` | Color of the dot on a public window, with `alwaysprivate` on. |
 | `movethreshold` | `4` | Pixels to drag a title bar before the window starts moving. |
 | `movesnap` | `12` | Distance in pixels at which a moved floating window sticks to an edge. `0` turns it off. |
 
@@ -375,7 +377,7 @@ rule {
 | `title` | any | Title of the window. |
 | `tags` | `0` | Tags to open on, as a bitmask (see [Tags as bitmasks](#tags-as-bitmasks)). `0` for the current tags. |
 | `isfloating` | `false` | Open floating. |
-| `private` | `false` | Open as a private window, see `toggleprivate`. |
+| `private` | | Open private with `true` or public with `false`. Left out, it follows `alwaysprivate`. |
 | `opacity_focus` | `0` | Opacity when focused. `0` keeps the global one. |
 | `opacity_unfocus` | `0` | Opacity when unfocused. `0` keeps the global one. |
 | `monitor` | `-1` | Monitor to open on, counted from `0`. `-1` for the focused one. |
@@ -555,7 +557,7 @@ doubling each time) and you add them up to pick more than one.
 | `zoom` | | Swap the focused window with the master. |
 | `togglefloating` | | Float or tile the window. |
 | `togglefullscreen` | | Toggle fullscreen. |
-| `toggleprivate` | | Make the window private, or not any more. Screen and window sharing show it as a black box. |
+| `toggleprivate` | | Make the window private, or public again. Screen and window sharing show a private window as a black box. |
 | `moveresize` | `move` or `resize` | Move or resize the window with the pointer, for `button` bindings on `client`. |
 | `resizewidth` | pixels | Change the width of a floating window. On a tiled one, it changes the master area. |
 | `resizeheight` | pixels | Change the height of a floating window. |

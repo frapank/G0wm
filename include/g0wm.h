@@ -776,6 +776,8 @@ extern int titleclose;
 extern uint32_t titleclosecolor;
 extern uint32_t privatecolor;
 extern float privateround;
+extern int alwaysprivate;
+extern uint32_t publiccolor;
 extern const char* privatetitle;
 extern Layout* layouts;
 extern size_t nlayouts;
