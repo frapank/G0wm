@@ -84,7 +84,7 @@ void toplevelmap(Client* c)
     c->eftl = wlr_ext_foreign_toplevel_handle_v1_create(
         ext_toplevel_list,
         &(struct wlr_ext_foreign_toplevel_handle_v1_state){
-            .title = client_get_title(c), .app_id = client_get_appid(c) });
+            .title = showntitle(c), .app_id = client_get_appid(c) });
     if (c->eftl)
         c->eftl->data = c;
 
@@ -113,7 +113,7 @@ void toplevelunmap(Client* c)
 
 void toplevelupdate(Client* c)
 {
-    const char* title = client_get_title(c);
+    const char* title = showntitle(c);
     const char* appid = client_get_appid(c);
     struct wlr_output* out = c->mon ? c->mon->wlr_output : NULL;
     struct wlr_foreign_toplevel_handle_v1_output *o, *tmp;
