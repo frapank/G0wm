@@ -402,6 +402,7 @@ struct Monitor {
     struct wlr_buffer* zoombuf;      /* the latest of them */
     struct wlr_texture* zoomtex;     /* zoombuf, to draw from */
     struct wlr_fbox zoomsrc;         /* the part of it on show */
+    struct wlr_buffer* shown;
     Drwl* drw;
     Buffer* pool[2];
 #ifdef INTEGRATED_BACKGROUND
@@ -521,7 +522,11 @@ void locksession(struct wl_listener* listener, void* data);
 void magnifierdrop(Monitor* m);
 int magnifierframe(Monitor* m, struct wlr_output_state* state);
 void magnifierzoom(Monitor* m, float z);
+void privacyafter(Monitor* m);
+int privacybefore(Monitor* m, struct wlr_output_state* state);
+void privacycapture(struct wl_listener* listener, void* data);
 void privacydamage(void);
+void shieldclient(Client* c);
 void magnify(const Arg* arg);
 void mapnotify(struct wl_listener* listener, void* data);
 void movestack(const Arg* arg);
