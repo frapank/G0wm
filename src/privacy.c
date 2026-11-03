@@ -17,6 +17,12 @@ typedef struct {
     struct wl_listener destroy;
 } Shield;
 
+typedef struct {
+    struct wlr_screencopy_frame_v1* frame;
+    struct wlr_buffer* buf;
+    struct wlr_box box;
+} Copy;
+
 /* function declarations */
 static int blackout(struct wlr_buffer* buf, struct wlr_box* b, int n);
 static void copyframe(struct wlr_ext_image_capture_source_v1* source,
@@ -27,6 +33,12 @@ static void shield(struct wlr_ext_image_capture_source_v1* source,
                    struct wlr_output* output,
                    Client* c);
 static void shielddestroy(struct wl_listener* listener, void* data);
+static void wipe(struct wlr_buffer* buf);
+
+/* variables */
+static struct wl_array copies;
+static struct wlr_box masks[MAXBOXES];
+static int nmasks;
 
 /* function implementations */
 
@@ -130,14 +142,58 @@ fail:
         frame, EXT_IMAGE_COPY_CAPTURE_FRAME_V1_FAILURE_REASON_UNKNOWN);
 }
 
+/* screencopy copies during the commit: mask before ready is sent */
 void privacyafter(Monitor* m)
 {
+    struct wlr_screencopy_frame_v1* f;
+    struct wlr_box b[MAXBOXES];
+    Copy* cp;
+    int i, gone;
+
     m->shown = NULL;
+    wl_array_for_each(cp, &copies)
+    {
+        gone = 1;
+        wl_list_for_each(f, &screencopy_mgr->frames, link)
+        {
+            if (f == cp->frame)
+                gone = 0;
+        }
+        if (gone) {
+            for (i = 0; i < nmasks; i++) {
+                b[i] = masks[i];
+                b[i].x -= cp->box.x;
+                b[i].y -= cp->box.y;
+            }
+            if (!blackout(cp->buf, b, nmasks))
+                wipe(cp->buf);
+        }
+        wlr_buffer_unlock(cp->buf);
+    }
+    copies.size = 0;
 }
 
 int privacybefore(Monitor* m, struct wlr_output_state* state)
 {
+    struct wlr_screencopy_frame_v1* f;
+    Copy* cp;
+
     m->shown = state->buffer;
+    copies.size = 0;
+    if (!screencopy_mgr || !(nmasks = privateboxes(m, masks)))
+        return 1;
+    wl_list_for_each(f, &screencopy_mgr->frames, link)
+    {
+        if (f->output != m->wlr_output || !f->buffer)
+            continue;
+        if (!(cp = wl_array_add(&copies, sizeof(*cp)))) {
+            privacyafter(m);
+            return 0;
+        }
+        /* ready must not be flushed before privacyafter() */
+        wl_client_flush(wl_resource_get_client(f->resource));
+        *cp = (Copy){ f, wlr_buffer_lock(f->buffer), f->box };
+    }
     return 1;
 }
 
@@ -160,6 +216,11 @@ void privacydamage(void)
         wlr_damage_ring_add_whole(&m->scene_output->damage_ring);
         wlr_output_schedule_frame(m->wlr_output);
     }
+}
+
+void privacyfini(void)
+{
+    wl_array_release(&copies);
 }
 
 /* contents of private windows on m, in buffer pixels */
@@ -252,4 +313,29 @@ void toggleprivate(const Arg* arg)
     sel->isprivate = !sel->isprivate;
     privacydamage();
     drawbars();
+}
+
+static void wipe(struct wlr_buffer* buf)
+{
+    struct wlr_render_pass* pass;
+    uint32_t format;
+    size_t stride;
+    void* data;
+
+    if (wlr_buffer_begin_data_ptr_access(
+            buf, WLR_BUFFER_DATA_PTR_ACCESS_WRITE, &data, &format, &stride)) {
+        memset(data, 0, stride * (size_t)buf->height);
+        wlr_buffer_end_data_ptr_access(buf);
+        return;
+    }
+    if (!(pass = wlr_renderer_begin_buffer_pass(drw, buf, NULL))) {
+        wlr_log(WLR_ERROR, "privacy: cannot black out a screencopy frame");
+        return;
+    }
+    wlr_render_pass_add_rect(pass,
+                             &(struct wlr_render_rect_options){
+                                 .box = { 0, 0, buf->width, buf->height },
+                                 .color = { 0, 0, 0, 1 } });
+    if (!wlr_render_pass_submit(pass))
+        wlr_log(WLR_ERROR, "privacy: cannot black out a screencopy frame");
 }

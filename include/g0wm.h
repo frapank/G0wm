@@ -526,6 +526,7 @@ void privacyafter(Monitor* m);
 int privacybefore(Monitor* m, struct wlr_output_state* state);
 void privacycapture(struct wl_listener* listener, void* data);
 void privacydamage(void);
+void privacyfini(void);
 void shieldclient(Client* c);
 void magnify(const Arg* arg);
 void mapnotify(struct wl_listener* listener, void* data);
@@ -703,6 +704,7 @@ extern struct wl_list clients; /* tiling order */
 extern struct wl_list fstack;  /* focus order */
 extern struct wlr_ext_foreign_toplevel_list_v1* ext_toplevel_list;
 extern struct wlr_foreign_toplevel_manager_v1* foreign_toplevel_mgr;
+extern struct wlr_screencopy_manager_v1* screencopy_mgr;
 extern struct wlr_idle_notifier_v1* idle_notifier;
 extern struct wlr_keyboard_shortcuts_inhibit_manager_v1* kb_inhibit_mgr;
 extern struct wlr_output_manager_v1* output_mgr;

@@ -121,6 +121,7 @@ struct wl_list clients; /* tiling order */
 struct wl_list fstack;  /* focus order */
 struct wlr_ext_foreign_toplevel_list_v1* ext_toplevel_list;
 struct wlr_foreign_toplevel_manager_v1* foreign_toplevel_mgr;
+struct wlr_screencopy_manager_v1* screencopy_mgr;
 struct wlr_idle_notifier_v1* idle_notifier;
 struct wlr_keyboard_shortcuts_inhibit_manager_v1* kb_inhibit_mgr;
 struct wlr_output_manager_v1* output_mgr;
@@ -242,6 +243,7 @@ static void cleanup(void)
         watcher_stop(&watcher);
     notifyfini();
     barfini();
+    privacyfini();
     if (shownotifications)
         notify_stop();
     if (bus_conn) {
@@ -589,7 +591,7 @@ static void setup(void)
     wlr_subcompositor_create(dpy);
     wlr_data_device_manager_create(dpy);
     wlr_export_dmabuf_manager_v1_create(dpy);
-    wlr_screencopy_manager_v1_create(dpy);
+    screencopy_mgr = wlr_screencopy_manager_v1_create(dpy);
     wl_signal_add(&wlr_ext_image_copy_capture_manager_v1_create(dpy, 1)
                        ->events.new_session,
                   &new_capture_session);
