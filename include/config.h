@@ -81,6 +81,11 @@ unsigned int titlepadding = 6;
 int titlecenter           = 1;
 int titleclose            = 1; // shown with the pointer over it
 uint32_t titleclosecolor  = 0xff5f57ff;
+uint32_t privatecolor     = 0x9b59f6ff;
+float privateround        = -1.0f;
+int alwaysprivate         = 0;
+uint32_t publiccolor      = 0x5bc8f5ff;
+const char* privatetitle  = "{app}";
 
 static Layout layouts_def[] = {
     { "[ ]", tile },
@@ -89,12 +94,13 @@ static Layout layouts_def[] = {
 Layout* layouts = layouts_def;
 size_t nlayouts = LENGTH(layouts_def);
 
-/* opacity 0 keeps the default, monitor -1 is the focused one */
+/* opacity 0 and private -1 keep the default, monitor -1 is the focused one */
 static Rule rules_def[] = {
     { .id              = "Placeholder",
       .title           = NULL,
       .tags            = 0,
       .isfloating      = 1,
+      .isprivate       = 1,
       .opacity_focus   = 0,
       .opacity_unfocus = 0,
       .monitor         = -1 },
@@ -257,6 +263,7 @@ static Key keys_def[] = {
 	{ 0,                         XKB_KEY_Print,       spawn,            SHCMD("grim -g \"$(slurp)\" - | swappy -f -") },
 	{ MODKEY,                    XKB_KEY_c,           killclient,       {0} },
 	{ MODKEY|WLR_MODIFIER_SHIFT, XKB_KEY_v,           togglefloating,   {0} },
+	{ MODKEY|WLR_MODIFIER_SHIFT, XKB_KEY_p,           toggleprivate,    {0} },
 	{ MODKEY|WLR_MODIFIER_SHIFT, XKB_KEY_g,           togglegaps,       {0} },
 	{ MODKEY|WLR_MODIFIER_SHIFT, XKB_KEY_b,           togglebar,        {0} },
 	{ MODKEY|WLR_MODIFIER_SHIFT, XKB_KEY_t,           toggletitlebar,   {0} },

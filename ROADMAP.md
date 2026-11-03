@@ -130,9 +130,18 @@ Keeps a window (a password manager, a private chat) out of screenshots and
 screen shares, for any app that goes through the portal, such as Discord or
 OBS.
 
-- [ ] Add a `private` option to the window rules.
-- [ ] In `capturetoplevel` (`toplevel.c`), refuse the request or accept an
-  empty source for a private window, so sharing that one window shows nothing.
+- [x] Add a `private` option to the window rules.
+- [x] Add `toggleprivate` (<kbd>Super</kbd> <kbd>Shift</kbd> <kbd>P</kbd>), with
+  a purple dot next to the title, in the tabs too.
+- [x] Black out private windows in what ext-image-copy-capture hands out
+  (`src/privacy.c`): the whole frame when sharing that one window, its area
+  when sharing the screen. The screen itself is left alone.
+- [x] Do the same for wlr-screencopy, which xdg-desktop-portal-wlr before 0.8
+  and grim before 1.5 use: its copies are made inside the output commit, so
+  they are painted over right after it, before the clients hear they are
+  ready. Checked against wlroots 0.19.2, 0.20.2 and master (2026-11-02).
+- [ ] export-dmabuf hands out the screen's own buffer, so it cannot be masked:
+  hide it while a private window is shown, or drop it.
 - [ ] Add a share mode (key and IPC command) with an indicator in the bar.
   While it is on, private windows, and notifications and popups marked
   private, are replaced by a placeholder on the output. This also hides them
@@ -141,9 +150,11 @@ OBS.
   config (`private` block) and overridable per rule. The text can use `{app}`
   and `{title}`, is drawn with fcft, and the shape follows the window border
   (rounded or squircle).
-- [ ] Show the placeholder text instead of the real title in the bar, the tabs
+- [x] Show the placeholder text instead of the real title in the bar, the tabs
   and the foreign toplevel list, since the title often holds the sensitive part.
-- [ ] Spike first: check in the wlroots sources whether the output capture
-  source and screencopy copy the buffer already composed for the screen. If
-  they do, masking a private window only in the capture needs a wlroots patch
-  and is out of scope here.
+- [x] Keep the real title on screen: screen sharing gets a copy of the title
+  bar and of the bar title drawn with the placeholder, pasted where the masks
+  go. A rotated or zoomed output gets a black box there instead.
+- [x] Spike: the output capture source and screencopy copy the buffer
+  already composed for the screen. ext-image-copy-capture can still be masked
+  without patching wlroots, by wrapping the source's `copy_frame`.

@@ -67,6 +67,7 @@ static struct wl_listener text_input_focus_change = { .notify =
                                                           textinputfocus };
 static struct wl_listener layout_change = { .notify = updatemons };
 static struct wl_listener new_capture_request = { .notify = capturetoplevel };
+static struct wl_listener new_capture_session = { .notify = privacycapture };
 static struct wl_listener new_idle_inhibitor = { .notify =
                                                      createidleinhibitor };
 static struct wl_listener new_input_device = { .notify = inputdevice };
@@ -120,6 +121,7 @@ struct wl_list clients; /* tiling order */
 struct wl_list fstack;  /* focus order */
 struct wlr_ext_foreign_toplevel_list_v1* ext_toplevel_list;
 struct wlr_foreign_toplevel_manager_v1* foreign_toplevel_mgr;
+struct wlr_screencopy_manager_v1* screencopy_mgr;
 struct wlr_idle_notifier_v1* idle_notifier;
 struct wlr_keyboard_shortcuts_inhibit_manager_v1* kb_inhibit_mgr;
 struct wlr_output_manager_v1* output_mgr;
@@ -241,6 +243,7 @@ static void cleanup(void)
         watcher_stop(&watcher);
     notifyfini();
     barfini();
+    privacyfini();
     if (shownotifications)
         notify_stop();
     if (bus_conn) {
@@ -301,6 +304,7 @@ static void cleanuplisteners(void)
     wl_list_remove(&new_virtual_pointer.link);
     wl_list_remove(&new_pointer_constraint.link);
     wl_list_remove(&new_capture_request.link);
+    wl_list_remove(&new_capture_session.link);
     wl_list_remove(&new_kb_inhibitor.link);
     wl_list_remove(&new_output.link);
     wl_list_remove(&new_xdg_toplevel.link);
@@ -587,8 +591,10 @@ static void setup(void)
     wlr_subcompositor_create(dpy);
     wlr_data_device_manager_create(dpy);
     wlr_export_dmabuf_manager_v1_create(dpy);
-    wlr_screencopy_manager_v1_create(dpy);
-    wlr_ext_image_copy_capture_manager_v1_create(dpy, 1);
+    screencopy_mgr = wlr_screencopy_manager_v1_create(dpy);
+    wl_signal_add(&wlr_ext_image_copy_capture_manager_v1_create(dpy, 1)
+                       ->events.new_session,
+                  &new_capture_session);
     wlr_ext_output_image_capture_source_manager_v1_create(dpy, 1);
     wlr_data_control_manager_v1_create(dpy);
     wlr_ext_data_control_manager_v1_create(dpy, 1);

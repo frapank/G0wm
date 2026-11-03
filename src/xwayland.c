@@ -101,6 +101,7 @@ void createnotifyx11(struct wl_listener* listener, void* data)
     c->bw = client_is_unmanaged(c) ? 0 : borderwidth();
     c->opacity = c->opacity_unfocus = opacity_unfocus;
     c->opacity_focus = opacity_focus;
+    c->isprivate = alwaysprivate;
 
     /* Listen to the various events it can emit */
     LISTEN(&xsurface->events.associate, &c->associate, associatex11);

@@ -26,6 +26,7 @@ void capturetoplevel(struct wl_listener* listener, void* data)
         !(c->capture = wlr_ext_image_capture_source_v1_create_with_scene_node(
               &c->scene_surface->node, event_loop, alloc, drw)))
         return;
+    shieldclient(c);
     wlr_ext_foreign_toplevel_image_capture_source_manager_v1_request_accept(
         req, c->capture);
 }
@@ -83,7 +84,7 @@ void toplevelmap(Client* c)
     c->eftl = wlr_ext_foreign_toplevel_handle_v1_create(
         ext_toplevel_list,
         &(struct wlr_ext_foreign_toplevel_handle_v1_state){
-            .title = client_get_title(c), .app_id = client_get_appid(c) });
+            .title = sharetitle(c), .app_id = client_get_appid(c) });
     if (c->eftl)
         c->eftl->data = c;
 
@@ -112,7 +113,7 @@ void toplevelunmap(Client* c)
 
 void toplevelupdate(Client* c)
 {
-    const char* title = client_get_title(c);
+    const char* title = sharetitle(c);
     const char* appid = client_get_appid(c);
     struct wlr_output* out = c->mon ? c->mon->wlr_output : NULL;
     struct wlr_foreign_toplevel_handle_v1_output *o, *tmp;
