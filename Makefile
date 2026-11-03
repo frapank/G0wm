@@ -62,6 +62,7 @@ LDLIBS    = $(PKG_LIBS) $(WLR_LIBS) -lm $(LIBS)
 SRC = $(SRCDIR)/g0wm.c $(SRCDIR)/bar.c $(SRCDIR)/buffer.c $(SRCDIR)/client.c \
 	$(SRCDIR)/corner.c $(SRCDIR)/input.c $(SRCDIR)/layout.c $(SRCDIR)/lock.c \
 	$(SRCDIR)/magnifier.c $(SRCDIR)/monitor.c $(SRCDIR)/opacity.c \
+	$(SRCDIR)/privacy.c \
 	$(SRCDIR)/util.c $(SRCDIR)/dbus.c $(SRCDIR)/settings.c \
 	$(SRCDIR)/notify.c $(SRCDIR)/runner.c $(SRCDIR)/tablet.c \
 	$(SRCDIR)/textinput.c $(SRCDIR)/toplevel.c $(SRCDIR)/traypopup.c \

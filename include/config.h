@@ -81,6 +81,7 @@ unsigned int titlepadding = 6;
 int titlecenter           = 1;
 int titleclose            = 1; // shown with the pointer over it
 uint32_t titleclosecolor  = 0xff5f57ff;
+uint32_t privatecolor     = 0x9b59f6ff;
 
 static Layout layouts_def[] = {
     { "[ ]", tile },
@@ -257,6 +258,7 @@ static Key keys_def[] = {
 	{ 0,                         XKB_KEY_Print,       spawn,            SHCMD("grim -g \"$(slurp)\" - | swappy -f -") },
 	{ MODKEY,                    XKB_KEY_c,           killclient,       {0} },
 	{ MODKEY|WLR_MODIFIER_SHIFT, XKB_KEY_v,           togglefloating,   {0} },
+	{ MODKEY|WLR_MODIFIER_SHIFT, XKB_KEY_p,           toggleprivate,    {0} },
 	{ MODKEY|WLR_MODIFIER_SHIFT, XKB_KEY_g,           togglegaps,       {0} },
 	{ MODKEY|WLR_MODIFIER_SHIFT, XKB_KEY_b,           togglebar,        {0} },
 	{ MODKEY|WLR_MODIFIER_SHIFT, XKB_KEY_t,           toggletitlebar,   {0} },

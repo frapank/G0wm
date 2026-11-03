@@ -294,7 +294,7 @@ typedef struct {
     uint32_t cornercolor;        /* and the colour it was drawn with */
     unsigned int bw;
     uint32_t tags;
-    int isfloating, isurgent, isfullscreen;
+    int isfloating, isurgent, isfullscreen, isprivate;
     float opacity;         /* the one in effect, focused or not */
     float opacity_focus;   /* used while the client holds focus */
     float opacity_unfocus; /* used while it does not */
@@ -521,6 +521,7 @@ void locksession(struct wl_listener* listener, void* data);
 void magnifierdrop(Monitor* m);
 int magnifierframe(Monitor* m, struct wlr_output_state* state);
 void magnifierzoom(Monitor* m, float z);
+void privacydamage(void);
 void magnify(const Arg* arg);
 void mapnotify(struct wl_listener* listener, void* data);
 void movestack(const Arg* arg);
@@ -632,6 +633,7 @@ void togglefullscreen(const Arg* arg);
 void togglegaps(const Arg* arg);
 void toggleinhibit(const Arg* arg);
 void toggleopacity(const Arg* arg);
+void toggleprivate(const Arg* arg);
 void toggletabbed(const Arg* arg);
 void toggletag(const Arg* arg);
 void toggletitlebar(const Arg* arg);
@@ -763,6 +765,7 @@ extern unsigned int titlepadding;
 extern int titlecenter;
 extern int titleclose;
 extern uint32_t titleclosecolor;
+extern uint32_t privatecolor;
 extern Layout* layouts;
 extern size_t nlayouts;
 extern Rule* rules;
