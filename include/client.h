@@ -9,8 +9,6 @@
 
 #include <errno.h>
 #include <math.h>
-#include <stdbool.h>
-#include <stddef.h>
 #include <stdint.h>
 #include <sys/wait.h>
 #include <wayland-server-core.h>
@@ -139,7 +137,7 @@ void urgent(struct wl_listener* listener, void* data);
  */
 
 /* Leave these functions first; they're used in the others */
-static inline int client_is_x11(Client* c)
+static inline int client_is_x11([[maybe_unused]] Client* c)
 {
 #ifdef XWAYLAND
     return c->type == X11;
@@ -163,8 +161,8 @@ static inline int toplevel_from_wlr_surface(struct wlr_surface* s,
     struct wlr_xdg_surface *xdg_surface, *tmp_xdg_surface;
     struct wlr_surface* root_surface;
     struct wlr_layer_surface_v1* layer_surface;
-    Client* c = NULL;
-    LayerSurface* l = NULL;
+    Client* c = nullptr;
+    LayerSurface* l = nullptr;
     int type = -1;
 #ifdef XWAYLAND
     struct wlr_xwayland_surface* xsurface;
@@ -191,7 +189,7 @@ static inline int toplevel_from_wlr_surface(struct wlr_surface* s,
 
     xdg_surface = wlr_xdg_surface_try_from_wlr_surface(root_surface);
     while (xdg_surface) {
-        tmp_xdg_surface = NULL;
+        tmp_xdg_surface = nullptr;
         switch (xdg_surface->role) {
             case WLR_XDG_SURFACE_ROLE_POPUP:
                 if (!xdg_surface->popup || !xdg_surface->popup->parent)
@@ -307,18 +305,18 @@ static inline void client_get_geometry(Client* c, struct wlr_box* geom)
 
 static inline Client* client_get_parent(Client* c)
 {
-    Client* p = NULL;
+    Client* p = nullptr;
 #ifdef XWAYLAND
     if (client_is_x11(c)) {
         if (c->surface.xwayland->parent)
             toplevel_from_wlr_surface(
-                c->surface.xwayland->parent->surface, &p, NULL);
+                c->surface.xwayland->parent->surface, &p, nullptr);
         return p;
     }
 #endif
     if (c->surface.xdg->toplevel->parent)
         toplevel_from_wlr_surface(
-            c->surface.xdg->toplevel->parent->base->surface, &p, NULL);
+            c->surface.xdg->toplevel->parent->base->surface, &p, nullptr);
     return p;
 }
 
@@ -399,13 +397,14 @@ static inline int client_is_rendered_on_mon(Client* c, Monitor* m)
 static inline int client_is_stopped(Client* c)
 {
     int pid;
-    siginfo_t in = { 0 };
+    siginfo_t in = {};
 #ifdef XWAYLAND
     if (client_is_x11(c))
         return 0;
 #endif
 
-    wl_client_get_credentials(c->surface.xdg->client->client, &pid, NULL, NULL);
+    wl_client_get_credentials(
+        c->surface.xdg->client->client, &pid, nullptr, nullptr);
     if (waitid(P_PID, pid, &in, WNOHANG | WCONTINUED | WSTOPPED | WNOWAIT) <
         0) {
         /* This process is not our child process, while is very unlikely that
@@ -422,7 +421,7 @@ static inline int client_is_stopped(Client* c)
     return 0;
 }
 
-static inline int client_is_unmanaged(Client* c)
+static inline int client_is_unmanaged([[maybe_unused]] Client* c)
 {
 #ifdef XWAYLAND
     if (client_is_x11(c))
@@ -438,7 +437,7 @@ static inline void client_notify_enter(struct wlr_surface* s,
         wlr_seat_keyboard_notify_enter(
             seat, s, kb->keycodes, kb->num_keycodes, &kb->modifiers);
     else
-        wlr_seat_keyboard_notify_enter(seat, s, NULL, 0, NULL);
+        wlr_seat_keyboard_notify_enter(seat, s, nullptr, 0, nullptr);
 }
 
 static inline void client_send_close(Client* c)
@@ -527,7 +526,7 @@ static inline void client_set_suspended(Client* c, int suspended)
     wlr_xdg_toplevel_set_suspended(c->surface.xdg->toplevel, suspended);
 }
 
-static inline int client_wants_focus(Client* c)
+static inline int client_wants_focus([[maybe_unused]] Client* c)
 {
 #ifdef XWAYLAND
     return client_is_unmanaged(c) &&

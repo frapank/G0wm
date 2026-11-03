@@ -15,7 +15,6 @@
 #include <pixman.h>
 #include <wayland-util.h>
 
-#include <stddef.h>
 #include <stdint.h>
 #include <stdio.h>
 #include <stdlib.h>
@@ -34,7 +33,7 @@
 static Watcher* tray_get_watcher(const Tray* tray)
 {
     if (!tray)
-        return NULL;
+        return nullptr;
 
     return tray->watcher;
 }
@@ -44,11 +43,11 @@ static pixman_image_t* createcanvas(int width, int height, int bgcolor)
     pixman_image_t *src, *dest;
     pixman_color_t bgcolor_pix = PIXMAN_COLOR(bgcolor);
 
-    dest = pixman_image_create_bits(PIXMAN_a8r8g8b8, width, height, NULL, 0);
+    dest = pixman_image_create_bits(PIXMAN_a8r8g8b8, width, height, nullptr, 0);
     src = pixman_image_create_solid_fill(&bgcolor_pix);
 
     pixman_image_composite32(
-        PIXMAN_OP_SRC, src, NULL, dest, 0, 0, 0, 0, 0, 0, width, height);
+        PIXMAN_OP_SRC, src, nullptr, dest, 0, 0, 0, 0, 0, 0, width, height);
 
     pixman_image_unref(src);
     return dest;
@@ -60,7 +59,7 @@ void tray_update(Tray* tray)
     Watcher* watcher;
     int icon_size, i = 0, canvas_width, canvas_height, n_items, spacing,
                    padding;
-    pixman_image_t *canvas = NULL, *img;
+    pixman_image_t *canvas = nullptr, *img;
 
     watcher = tray_get_watcher(tray);
     n_items = watcher_get_n_items(watcher);
@@ -68,7 +67,7 @@ void tray_update(Tray* tray)
     if (!n_items) {
         if (tray->image) {
             pixman_image_unref(tray->image);
-            tray->image = NULL;
+            tray->image = nullptr;
         }
         tray->cb(tray->monitor);
         return;
@@ -101,7 +100,7 @@ void tray_update(Tray* tray)
                 goto fail;
             pixman_image_composite32(PIXMAN_OP_OVER,
                                      img,
-                                     NULL,
+                                     nullptr,
                                      canvas,
                                      0,
                                      0,
@@ -183,9 +182,9 @@ Tray* createtray(void* monitor,
                  TrayNotifyCb cb,
                  Watcher* watcher)
 {
-    Tray* tray = NULL;
+    Tray* tray = nullptr;
     char fontattrs_my[128];
-    struct fcft_font* font = NULL;
+    struct fcft_font* font = nullptr;
 
     sprintf(fontattrs_my, "%s:%s", fontattrs, "weight:bold");
 
@@ -211,7 +210,7 @@ fail:
     if (font)
         fcft_destroy(font);
     free(tray);
-    return NULL;
+    return nullptr;
 }
 
 int tray_get_width(const Tray* tray)

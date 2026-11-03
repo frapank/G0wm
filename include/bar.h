@@ -7,16 +7,15 @@
 #ifndef G0WM_BAR_H
 #define G0WM_BAR_H
 
-#include <stdbool.h>
 #include <stdint.h>
 #include <wlr/types/wlr_scene.h>
 #include <xkbcommon/xkbcommon.h>
 
 #include "g0wm.h"
 
-#define STATUS_MAX 4096
+constexpr int STATUS_MAX = 4096;
 #define TEXTW(mon, text) (drwl_font_getwidth(mon->drw, text) + mon->lrpad)
-#define STATUS_BUTTONS 5
+constexpr int STATUS_BUTTONS = 5;
 /* the status box: drawbar() and buttonpress() agree on it to the pixel */
 #define STATUSW(mon) (drawstatus((mon), stext, 0, 0, 0) + 2)
 

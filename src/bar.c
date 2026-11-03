@@ -10,7 +10,6 @@
 #include <errno.h>
 #include <math.h>
 #include <pixman.h>
-#include <stdbool.h>
 #include <stddef.h>
 #include <stdint.h>
 #include <stdio.h>
@@ -102,8 +101,8 @@ static void stopstatus(void);
 
 /* variables */
 char stext[STATUS_MAX];
-static const char notifymore[] = "\xe2\x80\xba"; /* › */
-static dbus_uint32_t notifyshownid;              /* what notifyoff refers to */
+constexpr char notifymore[] = "\xe2\x80\xba"; /* › */
+static dbus_uint32_t notifyshownid;           /* what notifyoff refers to */
 static int notifyshownhist;
 static size_t notifyoff;
 /* history entry being viewed, 0 for live; by id since indices shift */
@@ -114,7 +113,7 @@ static dbus_uint32_t notifyliveid;
 static struct wl_event_source* notifytimer;
 /* redraws the bars while an urgent dot pulses */
 static struct wl_event_source* pulsetimer;
-#define PULSE_FRAME_MS 40
+constexpr int PULSE_FRAME_MS = 40;
 /* picked action, -1 when closed; the picker belongs to notifypickid */
 static long notifypicksel = -1;
 static dbus_uint32_t notifypickid;
@@ -122,7 +121,7 @@ static int notifyboxx;  /* last drawn x, for hit testing */
 static Client* hovered; /* whose close button is under the pointer */
 
 /* function implementations */
-bool baracceptsinput(struct wlr_scene_buffer* buffer, double* sx, double* sy)
+bool baracceptsinput(struct wlr_scene_buffer*, double*, double*)
 {
     return true;
 }
@@ -143,7 +142,7 @@ static Monitor* mainmon(void)
                 return m;
         }
     }
-    return NULL;
+    return nullptr;
 }
 
 /* The monitor the bar is drawn on: the main one with barsinglemon, the
@@ -192,7 +191,7 @@ static void drawpill(Monitor* m,
     double fx, fy;
 
     if (w <= 0 || h <= 0 ||
-        !(mask = pixman_image_create_bits(PIXMAN_a8, w, h, NULL, 0)))
+        !(mask = pixman_image_create_bits(PIXMAN_a8, w, h, nullptr, 0)))
         return;
     r = fmin(fmax(r, 0), fmin(w, h) / 2.0);
     data = (uint8_t*)pixman_image_get_data(mask);
@@ -269,7 +268,7 @@ static uint32_t pulse(uint32_t rgba)
     return (rgba & ~0xffu) | (uint32_t)((rgba & 0xffu) * k);
 }
 
-static int pulsetick(void* data)
+static int pulsetick(void*)
 {
     drawbars();
     return 0;
@@ -280,7 +279,7 @@ static int pulsetick(void* data)
 static void pulsearm(void)
 {
     if (!pulsetimer)
-        pulsetimer = wl_event_loop_add_timer(event_loop, pulsetick, NULL);
+        pulsetimer = wl_event_loop_add_timer(event_loop, pulsetick, nullptr);
     if (pulsetimer)
         wl_event_source_timer_update(pulsetimer, PULSE_FRAME_MS);
 }
@@ -289,7 +288,7 @@ void barfini(void)
 {
     if (pulsetimer)
         wl_event_source_remove(pulsetimer);
-    pulsetimer = NULL;
+    pulsetimer = nullptr;
 }
 
 /* icon scaled to fit size, centered in the bar */
@@ -308,10 +307,10 @@ static void drawicon(Monitor* m, Icon* icon, int x, int size)
                                 pixman_double_to_fixed((double)iw / w),
                                 pixman_double_to_fixed((double)ih / h));
     pixman_image_set_transform(img, &t);
-    pixman_image_set_filter(img, PIXMAN_FILTER_BILINEAR, NULL, 0);
+    pixman_image_set_filter(img, PIXMAN_FILTER_BILINEAR, nullptr, 0);
     pixman_image_composite32(PIXMAN_OP_OVER,
                              img,
-                             NULL,
+                             nullptr,
                              m->drw->image,
                              0,
                              0,
@@ -321,7 +320,7 @@ static void drawicon(Monitor* m, Icon* icon, int x, int size)
                              ((int)m->b.height - h) / 2,
                              w,
                              h);
-    pixman_image_set_transform(img, NULL);
+    pixman_image_set_transform(img, nullptr);
 }
 
 /* a rounded square where an icon is missing, colored by runnericon */
@@ -379,7 +378,7 @@ static void drawcandidates(Monitor* m, int x, int end)
     isz = MIN(runnericonsize(m), ph);
     for (i = sel / per * per; i < n && i < sel / per * per + per; i++) {
         s = runnercandidate(i);
-        icon = runner_icons == RunnerIconsAll ? runnericon(i) : NULL;
+        icon = runner_icons == RunnerIconsAll ? runnericon(i) : nullptr;
         holder = runner_icons == RunnerIconsAll && !icon && runnerhasicons();
         iw = icon || holder ? isz + pad / 2 : 0;
         tw = MIN((int)drwl_font_getwidth(m->drw, s), end - x - 2 * pad - iw);
@@ -672,7 +671,7 @@ void drawbar(Monitor* m)
              * once the notification expires or is dismissed. */
             long hist = -1;
             const Notification* n =
-                shownotifications && sel ? notifyshown(&hist) : NULL;
+                shownotifications && sel ? notifyshown(&hist) : nullptr;
             if (n) {
                 drawnotify(m, x, w, n, hist);
             } else if (barwintitle && c) {
@@ -696,7 +695,7 @@ void drawbar(Monitor* m)
     if (traywidth > 0)
         pixman_image_composite32(PIXMAN_OP_SRC,
                                  m->tray->image,
-                                 NULL,
+                                 nullptr,
                                  m->drw->image,
                                  0,
                                  0,
@@ -736,7 +735,7 @@ int statusshown(Monitor* m)
 
 void drawbars(void)
 {
-    Monitor* m = NULL;
+    Monitor* m = nullptr;
 
     wl_list_for_each(m, &mons, link) drawbar(m);
 }
@@ -759,7 +758,7 @@ void drawselbar(void)
  * given; zero means p does not start one. */
 static int statusescape(const char* p, uint32_t* scm)
 {
-    static const char hex[] = "0123456789abcdef";
+    static constexpr char hex[] = "0123456789abcdef";
     const char* d;
     uint32_t clr = 0;
     int i;
@@ -831,7 +830,7 @@ int drawstatus(Monitor* m, const char* text, int x, int w, int render)
                     p += 2;
                     continue;
                 }
-                if (statusescape(p, NULL))
+                if (statusescape(p, nullptr))
                     break;
             }
             seg[n++] = *p++;
@@ -866,7 +865,7 @@ static int statusarea(Monitor* m,
 {
     char seg[sizeof(stext)];
     const char* p = text;
-    const char* area[STATUS_BUTTONS] = { 0 };
+    const char* area[STATUS_BUTTONS] = {};
     int sx = 0, len;
     size_t n;
 
@@ -878,7 +877,7 @@ static int statusarea(Monitor* m,
                     p += 2;
                     continue;
                 }
-                if (statusescape(p, NULL))
+                if (statusescape(p, nullptr))
                     break;
             }
             seg[n++] = *p++;
@@ -897,7 +896,7 @@ static int statusarea(Monitor* m,
             return 1;
         }
 
-        if ((len = statusescape(p, NULL))) {
+        if ((len = statusescape(p, nullptr))) {
             if (p[1] == 's' && p[2] == '!')
                 area[0] = p + 3;
             else if (p[1] == 's')
@@ -918,7 +917,7 @@ static int statuscmd(Monitor* pm, int x, int button, char* cmd, size_t sz)
 
 static void statusrun(char* cmd)
 {
-    char* argv[] = { "/bin/sh", "-c", cmd, NULL };
+    char* argv[] = { "/bin/sh", "-c", cmd, nullptr };
 
     spawn(&(Arg){ .v = argv });
 }
@@ -936,7 +935,7 @@ int statusclick(Monitor* pm, int x, int button)
 int statusscroll(Monitor* pm, int x, double delta)
 {
     /* a mouse notch is 15; touchpads send it in slices */
-    static const double notch = 15;
+    constexpr double notch = 15;
     static double acc;
     char cmd[sizeof(stext)];
 
@@ -1139,7 +1138,7 @@ int titleclick(Client* c, double x, double y)
 
 void titlehover(Client* c, double x, double y)
 {
-    Client *h = c && onclose(c, x, y) ? c : NULL, *old = hovered, *w;
+    Client *h = c && onclose(c, x, y) ? c : nullptr, *old = hovered, *w;
 
     if (h == old)
         return;
@@ -1308,10 +1307,10 @@ static void drawnotify(Monitor* m,
             pixman_double_to_fixed((double)pixman_image_get_height(img) /
                                    b.iconh));
         pixman_image_set_transform(img, &t);
-        pixman_image_set_filter(img, PIXMAN_FILTER_BILINEAR, NULL, 0);
+        pixman_image_set_filter(img, PIXMAN_FILTER_BILINEAR, nullptr, 0);
         pixman_image_composite32(PIXMAN_OP_OVER,
                                  img,
-                                 NULL,
+                                 nullptr,
                                  m->drw->image,
                                  0,
                                  0,
@@ -1321,7 +1320,7 @@ static void drawnotify(Monitor* m,
                                  (m->b.height - b.iconh) / 2,
                                  b.iconw,
                                  b.iconh);
-        pixman_image_set_transform(img, NULL);
+        pixman_image_set_transform(img, nullptr);
     }
 
     if (notifyviewid) {
@@ -1330,7 +1329,7 @@ static void drawnotify(Monitor* m,
         wake = !wake || left < wake ? left : wake;
     }
     if (wake && !notifytimer)
-        notifytimer = wl_event_loop_add_timer(event_loop, notifytick, NULL);
+        notifytimer = wl_event_loop_add_timer(event_loop, notifytick, nullptr);
     if (notifytimer)
         wl_event_source_timer_update(notifytimer, (int)wake);
 }
@@ -1371,7 +1370,7 @@ static void notifybox(Monitor* m,
     int picking;
     size_t i;
 
-    memset(b, 0, sizeof(*b));
+    *b = (NotifyBox){};
     cx = x + pad;
     if (notification_linewidth) {
         b->linex = cx;
@@ -1477,7 +1476,7 @@ static void notifysync(const Notification* n, long hist)
     }
 }
 
-static int notifytick(void* data)
+static int notifytick(void*)
 {
     drawselbar();
     return 0;
@@ -1487,7 +1486,7 @@ void notifyfini(void)
 {
     if (notifytimer)
         wl_event_source_remove(notifytimer);
-    notifytimer = NULL;
+    notifytimer = nullptr;
 }
 
 /* Also closes the picker once its notification is gone or has no actions. */
@@ -1521,7 +1520,7 @@ static void notifypickrun(size_t i)
 }
 
 /* Toggles the picker; while open it owns the keyboard (notifypickkey()). */
-void notifyactions(const Arg* arg)
+void notifyactions(const Arg*)
 {
     const Notification* cur;
 
@@ -1580,7 +1579,7 @@ void notifypickkey(xkb_keysym_t sym)
 
 /* Scrolls the notification on by one screenful, wrapping to the start once
  * the tail has been shown. */
-void notifyscroll(const Arg* arg)
+void notifyscroll(const Arg*)
 {
     /* the box is measured on the monitor the bar is drawn on */
     Monitor* m = barmonitor();
@@ -1622,7 +1621,7 @@ void notifyscroll(const Arg* arg)
     drawbars();
 }
 
-void notifyprev(const Arg* arg)
+void notifyprev(const Arg*)
 {
     const Notification* h;
     long hist;
@@ -1637,7 +1636,7 @@ void notifyprev(const Arg* arg)
 }
 
 /* One step forward; on the live one, dismisses it for the next queued. */
-void notifynext(const Arg* arg)
+void notifynext(const Arg*)
 {
     long hist;
 
@@ -1654,7 +1653,7 @@ void notifynext(const Arg* arg)
 
 /* Puts the notification away early, giving the box back to the window title.
  * On a history entry, forgets it; with the picker open, closes the picker. */
-void notifydismiss(const Arg* arg)
+void notifydismiss(const Arg*)
 {
     const Notification* h;
     long hist;
@@ -1673,14 +1672,14 @@ void notifydismiss(const Arg* arg)
     }
     notify_histremove((size_t)hist);
     if ((h = notify_history((size_t)hist)) ||
-        (h = hist ? notify_history((size_t)hist - 1) : NULL))
+        (h = hist ? notify_history((size_t)hist - 1) : nullptr))
         notifybrowse(h->id);
     else
         notifybrowse(0);
 }
 
 /* The live and queued ones go to the history. */
-void notifydismissall(const Arg* arg)
+void notifydismissall(const Arg*)
 {
     int browsing = notifyviewid != 0;
 
@@ -1722,7 +1721,7 @@ void notifyopen(const Arg* arg)
         }
         if (b.signw && px >= b.signx - m->lrpad / 2 &&
             px < b.signx + b.signw + m->lrpad / 2) {
-            notifyactions(NULL);
+            notifyactions(nullptr);
             return;
         }
     }
@@ -1752,7 +1751,8 @@ void notifyopen(const Arg* arg)
 int notifywheel(Monitor* pm, double delta, int horizontal)
 {
     /* a mouse notch is 15; touchpads send it in slices */
-    static const double notch = 15, step = 5;
+    constexpr double notch = 15;
+    constexpr double step = 5;
     static double acc, hacc;
     Monitor* m = barmonitor();
     const Notification* n;
@@ -1775,9 +1775,9 @@ int notifywheel(Monitor* pm, double delta, int horizontal)
         if (!n && !notify_histlen())
             return 0;
         for (acc += delta; acc >= notch; acc -= notch)
-            notifynext(NULL);
+            notifynext(nullptr);
         for (; acc <= -notch; acc += notch)
-            notifyprev(NULL);
+            notifyprev(nullptr);
         return 1;
     }
 
@@ -1840,12 +1840,12 @@ int titleheight(Client* c)
     return titlebar && c->mon && !c->isfullscreen ? c->mon->t.real_height : 0;
 }
 
-int statusin(int fd, unsigned int mask, void* data)
+int statusin(int fd, unsigned int mask, void*)
 {
     static char buf[STATUS_MAX];
     static size_t len;
     static int skip; /* in a line too long for buf, up to its newline */
-    char *p, *nl, *line = NULL;
+    char *p, *nl, *line = nullptr;
     ssize_t n;
 
     if (mask & WL_EVENT_ERROR)
@@ -1901,10 +1901,10 @@ static void stopstatus(void)
         return;
 
     wl_event_source_remove(status_event_source);
-    status_event_source = NULL;
+    status_event_source = nullptr;
 }
 
-void togglebar(const Arg* arg)
+void togglebar(const Arg*)
 {
     /* under barsinglemon this hides the one bar from any monitor */
     Monitor* m = barmonitor();
@@ -1919,7 +1919,7 @@ void togglebar(const Arg* arg)
 
 /* arrange() leaves floating clients alone, and no client redraws a title
  * bar, so both are done by hand here */
-void toggletitlebar(const Arg* arg)
+void toggletitlebar(const Arg*)
 {
     Monitor* m;
     Client* c;

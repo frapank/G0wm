@@ -7,6 +7,7 @@
  * the tiling layouts, the tag actions and the stack order
  */
 #include <math.h>
+#include <stdbit.h>
 #include <stddef.h>
 #include <stdint.h>
 #include <stdio.h>
@@ -64,8 +65,8 @@ void arrange(Monitor* m)
     }
 
     m->lt[m->sellt]->arrange(m);
-    motionnotify(0, NULL, 0, 0, 0, 0);
-    checkidleinhibitor(NULL);
+    motionnotify(0, nullptr, 0, 0, 0, 0);
+    checkidleinhibitor(nullptr);
     warpcursor(focustop(selmon));
 }
 
@@ -211,7 +212,8 @@ static int tagshift(uint32_t set, int i)
 
     if (!(set & TAGMASK))
         return -1;
-    t = i > 0 ? 31 - __builtin_clz(set & TAGMASK) : __builtin_ctz(set);
+    t = i > 0 ? (int)stdc_bit_width(set & TAGMASK) - 1
+              : (int)stdc_trailing_zeros(set);
     t += i;
     return t < 0 || t >= (int)ntags ? -1 : t;
 }
@@ -308,12 +310,12 @@ Client* tabtop(Monitor* m)
     Client* c;
     wl_list_for_each(c, &fstack, flink) if (VISIBLEON(c, m) && !c->isfloating &&
                                             !c->isfullscreen) return c;
-    return NULL;
+    return nullptr;
 }
 
 static unsigned int tagindex(uint32_t tagset)
 {
-    return tagset ? (unsigned int)__builtin_ctz(tagset) : 0;
+    return tagset ? stdc_trailing_zeros(tagset) : 0;
 }
 
 void tile(Monitor* m)
@@ -364,24 +366,24 @@ void tile(Monitor* m)
     }
 }
 
-void togglegaps(const Arg* arg)
+void togglegaps(const Arg*)
 {
     selmon->gaps = !selmon->gaps;
     arrange(selmon);
 }
 
 /* Switches to the tabbed layout passed in arg, or back to the layout that was
- * selected before it if we are already tabbed - setlayout(NULL) flips lt[] back
- * to the other slot, which still holds it.
+ * selected before it if we are already tabbed - setlayout(nullptr) flips lt[]
+ * back to the other slot, which still holds it.
  *
- * Passing NULL rather than &(Arg){0}: Arg is a union, so that initialiser only
- * covers its first member (int i) and leaves the rest of ->v as whatever was on
- * the stack, which setlayout() then stores as the layout pointer. */
+ * Passing nullptr rather than &(Arg){0}: Arg is a union, so that initialiser
+ * only covers its first member (int i) and leaves the rest of ->v as whatever
+ * was on the stack, which setlayout() then stores as the layout pointer. */
 void toggletabbed(const Arg* arg)
 {
     if (!selmon || !arg || !arg->v)
         return;
-    setlayout(selmon->lt[selmon->sellt]->arrange == tabbed ? NULL : arg);
+    setlayout(selmon->lt[selmon->sellt]->arrange == tabbed ? nullptr : arg);
 }
 
 void toggletag(const Arg* arg)
@@ -437,7 +439,7 @@ void view(const Arg* arg)
     drawbars();
 }
 
-void zoom(const Arg* arg)
+void zoom(const Arg*)
 {
     Client *c, *sel = focustop(selmon);
 
@@ -451,7 +453,7 @@ void zoom(const Arg* arg)
         if (VISIBLEON(c, selmon) && !c->isfloating) {
             if (c != sel)
                 break;
-            sel = NULL;
+            sel = nullptr;
         }
     }
 

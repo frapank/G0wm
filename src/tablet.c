@@ -7,7 +7,6 @@
 #include <libinput.h>
 #include <linux/input-event-codes.h>
 #include <math.h>
-#include <stddef.h>
 #include <stdint.h>
 #include <stdlib.h>
 #include <string.h>
@@ -165,7 +164,7 @@ static void emulate(uint32_t time, uint32_t button, int pressed)
         .state = pressed ? WL_POINTER_BUTTON_STATE_PRESSED
                          : WL_POINTER_BUTTON_STATE_RELEASED,
     };
-    buttonpress(NULL, &synth);
+    buttonpress(nullptr, &synth);
     wlr_seat_pointer_notify_frame(seat);
 }
 
@@ -180,21 +179,21 @@ static struct wlr_output* outputnamed(const char* name)
     Monitor* m;
 
     if (!name)
-        return NULL;
+        return nullptr;
     wl_list_for_each(m, &mons, link)
     {
         if (m->wlr_output->enabled && !strcmp(m->wlr_output->name, name))
             return m->wlr_output;
     }
-    return NULL;
+    return nullptr;
 }
 
 static void padattach(TabletPad* p)
 {
     Tablet* t;
 
-    padfocus(p, NULL);
-    p->tablet = NULL;
+    padfocus(p, nullptr);
+    p->tablet = nullptr;
     wl_list_for_each(t, &tablets, link)
     {
         if (samegroup(p->device, &t->wlr_tablet->base)) {
@@ -231,7 +230,7 @@ static void padbutton(struct wl_listener* listener, void* data)
             : ZWP_TABLET_PAD_V2_BUTTON_STATE_RELEASED);
 }
 
-static void paddestroy(struct wl_listener* listener, void* data)
+static void paddestroy(struct wl_listener* listener, void*)
 {
     TabletPad* p = wl_container_of(listener, p, destroy);
 
@@ -253,7 +252,7 @@ static void padfocus(TabletPad* p, struct wlr_surface* surface)
         wlr_tablet_v2_tablet_pad_notify_leave(p->v2, p->focus);
         wl_list_remove(&p->focus_destroy.link);
         wl_list_init(&p->focus_destroy.link);
-        p->focus = NULL;
+        p->focus = nullptr;
     }
     if (!surface || !p->tablet || !p->tablet->v2 ||
         !wlr_surface_accepts_tablet_v2(surface, p->tablet->v2))
@@ -263,7 +262,7 @@ static void padfocus(TabletPad* p, struct wlr_surface* surface)
     LISTEN(&surface->events.destroy, &p->focus_destroy, padunfocus);
 }
 
-void padkeyboardfocus(struct wl_listener* listener, void* data)
+void padkeyboardfocus(struct wl_listener*, void* data)
 {
     struct wlr_seat_keyboard_focus_change_event* event = data;
     TabletPad* p;
@@ -299,13 +298,13 @@ static void padstrip(struct wl_listener* listener, void* data)
         event->time_msec);
 }
 
-static void padunfocus(struct wl_listener* listener, void* data)
+static void padunfocus(struct wl_listener* listener, void*)
 {
     TabletPad* p = wl_container_of(listener, p, focus_destroy);
 
     wl_list_remove(&p->focus_destroy.link);
     wl_list_init(&p->focus_destroy.link);
-    p->focus = NULL;
+    p->focus = nullptr;
 }
 
 /* no device groups outside libinput (nested): match any tablet */
@@ -332,7 +331,7 @@ static uint32_t stylusbutton(uint32_t button)
     }
 }
 
-void tabletaxis(struct wl_listener* listener, void* data)
+void tabletaxis(struct wl_listener*, void* data)
 {
     struct wlr_tablet_tool_axis_event* event = data;
     TabletTool* t = tool(event->tool);
@@ -368,7 +367,7 @@ void tabletaxis(struct wl_listener* listener, void* data)
         wlr_tablet_v2_tablet_tool_notify_wheel(t->v2, event->wheel_delta, 0);
 }
 
-void tabletbutton(struct wl_listener* listener, void* data)
+void tabletbutton(struct wl_listener*, void* data)
 {
     struct wlr_tablet_tool_button_event* event = data;
     TabletTool* t = tool(event->tool);
@@ -408,7 +407,7 @@ static void tabletconfigure(Tablet* t)
         libinput_device_config_left_handed_set(li, tablet_left_handed);
 }
 
-static void tabletdestroy(struct wl_listener* listener, void* data)
+static void tabletdestroy(struct wl_listener* listener, void*)
 {
     Tablet* t = wl_container_of(listener, t, destroy);
     TabletPad* p;
@@ -419,7 +418,7 @@ static void tabletdestroy(struct wl_listener* listener, void* data)
     free(t);
 }
 
-void tabletproximity(struct wl_listener* listener, void* data)
+void tabletproximity(struct wl_listener*, void* data)
 {
     struct wlr_tablet_tool_proximity_event* event = data;
     TabletTool* t = tool(event->tool);
@@ -448,7 +447,7 @@ void tabletremap(void)
     }
 }
 
-void tablettip(struct wl_listener* listener, void* data)
+void tablettip(struct wl_listener*, void* data)
 {
     struct wlr_tablet_tool_tip_event* event = data;
     TabletTool* t = tool(event->tool);
@@ -469,7 +468,7 @@ void tablettip(struct wl_listener* listener, void* data)
     if (t->v2 && t->v2->focused_surface && !tipbound()) {
         /* a stroke focuses like a click */
         selmon = xytomon(cursor->x, cursor->y);
-        xytonode(cursor->x, cursor->y, NULL, &c, NULL, NULL, NULL);
+        xytonode(cursor->x, cursor->y, nullptr, &c, nullptr, nullptr, nullptr);
         if (!locked && c && (!client_is_unmanaged(c) || client_wants_focus(c)))
             focusclient(c, 1);
         wlr_tablet_v2_tablet_tool_notify_down(t->v2);
@@ -515,7 +514,7 @@ static TabletTool* tool(struct wlr_tablet_tool* wlr_tool)
     return t;
 }
 
-static void tooldestroy(struct wl_listener* listener, void* data)
+static void tooldestroy(struct wl_listener* listener, void*)
 {
     TabletTool* t = wl_container_of(listener, t, destroy);
 
@@ -540,17 +539,17 @@ static void toolmotion(TabletTool* t,
                        double y)
 {
     struct wlr_input_device* device = &tb->wlr_tablet->base;
-    struct wlr_surface* surface = NULL;
-    Client* c = NULL;
+    struct wlr_surface* surface = nullptr;
+    Client* c = nullptr;
     double lx, ly, sx = 0, sy = 0;
     int grabbed = t->v2 && wlr_tablet_tool_v2_has_implicit_grab(t->v2);
 
     wlr_cursor_absolute_to_layout_coords(cursor, device, x, y, &lx, &ly);
     if (t->v2 && tb->v2 && !t->emulating && cursor_mode == CurNormal &&
         !traypopup_active())
-        xytonode(lx, ly, &surface, &c, NULL, &sx, &sy);
+        xytonode(lx, ly, &surface, &c, nullptr, &sx, &sy);
     if (surface && !wlr_surface_accepts_tablet_v2(surface, tb->v2))
-        surface = NULL;
+        surface = nullptr;
 
     if (!surface && !grabbed) {
         if (t->v2)
@@ -597,7 +596,7 @@ static void toolsetcursor(struct wl_listener* listener, void* data)
         setclientcursor(event->surface, event->hotspot_x, event->hotspot_y);
 }
 
-void touchcancel(struct wl_listener* listener, void* data)
+void touchcancel(struct wl_listener*, void* data)
 {
     struct wlr_touch_cancel_event* event = data;
     struct wlr_touch_point* point;
@@ -610,7 +609,7 @@ void touchcancel(struct wl_listener* listener, void* data)
     }
 }
 
-static void touchdestroy(struct wl_listener* listener, void* data)
+static void touchdestroy(struct wl_listener* listener, void*)
 {
     Touch* d = wl_container_of(listener, d, destroy);
 
@@ -620,18 +619,18 @@ static void touchdestroy(struct wl_listener* listener, void* data)
     seatcaps();
 }
 
-void touchdown(struct wl_listener* listener, void* data)
+void touchdown(struct wl_listener*, void* data)
 {
     struct wlr_touch_down_event* event = data;
-    struct wlr_surface* surface = NULL;
-    Client* c = NULL;
+    struct wlr_surface* surface = nullptr;
+    Client* c = nullptr;
     double lx, ly, sx, sy;
 
     wlr_idle_notifier_v1_notify_activity(idle_notifier, seat);
     wlr_cursor_absolute_to_layout_coords(
         cursor, &event->touch->base, event->x, event->y, &lx, &ly);
     if (cursor_mode == CurNormal && !traypopup_active())
-        xytonode(lx, ly, &surface, &c, NULL, &sx, &sy);
+        xytonode(lx, ly, &surface, &c, nullptr, &sx, &sy);
 
     if (surface && touchtaken(surface) &&
         wlr_seat_touch_notify_down(
@@ -656,12 +655,12 @@ void touchdown(struct wl_listener* listener, void* data)
     emulate(event->time_msec, BTN_LEFT, 1);
 }
 
-void touchframe(struct wl_listener* listener, void* data)
+void touchframe(struct wl_listener*, void*)
 {
     wlr_seat_touch_notify_frame(seat);
 }
 
-void touchmotion(struct wl_listener* listener, void* data)
+void touchmotion(struct wl_listener*, void* data)
 {
     struct wlr_touch_motion_event* event = data;
     double lx, ly;
@@ -681,12 +680,12 @@ void touchmotion(struct wl_listener* listener, void* data)
     }
     if (seat->drag && seat->drag->grab_type == WLR_DRAG_GRAB_KEYBOARD_TOUCH &&
         seat->drag->touch_id == event->touch_id) {
-        struct wlr_surface* surface = NULL;
+        struct wlr_surface* surface = nullptr;
         double sx = 0, sy = 0;
 
         wlr_scene_node_set_position(
             &drag_icon->node, (int)round(lx), (int)round(ly));
-        xytonode(lx, ly, &surface, NULL, NULL, &sx, &sy);
+        xytonode(lx, ly, &surface, nullptr, nullptr, &sx, &sy);
         if (surface)
             wlr_seat_touch_point_focus(
                 seat, surface, event->time_msec, event->touch_id, sx, sy);
@@ -712,7 +711,7 @@ static int touchtaken(struct wlr_surface* surface)
     return client && !wl_list_empty(&client->touches);
 }
 
-void touchup(struct wl_listener* listener, void* data)
+void touchup(struct wl_listener*, void* data)
 {
     struct wlr_touch_up_event* event = data;
 

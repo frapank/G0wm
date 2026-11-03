@@ -23,18 +23,25 @@ typedef struct {
     size_t size_pixman;
 } Icon;
 
-Icon* createicon(const uint8_t* buf, int width, int height, int size);
-Icon* createiconfromname(const char* name, const char* themepath, int size);
-Icon* createiconfromdata(const uint8_t* data,
-                         int width,
-                         int height,
-                         int rowstride,
-                         int alpha,
-                         int size);
-FallbackIcon* createfallbackicon(const char* appname,
-                                 int fgcolor,
-                                 struct fcft_font* font);
+[[nodiscard]] Icon* createicon(const uint8_t* buf,
+                               int width,
+                               int height,
+                               int size);
+[[nodiscard]] Icon* createiconfromname(const char* name,
+                                       const char* themepath,
+                                       int size);
+[[nodiscard]] Icon* createiconfromdata(const uint8_t* data,
+                                       int width,
+                                       int height,
+                                       int rowstride,
+                                       int alpha,
+                                       int size);
+[[nodiscard]] FallbackIcon* createfallbackicon(const char* appname,
+                                               int fgcolor,
+                                               struct fcft_font* font);
 void destroyicon(Icon* icon);
-int resize_image(pixman_image_t* orig, int new_width, int new_height);
+[[nodiscard]] int resize_image(pixman_image_t* orig,
+                               int new_width,
+                               int new_height);
 
 #endif

@@ -52,7 +52,7 @@ enum {
 }; /* gesture motions */
 enum { RunnerIconsNone, RunnerIconsSelected, RunnerIconsAll };
 enum { BarStatusFocus, BarStatusAll, BarStatusMain };
-enum {
+enum : unsigned int {
     ClkTagBar,
     ClkLtSymbol,
     ClkStatus,
@@ -62,7 +62,10 @@ enum {
     ClkTray,
     ClkWinTitle /* a window's title bar, only for the wheel */
 }; /* clicks */
-enum { WheelUp = 0x10000, WheelDown }; /* Button.button for a wheel notch */
+enum : unsigned int {
+    WheelUp = 0x10000,
+    WheelDown
+}; /* Button.button for a wheel notch */
 
 typedef struct {
     unsigned int click;
@@ -249,7 +252,7 @@ extern int allow_tearing;
 extern int auto_vrr;
 
 void settingsload(void);
-int settingswrite(void);
-int mkdirp(char* path);
+[[nodiscard]] int settingswrite(void);
+[[nodiscard]] int mkdirp(char* path);
 
 #endif

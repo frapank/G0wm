@@ -10,7 +10,7 @@
 #include <dbus/dbus.h>
 
 /* Longest label a menu entry is shown under, affixes included */
-#define MENU_LABEL_MAX 64
+constexpr int MENU_LABEL_MAX = 64;
 
 typedef struct Menu Menu;
 

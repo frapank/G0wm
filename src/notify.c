@@ -18,9 +18,9 @@
 #define NOTIFY_IFACE "org.freedesktop.Notifications"
 /* An unbounded expire_timeout would let one client hold the bar (and hide the
  * window title) for the rest of the session. */
-#define NOTIFY_TIMEOUT_MAX 60000
+constexpr int NOTIFY_TIMEOUT_MAX = 60'000;
 /* image-data bigger than this on a side is refused rather than decoded */
-#define NOTIFY_IMAGEMAX 4096
+constexpr int NOTIFY_IMAGEMAX = 4096;
 
 /* org.freedesktop.Notifications.NotificationClosed reasons */
 enum { ClosedExpired = 1, ClosedDismissed, ClosedByCall, ClosedUndefined };
@@ -49,7 +49,7 @@ uint64_t notify_now(void)
     struct timespec ts;
 
     clock_gettime(CLOCK_MONOTONIC, &ts);
-    return (uint64_t)ts.tv_sec * 1000 + (uint64_t)ts.tv_nsec / 1000000;
+    return (uint64_t)ts.tv_sec * 1000 + (uint64_t)ts.tv_nsec / 1'000'000;
 }
 
 /* Copies src into dst keeping only whole, well-formed UTF-8 codepoints:
@@ -106,7 +106,7 @@ static void notify_closed(dbus_uint32_t id, dbus_uint32_t reason)
                                  DBUS_TYPE_UINT32,
                                  &reason,
                                  DBUS_TYPE_INVALID))
-        dbus_connection_send(notify.conn, sig, NULL);
+        dbus_connection_send(notify.conn, sig, nullptr);
     dbus_message_unref(sig);
 }
 
@@ -114,7 +114,7 @@ static void release(Notification* n)
 {
     if (n->icon)
         destroyicon(n->icon);
-    n->icon = NULL;
+    n->icon = nullptr;
 }
 
 /* same id, or same app and stack tag */
@@ -149,7 +149,7 @@ static void histpush(Notification* n)
     memmove(&notify.hist[1], &notify.hist[0], notify.nhist * sizeof(*n));
     notify.hist[0] = *n;
     notify.nhist++;
-    n->icon = NULL;
+    n->icon = nullptr;
 }
 
 static void unqueue(size_t i, Notification* dst)
@@ -199,7 +199,7 @@ static int notify_arm(unsigned int ms)
 {
     if (!notify.timer && ms)
         notify.timer =
-            wl_event_loop_add_timer(notify.loop, notify_expire, NULL);
+            wl_event_loop_add_timer(notify.loop, notify_expire, nullptr);
     if (!notify.timer)
         return !ms;
     return wl_event_source_timer_update(notify.timer, (int)ms) == 0;
@@ -477,28 +477,28 @@ static Icon* image_data(DBusMessage* msg, const char* name)
     int i, len;
 
     if (!hint(msg, name, DBUS_TYPE_STRUCT, &var))
-        return NULL;
+        return nullptr;
     dbus_message_iter_recurse(&var, &st);
     for (i = 0; i < 3; i++, dbus_message_iter_next(&st)) {
         if (dbus_message_iter_get_arg_type(&st) != DBUS_TYPE_INT32)
-            return NULL;
+            return nullptr;
         dbus_message_iter_get_basic(&st, &v[i]);
     }
     if (dbus_message_iter_get_arg_type(&st) != DBUS_TYPE_BOOLEAN)
-        return NULL;
+        return nullptr;
     dbus_message_iter_get_basic(&st, &alpha);
     dbus_message_iter_next(&st);
     if (dbus_message_iter_get_arg_type(&st) != DBUS_TYPE_INT32)
-        return NULL;
+        return nullptr;
     dbus_message_iter_get_basic(&st, &bps);
     dbus_message_iter_next(&st);
     if (dbus_message_iter_get_arg_type(&st) != DBUS_TYPE_INT32)
-        return NULL;
+        return nullptr;
     dbus_message_iter_get_basic(&st, &ch);
     dbus_message_iter_next(&st);
     if (dbus_message_iter_get_arg_type(&st) != DBUS_TYPE_ARRAY ||
         dbus_message_iter_get_element_type(&st) != DBUS_TYPE_BYTE)
-        return NULL;
+        return nullptr;
     dbus_message_iter_recurse(&st, &arr);
     dbus_message_iter_get_fixed_array(&arr, &data, &len);
 
@@ -506,7 +506,7 @@ static Icon* image_data(DBusMessage* msg, const char* name)
         v[1] > NOTIFY_IMAGEMAX || bps != 8 || ch != (alpha ? 4 : 3) ||
         v[2] < v[0] * ch ||
         (int64_t)len < (int64_t)v[2] * (v[1] - 1) + (int64_t)v[0] * ch)
-        return NULL;
+        return nullptr;
     return createiconfromdata(data, v[0], v[1], v[2], alpha, NOTIFY_ICONSIZE);
 }
 
@@ -514,10 +514,10 @@ static Icon* image_data(DBusMessage* msg, const char* name)
 static Icon* image_named(const char* s)
 {
     if (!s || !*s)
-        return NULL;
+        return nullptr;
     if (!strncmp(s, "file://", 7))
         s += 7;
-    return createiconfromname(s, NULL, NOTIFY_ICONSIZE);
+    return createiconfromname(s, nullptr, NOTIFY_ICONSIZE);
 }
 
 /* in the spec's order of precedence */
@@ -546,7 +546,7 @@ static DBusHandlerResult reply_empty(DBusConnection* conn, DBusMessage* msg)
     DBusMessage* reply = dbus_message_new_method_return(msg);
     DBusHandlerResult res = DBUS_HANDLER_RESULT_HANDLED;
 
-    if (!reply || !dbus_connection_send(conn, reply, NULL))
+    if (!reply || !dbus_connection_send(conn, reply, nullptr))
         res = DBUS_HANDLER_RESULT_NEED_MEMORY;
     if (reply)
         dbus_message_unref(reply);
@@ -559,7 +559,7 @@ static DBusHandlerResult handle_notify(DBusConnection* conn, DBusMessage* msg)
     DBusMessage* reply;
     const char *app_name = "", *app_icon = "", *summary = "", *body = "";
     dbus_uint32_t replaces_id = 0, id;
-    Notification n = { 0 };
+    Notification n = {};
     size_t i;
     int ms;
     /* bounded well under NOTIFY_TEXTMAX: snprintf() below can't truncate */
@@ -679,7 +679,7 @@ static DBusHandlerResult handle_notify(DBusConnection* conn, DBusMessage* msg)
             reply, DBUS_TYPE_UINT32, &id, DBUS_TYPE_INVALID);
 
 send:
-    if (!reply || !dbus_connection_send(conn, reply, NULL)) {
+    if (!reply || !dbus_connection_send(conn, reply, nullptr)) {
         if (reply)
             dbus_message_unref(reply);
         return DBUS_HANDLER_RESULT_NEED_MEMORY;
@@ -695,7 +695,7 @@ static DBusHandlerResult handle_close(DBusConnection* conn, DBusMessage* msg)
     size_t i;
 
     if (!dbus_message_get_args(
-            msg, NULL, DBUS_TYPE_UINT32, &id, DBUS_TYPE_INVALID))
+            msg, nullptr, DBUS_TYPE_UINT32, &id, DBUS_TYPE_INVALID))
         return reply_empty(conn, msg);
     for (i = 0; i < notify.nqueue && notify.queue[i].id != id; i++)
         ;
@@ -734,7 +734,7 @@ static DBusHandlerResult handle_capabilities(DBusConnection* conn,
             res = DBUS_HANDLER_RESULT_NEED_MEMORY;
     if (res != DBUS_HANDLER_RESULT_HANDLED ||
         !dbus_message_iter_close_container(&iter, &arr) ||
-        !dbus_connection_send(conn, reply, NULL))
+        !dbus_connection_send(conn, reply, nullptr))
         res = DBUS_HANDLER_RESULT_NEED_MEMORY;
 
     dbus_message_unref(reply);
@@ -762,7 +762,7 @@ static DBusHandlerResult handle_serverinfo(DBusConnection* conn,
                                   DBUS_TYPE_STRING,
                                   &spec,
                                   DBUS_TYPE_INVALID) ||
-        !dbus_connection_send(conn, reply, NULL))
+        !dbus_connection_send(conn, reply, nullptr))
         res = DBUS_HANDLER_RESULT_NEED_MEMORY;
 
     dbus_message_unref(reply);
@@ -804,7 +804,7 @@ void notify_start(DBusConnection* conn,
     if (!conn || !loop)
         return;
 
-    memset(&notify, 0, sizeof(notify));
+    notify = (typeof(notify)){};
     notify.conn = conn;
     notify.loop = loop;
     notify_settimeout(timeout_secs);
@@ -814,7 +814,7 @@ void notify_start(DBusConnection* conn,
     /* if another daemon (mako, dunst, swaync, ...) already owns the name,
      * don't fight it for it: just stay disabled */
     r = dbus_bus_request_name(
-        conn, NOTIFY_NAME, DBUS_NAME_FLAG_DO_NOT_QUEUE, NULL);
+        conn, NOTIFY_NAME, DBUS_NAME_FLAG_DO_NOT_QUEUE, nullptr);
     if (r != DBUS_REQUEST_NAME_REPLY_PRIMARY_OWNER) {
         fprintf(stderr,
                 "Couldn't own %s (another notification daemon is likely "
@@ -824,8 +824,8 @@ void notify_start(DBusConnection* conn,
     }
 
     if (!dbus_connection_register_object_path(
-            conn, NOTIFY_OPATH, &notify_vtable, NULL)) {
-        dbus_bus_release_name(conn, NOTIFY_NAME, NULL);
+            conn, NOTIFY_OPATH, &notify_vtable, nullptr)) {
+        dbus_bus_release_name(conn, NOTIFY_NAME, nullptr);
         fprintf(stderr, "Couldn't register %s\n", NOTIFY_OPATH);
         return;
     }
@@ -842,7 +842,7 @@ void notify_stop(void)
 
     /* nothing is worth redrawing on the way out, but clients still deserve
      * to hear that their notification went away */
-    notify.redraw = NULL;
+    notify.redraw = nullptr;
     while (notify.nqueue) {
         unqueue(0, &n);
         notify_closed(n.id, ClosedUndefined);
@@ -853,10 +853,10 @@ void notify_stop(void)
         release(&notify.hist[--notify.nhist]);
     if (notify.timer) {
         wl_event_source_remove(notify.timer);
-        notify.timer = NULL;
+        notify.timer = nullptr;
     }
     dbus_connection_unregister_object_path(notify.conn, NOTIFY_OPATH);
-    dbus_bus_release_name(notify.conn, NOTIFY_NAME, NULL);
+    dbus_bus_release_name(notify.conn, NOTIFY_NAME, nullptr);
     notify.running = 0;
 }
 
@@ -869,7 +869,7 @@ void notify_settimeout(unsigned int timeout_secs)
 
 const Notification* notify_current(void)
 {
-    return notify.active ? &notify.cur : NULL;
+    return notify.active ? &notify.cur : nullptr;
 }
 
 size_t notify_queued(void)
@@ -879,7 +879,7 @@ size_t notify_queued(void)
 
 const Notification* notify_history(size_t i)
 {
-    return i < notify.nhist ? &notify.hist[i] : NULL;
+    return i < notify.nhist ? &notify.hist[i] : nullptr;
 }
 
 size_t notify_histlen(void)
@@ -941,7 +941,7 @@ static void invoke(const char* key)
                                      DBUS_TYPE_STRING,
                                      &token,
                                      DBUS_TYPE_INVALID))
-            dbus_connection_send(notify.conn, sig, NULL);
+            dbus_connection_send(notify.conn, sig, nullptr);
         dbus_message_unref(sig);
     }
     if ((sig = dbus_message_new_signal(
@@ -952,7 +952,7 @@ static void invoke(const char* key)
                                      DBUS_TYPE_STRING,
                                      &key,
                                      DBUS_TYPE_INVALID))
-            dbus_connection_send(notify.conn, sig, NULL);
+            dbus_connection_send(notify.conn, sig, nullptr);
         dbus_message_unref(sig);
     }
     if (notify.cur.resident) {

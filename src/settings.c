@@ -12,7 +12,6 @@
 #include <math.h>
 #include <scfg.h>
 #include <stdarg.h>
-#include <stdbool.h>
 #include <stddef.h>
 #include <stdint.h>
 #include <stdio.h>
@@ -54,7 +53,7 @@ typedef struct {
     const char* name;
 } Enum;
 
-/* tables end on { 0, NULL }; a real zero value is listed before it */
+/* tables end on { 0, nullptr }; a real zero value is listed before it */
 /* in combo order: logo+shift+q */
 static const Enum modnames[] = { { WLR_MODIFIER_LOGO, "logo" },
                                  { WLR_MODIFIER_CTRL, "ctrl" },
@@ -64,28 +63,24 @@ static const Enum modnames[] = { { WLR_MODIFIER_LOGO, "logo" },
                                  { WLR_MODIFIER_MOD2, "mod2" },
                                  { WLR_MODIFIER_MOD3, "mod3" },
                                  { WLR_MODIFIER_MOD5, "mod5" },
-                                 { 0, NULL } };
+                                 { 0, nullptr } };
 
 static const Enum dragmodes[] = { { CurMove, "move" },
                                   { CurResize, "resize" },
-                                  { 0, NULL } };
+                                  { 0, nullptr } };
 
 static const Enum clickareas[] = {
-    { ClkTagBar, "tagbar" },
-    { ClkLtSymbol, "ltsymbol" },
-    { ClkStatus, "status" },
-    { ClkTitle, "title" },
-    { ClkClient, "client" },
-    { ClkRoot, "root" },
-    { ClkTray, "tray" },
-    { ClkWinTitle, "wintitle" },
-    { 0, NULL },
+    { ClkTagBar, "tagbar" }, { ClkLtSymbol, "ltsymbol" },
+    { ClkStatus, "status" }, { ClkTitle, "title" },
+    { ClkClient, "client" }, { ClkRoot, "root" },
+    { ClkTray, "tray" },     { ClkWinTitle, "wintitle" },
+    { 0, nullptr },
 };
 
 static const Enum mousebuttons[] = {
     { BTN_LEFT, "left" },        { BTN_MIDDLE, "middle" },
     { BTN_RIGHT, "right" },      { WheelUp, "wheel-up" },
-    { WheelDown, "wheel-down" }, { 0, NULL }
+    { WheelDown, "wheel-down" }, { 0, nullptr }
 };
 
 static const Enum gesturemotions[] = { { SwipeLeft, "swipe-left" },
@@ -94,26 +89,26 @@ static const Enum gesturemotions[] = { { SwipeLeft, "swipe-left" },
                                        { SwipeDown, "swipe-down" },
                                        { PinchIn, "pinch-in" },
                                        { PinchOut, "pinch-out" },
-                                       { 0, NULL } };
+                                       { 0, nullptr } };
 
 static const Enum runnericons[] = { { RunnerIconsNone, "none" },
                                     { RunnerIconsSelected, "selected" },
                                     { RunnerIconsAll, "all" },
-                                    { 0, NULL } };
+                                    { 0, nullptr } };
 
 static const Enum barstatuses[] = { { BarStatusFocus, "focus" },
                                     { BarStatusAll, "all" },
                                     { BarStatusMain, "main" },
-                                    { 0, NULL } };
+                                    { 0, nullptr } };
 
 static const Enum cornerstyles[] = { { CornerNormal, "normal" },
                                      { CornerSquircle, "squircle" },
-                                     { 0, NULL } };
+                                     { 0, nullptr } };
 
 #ifdef INTEGRATED_BACKGROUND
 static const Enum opacitykinds[] = { { OpacityNormal, "normal" },
                                      { OpacityBlur, "blur" },
-                                     { 0, NULL } };
+                                     { 0, nullptr } };
 #endif /* INTEGRATED_BACKGROUND */
 
 static const Enum transforms[] = {
@@ -125,7 +120,7 @@ static const Enum transforms[] = {
     { WL_OUTPUT_TRANSFORM_FLIPPED_90, "flipped-90" },
     { WL_OUTPUT_TRANSFORM_FLIPPED_180, "flipped-180" },
     { WL_OUTPUT_TRANSFORM_FLIPPED_270, "flipped-270" },
-    { 0, NULL }
+    { 0, nullptr }
 };
 
 static const Enum scrollmethods[] = {
@@ -133,14 +128,14 @@ static const Enum scrollmethods[] = {
     { LIBINPUT_CONFIG_SCROLL_2FG, "2fg" },
     { LIBINPUT_CONFIG_SCROLL_EDGE, "edge" },
     { LIBINPUT_CONFIG_SCROLL_ON_BUTTON_DOWN, "on-button-down" },
-    { 0, NULL }
+    { 0, nullptr }
 };
 
 static const Enum clickmethods[] = {
     { LIBINPUT_CONFIG_CLICK_METHOD_NONE, "none" },
     { LIBINPUT_CONFIG_CLICK_METHOD_BUTTON_AREAS, "button-areas" },
     { LIBINPUT_CONFIG_CLICK_METHOD_CLICKFINGER, "clickfinger" },
-    { 0, NULL }
+    { 0, nullptr }
 };
 
 static const Enum sendevents[] = {
@@ -148,25 +143,25 @@ static const Enum sendevents[] = {
     { LIBINPUT_CONFIG_SEND_EVENTS_DISABLED, "disabled" },
     { LIBINPUT_CONFIG_SEND_EVENTS_DISABLED_ON_EXTERNAL_MOUSE,
       "disabled-on-external-mouse" },
-    { 0, NULL }
+    { 0, nullptr }
 };
 
 static const Enum accelprofiles[] = {
     { LIBINPUT_CONFIG_ACCEL_PROFILE_NONE, "none" },
     { LIBINPUT_CONFIG_ACCEL_PROFILE_FLAT, "flat" },
     { LIBINPUT_CONFIG_ACCEL_PROFILE_ADAPTIVE, "adaptive" },
-    { 0, NULL }
+    { 0, nullptr }
 };
 
 static const Enum buttonmaps[] = { { LIBINPUT_CONFIG_TAP_MAP_LRM, "lrm" },
                                    { LIBINPUT_CONFIG_TAP_MAP_LMR, "lmr" },
-                                   { 0, NULL } };
+                                   { 0, nullptr } };
 
 static const Enum loglevels[] = { { WLR_SILENT, "silent" },
                                   { WLR_ERROR, "error" },
                                   { WLR_INFO, "info" },
                                   { WLR_DEBUG, "debug" },
-                                  { 0, NULL } };
+                                  { 0, nullptr } };
 
 static const struct {
     const char* name;
@@ -231,7 +226,7 @@ static const Action actions[] = {
 
 static int line; /* of the directive being read */
 
-static void warn(const char* fmt, ...)
+[[gnu::format(printf, 1, 2)]] static void warn(const char* fmt, ...)
 {
     va_list ap;
 
@@ -271,7 +266,7 @@ static const Action* actionbyfunc(void (*func)(const Arg*))
     for (i = 0; i < LENGTH(actions); i++)
         if (actions[i].func == func)
             return &actions[i];
-    return NULL;
+    return nullptr;
 }
 
 static const Action* actionbyname(const char* name)
@@ -279,12 +274,12 @@ static const Action* actionbyname(const char* name)
     size_t i;
 
     if (!name)
-        return NULL;
+        return nullptr;
     for (i = 0; i < LENGTH(actions); i++)
         if (!strcmp(actions[i].name, name))
             return &actions[i];
     warn("%s is not an action", name);
-    return NULL;
+    return nullptr;
 }
 
 static const char* arrangename(void (*fn)(Monitor*))
@@ -320,6 +315,7 @@ static const char* const schemenames[] = {
     [SchemeRunnerSel] = "runnersel",
     [SchemeRunnerIcon] = "runnericon",
 };
+static_assert(LENGTH(schemenames) == NumSchemes);
 
 /* repeatable, so never missing */
 static const char* const records[] = { "layout",    "rule",     "monitor",
@@ -770,7 +766,7 @@ static void wmonitors(void)
         wnum("mfact", monrules[i].mfact);
         wint("nmaster", monrules[i].nmaster);
         wnum("scale", monrules[i].scale);
-        wstr("layout", monrules[i].lt ? monrules[i].lt->symbol : NULL);
+        wstr("layout", monrules[i].lt ? monrules[i].lt->symbol : nullptr);
         wstr("transform", enumname(transforms, (int)monrules[i].rr));
         wint("x", monrules[i].x);
         wint("y", monrules[i].y);
@@ -907,19 +903,19 @@ static void defaults(void)
 /* the defaults, rendered; NULL and a message when they cannot be */
 static char* rendered(void)
 {
-    char* text = NULL;
+    char* text = nullptr;
     size_t len;
 
     if ((fp = open_memstream(&text, &len))) {
         depth = 0;
-        prev = NULL;
+        prev = nullptr;
         defaults();
         if (!fclose(fp))
             return text;
     }
     free(text);
     fprintf(stderr, "g0wm: cannot render the settings\n");
-    return NULL;
+    return nullptr;
 }
 
 static const struct scfg_directive* find(const struct scfg_block* b,
@@ -928,14 +924,14 @@ static const struct scfg_directive* find(const struct scfg_block* b,
     size_t i;
 
     if (!b)
-        return NULL;
+        return nullptr;
     for (i = 0; i < b->directives_len; i++) {
         if (!strcmp(b->directives[i].name, k)) {
             line = b->directives[i].lineno;
             return &b->directives[i];
         }
     }
-    return NULL;
+    return nullptr;
 }
 
 static const struct scfg_block* section(const struct scfg_block* b,
@@ -943,7 +939,7 @@ static const struct scfg_block* section(const struct scfg_block* b,
 {
     const struct scfg_directive* d = find(b, k);
 
-    return d ? &d->children : NULL;
+    return d ? &d->children : nullptr;
 }
 
 static size_t count(const struct scfg_block* b, const char* k)
@@ -957,7 +953,7 @@ static size_t count(const struct scfg_block* b, const char* k)
 
 static const char* param(const struct scfg_directive* d, size_t i)
 {
-    return d && i < d->params_len ? d->params[i] : NULL;
+    return d && i < d->params_len ? d->params[i] : nullptr;
 }
 
 static int isbool(const char* s)
@@ -1052,14 +1048,14 @@ static int getenum(const struct scfg_block* b,
                    int cur,
                    const char* what)
 {
-    const char* name = getstr(b, k, NULL);
+    const char* name = getstr(b, k, nullptr);
 
     return name ? enumval(e, name, cur, what) : cur;
 }
 
 static uint32_t gethex(const struct scfg_block* b, const char* k, uint32_t cur)
 {
-    return hexval(getstr(b, k, NULL), cur);
+    return hexval(getstr(b, k, nullptr), cur);
 }
 
 static void getrgba(float c[static 4],
@@ -1084,7 +1080,7 @@ static const char** strlist(const struct scfg_directive* d,
     size_t i;
 
     if (!d || d->params_len < from)
-        return NULL;
+        return nullptr;
     v = ecalloc(d->params_len - from + 1, sizeof *v);
     for (i = from; i < d->params_len; i++)
         v[i - from] = d->params[i];
@@ -1110,7 +1106,7 @@ static const char* splitmods(const char* s, uint32_t* mod)
 
 static uint32_t getmods(const struct scfg_block* b, const char* k, uint32_t cur)
 {
-    const char* s = getstr(b, k, NULL);
+    const char* s = getstr(b, k, nullptr);
     uint32_t mod;
 
     if (!s)
@@ -1126,18 +1122,18 @@ static const Layout* layoutbysymbol(const char* symbol)
     size_t i;
 
     if (!symbol)
-        return NULL;
+        return nullptr;
     for (i = 0; i < nlayouts; i++)
         if (!strcmp(layouts[i].symbol, symbol))
             return &layouts[i];
     warn("no layout draws %s", symbol);
-    return NULL;
+    return nullptr;
 }
 
 static Arg getarg(char kind, const struct scfg_directive* d, size_t i)
 {
     const char* s = param(d, i);
-    Arg a = { 0 };
+    Arg a = {};
 
     switch (kind) {
         case 'i':
@@ -1150,7 +1146,7 @@ static Arg getarg(char kind, const struct scfg_directive* d, size_t i)
             a.f = (float)numval(s, 0);
             break;
         case 'v':
-            a.v = strlist(d, i, NULL);
+            a.v = strlist(d, i, nullptr);
             break;
         case 'l':
             a.v = layoutbysymbol(s);
@@ -1427,8 +1423,8 @@ static void applyrules(const struct scfg_block* b)
         if (strcmp(b->directives[i].name, "rule"))
             continue;
         r = &b->directives[i].children;
-        out[n].id = getstr(r, "id", NULL);
-        out[n].title = getstr(r, "title", NULL);
+        out[n].id = getstr(r, "id", nullptr);
+        out[n].title = getstr(r, "title", nullptr);
         out[n].tags = getuint(r, "tags", 0);
         out[n].isfloating = getbool(r, "isfloating", 0);
         out[n].isprivate = getbool(r, "private", -1);
@@ -1454,11 +1450,11 @@ static void applymonitors(const struct scfg_block* b)
         if (strcmp(b->directives[i].name, "monitor"))
             continue;
         m = &b->directives[i].children;
-        out[n].name = getstr(m, "name", NULL);
+        out[n].name = getstr(m, "name", nullptr);
         out[n].mfact = (float)getnum(m, "mfact", 0.55);
         out[n].nmaster = (int)getnum(m, "nmaster", 1);
         out[n].scale = (float)getnum(m, "scale", 1);
-        out[n].lt = layoutbysymbol(getstr(m, "layout", NULL));
+        out[n].lt = layoutbysymbol(getstr(m, "layout", nullptr));
         if (!out[n].lt)
             out[n].lt = layouts;
         out[n].rr =
@@ -1498,7 +1494,7 @@ static void applyautostart(const struct scfg_block* b)
             continue;
         for (j = 0; j < d->params_len; j++)
             out[n++] = d->params[j];
-        out[n++] = NULL;
+        out[n++] = nullptr;
     }
     autostart = out;
 }
@@ -1671,7 +1667,7 @@ static const char* settingspath(void)
     else if (home && *home)
         snprintf(path, sizeof path, "%s/.config/g0wm/config", home);
     else
-        return NULL;
+        return nullptr;
     return path;
 }
 
@@ -1707,7 +1703,7 @@ static const char* kindof(const struct scfg_directive* d)
         return d->params_len ? "a list" : "off";
     if (isbool(d->params[0]))
         return "true or false";
-    if (isnum(d->params[0], NULL))
+    if (isnum(d->params[0], nullptr))
         return "a number";
     return "a string";
 }
@@ -1884,7 +1880,7 @@ static void reloadkeyboard(void)
         &kb_group->wlr_group->keyboard, repeat_rate, repeat_delay);
 }
 
-static void reloadsettings(const Arg* arg)
+static void reloadsettings(const Arg*)
 {
     Monitor* m;
     Client* c;
@@ -1920,7 +1916,7 @@ static void reloadsettings(const Arg* arg)
     reloadkeyboard();
     tabletremap();
     reloadmons();
-    updatemons(NULL, NULL);
+    updatemons(nullptr, nullptr);
 
     /* a floating client keeps its own geometry, so a new border or title bar
      * only reaches it through resize() */

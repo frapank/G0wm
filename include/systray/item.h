@@ -44,7 +44,9 @@ typedef struct Item {
     struct wl_list link;
 } Item;
 
-Item* createitem(const char* busname, const char* busobj, Watcher* watcher);
+[[nodiscard]] Item* createitem(const char* busname,
+                               const char* busobj,
+                               Watcher* watcher);
 void destroyitem(Item* item);
 
 void item_activate(Item* item);

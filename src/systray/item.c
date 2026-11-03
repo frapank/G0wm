@@ -11,6 +11,7 @@
 #include "systray/watcher.h"
 
 #include <dbus/dbus.h>
+#include <stdckdint.h>
 
 #include <stdint.h>
 #include <stdio.h>
@@ -20,7 +21,7 @@
 // IWYU pragma: no_include "dbus/dbus-protocol.h"
 // IWYU pragma: no_include "dbus/dbus-shared.h"
 
-#define RULEBSIZE 256
+constexpr int RULEBSIZE = 256;
 #define MIN(A, B) ((A) < (B) ? (A) : (B))
 
 static const char* match_string = "type='signal',"
@@ -31,7 +32,7 @@ static const char* match_string = "type='signal',"
 static Watcher* item_get_watcher(const Item* item)
 {
     if (!item)
-        return NULL;
+        return nullptr;
 
     return item->watcher;
 }
@@ -39,7 +40,7 @@ static Watcher* item_get_watcher(const Item* item)
 static DBusConnection* item_get_connection(const Item* item)
 {
     if (!item || !item->watcher)
-        return NULL;
+        return nullptr;
 
     return item->watcher->conn;
 }
@@ -51,6 +52,7 @@ static const uint8_t* extract_image(DBusMessageIter* iter,
 {
     DBusMessageIter vals, bytes;
     const uint8_t* buf;
+    int n;
 
     dbus_message_iter_recurse(iter, &vals);
     if (dbus_message_iter_get_arg_type(&vals) != DBUS_TYPE_INT32)
@@ -70,13 +72,13 @@ static const uint8_t* extract_image(DBusMessageIter* iter,
         goto fail;
     dbus_message_iter_get_fixed_array(&bytes, &buf, size);
     if (*size == 0 || *width <= 0 || *height <= 0 ||
-        (dbus_int64_t)*size != (dbus_int64_t)*width * *height * 4)
+        ckd_mul(&n, *width, *height) || ckd_mul(&n, n, 4) || n != *size)
         goto fail;
 
     return buf;
 
 fail:
-    return NULL;
+    return nullptr;
 }
 
 static int select_image(DBusMessageIter* iter, int target_width)
@@ -107,9 +109,9 @@ static int select_image(DBusMessageIter* iter, int target_width)
 static char* take_string_property(DBusPendingCall* pending, const char* what)
 {
     DBusError err = DBUS_ERROR_INIT;
-    DBusMessage* reply = NULL;
+    DBusMessage* reply = nullptr;
     DBusMessageIter iter, val;
-    char* dup = NULL;
+    char* dup = nullptr;
     const char* str;
     int type;
 
@@ -163,7 +165,7 @@ static void iconname_ready_handler(DBusPendingCall* pending, void* data)
     Icon* icon;
     char* name;
 
-    name = take_string_property(pending, NULL);
+    name = take_string_property(pending, nullptr);
     if (!name)
         return;
 
@@ -186,7 +188,7 @@ static void themepath_ready_handler(DBusPendingCall* pending, void* data)
     Item* item = data;
 
     free(item->icon_themepath);
-    item->icon_themepath = take_string_property(pending, NULL);
+    item->icon_themepath = take_string_property(pending, nullptr);
 
     request_property(item_get_connection(item),
                      item->busname,
@@ -224,9 +226,9 @@ static void pixmap_ready_handler(DBusPendingCall* pending, void* data)
 {
     Item* item = data;
 
-    DBusMessage* reply = NULL;
+    DBusMessage* reply = nullptr;
     DBusMessageIter iter, array, select, strct;
-    Icon* icon = NULL;
+    Icon* icon = nullptr;
     Watcher* watcher;
     dbus_int32_t width, height;
     int selected_index, size;
@@ -272,7 +274,7 @@ static void pixmap_ready_handler(DBusPendingCall* pending, void* data)
                       MIN(item->icon->size_orig, (size_t)size)) != 0) {
         /* New icon */
         destroyicon(item->icon);
-        item->icon = NULL;
+        item->icon = nullptr;
         icon = createicon(buf, width, height, size);
         if (!icon)
             goto fail;
@@ -343,13 +345,13 @@ Item* createitem(const char* busname, const char* busobj, Watcher* watcher)
 {
     DBusConnection* conn;
     Item* item;
-    char* busname_dup = NULL;
-    char* busobj_dup = NULL;
+    char* busname_dup = nullptr;
+    char* busobj_dup = nullptr;
     char match_rule[RULEBSIZE];
 
     if (snprintf(match_rule, sizeof(match_rule), match_string, busname) >=
         RULEBSIZE)
-        return NULL;
+        return nullptr;
 
     item = calloc(1, sizeof(Item));
     busname_dup = strdup(busname);
@@ -362,9 +364,9 @@ Item* createitem(const char* busname, const char* busobj, Watcher* watcher)
     item->busobj = busobj_dup;
     item->watcher = watcher;
 
-    if (!dbus_connection_add_filter(conn, filter_bus, item, NULL))
+    if (!dbus_connection_add_filter(conn, filter_bus, item, nullptr))
         goto fail;
-    dbus_bus_add_match(conn, match_rule, NULL);
+    dbus_bus_add_match(conn, match_rule, nullptr);
 
     request_property(conn,
                      busname,
@@ -386,7 +388,7 @@ fail:
     free(busname_dup);
     free(busobj_dup);
     free(item);
-    return NULL;
+    return nullptr;
 }
 
 void destroyitem(Item* item)
@@ -398,7 +400,7 @@ void destroyitem(Item* item)
 
     if (snprintf(match_rule, sizeof(match_rule), match_string, item->busname) <
         RULEBSIZE) {
-        dbus_bus_remove_match(conn, match_rule, NULL);
+        dbus_bus_remove_match(conn, match_rule, nullptr);
         dbus_connection_remove_filter(conn, filter_bus, item);
     }
     if (item->icon)
@@ -414,7 +416,7 @@ void destroyitem(Item* item)
 void item_activate(Item* item)
 {
     DBusConnection* conn;
-    DBusMessage* msg = NULL;
+    DBusMessage* msg = nullptr;
     dbus_int32_t x = 0, y = 0;
 
     conn = item_get_connection(item);
@@ -423,7 +425,7 @@ void item_activate(Item* item)
               item->busname, item->busobj, SNI_IFACE, "Activate")) ||
         !dbus_message_append_args(
             msg, DBUS_TYPE_INT32, &x, DBUS_TYPE_INT32, &y, DBUS_TYPE_INVALID) ||
-        !dbus_connection_send_with_reply(conn, msg, NULL, -1)) {
+        !dbus_connection_send_with_reply(conn, msg, nullptr, -1)) {
         goto fail;
     }
 

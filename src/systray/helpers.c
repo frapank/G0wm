@@ -9,7 +9,6 @@
 #include <dbus/dbus.h>
 
 #include <errno.h>
-#include <stddef.h>
 
 // IWYU pragma: no_include "dbus/dbus-protocol.h"
 // IWYU pragma: no_include "dbus/dbus-shared.h"
@@ -22,8 +21,8 @@ int request_property(DBusConnection* conn,
                      PropHandler handler,
                      void* data)
 {
-    DBusMessage* msg = NULL;
-    DBusPendingCall* pending = NULL;
+    DBusMessage* msg = nullptr;
+    DBusPendingCall* pending = nullptr;
     int r;
 
     if (!(msg = dbus_message_new_method_call(
@@ -35,7 +34,7 @@ int request_property(DBusConnection* conn,
                                   &prop,
                                   DBUS_TYPE_INVALID) ||
         !dbus_connection_send_with_reply(conn, msg, &pending, -1) ||
-        !dbus_pending_call_set_notify(pending, handler, data, NULL)) {
+        !dbus_pending_call_set_notify(pending, handler, data, nullptr)) {
         r = -ENOMEM;
         goto fail;
     }

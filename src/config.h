@@ -13,7 +13,7 @@
     {                                                                          \
         .v = (const char*[])                                                   \
         {                                                                      \
-            "/bin/sh", "-c", cmd, NULL                                         \
+            "/bin/sh", "-c", cmd, nullptr                                      \
         }                                                                      \
     }
 
@@ -103,7 +103,7 @@ size_t nlayouts = LENGTH(layouts_def);
 /* opacity 0 and private -1 keep the default, monitor -1 is the focused one */
 static Rule rules_def[] = {
     { .id              = "Placeholder",
-      .title           = NULL,
+      .title           = nullptr,
       .tags            = 0,
       .isfloating      = 1,
       .isprivate       = 1,
@@ -185,9 +185,9 @@ float blur_saturation    = 1.60f;
 float blur_brightness    = 1.00f;
 #endif
 
-/* the first matching name wins, keep the NULL one last */
+/* the first matching name wins, keep the nullptr one last */
 static MonitorRule monrules_def[] = {
-    { .name    = NULL,
+    { .name    = nullptr,
       .mfact   = 0.55f,
       .nmaster = 1,
       .scale   = 1,
@@ -208,13 +208,13 @@ int movethreshold = 4;     // px dragged on a title before the window moves
 int movesnap      = 12;    // px at which a moved floating window sticks, 0 off
 
 struct xkb_rule_names xkb_rules = {
-    .options = NULL,
+    .options = nullptr,
 };
 
 int repeat_rate  = 25;
 int repeat_delay = 600;
 
-const char* cursor_theme = NULL;
+const char* cursor_theme = nullptr;
 int cursor_size    = 24;
 int hide_cursor_when_typing = 1;
 
@@ -245,20 +245,20 @@ double touchpad_accel_speed = 0.0;
 
 enum libinput_config_tap_button_map button_map = LIBINPUT_CONFIG_TAP_MAP_LRM;
 
-/* output names as wlr-randr shows them, NULL for all of them */
-const char* tablet_output = NULL;
+/* output names as wlr-randr shows them, nullptr for all of them */
+const char* tablet_output = nullptr;
 int tablet_left_handed    = 0; // buttons on the right
-const char* touch_output  = NULL; // NULL: the one udev reports
+const char* touch_output  = nullptr; // nullptr: the one udev reports
 
-static const char* termcmd[]        = { "foot", NULL };
-static const char* filemanagercmd[] = { "thunar", NULL };
-static const char* browsercmd[]     = { "firefox", NULL };
+static const char* termcmd[]        = { "foot", nullptr };
+static const char* filemanagercmd[] = { "thunar", nullptr };
+static const char* browsercmd[]     = { "firefox", nullptr };
 
 
 /* run without a shell */
 static const char* autostart_def[] = {
-    /* "example", "arg1", "arg2", NULL, */
-    NULL
+    /* "example", "arg1", "arg2", nullptr, */
+    nullptr
 };
 const char** autostart = autostart_def;
 
@@ -267,24 +267,24 @@ static Key keys_def[] = {
 	{ MODKEY,                    XKB_KEY_f,           spawn,            {.v = filemanagercmd} },
 	{ MODKEY,                    XKB_KEY_b,           spawn,            {.v = browsercmd} },
 	{ 0,                         XKB_KEY_Print,       spawn,            SHCMD("grim -g \"$(slurp)\" - | swappy -f -") },
-	{ MODKEY,                    XKB_KEY_c,           killclient,       {0} },
-	{ MODKEY|WLR_MODIFIER_SHIFT, XKB_KEY_v,           togglefloating,   {0} },
-	{ MODKEY|WLR_MODIFIER_SHIFT, XKB_KEY_p,           toggleprivate,    {0} },
-	{ MODKEY|WLR_MODIFIER_SHIFT, XKB_KEY_g,           togglegaps,       {0} },
-	{ MODKEY|WLR_MODIFIER_SHIFT, XKB_KEY_b,           togglebar,        {0} },
-	{ MODKEY|WLR_MODIFIER_SHIFT, XKB_KEY_t,           toggletitlebar,   {0} },
+	{ MODKEY,                    XKB_KEY_c,           killclient,       {} },
+	{ MODKEY|WLR_MODIFIER_SHIFT, XKB_KEY_v,           togglefloating,   {} },
+	{ MODKEY|WLR_MODIFIER_SHIFT, XKB_KEY_p,           toggleprivate,    {} },
+	{ MODKEY|WLR_MODIFIER_SHIFT, XKB_KEY_g,           togglegaps,       {} },
+	{ MODKEY|WLR_MODIFIER_SHIFT, XKB_KEY_b,           togglebar,        {} },
+	{ MODKEY|WLR_MODIFIER_SHIFT, XKB_KEY_t,           toggletitlebar,   {} },
 	{ MODKEY,                    XKB_KEY_t,           toggletabbed,     {.v = &layouts_def[1]} },
-	{ MODKEY|WLR_MODIFIER_SHIFT, XKB_KEY_f,           togglefullscreen, {0} },
-	{ MODKEY|WLR_MODIFIER_SHIFT, XKB_KEY_r,           reloadsettings,   {0} },
+	{ MODKEY|WLR_MODIFIER_SHIFT, XKB_KEY_f,           togglefullscreen, {} },
+	{ MODKEY|WLR_MODIFIER_SHIFT, XKB_KEY_r,           reloadsettings,   {} },
 
-	{ MODKEY,                    XKB_KEY_r,           runnertoggle,     {0} },
+	{ MODKEY,                    XKB_KEY_r,           runnertoggle,     {} },
 
-	{ MODKEY,                                      XKB_KEY_n, notifyscroll,     {0} },
-	{ MODKEY|WLR_MODIFIER_SHIFT,                   XKB_KEY_n, notifyopen,       {0} },
-	{ MODKEY|WLR_MODIFIER_CTRL,                    XKB_KEY_n, notifynext,       {0} },
-	{ MODKEY|WLR_MODIFIER_ALT,                     XKB_KEY_n, notifyprev,       {0} },
-	{ MODKEY|WLR_MODIFIER_CTRL|WLR_MODIFIER_SHIFT, XKB_KEY_n, notifydismissall, {0} },
-	{ MODKEY,                                      XKB_KEY_a, notifyactions,    {0} },
+	{ MODKEY,                                      XKB_KEY_n, notifyscroll,     {} },
+	{ MODKEY|WLR_MODIFIER_SHIFT,                   XKB_KEY_n, notifyopen,       {} },
+	{ MODKEY|WLR_MODIFIER_CTRL,                    XKB_KEY_n, notifynext,       {} },
+	{ MODKEY|WLR_MODIFIER_ALT,                     XKB_KEY_n, notifyprev,       {} },
+	{ MODKEY|WLR_MODIFIER_CTRL|WLR_MODIFIER_SHIFT, XKB_KEY_n, notifydismissall, {} },
+	{ MODKEY,                                      XKB_KEY_a, notifyactions,    {} },
 
 	{ MODKEY,                    XKB_KEY_h,           focusstack,       {.i = -1} },
 	{ MODKEY,                    XKB_KEY_j,           focusstack,       {.i = +1} },
@@ -305,7 +305,7 @@ static Key keys_def[] = {
 	{ MODKEY|WLR_MODIFIER_ALT,                   XKB_KEY_o, setopacityfocus,   {.f = -0.05f} },
 	{ MODKEY|WLR_MODIFIER_CTRL,                  XKB_KEY_o, setopacityunfocus, {.f = +0.05f} },
 	{ MODKEY|WLR_MODIFIER_CTRL|WLR_MODIFIER_ALT, XKB_KEY_o, setopacityunfocus, {.f = -0.05f} },
-	{ MODKEY|WLR_MODIFIER_SHIFT,                 XKB_KEY_o, toggleopacity,     {0} },
+	{ MODKEY|WLR_MODIFIER_SHIFT,                 XKB_KEY_o, toggleopacity,     {} },
 
 	{ MODKEY|WLR_MODIFIER_ALT,   XKB_KEY_equal,       magnify,          {.f = +0.25f} },
 	{ MODKEY|WLR_MODIFIER_ALT,   XKB_KEY_minus,       magnify,          {.f = -0.25f} },
@@ -324,9 +324,9 @@ static Key keys_def[] = {
 
 	{ MODKEY,                    XKB_KEY_i,           incnmaster,       {.i = +1} },
 	{ MODKEY,                    XKB_KEY_d,           incnmaster,       {.i = -1} },
-	{ MODKEY,                    XKB_KEY_Return,      zoom,             {0} },
-	{ MODKEY,                    XKB_KEY_Tab,         view,             {0} },
-	{ MODKEY,                    XKB_KEY_space,       setlayout,        {0} },
+	{ MODKEY,                    XKB_KEY_Return,      zoom,             {} },
+	{ MODKEY,                    XKB_KEY_Tab,         view,             {} },
+	{ MODKEY,                    XKB_KEY_space,       setlayout,        {} },
 	{ MODKEY,                    XKB_KEY_0,           view,             {.ui = ~0} },
 	{ MODKEY|WLR_MODIFIER_SHIFT, XKB_KEY_parenright,  tag,              {.ui = ~0} },
 	{ MODKEY,                    XKB_KEY_comma,       focusmon,         {.i = WLR_DIRECTION_LEFT} },
@@ -342,10 +342,10 @@ static Key keys_def[] = {
 	TAGKEYS(          XKB_KEY_7, XKB_KEY_ampersand,                     6),
 	TAGKEYS(          XKB_KEY_8, XKB_KEY_asterisk,                      7),
 	TAGKEYS(          XKB_KEY_9, XKB_KEY_parenleft,                     8),
-	{ MODKEY|WLR_MODIFIER_SHIFT, XKB_KEY_Escape,      quit,             {0} },
-	{ MODKEY,                    XKB_KEY_Escape,      toggleinhibit,    {0} },
+	{ MODKEY|WLR_MODIFIER_SHIFT, XKB_KEY_Escape,      quit,             {} },
+	{ MODKEY,                    XKB_KEY_Escape,      toggleinhibit,    {} },
 
-	{ WLR_MODIFIER_CTRL|WLR_MODIFIER_ALT,XKB_KEY_Terminate_Server, quit, {0} },
+	{ WLR_MODIFIER_CTRL|WLR_MODIFIER_ALT,XKB_KEY_Terminate_Server, quit, {} },
 	CHVT(1), CHVT(2), CHVT(3), CHVT(4), CHVT(5), CHVT(6),
 	CHVT(7), CHVT(8), CHVT(9), CHVT(10), CHVT(11), CHVT(12),
 };
@@ -356,19 +356,19 @@ static Button buttons_def[] = {
 	{ ClkLtSymbol, 0,      BTN_LEFT,   setlayout,      {.v = &layouts_def[0]} },
 	{ ClkLtSymbol, 0,      BTN_RIGHT,  setlayout,      {.v = &layouts_def[1]} },
 
-	{ ClkTitle,    0,      BTN_MIDDLE, zoom,           {0} },
-	{ ClkTitle,    0,      BTN_LEFT,   notifyopen,     {0} },
-	{ ClkTitle,    0,      BTN_RIGHT,  notifydismiss,  {0} },
+	{ ClkTitle,    0,      BTN_MIDDLE, zoom,           {} },
+	{ ClkTitle,    0,      BTN_LEFT,   notifyopen,     {} },
+	{ ClkTitle,    0,      BTN_RIGHT,  notifydismiss,  {} },
 
 	{ ClkStatus,   0,      BTN_MIDDLE, spawn,          {.v = termcmd} },
 
-	{ ClkTray,     0,      BTN_LEFT,   trayactivate,   {0} },
-	{ ClkTray,     0,      BTN_RIGHT,  traymenu,       {0} },
+	{ ClkTray,     0,      BTN_LEFT,   trayactivate,   {} },
+	{ ClkTray,     0,      BTN_RIGHT,  traymenu,       {} },
 
-	{ ClkTagBar,   0,      BTN_LEFT,   view,           {0} },
-	{ ClkTagBar,   0,      BTN_RIGHT,  toggleview,     {0} },
-	{ ClkTagBar,   MODKEY, BTN_LEFT,   tag,            {0} },
-	{ ClkTagBar,   MODKEY, BTN_RIGHT,  toggletag,      {0} },
+	{ ClkTagBar,   0,      BTN_LEFT,   view,           {} },
+	{ ClkTagBar,   0,      BTN_RIGHT,  toggleview,     {} },
+	{ ClkTagBar,   MODKEY, BTN_LEFT,   tag,            {} },
+	{ ClkTagBar,   MODKEY, BTN_RIGHT,  toggletag,      {} },
 	{ ClkTagBar,   0,      WheelUp,    shiftview,      {.i = -1} },
 	{ ClkTagBar,   0,      WheelDown,  shiftview,      {.i = +1} },
 
@@ -376,7 +376,7 @@ static Button buttons_def[] = {
 	{ ClkWinTitle, 0,      WheelDown,  focusstack,     {.i = +1} },
 
 	{ ClkClient,   MODKEY, BTN_LEFT,   moveresize,     {.ui = CurMove} },
-	{ ClkClient,   MODKEY, BTN_MIDDLE, togglefloating, {0} },
+	{ ClkClient,   MODKEY, BTN_MIDDLE, togglefloating, {} },
 	{ ClkClient,   MODKEY, BTN_RIGHT,  moveresize,     {.ui = CurResize} },
 
 	{ ClkClient,   MODKEY, WheelUp,    magnify,        {.f = +0.25f} },
@@ -400,7 +400,7 @@ unsigned int pinchzoom_mod = MODKEY;
 
 /* tablet pad buttons, counted from 0: a bound one is not sent to the app.
  * e.g. { 0, spawn, SHCMD("wtype -M ctrl z -m ctrl") } */
-PadButton* padbuttons = NULL;
+PadButton* padbuttons = nullptr;
 size_t npadbuttons    = 0;
 
 int log_level = WLR_ERROR;

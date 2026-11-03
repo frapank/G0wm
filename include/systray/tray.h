@@ -32,16 +32,16 @@ typedef struct {
     struct wl_list link;
 } Tray;
 
-Tray* createtray(void* monitor,
-                 int height,
-                 int iconsize,
-                 int spacing,
-                 int padding,
-                 uint32_t* colorscheme,
-                 const char** fonts,
-                 const char* fontattrs,
-                 TrayNotifyCb cb,
-                 Watcher* watcher);
+[[nodiscard]] Tray* createtray(void* monitor,
+                               int height,
+                               int iconsize,
+                               int spacing,
+                               int padding,
+                               uint32_t* colorscheme,
+                               const char** fonts,
+                               const char* fontattrs,
+                               TrayNotifyCb cb,
+                               Watcher* watcher);
 void destroytray(Tray* tray);
 
 int tray_get_width(const Tray* tray);

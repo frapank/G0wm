@@ -5,7 +5,6 @@
  *
  * session lock
  */
-#include <stddef.h>
 #include <stdlib.h>
 #include <wayland-server-core.h>
 #include <wlr/types/wlr_scene.h>
@@ -70,7 +69,7 @@ static void destroylock(SessionLock* lock, int unlock)
     wlr_scene_node_set_enabled(&locked_bg->node, 0);
 
     focusclient(focustop(selmon), 0);
-    motionnotify(0, NULL, 0, 0, 0, 0);
+    motionnotify(0, nullptr, 0, 0, 0, 0);
 
 destroy:
     wl_list_remove(&lock->new_surface.link);
@@ -78,17 +77,17 @@ destroy:
     wl_list_remove(&lock->destroy.link);
 
     wlr_scene_node_destroy(&lock->scene->node);
-    cur_lock = NULL;
+    cur_lock = nullptr;
     free(lock);
 }
 
-void destroylocksurface(struct wl_listener* listener, void* data)
+void destroylocksurface(struct wl_listener* listener, void*)
 {
     Monitor* m = wl_container_of(listener, m, destroy_lock_surface);
     struct wlr_session_lock_surface_v1 *surface,
         *lock_surface = m->lock_surface;
 
-    m->lock_surface = NULL;
+    m->lock_surface = nullptr;
     wl_list_remove(&m->destroy_lock_surface.link);
 
     if (lock_surface->surface != seat->keyboard_state.focused_surface)
@@ -104,13 +103,13 @@ void destroylocksurface(struct wl_listener* listener, void* data)
     }
 }
 
-static void destroysessionlock(struct wl_listener* listener, void* data)
+static void destroysessionlock(struct wl_listener* listener, void*)
 {
     SessionLock* lock = wl_container_of(listener, lock, destroy);
     destroylock(lock, 0);
 }
 
-void locksession(struct wl_listener* listener, void* data)
+void locksession(struct wl_listener*, void* data)
 {
     struct wlr_session_lock_v1* session_lock = data;
     SessionLock* lock;
@@ -120,7 +119,7 @@ void locksession(struct wl_listener* listener, void* data)
         return;
     }
     lock = session_lock->data = ecalloc(1, sizeof(*lock));
-    focusclient(NULL, 0);
+    focusclient(nullptr, 0);
     /* an open menu would keep taking clicks under the lock surface */
     traypopup_dismiss();
 
@@ -137,7 +136,7 @@ void locksession(struct wl_listener* listener, void* data)
     wlr_session_lock_v1_send_locked(session_lock);
 }
 
-static void unlocksession(struct wl_listener* listener, void* data)
+static void unlocksession(struct wl_listener* listener, void*)
 {
     SessionLock* lock = wl_container_of(listener, lock, unlock);
     destroylock(lock, 1);

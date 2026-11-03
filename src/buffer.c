@@ -7,7 +7,7 @@
  */
 #include <drwl.h>
 #include <libdrm/drm_fourcc.h>
-#include <stdbool.h>
+#include <stdckdint.h>
 #include <stddef.h>
 #include <stdint.h>
 #include <stdlib.h>
@@ -64,14 +64,14 @@ static bool bufdatabegin(struct wlr_buffer* wlr_buffer,
     return true;
 }
 
-static void bufdataend(struct wlr_buffer* wlr_buffer) {}
+static void bufdataend(struct wlr_buffer*) {}
 
 /* Grabs a free width*height buffer from pool, allocating it on first use. The
  * bar and every client's title bar own a pool, as their sizes differ. */
 Buffer* bufget(Buffer** pool, size_t poollen, int width, int height)
 {
-    size_t i;
-    Buffer* buf = NULL;
+    size_t i, len;
+    Buffer* buf = nullptr;
 
     for (i = 0; i < poollen; i++) {
         if (pool[i]) {
@@ -81,14 +81,17 @@ Buffer* bufget(Buffer** pool, size_t poollen, int width, int height)
             break;
         }
 
-        buf = ecalloc(1, sizeof(Buffer) + ((size_t)width * 4 * (size_t)height));
-        buf->image = drwl_image_create(NULL, width, height, buf->data);
+        if (ckd_mul(&len, (size_t)width, (size_t)height) ||
+            ckd_mul(&len, len, 4) || ckd_add(&len, len, sizeof(Buffer)))
+            return nullptr;
+        buf = ecalloc(1, len);
+        buf->image = drwl_image_create(nullptr, width, height, buf->data);
         wlr_buffer_init(&buf->base, &buffer_impl, width, height);
         pool[i] = buf;
         break;
     }
     if (!buf)
-        return NULL;
+        return nullptr;
 
     buf->busy = true;
     LISTEN(&buf->base.events.release, &buf->release, bufrelease);
@@ -103,11 +106,11 @@ void bufpooldrop(Buffer** pool, size_t poollen)
     for (i = 0; i < poollen; i++)
         if (pool[i]) {
             wlr_buffer_drop(&pool[i]->base);
-            pool[i] = NULL;
+            pool[i] = nullptr;
         }
 }
 
-static void bufrelease(struct wl_listener* listener, void* data)
+static void bufrelease(struct wl_listener* listener, void*)
 {
     Buffer* buf = wl_container_of(listener, buf, release);
     buf->busy = false;

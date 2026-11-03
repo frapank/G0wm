@@ -6,7 +6,6 @@
  */
 #include <drwl.h>
 #include <math.h>
-#include <stddef.h>
 #include <stdint.h>
 #include <stdio.h>
 #include <wlr/types/wlr_buffer.h>
@@ -22,7 +21,7 @@
 #include "traypopup.h"
 
 /* Rows the tray menu shows at once, past which the tail is dropped. */
-#define TRAYPOPUP_ITEMS_MAX 64
+constexpr int TRAYPOPUP_ITEMS_MAX = 64;
 
 /* function declarations */
 static void traypopup_draw(void);
@@ -52,13 +51,13 @@ static int traypopup_corner(void)
 
 int traypopup_active(void)
 {
-    return popup.menu != NULL;
+    return popup.menu != nullptr;
 }
 
 /* Hides the popup. The caller still owes the menu its menu_pick(). */
 static void traypopup_hide(void)
 {
-    popup.menu = NULL;
+    popup.menu = nullptr;
     popup.n = 0;
     popup.sel = -1;
     if (popup.scene)
@@ -113,7 +112,7 @@ void traypopup_present(const char* const* labels, int n, Menu* menu)
     popup.h = MIN(m->b.real_height * n + 2 * popup.bd, m->m.height);
 
     if (popup.w <= 2 * popup.bd || popup.h <= 2 * popup.bd) {
-        popup.menu = NULL;
+        popup.menu = nullptr;
         menu_pick(menu, -1);
         return;
     }
@@ -157,7 +156,7 @@ static void traypopup_draw(void)
         return;
 
     if (!popup.scene &&
-        !(popup.scene = wlr_scene_buffer_create(layers[LyrOverlay], NULL))) {
+        !(popup.scene = wlr_scene_buffer_create(layers[LyrOverlay], nullptr))) {
         wlr_buffer_unlock(&buf->base);
         return;
     }
@@ -236,5 +235,5 @@ void traypopup_cleanup(void)
     traypopup_dismiss();
     if (popup.scene)
         wlr_scene_node_destroy(&popup.scene->node);
-    popup.scene = NULL;
+    popup.scene = nullptr;
 }
