@@ -4,7 +4,7 @@
  * SPDX-License-Identifier: GPL-3.0-or-later
  */
 
-#include "helpers.h"
+#include "systray/helpers.h"
 
 #include <dbus/dbus.h>
 

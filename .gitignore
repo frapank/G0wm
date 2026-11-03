@@ -2,4 +2,4 @@ g0wm
 build/
 .ccls-cache
 config.mk
-include/config.h.*.bak
+src/config.h.*.bak

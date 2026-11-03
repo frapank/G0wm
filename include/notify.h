@@ -3,15 +3,15 @@
  * SPDX-License-Identifier: GPL-3.0-or-later
  */
 
-#ifndef G0WMNOTIFY_H
-#define G0WMNOTIFY_H
+#ifndef G0WM_NOTIFY_H
+#define G0WM_NOTIFY_H
 
 #include <dbus/dbus.h>
 #include <stddef.h>
 #include <stdint.h>
 #include <wayland-server-core.h>
 
-#include "icon.h"
+#include "systray/icon.h"
 
 /* org.freedesktop.Notifications server: one notification on screen, the rest
  * queued behind it, the closed ones kept in a short history. */
@@ -81,4 +81,4 @@ int notify_held(unsigned int* left_ms);
 /* CLOCK_MONOTONIC, in ms */
 uint64_t notify_now(void);
 
-#endif /* G0WMNOTIFY_H */
+#endif

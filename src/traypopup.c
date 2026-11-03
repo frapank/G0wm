@@ -4,7 +4,25 @@
  *
  * the tray context menu, drawn under the cursor
  */
+#include <drwl.h>
+#include <math.h>
+#include <stddef.h>
+#include <stdint.h>
+#include <stdio.h>
+#include <wlr/types/wlr_buffer.h>
+#include <wlr/types/wlr_scene.h>
+
+#include "buffer.h"
+#include "corner.h"
 #include "g0wm.h"
+#include "monitor.h"
+#include "opacity.h"
+#include "settings.h"
+#include "systray/menu.h"
+#include "traypopup.h"
+
+/* Rows the tray menu shows at once, past which the tail is dropped. */
+#define TRAYPOPUP_ITEMS_MAX 64
 
 /* function declarations */
 static void traypopup_draw(void);

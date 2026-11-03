@@ -3,145 +3,50 @@
  * SPDX-FileCopyrightText: 2026 frapank
  * SPDX-License-Identifier: GPL-3.0-or-later
  */
+
 #ifndef G0WM_H
 #define G0WM_H
 
-#include <fcntl.h>
-#ifdef INTEGRATED_BACKGROUND
-#include <gdk-pixbuf/gdk-pixbuf.h>
-#endif
-#include <dirent.h>
-#include <getopt.h>
-#include <libdrm/drm_fourcc.h>
-#include <libinput.h>
-#include <linux/input-event-codes.h>
-#include <math.h>
-#include <signal.h>
-#include <stdio.h>
-#include <stdlib.h>
-#include <string.h>
-#include <sys/stat.h>
-#include <sys/wait.h>
-#include <time.h>
-#include <unistd.h>
+#include <stdint.h>
 #include <wayland-server-core.h>
-#include <wlr/backend.h>
-#include <wlr/backend/libinput.h>
-#include <wlr/interfaces/wlr_buffer.h>
 #include <wlr/render/allocator.h>
-#include <wlr/render/swapchain.h>
 #include <wlr/render/wlr_renderer.h>
-#include <wlr/types/wlr_alpha_modifier_v1.h>
 #include <wlr/types/wlr_compositor.h>
 #include <wlr/types/wlr_content_type_v1.h>
 #include <wlr/types/wlr_cursor.h>
-#include <wlr/types/wlr_cursor_shape_v1.h>
-#include <wlr/types/wlr_data_control_v1.h>
-#include <wlr/types/wlr_data_device.h>
-#include <wlr/types/wlr_drm.h>
-#include <wlr/types/wlr_export_dmabuf_v1.h>
-#include <wlr/types/wlr_ext_data_control_v1.h>
 #include <wlr/types/wlr_ext_foreign_toplevel_list_v1.h>
-#include <wlr/types/wlr_ext_image_capture_source_v1.h>
-#include <wlr/types/wlr_ext_image_copy_capture_v1.h>
 #include <wlr/types/wlr_foreign_toplevel_management_v1.h>
-#include <wlr/types/wlr_fractional_scale_v1.h>
-#include <wlr/types/wlr_gamma_control_v1.h>
-#include <wlr/types/wlr_idle_inhibit_v1.h>
 #include <wlr/types/wlr_idle_notify_v1.h>
-#include <wlr/types/wlr_input_device.h>
-#include <wlr/types/wlr_input_method_v2.h>
-#include <wlr/types/wlr_keyboard.h>
-#include <wlr/types/wlr_keyboard_group.h>
 #include <wlr/types/wlr_keyboard_shortcuts_inhibit_v1.h>
-#include <wlr/types/wlr_layer_shell_v1.h>
-#include <wlr/types/wlr_linux_dmabuf_v1.h>
-#include <wlr/types/wlr_linux_drm_syncobj_v1.h>
-#include <wlr/types/wlr_output.h>
 #include <wlr/types/wlr_output_layout.h>
 #include <wlr/types/wlr_output_management_v1.h>
-#include <wlr/types/wlr_output_power_management_v1.h>
-#include <wlr/types/wlr_pointer.h>
 #include <wlr/types/wlr_pointer_constraints_v1.h>
 #include <wlr/types/wlr_pointer_gestures_v1.h>
-#include <wlr/types/wlr_presentation_time.h>
-#include <wlr/types/wlr_primary_selection.h>
-#include <wlr/types/wlr_primary_selection_v1.h>
 #include <wlr/types/wlr_relative_pointer_v1.h>
 #include <wlr/types/wlr_scene.h>
 #include <wlr/types/wlr_screencopy_v1.h>
 #include <wlr/types/wlr_seat.h>
-#include <wlr/types/wlr_security_context_v1.h>
-#include <wlr/types/wlr_server_decoration.h>
-#include <wlr/types/wlr_session_lock_v1.h>
-#include <wlr/types/wlr_single_pixel_buffer_v1.h>
-#include <wlr/types/wlr_subcompositor.h>
-#include <wlr/types/wlr_tablet_pad.h>
-#include <wlr/types/wlr_tablet_tool.h>
-#include <wlr/types/wlr_tablet_v2.h>
 #include <wlr/types/wlr_tearing_control_v1.h>
-#include <wlr/types/wlr_text_input_v3.h>
-#include <wlr/types/wlr_touch.h>
-#include <wlr/types/wlr_viewporter.h>
-#include <wlr/types/wlr_virtual_keyboard_v1.h>
-#include <wlr/types/wlr_virtual_pointer_v1.h>
 #include <wlr/types/wlr_xcursor_manager.h>
 #include <wlr/types/wlr_xdg_activation_v1.h>
-#include <wlr/types/wlr_xdg_decoration_v1.h>
-#include <wlr/types/wlr_xdg_dialog_v1.h>
-#include <wlr/types/wlr_xdg_foreign_registry.h>
-#include <wlr/types/wlr_xdg_foreign_v1.h>
-#include <wlr/types/wlr_xdg_foreign_v2.h>
-#include <wlr/types/wlr_xdg_output_v1.h>
-#include <wlr/types/wlr_xdg_shell.h>
-#include <wlr/types/wlr_xdg_system_bell_v1.h>
-#include <wlr/util/log.h>
-#include <wlr/util/region.h>
-#include <wlr/util/transform.h>
-#include <xkbcommon/xkbcommon.h>
+#include <wlr/util/box.h>
+#ifdef INTEGRATED_BACKGROUND
+#include <gdk-pixbuf/gdk-pixbuf.h>
+#endif
 #ifdef XWAYLAND
 #include <wlr/xwayland.h>
-#include <xcb/xcb.h>
-#include <xcb/xcb_icccm.h>
 #endif
 
-#include "dbus.h"
-#include "settings.h"
-/* vendored, and every helper in it is static */
-#pragma GCC diagnostic push
-#pragma GCC diagnostic ignored "-Wunused-function"
-#include "drwl.h"
-#pragma GCC diagnostic pop
-#include "notify.h"
-#include "systray/menu.h"
-#include "systray/tray.h"
 #include "systray/watcher.h"
 #include "util.h"
-#include "xdg-shell-protocol.h"
 
-/* macros */
 #ifndef MAX
 #define MAX(A, B) ((A) > (B) ? (A) : (B))
 #endif
 #ifndef MIN
 #define MIN(A, B) ((A) < (B) ? (A) : (B))
 #endif
-#define CLEANMASK(mask) (mask & ~WLR_MODIFIER_CAPS)
-#define VISIBLEON(C, M)                                                        \
-    ((M) && (C)->mon == (M) && ((C)->tags & (M)->tagset[(M)->seltags]))
 #define LENGTH(X) (sizeof X / sizeof X[0])
-/* Rows the tray menu shows at once, past which the tail is dropped. */
-#define TRAYPOPUP_ITEMS_MAX 64
-/* 0xRRGGBBAA -> the float[4] wlroots wants (dwl issue #466) */
-#define COLOR(hex)                                                             \
-    { ((hex >> 24) & 0xFF) / 255.0f,                                           \
-      ((hex >> 16) & 0xFF) / 255.0f,                                           \
-      ((hex >> 8) & 0xFF) / 255.0f,                                            \
-      (hex & 0xFF) / 255.0f }
-#define OPACITY_MIN 0.1f /* floor for the opacity keybindings */
-#define MAPWAIT_MS 200   /* longest a new client may take to fit its tile */
-#define END(A) ((A) + LENGTH(A))
-#define TAGMASK ((1u << ntags) - 1)
 #define LISTEN(E, L, H) wl_signal_add((E), ((L)->notify = (H), (L)))
 #define LISTEN_STATIC(E, H)                                                    \
     do {                                                                       \
@@ -149,42 +54,7 @@
         _l->notify = (H);                                                      \
         wl_signal_add((E), _l);                                                \
     } while (0)
-#define TEXTW(mon, text) (drwl_font_getwidth(mon->drw, text) + mon->lrpad)
-#define STATUS_BUTTONS 5
-/* the status box: drawbar() and buttonpress() agree on it to the pixel */
-#define STATUSW(mon) (drawstatus((mon), stext, 0, 0, 0) + 2)
 
-/* enums */
-enum {
-    SchemeNorm,
-    SchemeSel,
-    SchemeUrg,
-    SchemeTitle,
-    SchemeTitleSel,
-    SchemeStatus,
-    SchemeNotify,
-    SchemeNotifyLow,
-    SchemeNotifyCrit,
-    SchemeRunner,
-    SchemeRunnerSuggest,
-    SchemeRunnerSel,
-    SchemeRunnerIcon,
-    NumSchemes
-}; /* color schemes */
-enum { CornerNormal, CornerSquircle };              /* corner curve */
-enum { CurNormal, CurPressed, CurMove, CurResize }; /* cursor */
-enum { OpacityNormal, OpacityBlur };                /* opacity_type */
-enum { XDGShell, LayerShell, X11 };                 /* client types */
-enum {
-    SwipeLeft,
-    SwipeRight,
-    SwipeUp,
-    SwipeDown,
-    PinchIn,
-    PinchOut
-}; /* gesture motions */
-enum { RunnerIconsNone, RunnerIconsSelected, RunnerIconsAll };
-enum { BarStatusFocus, BarStatusAll, BarStatusMain };
 enum {
     LyrBg,
     LyrBottom,
@@ -196,17 +66,6 @@ enum {
     LyrBlock,
     NUM_LAYERS
 }; /* scene layers */
-enum {
-    ClkTagBar,
-    ClkLtSymbol,
-    ClkStatus,
-    ClkTitle,
-    ClkClient,
-    ClkRoot,
-    ClkTray,
-    ClkWinTitle /* a window's title bar, only for the wheel */
-}; /* clicks */
-enum { WheelUp = 0x10000, WheelDown }; /* Button.button for a wheel notch */
 
 typedef union {
     int i;
@@ -215,496 +74,24 @@ typedef union {
     const void* v;
 } Arg;
 
-typedef struct {
-    unsigned int click;
-    unsigned int mod;
-    unsigned int button;
-    void (*func)(const Arg*);
-    Arg arg;
-} Button;
-
-typedef struct {
-    unsigned int motion;
-    unsigned int fingers;
-    void (*func)(const Arg*);
-    Arg arg;
-} Gesture;
-
-typedef struct {
-    unsigned int button; /* counted from 0, as libinput does */
-    void (*func)(const Arg*);
-    Arg arg;
-} PadButton;
-
-typedef struct {
-    struct wlr_buffer base;
-    struct wl_listener release;
-    bool busy;
-    Img* image;
-    uint32_t data[];
-} Buffer;
-
+typedef struct Client Client;
+typedef struct KeyboardGroup KeyboardGroup;
+typedef struct LayerSurface LayerSurface;
 typedef struct Monitor Monitor;
-typedef struct {
-    /* Must keep this field first */
-    unsigned int type; /* XDGShell or X11* */
 
-    Monitor* mon;
-    struct wlr_scene_tree* scene;
-    struct wlr_scene_rect* border[4];   /* top, bottom, left, right */
-    struct wlr_scene_buffer* corner[4]; /* tl, tr, bl, br */
-    struct wlr_scene_tree* scene_surface;
-    struct wl_list link;
-    struct wl_list flink;
-    struct wlr_box geom;   /* layout-relative, includes border */
-    struct wlr_box prev;   /* layout-relative, includes border */
-    struct wlr_box bounds; /* only width and height are used */
-    union {
-        struct wlr_xdg_surface* xdg;
-        struct wlr_xwayland_surface* xwayland;
-    } surface;
-    struct wlr_xdg_toplevel_decoration_v1* decoration;
-    struct wl_listener commit;
-    struct wl_listener map;
-    struct wl_listener maximize;
-    struct wl_listener unmap;
-    struct wl_listener destroy;
-    struct wl_listener set_title;
-    struct wl_listener fullscreen;
-    struct wl_listener set_decoration_mode;
-    struct wl_listener destroy_decoration;
-#ifdef XWAYLAND
-    struct wl_listener activate;
-    struct wl_listener associate;
-    struct wl_listener dissociate;
-    struct wl_listener configure;
-    struct wl_listener set_hints;
-    struct wl_listener minimize;
-#endif
-    struct wlr_scene_buffer* title;
-#ifdef INTEGRATED_BACKGROUND
-    struct wlr_scene_buffer* blur; /* frosted wallpaper, below the whole box */
-    struct wlr_buffer* blurbuf;    /* what blur's node was last handed */
-    struct wlr_scene_buffer* titleblur; /* the same, for the title bar */
-    struct wlr_buffer* titleblurbuf;
-#endif
-    Buffer* titlepool[2];
-    Buffer* sharepool[1];
-    int titlex, titlew; /* title bar placement, relative to the border box */
-    int titlebufw;      /* pixel width titlepool was allocated at */
-    Buffer* cornerpool[4][2];
-    int cornerbufr, cornerbufbw; /* radius and border cornerpool was drawn at */
-    uint32_t cornercolor;        /* and the colour it was drawn with */
-    unsigned int bw;
-    uint32_t tags;
-    int isfloating, isurgent, isfullscreen, isprivate;
-    float opacity;         /* the one in effect, focused or not */
-    float opacity_focus;   /* used while the client holds focus */
-    float opacity_unfocus; /* used while it does not */
-    int borderscheme;      /* scheme its border is drawn in, to redo it */
-    uint32_t resize;       /* configure serial of a pending resize */
-    struct wl_event_source* mapwait; /* set while a new client is held back */
-    struct wlr_foreign_toplevel_handle_v1* ftl;
-    struct wlr_ext_foreign_toplevel_handle_v1* eftl;
-    struct wlr_ext_image_capture_source_v1* capture;
-    struct wl_listener ftl_activate;
-    struct wl_listener ftl_close;
-    struct wl_listener ftl_fullscreen;
-} Client;
-
-typedef struct {
-    uint32_t mod;
-    xkb_keysym_t keysym;
-    void (*func)(const Arg*);
-    Arg arg;
-} Key;
-
-typedef struct {
-    struct wlr_keyboard_group* wlr_group;
-
-    int nsyms;
-    const xkb_keysym_t* keysyms; /* invalid if nsyms == 0 */
-    uint32_t mods;               /* invalid if nsyms == 0 */
-    struct wl_event_source* key_repeat_source;
-
-    struct wl_listener modifiers;
-    struct wlr_virtual_keyboard_v1* vkb; /* NULL for the physical keyboards */
-    uint32_t imkeys[KEY_CNT / 32]; /* held keys whose press went to the IM */
-    struct wl_listener key;
-    struct wl_listener destroy;
-} KeyboardGroup;
-
-typedef struct {
-    /* Must keep this field first */
-    unsigned int type; /* LayerShell */
-
-    Monitor* mon;
-    struct wlr_scene_tree* scene;
-    struct wlr_scene_tree* popups;
-    struct wlr_scene_layer_surface_v1* scene_layer;
-    struct wl_list link;
-    int mapped;
-    struct wlr_layer_surface_v1* layer_surface;
-
-    struct wl_listener destroy;
-    struct wl_listener unmap;
-    struct wl_listener surface_commit;
-} LayerSurface;
-
-typedef struct {
-    const char* symbol;
-    void (*arrange)(Monitor*);
-} Layout;
-
-struct Monitor {
-    struct wl_list link;
-    struct wlr_output* wlr_output;
-    struct wlr_scene_output* scene_output;
-    struct wlr_scene_buffer* scene_buffer; /* bar buffer */
-#ifdef INTEGRATED_BACKGROUND
-    struct wlr_scene_buffer* wallpaper; /* wallpaper buffer */
-    struct wlr_buffer* wallpaperbuf; /* what wallpaper's node was last handed */
-    struct wlr_scene_buffer* barblur; /* the bar's own frosted backdrop */
-#endif
-    struct wlr_scene_rect* fullscreen_bg; /* See createmon() for info */
-    struct wl_listener frame;
-    struct wl_listener destroy;
-    struct wl_listener request_state;
-    struct wl_listener destroy_lock_surface;
-    struct wlr_session_lock_surface_v1* lock_surface;
-    struct wlr_box m; /* monitor area, layout-relative */
-    struct {
-        int width, height;
-        int real_width, real_height; /* non-scaled */
-        int titlew; /* free box shared by the window title and the
-                     * notification, 0 when it doesn't fit */
-        float scale;
-    } b; /* bar area */
-    struct {
-        int height;
-        int real_height; /* non-scaled */
-    } t;                 /* per-client title bar */
-    Tray* tray;
-    struct wlr_box w;         /* window area, layout-relative */
-    struct wl_list layers[4]; /* LayerSurface.link */
-    const Layout* lt[2];
-    const Layout* taglt[32][2];
-    unsigned int tagsellt[32];
-    int gaps;
-    unsigned int seltags;
-    unsigned int sellt;
-    uint32_t tagset[2];
-    float mfact;
-    int gamma_lut_changed;
-    int nmaster;
-    char ltsymbol[16];
-    int asleep;
-    int autovrr;                     /* 1 turned on by gamemode(), -1 refused */
-    float zoom;                      /* magnifier level, 1 is off */
-    struct wlr_swapchain* zoomchain; /* the frames, rendered unzoomed */
-    struct wlr_buffer* zoombuf;      /* the latest of them */
-    struct wlr_texture* zoomtex;     /* zoombuf, to draw from */
-    struct wlr_fbox zoomsrc;         /* the part of it on show */
-    struct wlr_buffer* shown;
-    Drwl* drw;
-    Buffer* pool[2];
-    Buffer* sharepool[1];
-    int sharex, sharew;
-#ifdef INTEGRATED_BACKGROUND
-    Buffer* wallpaperpool[1];
-    Buffer* blurpool[1];        /* wallpaperpool, blurred */
-    int blurw, blurh;           /* size blurpool was rendered at */
-    int wallpaperw, wallpaperh; /* size wallpaperpool was rendered at */
-#endif
-    int lrpad;
-};
-
-typedef struct {
-    const char* name;
-    float mfact;
-    int nmaster;
-    float scale;
-    const Layout* lt;
-    enum wl_output_transform rr;
-    int x, y;
-    int width, height; /* 0,0 means use the preferred mode */
-    int refresh;       /* Hz, ignored when width/height are 0 */
-} MonitorRule;
-
-typedef struct {
-    struct wlr_pointer_constraint_v1* constraint;
-    struct wl_listener destroy;
-} PointerConstraint;
-
-typedef struct {
-    const char* id;
-    const char* title;
-    uint32_t tags;
-    int isfloating;
-    int isprivate;
-    float opacity_focus;   /* 0 keeps the default from config.h */
-    float opacity_unfocus; /* 0 keeps the default from config.h */
-    int monitor;
-} Rule;
-
-typedef struct {
-    struct wlr_scene_tree* scene;
-
-    struct wlr_session_lock_v1* lock;
-    struct wl_listener new_surface;
-    struct wl_listener unlock;
-    struct wl_listener destroy;
-} SessionLock;
-
-/* function declarations */
-void activateclient(Client* c);
-void arrange(Monitor* m);
-void arrangelayers(Monitor* m);
-void applymonrules(Monitor* m, struct wlr_output_state* state);
-void axisnotify(struct wl_listener* listener, void* data);
-bool baracceptsinput(struct wlr_scene_buffer* buffer, double* sx, double* sy);
-int barcorner(Monitor* m);
-#ifdef INTEGRATED_BACKGROUND
-void blurbar(Monitor* m);
-void blurclient(Client* c);
-#endif /* INTEGRATED_BACKGROUND */
-void bufdestroy(struct wlr_buffer* buffer);
-bool bufdatabegin(struct wlr_buffer* buffer,
-                  uint32_t flags,
-                  void** data,
-                  uint32_t* format,
-                  size_t* stride);
-void bufdataend(struct wlr_buffer* buffer);
-Buffer* bufget(Buffer** pool, size_t poollen, int width, int height);
-void bufpooldrop(Buffer** pool, size_t poollen);
-unsigned int borderwidth(void);
-void buttonpress(struct wl_listener* listener, void* data);
-void capturetoplevel(struct wl_listener* listener, void* data);
-void chvt(const Arg* arg);
 void checkidleinhibitor(struct wlr_surface* exclude);
-void closemon(Monitor* m);
-void createdecoration(struct wl_listener* listener, void* data);
-void createkbinhibitor(struct wl_listener* listener, void* data);
-KeyboardGroup* createkeyboardgroup(void);
-void createinputmethod(struct wl_listener* listener, void* data);
-void createlayersurface(struct wl_listener* listener, void* data);
-void createmon(struct wl_listener* listener, void* data);
-void createnotify(struct wl_listener* listener, void* data);
-void createpointerconstraint(struct wl_listener* listener, void* data);
-void createpopup(struct wl_listener* listener, void* data);
-void createtablet(struct wlr_tablet* wlr_tablet);
-void createtabletpad(struct wlr_tablet_pad* wlr_pad);
-void createtouch(struct wlr_touch* wlr_touch);
-void cornerclear(uint32_t* px, int w, int h, int r);
-void createtextinput(struct wl_listener* listener, void* data);
-void cornercut(uint32_t* px, int w, int h, int r);
-int cornerradius(Client* c);
-void cursorframe(struct wl_listener* listener, void* data);
-void cursormoved(void);
-float decoopacity(void);
-void destroylocksurface(struct wl_listener* listener, void* data);
-void destroynotify(struct wl_listener* listener, void* data);
-void destroykeyboardgroup(struct wl_listener* listener, void* data);
-void barfini(void);
-void drawbar(Monitor* m);
-void drawbars(void);
-void drawcorners(Client* c);
-void drawselbar(void);
-int statusshown(Monitor* m);
-int drawstatus(Monitor* m, const char* text, int x, int w, int render);
-int tagwidth(Monitor* m, Monitor* s, uint32_t i);
-void focusclient(Client* c, int lift);
-void focusmon(const Arg* arg);
-void focusstack(const Arg* arg);
-Client* focustop(Monitor* m);
-void fullscreennotify(struct wl_listener* listener, void* data);
-int hastouch(void);
-void incnmaster(const Arg* arg);
-void holdbegin(struct wl_listener* listener, void* data);
-void holdend(struct wl_listener* listener, void* data);
-void inputdevice(struct wl_listener* listener, void* data);
-void killclient(const Arg* arg);
-void locksession(struct wl_listener* listener, void* data);
-void magnifierdrop(Monitor* m);
-int magnifierframe(Monitor* m, struct wlr_output_state* state);
-void magnifierzoom(Monitor* m, float z);
-void privacyafter(Monitor* m);
-int privacybefore(Monitor* m, struct wlr_output_state* state);
-void privacycapture(struct wl_listener* listener, void* data);
-void privacydamage(void);
-void privacyfini(void);
-void shieldclient(Client* c);
-const char* sharetitle(Client* c);
-void magnify(const Arg* arg);
-void mapnotify(struct wl_listener* listener, void* data);
-void movestack(const Arg* arg);
-void motionabsolute(struct wl_listener* listener, void* data);
-void motionnotify(uint32_t time,
-                  struct wlr_input_device* device,
-                  double sx,
-                  double sy,
-                  double sx_unaccel,
-                  double sy_unaccel);
-void motionrelative(struct wl_listener* listener, void* data);
-void moveresize(const Arg* arg);
-void notifyactions(const Arg* arg);
-void notifydismiss(const Arg* arg);
-void notifyfini(void);
-const char* notifytoken(void);
+void chvt(const Arg* arg);
 int notifytokenmine(const struct wlr_xdg_activation_token_v1* token);
-void notifydismissall(const Arg* arg);
-void notifynext(const Arg* arg);
-void notifyopen(const Arg* arg);
-int notifypicking(void);
-void notifypickkey(xkb_keysym_t sym);
-void notifyprev(const Arg* arg);
-void notifyscroll(const Arg* arg);
-int notifywheel(Monitor* pm, double delta, int horizontal);
-void outputmgrapply(struct wl_listener* listener, void* data);
-void outputmgrtest(struct wl_listener* listener, void* data);
-void padkeyboardfocus(struct wl_listener* listener, void* data);
-void pinchbegin(struct wl_listener* listener, void* data);
-void pinchend(struct wl_listener* listener, void* data);
-void pinchupdate(struct wl_listener* listener, void* data);
-void powermgrsetmode(struct wl_listener* listener, void* data);
 void quit(const Arg* arg);
-void reloadmons(void);
-void reloadopacity(void);
-void reloadsettings(const Arg* arg);
-void requeststartdrag(struct wl_listener* listener, void* data);
-void ringbell(struct wl_listener* listener, void* data);
-void resize(Client* c, struct wlr_box geo, int interact);
-void resizeheight(const Arg* arg);
-void resizewidth(const Arg* arg);
-void run(void);
-int runnercalc(double* out);
-void runnercalcformat(char* out, size_t n, double v);
-void runnerkey(xkb_keysym_t sym, uint32_t mods, uint32_t codepoint);
-const char* runnersuggest(void);
-int runnercandidates(void);
-const char* runnercandidate(int i);
-int runnerselected(void);
-int runnerhasicons(void);
-Icon* runnericon(int i);
-int runnerquery(void);
-void runnertoggle(const Arg* arg);
-void seatcaps(void);
-void scenebuffersetopacity(struct wlr_scene_buffer* buffer,
-                           int sx,
-                           int sy,
-                           void* data);
-void setbordercolor(Client* c, int scheme);
-void setclientcursor(struct wlr_surface* surface, int hotspot_x, int hotspot_y);
-void setcursor(struct wl_listener* listener, void* data);
-void setcursorshape(struct wl_listener* listener, void* data);
-void setfloating(Client* c, int floating);
-void setfullscreen(Client* c, int fullscreen);
-void setlayout(const Arg* arg);
-void setmfact(const Arg* arg);
-void settitle(Client* c);
-int titleclick(Client* c, double x, double y);
-int ontitle(Client* c, double x, double y);
-void titlehover(Client* c, double x, double y);
-int titleheight(Client* c);
-void titlegrab(Client* c);
-void setmon(Client* c, Monitor* m, uint32_t newtags);
-void setopacityfocus(const Arg* arg);
-void setopacityunfocus(const Arg* arg);
-void setpsel(struct wl_listener* listener, void* data);
-void setsel(struct wl_listener* listener, void* data);
-#ifdef INTEGRATED_BACKGROUND
-void setwallpaper(Monitor* m);
-#endif /* INTEGRATED_BACKGROUND */
-void shifttag(const Arg* arg);
-void shiftview(const Arg* arg);
 void spawn(const Arg* arg);
-void startdrag(struct wl_listener* listener, void* data);
-int statusin(int fd, unsigned int mask, void* data);
-int statusclick(Monitor* pm, int x, int button);
-int statusscroll(Monitor* pm, int x, double delta);
-void swapclients(Client* a, Client* b);
-void swipebegin(struct wl_listener* listener, void* data);
-void swipeend(struct wl_listener* listener, void* data);
-void swipeupdate(struct wl_listener* listener, void* data);
-void tabletaxis(struct wl_listener* listener, void* data);
-void tabletbutton(struct wl_listener* listener, void* data);
-void tabletproximity(struct wl_listener* listener, void* data);
-void tabletremap(void);
-void tablettip(struct wl_listener* listener, void* data);
-void tag(const Arg* arg);
-void tabbed(Monitor* m);
-Client* tabtop(Monitor* m);
-void tagmon(const Arg* arg);
-void tile(Monitor* m);
-void togglebar(const Arg* arg);
-void textinputarrange(void);
-void textinputfocus(struct wl_listener* listener, void* data);
-int textinputkey(KeyboardGroup* group, struct wlr_keyboard_key_event* event);
-int textinputmodifiers(KeyboardGroup* group);
-void togglefloating(const Arg* arg);
-void togglefullscreen(const Arg* arg);
-void togglegaps(const Arg* arg);
-void toggleinhibit(const Arg* arg);
-void toggleopacity(const Arg* arg);
-void toggleprivate(const Arg* arg);
-void toggletabbed(const Arg* arg);
-void toggletag(const Arg* arg);
-void toggletitlebar(const Arg* arg);
-void toggleview(const Arg* arg);
-void trayactivate(const Arg* arg);
-void traymenu(const Arg* arg);
-/* the tray context menu, drawn under the cursor */
-int traypopup_active(void);
-void traypopup_cleanup(void);
-void traypopup_click(double lx, double ly);
-void traypopup_dismiss(void);
-void traypopup_motion(double lx, double ly);
-void traypopup_present(const char* const* labels, int n, Menu* menu);
-int toolfocusedby(struct wlr_tablet_v2_tablet_tool* tool,
-                  struct wlr_seat_client* client);
-void toplevelfocus(Client* c);
-void toplevelmap(Client* c);
-void toplevelunmap(Client* c);
-void toplevelupdate(Client* c);
-void touchcancel(struct wl_listener* listener, void* data);
-void touchdown(struct wl_listener* listener, void* data);
-void touchframe(struct wl_listener* listener, void* data);
-void touchmotion(struct wl_listener* listener, void* data);
-void touchup(struct wl_listener* listener, void* data);
-void unmapnotify(struct wl_listener* listener, void* data);
-void updatemons(struct wl_listener* listener, void* data);
-void updatebar(Monitor* m);
-void updatetitle(struct wl_listener* listener, void* data);
-void urgent(struct wl_listener* listener, void* data);
-void view(const Arg* arg);
-void virtualkeyboard(struct wl_listener* listener, void* data);
-void virtualpointer(struct wl_listener* listener, void* data);
-void warpcursor(const Client* c);
-Monitor* xytomon(double x, double y);
-void xytonode(double x,
-              double y,
-              struct wlr_surface** psurface,
-              Client** pc,
-              LayerSurface** pl,
-              double* nx,
-              double* ny);
-void zoom(const Arg* arg);
-#ifdef XWAYLAND
-void createnotifyx11(struct wl_listener* listener, void* data);
-void xwaylandready(struct wl_listener* listener, void* data);
-#endif /* XWAYLAND */
 
-/* variables */
-extern int locked;
 extern void* exclusive_focus;
 extern struct wl_event_loop* event_loop;
-extern struct wlr_backend* backend;
 extern struct wlr_scene* scene;
 extern struct wlr_scene_tree* layers[NUM_LAYERS];
 extern struct wlr_scene_tree* drag_icon;
 extern struct wlr_renderer* drw;
 extern struct wlr_allocator* alloc;
-extern struct wlr_compositor* compositor;
 extern struct wlr_content_type_manager_v1* content_type_mgr;
 extern struct wlr_tearing_control_manager_v1* tearing_mgr;
 extern struct wl_list clients; /* tiling order */
@@ -718,180 +105,23 @@ extern struct wlr_output_manager_v1* output_mgr;
 extern struct wlr_pointer_constraints_v1* pointer_constraints;
 extern struct wlr_pointer_gestures_v1* pointer_gestures;
 extern struct wlr_relative_pointer_manager_v1* relative_pointer_mgr;
-extern struct wlr_tablet_manager_v2* tablet_mgr;
 extern struct wlr_cursor* cursor;
 extern struct wlr_xcursor_manager* cursor_mgr;
-extern struct last_cursor_state {
-    enum wp_cursor_shape_device_v1_shape shape;
-    struct wlr_surface* surface;
-    bool has_client_cursor;
-    int hotspot_x;
-    int hotspot_y;
-    struct wl_listener destroy;
-} last_cursor;
 extern struct wlr_scene_rect* root_bg;
 #ifdef INTEGRATED_BACKGROUND
 extern GdkPixbuf* wallpaper_src; /* full-res decode, cached across resizes */
-#endif                           /* INTEGRATED_BACKGROUND */
+#endif
 extern struct wlr_scene_rect* locked_bg;
 extern struct wlr_seat* seat;
 extern KeyboardGroup* kb_group;
-extern unsigned int cursor_mode;
-extern Client* grabc;
 extern struct wlr_output_layout* output_layout;
 extern struct wlr_box sgeom;
 extern struct wl_list mons;
 extern Monitor* selmon;
-#define STATUS_MAX 4096
-extern char stext[STATUS_MAX];
 extern struct wl_event_source* status_event_source;
 extern Watcher watcher;
-extern int runner_active;
-extern char runner_buf[256];
-extern int runner_len;
-extern int runner_cur;       /* cursor offset into runner_buf, 0..runner_len */
-extern int runner_repeating; /* the armed repeat belongs to the prompt */
-extern struct wl_listener request_activate;
 #ifdef XWAYLAND
 extern struct wlr_xwayland* xwayland;
-#endif /* XWAYLAND */
+#endif
 
-/* the settings. config.h holds their initial values and settings.c is the one
- * file that includes it; settingsload() overwrites them from the config. */
-extern const char** fonts;
-extern size_t nfonts;
-extern uint32_t colors[NumSchemes][3];
-extern float rootcolor[4];
-extern float fullscreen_bg[4];
-#ifdef INTEGRATED_BACKGROUND
-extern const char* wallpaper;
-#endif /* INTEGRATED_BACKGROUND */
-extern char** tags;
-extern size_t ntags;
-extern unsigned int borderpx;
-extern int cornerstyle;
-extern unsigned int cornerpx;
-extern int gaps;
-extern unsigned int gappx;
-extern int smartgaps;
-extern int titlebar;
-extern unsigned int titlepadding;
-extern int titlecenter;
-extern int titleclose;
-extern uint32_t titleclosecolor;
-extern uint32_t privatecolor;
-extern float privateround;
-extern int alwaysprivate;
-extern uint32_t publiccolor;
-extern const char* privatetitle;
-extern Layout* layouts;
-extern size_t nlayouts;
-extern Rule* rules;
-extern size_t nrules;
-extern int showbar;
-extern int topbar;
-extern int barwintitle;
-extern int bartagdots;
-extern unsigned int bartagdotsize;
-extern unsigned int bartagdotgap;
-extern float bartagdotwidth;
-extern float bartagdotround;
-extern unsigned int barurgentpulse;
-extern int barltsymbol;
-extern unsigned int barboxradius;
-extern unsigned int barpadding;
-extern float barheight;
-extern int barsinglemon;
-extern int barstatus;
-extern int showsystray;
-extern unsigned int systrayspacing;
-extern unsigned int systraypadding;
-extern unsigned int systrayiconsize;
-extern int shownotifications;
-extern unsigned int notification_timeout;
-extern unsigned int notification_linewidth;
-extern unsigned int notification_lineradius;
-extern const char* notification_actionsign;
-extern const char* runner_placeholder;
-extern unsigned int runner_max_candidates;
-extern unsigned int runner_pillheight;
-extern unsigned int runner_pillpadding;
-extern float runner_pillround;
-extern int runner_fuzzy;
-extern int runner_icons;
-extern unsigned int runner_iconsize;
-extern float runner_iconround;
-extern unsigned int runner_iconborder;
-extern unsigned int runner_history_size;
-extern const char* runner_shell;
-extern const char* runner_terminal;
-extern const char* runner_termprefix;
-extern const char* runner_runprefix;
-extern const char* runner_calcprefix;
-extern const char* runner_searchprefix;
-extern const char* runner_searchurl;
-extern const char* runner_windowprefix;
-extern const char* runner_tagprefix;
-extern int runner_files;
-extern const char* runner_paths;
-extern unsigned int runner_calc_precision;
-extern int opacity_enabled;
-extern float opacity_focus;
-extern float opacity_unfocus;
-extern float opacity_deco;
-#ifdef INTEGRATED_BACKGROUND
-extern int opacity_type;
-extern unsigned int blur_radius;
-extern unsigned int blur_passes;
-extern float blur_saturation;
-extern float blur_brightness;
-#endif /* INTEGRATED_BACKGROUND */
-extern MonitorRule* monrules;
-extern size_t nmonrules;
-extern int sloppyfocus;
-extern int movethreshold;
-extern int movesnap;
-extern struct xkb_rule_names xkb_rules;
-extern int repeat_rate;
-extern int repeat_delay;
-extern const char* cursor_theme;
-extern int cursor_size;
-extern int hide_cursor_when_typing;
-extern int tap_to_click;
-extern int tap_and_drag;
-extern int drag_lock;
-extern int natural_scrolling;
-extern int disable_while_typing;
-extern int left_handed;
-extern int middle_button_emulation;
-extern enum libinput_config_scroll_method scroll_method;
-extern enum libinput_config_click_method click_method;
-extern uint32_t send_events_mode;
-extern enum libinput_config_accel_profile accel_profile;
-extern double accel_speed;
-extern int touchpad_natural_scrolling;
-extern enum libinput_config_accel_profile touchpad_accel_profile;
-extern double touchpad_accel_speed;
-extern enum libinput_config_tap_button_map button_map;
-extern const char* tablet_output;
-extern int tablet_left_handed;
-extern const char* touch_output;
-extern const char** autostart;
-extern Key* keys;
-extern size_t nkeys;
-extern Button* buttons;
-extern size_t nbuttons;
-extern Gesture* gestures;
-extern unsigned int pinchzoom_mod;
-extern size_t ngestures;
-extern PadButton* padbuttons;
-extern size_t npadbuttons;
-extern int log_level;
-extern int bypass_surface_visibility;
-extern int allow_tearing;
-extern int auto_vrr;
-
-/* attempt to encapsulate suck into one file */
-#include "client.h"
-
-#endif /* G0WM_H */
+#endif

@@ -4,12 +4,12 @@
  * SPDX-License-Identifier: GPL-3.0-or-later
  */
 
-#include "tray.h"
+#include "systray/tray.h"
 
-#include "icon.h"
-#include "item.h"
-#include "menu.h"
-#include "watcher.h"
+#include "systray/icon.h"
+#include "systray/item.h"
+#include "systray/menu.h"
+#include "systray/watcher.h"
 
 #include <fcft/fcft.h>
 #include <pixman.h>

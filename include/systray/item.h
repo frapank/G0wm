@@ -4,11 +4,11 @@
  * SPDX-License-Identifier: GPL-3.0-or-later
  */
 
-#ifndef ITEM_H
-#define ITEM_H
+#ifndef G0WM_SYSTRAY_ITEM_H
+#define G0WM_SYSTRAY_ITEM_H
 
-#include "icon.h"
-#include "watcher.h"
+#include "systray/icon.h"
+#include "systray/watcher.h"
 
 #include <wayland-util.h>
 
@@ -50,4 +50,4 @@ void destroyitem(Item* item);
 void item_activate(Item* item);
 void item_show_menu(Item* item);
 
-#endif /* ITEM_H */
+#endif

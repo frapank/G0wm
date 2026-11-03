@@ -4,8 +4,8 @@
  * SPDX-License-Identifier: GPL-3.0-or-later
  */
 
-#ifndef HELPERS_H
-#define HELPERS_H
+#ifndef G0WM_SYSTRAY_HELPERS_H
+#define G0WM_SYSTRAY_HELPERS_H
 
 #include <dbus/dbus.h>
 
@@ -19,4 +19,4 @@ int request_property(DBusConnection* conn,
                      PropHandler handler,
                      void* data);
 
-#endif /* HELPERS_H */
+#endif

@@ -4,8 +4,40 @@
  *
  * private windows, masked in screen capture but not on screen
  */
-#include "g0wm.h"
+#include <libdrm/drm_fourcc.h>
+#include <math.h>
+#include <pixman.h>
+#include <stddef.h>
+#include <stdint.h>
+#include <stdio.h>
+#include <stdlib.h>
+#include <string.h>
+#include <time.h>
+#include <wayland-server-core.h>
+#include <wayland-server-protocol.h>
 #include <wlr/interfaces/wlr_ext_image_capture_source_v1.h>
+#include <wlr/render/pass.h>
+#include <wlr/render/wlr_texture.h>
+#include <wlr/types/wlr_buffer.h>
+#include <wlr/types/wlr_damage_ring.h>
+#include <wlr/types/wlr_ext_image_capture_source_v1.h>
+#include <wlr/types/wlr_ext_image_copy_capture_v1.h>
+#include <wlr/types/wlr_output.h>
+#include <wlr/types/wlr_scene.h>
+#include <wlr/types/wlr_screencopy_v1.h>
+#include <wlr/util/box.h>
+#include <wlr/util/log.h>
+#include <wlr/util/transform.h>
+
+#include "bar.h"
+#include "buffer.h"
+#include "client.h"
+#include "g0wm.h"
+#include "monitor.h"
+#include "privacy.h"
+#include "settings.h"
+#include "toplevel.h"
+#include "util.h"
 
 #define MAXBOXES 64
 

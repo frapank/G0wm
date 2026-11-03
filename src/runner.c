@@ -5,10 +5,32 @@
  * the command prompt and its calculator
  */
 #include <ctype.h>
+#include <dirent.h>
 #include <errno.h>
 #include <limits.h>
+#include <math.h>
+#include <stdbool.h>
+#include <stddef.h>
+#include <stdint.h>
+#include <stdio.h>
+#include <stdlib.h>
+#include <string.h>
+#include <sys/stat.h>
+#include <time.h>
+#include <unistd.h>
+#include <wayland-server-core.h>
+#include <wlr/types/wlr_keyboard.h>
+#include <xkbcommon/xkbcommon.h>
 
+#include "bar.h"
+#include "client.h"
 #include "g0wm.h"
+#include "layout.h"
+#include "privacy.h"
+#include "runner.h"
+#include "settings.h"
+#include "systray/icon.h"
+#include "util.h"
 
 /* function declarations */
 static void runnerbuildcache(void);
@@ -43,6 +65,11 @@ typedef struct {
 } RunnerApp;
 
 /* variables */
+int runner_active;
+char runner_buf[256];
+int runner_len;
+int runner_cur;       /* cursor offset into runner_buf, 0..runner_len */
+int runner_repeating; /* the armed repeat belongs to the prompt */
 static const char** runner_prefixes[NumModes] = {
     [ModeRun] = &runner_runprefix,       [ModeTerm] = &runner_termprefix,
     [ModeCalc] = &runner_calcprefix,     [ModeSearch] = &runner_searchprefix,

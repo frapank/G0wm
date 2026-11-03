@@ -4,7 +4,18 @@
  *
  * foreign toplevel handles, for docks, taskbars and window capture
  */
+#include <stddef.h>
+#include <string.h>
+#include <wayland-server-core.h>
+#include <wlr/types/wlr_ext_foreign_toplevel_list_v1.h>
+#include <wlr/types/wlr_ext_image_capture_source_v1.h>
+#include <wlr/types/wlr_foreign_toplevel_management_v1.h>
+#include <wlr/types/wlr_output.h>
+
+#include "client.h"
 #include "g0wm.h"
+#include "privacy.h"
+#include "toplevel.h"
 
 /* function declarations */
 static void requestactivate(struct wl_listener* listener, void* data);

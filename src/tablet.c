@@ -4,7 +4,41 @@
  *
  * drawing tablets (pens and pads, over tablet-v2) and touchscreens
  */
+#include <libinput.h>
+#include <linux/input-event-codes.h>
+#include <math.h>
+#include <stddef.h>
+#include <stdint.h>
+#include <stdlib.h>
+#include <string.h>
+#include <wayland-server-core.h>
+#include <wayland-server-protocol.h>
+#include <wlr/backend/libinput.h>
+#include <wlr/types/wlr_compositor.h>
+#include <wlr/types/wlr_cursor.h>
+#include <wlr/types/wlr_data_device.h>
+#include <wlr/types/wlr_idle_notify_v1.h>
+#include <wlr/types/wlr_input_device.h>
+#include <wlr/types/wlr_keyboard.h>
+#include <wlr/types/wlr_output.h>
+#include <wlr/types/wlr_pointer.h>
+#include <wlr/types/wlr_scene.h>
+#include <wlr/types/wlr_seat.h>
+#include <wlr/types/wlr_tablet_pad.h>
+#include <wlr/types/wlr_tablet_tool.h>
+#include <wlr/types/wlr_tablet_v2.h>
+#include <wlr/types/wlr_touch.h>
+
+#include "bar.h"
+#include "client.h"
 #include "g0wm.h"
+#include "input.h"
+#include "lock.h"
+#include "monitor.h"
+#include "settings.h"
+#include "tablet.h"
+#include "traypopup.h"
+#include "util.h"
 
 typedef struct {
     struct wlr_tablet* wlr_tablet;

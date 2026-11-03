@@ -10,8 +10,8 @@ anything big.
 - Keep comments short. Say why, not what.
 - New files start with the SPDX header the others have, `reuse lint`
   checks it.
-- A new setting goes in `include/config.h`, `src/settings.c` and
-  `docs/settings.md`.
+- A new setting goes in `src/config.h`, `include/settings.h`,
+  `src/settings.c` and `docs/settings.md`.
 
 ## Commits
 

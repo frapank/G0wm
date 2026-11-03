@@ -4,8 +4,8 @@
  * SPDX-License-Identifier: GPL-3.0-or-later
  */
 
-#ifndef ICON_H
-#define ICON_H
+#ifndef G0WM_SYSTRAY_ICON_H
+#define G0WM_SYSTRAY_ICON_H
 
 #include <fcft/fcft.h>
 #include <pixman.h>
@@ -37,4 +37,4 @@ FallbackIcon* createfallbackicon(const char* appname,
 void destroyicon(Icon* icon);
 int resize_image(pixman_image_t* orig, int new_width, int new_height);
 
-#endif /* ICON_H */
+#endif

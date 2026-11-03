@@ -5,7 +5,26 @@
  * text-input-v3 and input-method-v2: the bridge between apps and an input
  * method, with its keyboard grab and candidate popup
  */
+#include <linux/input-event-codes.h>
+#include <stddef.h>
+#include <stdint.h>
+#include <stdlib.h>
+#include <wayland-server-core.h>
+#include <wayland-server-protocol.h>
+#include <wlr/types/wlr_compositor.h>
+#include <wlr/types/wlr_input_method_v2.h>
+#include <wlr/types/wlr_keyboard.h>
+#include <wlr/types/wlr_scene.h>
+#include <wlr/types/wlr_seat.h>
+#include <wlr/types/wlr_text_input_v3.h>
+#include <wlr/util/box.h>
+
 #include "g0wm.h"
+#include "input.h"
+#include "lock.h"
+#include "monitor.h"
+#include "textinput.h"
+#include "util.h"
 
 typedef struct {
     struct wlr_text_input_v3* wlr;

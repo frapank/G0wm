@@ -6,7 +6,21 @@
  *
  * the tiling layouts, the tag actions and the stack order
  */
+#include <math.h>
+#include <stddef.h>
+#include <stdint.h>
+#include <stdio.h>
+#include <wayland-server-core.h>
+#include <wlr/types/wlr_scene.h>
+#include <wlr/util/box.h>
+
+#include "bar.h"
+#include "client.h"
 #include "g0wm.h"
+#include "input.h"
+#include "layout.h"
+#include "monitor.h"
+#include "settings.h"
 
 /* function declarations */
 static unsigned int tagindex(uint32_t tagset);

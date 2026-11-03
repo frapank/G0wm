@@ -4,7 +4,7 @@
  * SPDX-License-Identifier: GPL-3.0-or-later
  */
 
-#include "menu.h"
+#include "systray/menu.h"
 
 #include <dbus/dbus.h>
 #include <wayland-util.h>

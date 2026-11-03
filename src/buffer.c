@@ -5,9 +5,28 @@
  *
  * the wlr_buffer pool the bar and the title bars draw into
  */
+#include <drwl.h>
+#include <libdrm/drm_fourcc.h>
+#include <stdbool.h>
+#include <stddef.h>
+#include <stdint.h>
+#include <stdlib.h>
+#include <wayland-server-core.h>
+#include <wlr/interfaces/wlr_buffer.h>
+#include <wlr/types/wlr_buffer.h>
+
+#include "buffer.h"
 #include "g0wm.h"
+#include "util.h"
 
 /* function declarations */
+static bool bufdatabegin(struct wlr_buffer* buffer,
+                         uint32_t flags,
+                         void** data,
+                         uint32_t* format,
+                         size_t* stride);
+static void bufdataend(struct wlr_buffer* buffer);
+static void bufdestroy(struct wlr_buffer* buffer);
 static void bufrelease(struct wl_listener* listener, void* data);
 
 /* variables */
@@ -18,7 +37,7 @@ static const struct wlr_buffer_impl buffer_impl = {
 };
 
 /* function implementations */
-void bufdestroy(struct wlr_buffer* wlr_buffer)
+static void bufdestroy(struct wlr_buffer* wlr_buffer)
 {
     Buffer* buf = wl_container_of(wlr_buffer, buf, base);
     if (buf->busy)
@@ -27,11 +46,11 @@ void bufdestroy(struct wlr_buffer* wlr_buffer)
     free(buf);
 }
 
-bool bufdatabegin(struct wlr_buffer* wlr_buffer,
-                  uint32_t flags,
-                  void** data,
-                  uint32_t* format,
-                  size_t* stride)
+static bool bufdatabegin(struct wlr_buffer* wlr_buffer,
+                         uint32_t flags,
+                         void** data,
+                         uint32_t* format,
+                         size_t* stride)
 {
     Buffer* buf = wl_container_of(wlr_buffer, buf, base);
 
@@ -45,7 +64,7 @@ bool bufdatabegin(struct wlr_buffer* wlr_buffer,
     return true;
 }
 
-void bufdataend(struct wlr_buffer* wlr_buffer) {}
+static void bufdataend(struct wlr_buffer* wlr_buffer) {}
 
 /* Grabs a free width*height buffer from pool, allocating it on first use. The
  * bar and every client's title bar own a pool, as their sizes differ. */

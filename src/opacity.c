@@ -5,7 +5,32 @@
  *
  * opacity, the blurred wallpaper and the frosted decorations
  */
+#include <drwl.h>
+#include <gdk-pixbuf/gdk-pixbuf.h>
+#include <math.h>
+#include <stddef.h>
+#include <stdint.h>
+#include <stdlib.h>
+#include <string.h>
+#include <wayland-server-core.h>
+#include <wlr/types/wlr_buffer.h>
+#include <wlr/types/wlr_output.h>
+#include <wlr/types/wlr_scene.h>
+#include <wlr/util/box.h>
+#include <wlr/util/log.h>
+
+#include "bar.h"
+#include "buffer.h"
+#include "client.h"
+#include "corner.h"
 #include "g0wm.h"
+#include "layout.h"
+#include "monitor.h"
+#include "opacity.h"
+#include "settings.h"
+#include "util.h"
+
+#define OPACITY_MIN 0.1f /* floor for the opacity keybindings */
 
 /* function declarations */
 #ifdef INTEGRATED_BACKGROUND

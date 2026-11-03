@@ -4,8 +4,8 @@
  * SPDX-License-Identifier: GPL-3.0-or-later
  */
 
-#ifndef WATCHER_H
-#define WATCHER_H
+#ifndef G0WM_SYSTRAY_WATCHER_H
+#define G0WM_SYSTRAY_WATCHER_H
 
 #include <dbus/dbus.h>
 #include <wayland-server-core.h>
@@ -41,4 +41,4 @@ int watcher_get_n_items(const Watcher* watcher);
 int watcher_get_iconsize(const Watcher* watcher);
 void watcher_update_trays(Watcher* watcher);
 
-#endif /* WATCHER_H */
+#endif

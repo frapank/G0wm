@@ -7,7 +7,9 @@ SPDX-PackageDownloadLocation = "https://github.com/frapank/G0wm"
 path = [
     "src/g0wm.c", "src/client.c", "src/input.c", "src/layout.c",
     "src/lock.c", "src/monitor.c", "src/xwayland.c",
-    "include/client.h", "include/config.h", "include/g0wm.h",
+    "include/client.h", "include/g0wm.h", "src/config.h",
+    "include/input.h", "include/layout.h", "include/lock.h",
+    "include/monitor.h", "include/settings.h", "include/xwayland.h",
 ]
 precedence = "aggregate"
 SPDX-FileCopyrightText = [

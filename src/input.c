@@ -7,7 +7,63 @@
  *
  * keyboard, pointer, gesture and drag-and-drop handling
  */
+#include <libinput.h>
+#include <linux/input-event-codes.h>
+#include <math.h>
+#include <stdbool.h>
+#include <stddef.h>
+#include <stdint.h>
+#include <stdlib.h>
+#include <time.h>
+#include <wayland-server-core.h>
+#include <wayland-server-protocol.h>
+#include <wlr/backend/libinput.h>
+#include <wlr/types/wlr_compositor.h>
+#include <wlr/types/wlr_cursor.h>
+#include <wlr/types/wlr_cursor_shape_v1.h>
+#include <wlr/types/wlr_data_device.h>
+#include <wlr/types/wlr_idle_notify_v1.h>
+#include <wlr/types/wlr_input_device.h>
+#include <wlr/types/wlr_keyboard.h>
+#include <wlr/types/wlr_keyboard_group.h>
+#include <wlr/types/wlr_keyboard_shortcuts_inhibit_v1.h>
+#include <wlr/types/wlr_output.h>
+#include <wlr/types/wlr_pointer.h>
+#include <wlr/types/wlr_pointer_constraints_v1.h>
+#include <wlr/types/wlr_pointer_gestures_v1.h>
+#include <wlr/types/wlr_primary_selection.h>
+#include <wlr/types/wlr_relative_pointer_v1.h>
+#include <wlr/types/wlr_scene.h>
+#include <wlr/types/wlr_seat.h>
+#include <wlr/types/wlr_tablet_pad.h>
+#include <wlr/types/wlr_tablet_tool.h>
+#include <wlr/types/wlr_touch.h>
+#include <wlr/types/wlr_virtual_keyboard_v1.h>
+#include <wlr/types/wlr_virtual_pointer_v1.h>
+#include <wlr/util/box.h>
+#include <wlr/util/region.h>
+#include <xkbcommon/xkbcommon.h>
+
+#include "bar.h"
+#include "client.h"
 #include "g0wm.h"
+#include "input.h"
+#include "layout.h"
+#include "lock.h"
+#include "magnifier.h"
+#include "monitor.h"
+#include "runner.h"
+#include "settings.h"
+#include "systray/tray.h"
+#include "tablet.h"
+#include "textinput.h"
+#include "traypopup.h"
+#include "util.h"
+
+typedef struct {
+    struct wlr_pointer_constraint_v1* constraint;
+    struct wl_listener destroy;
+} PointerConstraint;
 
 /* function declarations */
 static unsigned int barclick(Monitor* pm, Arg* arg);
@@ -38,6 +94,9 @@ static void unlastcursor(struct wl_listener* listener, void* data);
 static int wheelbinding(const struct wlr_pointer_axis_event* event);
 
 /* variables */
+struct last_cursor_state last_cursor;
+unsigned int cursor_mode;
+Client* grabc;
 static struct wlr_pointer_constraint_v1* active_constraint;
 static bool cursor_hidden = false;
 static int grabcx, grabcy; /* client-relative */

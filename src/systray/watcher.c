@@ -4,10 +4,10 @@
  * SPDX-License-Identifier: GPL-3.0-or-later
  */
 
-#include "watcher.h"
+#include "systray/watcher.h"
 
-#include "item.h"
-#include "tray.h"
+#include "systray/item.h"
+#include "systray/tray.h"
 
 #include <dbus/dbus.h>
 #include <wayland-util.h>

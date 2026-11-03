@@ -6,7 +6,22 @@
  * rendered unzoomed into buffers of our own, and the part on show is drawn
  * from there, scaled, onto the output.
  */
+#include <pixman.h>
+#include <stddef.h>
+#include <wlr/render/pass.h>
+#include <wlr/render/swapchain.h>
+#include <wlr/render/wlr_texture.h>
+#include <wlr/types/wlr_buffer.h>
+#include <wlr/types/wlr_damage_ring.h>
+#include <wlr/types/wlr_output.h>
+#include <wlr/types/wlr_scene.h>
+#include <wlr/util/box.h>
+#include <wlr/util/log.h>
+#include <wlr/util/transform.h>
+
 #include "g0wm.h"
+#include "magnifier.h"
+#include "monitor.h"
 
 #define ZOOMMAX 16.0f
 
