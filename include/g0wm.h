@@ -50,7 +50,7 @@
 #define LISTEN(E, L, H) wl_signal_add((E), ((L)->notify = (H), (L)))
 #define LISTEN_STATIC(E, H)                                                    \
     do {                                                                       \
-        struct wl_listener* _l = ecalloc(1, sizeof(*_l));                      \
+        struct wl_listener* _l = util_calloc(1, sizeof(*_l));                  \
         _l->notify = (H);                                                      \
         wl_signal_add((E), _l);                                                \
     } while (0)
@@ -79,9 +79,9 @@ typedef struct KeyboardGroup KeyboardGroup;
 typedef struct LayerSurface LayerSurface;
 typedef struct Monitor Monitor;
 
-void checkidleinhibitor(struct wlr_surface* exclude);
-void chvt(const Arg* arg);
-int notifytokenmine(const struct wlr_xdg_activation_token_v1* token);
+void check_idle_inhibitor(struct wlr_surface* exclude);
+void change_vt(const Arg* arg);
+int activation_token_ours(const struct wlr_xdg_activation_token_v1* token);
 void quit(const Arg* arg);
 void spawn(const Arg* arg);
 
@@ -90,36 +90,37 @@ extern struct wl_event_loop* event_loop;
 extern struct wlr_scene* scene;
 extern struct wlr_scene_tree* layers[NUM_LAYERS];
 extern struct wlr_scene_tree* drag_icon;
-extern struct wlr_renderer* drw;
-extern struct wlr_allocator* alloc;
-extern struct wlr_content_type_manager_v1* content_type_mgr;
-extern struct wlr_tearing_control_manager_v1* tearing_mgr;
-extern struct wl_list clients; /* tiling order */
-extern struct wl_list fstack;  /* focus order */
+extern struct wlr_renderer* renderer;
+extern struct wlr_allocator* allocator;
+extern struct wlr_content_type_manager_v1* content_type_manager;
+extern struct wlr_tearing_control_manager_v1* tearing_manager;
+extern struct wl_list clients;     /* tiling order */
+extern struct wl_list focus_stack; /* focus order */
 extern struct wlr_ext_foreign_toplevel_list_v1* ext_toplevel_list;
-extern struct wlr_foreign_toplevel_manager_v1* foreign_toplevel_mgr;
-extern struct wlr_screencopy_manager_v1* screencopy_mgr;
+extern struct wlr_foreign_toplevel_manager_v1* foreign_toplevel_manager;
+extern struct wlr_screencopy_manager_v1* screencopy_manager;
 extern struct wlr_idle_notifier_v1* idle_notifier;
-extern struct wlr_keyboard_shortcuts_inhibit_manager_v1* kb_inhibit_mgr;
-extern struct wlr_output_manager_v1* output_mgr;
+extern struct wlr_keyboard_shortcuts_inhibit_manager_v1*
+    keyboard_inhibit_manager;
+extern struct wlr_output_manager_v1* output_manager;
 extern struct wlr_pointer_constraints_v1* pointer_constraints;
 extern struct wlr_pointer_gestures_v1* pointer_gestures;
-extern struct wlr_relative_pointer_manager_v1* relative_pointer_mgr;
+extern struct wlr_relative_pointer_manager_v1* relative_pointer_manager;
 extern struct wlr_cursor* cursor;
-extern struct wlr_xcursor_manager* cursor_mgr;
-extern struct wlr_scene_rect* root_bg;
+extern struct wlr_xcursor_manager* cursor_manager;
+extern struct wlr_scene_rect* root_background;
 #ifdef INTEGRATED_BACKGROUND
-extern GdkPixbuf* wallpaper_src; /* full-res decode, cached across resizes */
+extern GdkPixbuf* wallpaper_source; /* full-res decode, cached across resizes */
 #endif
-extern struct wlr_scene_rect* locked_bg;
+extern struct wlr_scene_rect* locked_background;
 extern struct wlr_seat* seat;
-extern KeyboardGroup* kb_group;
+extern KeyboardGroup* keyboard_group;
 extern struct wlr_output_layout* output_layout;
-extern struct wlr_box sgeom;
-extern struct wl_list mons;
-extern Monitor* selmon;
+extern struct wlr_box screen_geometry;
+extern struct wl_list monitors;
+extern Monitor* selected_monitor;
 extern struct wl_event_source* status_event_source;
-extern Watcher watcher;
+extern Watcher tray_watcher;
 #ifdef XWAYLAND
 extern struct wlr_xwayland* xwayland;
 #endif

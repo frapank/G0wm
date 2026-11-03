@@ -17,15 +17,18 @@
 #include "toplevel.h"
 
 /* function declarations */
-static void requestactivate(struct wl_listener* listener, void* data);
-static void requestclose(struct wl_listener* listener, void* data);
-static void requestfullscreen(struct wl_listener* listener, void* data);
+static void toplevel_handle_request_activate(struct wl_listener* listener,
+                                             void* data);
+static void toplevel_handle_request_close(struct wl_listener* listener,
+                                          void* data);
+static void toplevel_handle_request_fullscreen(struct wl_listener* listener,
+                                               void* data);
 
 /* variables */
-static Client* activetop;
+static Client* toplevel_active;
 
 /* function implementations */
-void capturetoplevel(struct wl_listener*, void* data)
+void toplevel_handle_new_capture_request(struct wl_listener*, void* data)
 {
     struct wlr_ext_foreign_toplevel_image_capture_source_manager_v1_request*
         req = data;
@@ -35,79 +38,83 @@ void capturetoplevel(struct wl_listener*, void* data)
         return;
     if (!c->capture &&
         !(c->capture = wlr_ext_image_capture_source_v1_create_with_scene_node(
-              &c->scene_surface->node, event_loop, alloc, drw)))
+              &c->scene_surface->node, event_loop, allocator, renderer)))
         return;
-    shieldclient(c);
+    privacy_shield_client(c);
     wlr_ext_foreign_toplevel_image_capture_source_manager_v1_request_accept(
         req, c->capture);
 }
 
-static void requestactivate(struct wl_listener* listener, void*)
+static void toplevel_handle_request_activate(struct wl_listener* listener,
+                                             void*)
 {
     Client* c = wl_container_of(listener, c, ftl_activate);
-    activateclient(c);
+    client_activate(c);
 }
 
-static void requestclose(struct wl_listener* listener, void*)
+static void toplevel_handle_request_close(struct wl_listener* listener, void*)
 {
     Client* c = wl_container_of(listener, c, ftl_close);
     client_send_close(c);
 }
 
-static void requestfullscreen(struct wl_listener* listener, void* data)
+static void toplevel_handle_request_fullscreen(struct wl_listener* listener,
+                                               void* data)
 {
     Client* c = wl_container_of(listener, c, ftl_fullscreen);
     struct wlr_foreign_toplevel_handle_v1_fullscreen_event* event = data;
-    setfullscreen(c, event->fullscreen);
+    client_set_fullscreen(c, event->fullscreen);
 }
 
-void toplevelfocus(Client* c)
+void toplevel_focus(Client* c)
 {
     if (c && client_is_unmanaged(c))
         return;
     if (c && !c->ftl)
         c = nullptr;
-    if (c == activetop)
+    if (c == toplevel_active)
         return;
-    if (activetop)
-        wlr_foreign_toplevel_handle_v1_set_activated(activetop->ftl, 0);
-    if ((activetop = c))
+    if (toplevel_active)
+        wlr_foreign_toplevel_handle_v1_set_activated(toplevel_active->ftl, 0);
+    if ((toplevel_active = c))
         wlr_foreign_toplevel_handle_v1_set_activated(c->ftl, 1);
 }
 
-void toplevelmap(Client* c)
+void toplevel_map(Client* c)
 {
     Client* p = client_get_parent(c);
 
-    c->ftl = wlr_foreign_toplevel_handle_v1_create(foreign_toplevel_mgr);
+    c->ftl = wlr_foreign_toplevel_handle_v1_create(foreign_toplevel_manager);
     if (c->ftl) {
         c->ftl->data = c;
         LISTEN(&c->ftl->events.request_activate,
                &c->ftl_activate,
-               requestactivate);
-        LISTEN(&c->ftl->events.request_close, &c->ftl_close, requestclose);
+               toplevel_handle_request_activate);
+        LISTEN(&c->ftl->events.request_close,
+               &c->ftl_close,
+               toplevel_handle_request_close);
         LISTEN(&c->ftl->events.request_fullscreen,
                &c->ftl_fullscreen,
-               requestfullscreen);
+               toplevel_handle_request_fullscreen);
         if (p && p->ftl)
             wlr_foreign_toplevel_handle_v1_set_parent(c->ftl, p->ftl);
     }
     c->eftl = wlr_ext_foreign_toplevel_handle_v1_create(
         ext_toplevel_list,
         &(struct wlr_ext_foreign_toplevel_handle_v1_state){
-            .title = sharetitle(c), .app_id = client_get_appid(c) });
+            .title = privacy_share_title(c), .app_id = client_get_app_id(c) });
     if (c->eftl)
         c->eftl->data = c;
 
-    toplevelupdate(c);
+    toplevel_update(c);
     if (client_surface(c) == seat->keyboard_state.focused_surface)
-        toplevelfocus(c);
+        toplevel_focus(c);
 }
 
-void toplevelunmap(Client* c)
+void toplevel_unmap(Client* c)
 {
-    if (c == activetop)
-        activetop = nullptr;
+    if (c == toplevel_active)
+        toplevel_active = nullptr;
     if (c->ftl) {
         wl_list_remove(&c->ftl_activate.link);
         wl_list_remove(&c->ftl_close.link);
@@ -122,10 +129,10 @@ void toplevelunmap(Client* c)
     c->capture = nullptr; /* freed with the scene node */
 }
 
-void toplevelupdate(Client* c)
+void toplevel_update(Client* c)
 {
-    const char* title = sharetitle(c);
-    const char* appid = client_get_appid(c);
+    const char* title = privacy_share_title(c);
+    const char* appid = client_get_app_id(c);
     struct wlr_output* out = c->mon ? c->mon->wlr_output : nullptr;
     struct wlr_foreign_toplevel_handle_v1_output *o, *tmp;
     int on = 0;

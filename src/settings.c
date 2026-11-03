@@ -43,7 +43,7 @@
 #include "toplevel.h"
 #include "util.h"
 
-static void reloadsettings(const Arg* arg);
+static void settings_reload(const Arg* arg);
 
 /* the only file that includes it: these are the definitions */
 #include "config.h"
@@ -55,21 +55,21 @@ typedef struct {
 
 /* tables end on { 0, nullptr }; a real zero value is listed before it */
 /* in combo order: logo+shift+q */
-static const Enum modnames[] = { { WLR_MODIFIER_LOGO, "logo" },
-                                 { WLR_MODIFIER_CTRL, "ctrl" },
-                                 { WLR_MODIFIER_ALT, "alt" },
-                                 { WLR_MODIFIER_SHIFT, "shift" },
-                                 { WLR_MODIFIER_CAPS, "caps" },
-                                 { WLR_MODIFIER_MOD2, "mod2" },
-                                 { WLR_MODIFIER_MOD3, "mod3" },
-                                 { WLR_MODIFIER_MOD5, "mod5" },
-                                 { 0, nullptr } };
+static const Enum settings_modifier_names[] = { { WLR_MODIFIER_LOGO, "logo" },
+                                                { WLR_MODIFIER_CTRL, "ctrl" },
+                                                { WLR_MODIFIER_ALT, "alt" },
+                                                { WLR_MODIFIER_SHIFT, "shift" },
+                                                { WLR_MODIFIER_CAPS, "caps" },
+                                                { WLR_MODIFIER_MOD2, "mod2" },
+                                                { WLR_MODIFIER_MOD3, "mod3" },
+                                                { WLR_MODIFIER_MOD5, "mod5" },
+                                                { 0, nullptr } };
 
-static const Enum dragmodes[] = { { CurMove, "move" },
-                                  { CurResize, "resize" },
-                                  { 0, nullptr } };
+static const Enum settings_drag_modes[] = { { CurMove, "move" },
+                                            { CurResize, "resize" },
+                                            { 0, nullptr } };
 
-static const Enum clickareas[] = {
+static const Enum settings_click_areas[] = {
     { ClkTagBar, "tagbar" }, { ClkLtSymbol, "ltsymbol" },
     { ClkStatus, "status" }, { ClkTitle, "title" },
     { ClkClient, "client" }, { ClkRoot, "root" },
@@ -77,41 +77,42 @@ static const Enum clickareas[] = {
     { 0, nullptr },
 };
 
-static const Enum mousebuttons[] = {
+static const Enum settings_mouse_buttons[] = {
     { BTN_LEFT, "left" },        { BTN_MIDDLE, "middle" },
     { BTN_RIGHT, "right" },      { WheelUp, "wheel-up" },
     { WheelDown, "wheel-down" }, { 0, nullptr }
 };
 
-static const Enum gesturemotions[] = { { SwipeLeft, "swipe-left" },
-                                       { SwipeRight, "swipe-right" },
-                                       { SwipeUp, "swipe-up" },
-                                       { SwipeDown, "swipe-down" },
-                                       { PinchIn, "pinch-in" },
-                                       { PinchOut, "pinch-out" },
-                                       { 0, nullptr } };
+static const Enum settings_gesture_motions[] = { { SwipeLeft, "swipe-left" },
+                                                 { SwipeRight, "swipe-right" },
+                                                 { SwipeUp, "swipe-up" },
+                                                 { SwipeDown, "swipe-down" },
+                                                 { PinchIn, "pinch-in" },
+                                                 { PinchOut, "pinch-out" },
+                                                 { 0, nullptr } };
 
-static const Enum runnericons[] = { { RunnerIconsNone, "none" },
-                                    { RunnerIconsSelected, "selected" },
-                                    { RunnerIconsAll, "all" },
-                                    { 0, nullptr } };
+static const Enum settings_runner_icons[] = { { RunnerIconsNone, "none" },
+                                              { RunnerIconsSelected,
+                                                "selected" },
+                                              { RunnerIconsAll, "all" },
+                                              { 0, nullptr } };
 
-static const Enum barstatuses[] = { { BarStatusFocus, "focus" },
-                                    { BarStatusAll, "all" },
-                                    { BarStatusMain, "main" },
-                                    { 0, nullptr } };
+static const Enum settings_bar_statuses[] = { { BarStatusFocus, "focus" },
+                                              { BarStatusAll, "all" },
+                                              { BarStatusMain, "main" },
+                                              { 0, nullptr } };
 
-static const Enum cornerstyles[] = { { CornerNormal, "normal" },
-                                     { CornerSquircle, "squircle" },
-                                     { 0, nullptr } };
+static const Enum settings_corner_styles[] = { { CornerNormal, "normal" },
+                                               { CornerSquircle, "squircle" },
+                                               { 0, nullptr } };
 
 #ifdef INTEGRATED_BACKGROUND
-static const Enum opacitykinds[] = { { OpacityNormal, "normal" },
-                                     { OpacityBlur, "blur" },
-                                     { 0, nullptr } };
+static const Enum settings_opacity_kinds[] = { { OpacityNormal, "normal" },
+                                               { OpacityBlur, "blur" },
+                                               { 0, nullptr } };
 #endif /* INTEGRATED_BACKGROUND */
 
-static const Enum transforms[] = {
+static const Enum settings_transforms[] = {
     { WL_OUTPUT_TRANSFORM_NORMAL, "normal" },
     { WL_OUTPUT_TRANSFORM_90, "90" },
     { WL_OUTPUT_TRANSFORM_180, "180" },
@@ -123,7 +124,7 @@ static const Enum transforms[] = {
     { 0, nullptr }
 };
 
-static const Enum scrollmethods[] = {
+static const Enum settings_scroll_methods[] = {
     { LIBINPUT_CONFIG_SCROLL_NO_SCROLL, "none" },
     { LIBINPUT_CONFIG_SCROLL_2FG, "2fg" },
     { LIBINPUT_CONFIG_SCROLL_EDGE, "edge" },
@@ -131,14 +132,14 @@ static const Enum scrollmethods[] = {
     { 0, nullptr }
 };
 
-static const Enum clickmethods[] = {
+static const Enum settings_click_methods[] = {
     { LIBINPUT_CONFIG_CLICK_METHOD_NONE, "none" },
     { LIBINPUT_CONFIG_CLICK_METHOD_BUTTON_AREAS, "button-areas" },
     { LIBINPUT_CONFIG_CLICK_METHOD_CLICKFINGER, "clickfinger" },
     { 0, nullptr }
 };
 
-static const Enum sendevents[] = {
+static const Enum settings_send_events[] = {
     { LIBINPUT_CONFIG_SEND_EVENTS_ENABLED, "enabled" },
     { LIBINPUT_CONFIG_SEND_EVENTS_DISABLED, "disabled" },
     { LIBINPUT_CONFIG_SEND_EVENTS_DISABLED_ON_EXTERNAL_MOUSE,
@@ -146,27 +147,30 @@ static const Enum sendevents[] = {
     { 0, nullptr }
 };
 
-static const Enum accelprofiles[] = {
+static const Enum settings_accel_profiles[] = {
     { LIBINPUT_CONFIG_ACCEL_PROFILE_NONE, "none" },
     { LIBINPUT_CONFIG_ACCEL_PROFILE_FLAT, "flat" },
     { LIBINPUT_CONFIG_ACCEL_PROFILE_ADAPTIVE, "adaptive" },
     { 0, nullptr }
 };
 
-static const Enum buttonmaps[] = { { LIBINPUT_CONFIG_TAP_MAP_LRM, "lrm" },
-                                   { LIBINPUT_CONFIG_TAP_MAP_LMR, "lmr" },
-                                   { 0, nullptr } };
+static const Enum settings_button_maps[] = {
+    { LIBINPUT_CONFIG_TAP_MAP_LRM, "lrm" },
+    { LIBINPUT_CONFIG_TAP_MAP_LMR, "lmr" },
+    { 0, nullptr }
+};
 
-static const Enum loglevels[] = { { WLR_SILENT, "silent" },
-                                  { WLR_ERROR, "error" },
-                                  { WLR_INFO, "info" },
-                                  { WLR_DEBUG, "debug" },
-                                  { 0, nullptr } };
+static const Enum settings_log_levels[] = { { WLR_SILENT, "silent" },
+                                            { WLR_ERROR, "error" },
+                                            { WLR_INFO, "info" },
+                                            { WLR_DEBUG, "debug" },
+                                            { 0, nullptr } };
 
 static const struct {
     const char* name;
     void (*arrange)(Monitor*);
-} arranges[] = { { "tile", tile }, { "tabbed", tabbed } };
+} settings_arranges[] = { { "tile", layout_tile },
+                          { "tabbed", layout_tabbed } };
 
 /* which member of the Arg a binding uses: 'i' int, 'u' unsigned, 'f' float,
  * 'v' an execvp() list, 'l' a layout symbol, 'c' a drag mode, 0 none */
@@ -177,67 +181,67 @@ typedef struct {
     char arg;
 } Action;
 
-static const Action actions[] = {
-    { chvt, "chvt", 'u' },
-    { focusmon, "focusmon", 'i' },
-    { focusstack, "focusstack", 'i' },
-    { incnmaster, "incnmaster", 'i' },
-    { killclient, "killclient", 0 },
-    { magnify, "magnify", 'f' },
-    { moveresize, "moveresize", 'c' },
-    { movestack, "movestack", 'i' },
-    { notifyactions, "notifyactions", 0 },
-    { notifydismiss, "notifydismiss", 0 },
-    { notifydismissall, "notifydismissall", 0 },
-    { notifynext, "notifynext", 0 },
-    { notifyopen, "notifyopen", 0 },
-    { notifyprev, "notifyprev", 0 },
-    { notifyscroll, "notifyscroll", 0 },
+static const Action settings_actions[] = {
+    { change_vt, "chvt", 'u' },
+    { monitor_focus, "focusmon", 'i' },
+    { layout_focus_stack, "focusstack", 'i' },
+    { layout_inc_master, "incnmaster", 'i' },
+    { client_kill, "killclient", 0 },
+    { magnifier_magnify, "magnify", 'f' },
+    { input_move_resize, "moveresize", 'c' },
+    { layout_move_stack, "movestack", 'i' },
+    { bar_notification_actions, "notifyactions", 0 },
+    { bar_notification_dismiss, "notifydismiss", 0 },
+    { bar_notification_dismiss_all, "notifydismissall", 0 },
+    { bar_notification_next, "notifynext", 0 },
+    { bar_notification_open, "notifyopen", 0 },
+    { bar_notification_prev, "notifyprev", 0 },
+    { bar_notification_scroll, "notifyscroll", 0 },
     { quit, "quit", 0 },
-    { reloadsettings, "reloadsettings", 0 },
-    { resizeheight, "resizeheight", 'i' },
-    { resizewidth, "resizewidth", 'i' },
-    { runnertoggle, "runnertoggle", 0 },
-    { setlayout, "setlayout", 'l' },
-    { setmfact, "setmfact", 'f' },
-    { setopacityfocus, "setopacityfocus", 'f' },
-    { setopacityunfocus, "setopacityunfocus", 'f' },
-    { shifttag, "shifttag", 'i' },
-    { shiftview, "shiftview", 'i' },
+    { settings_reload, "reloadsettings", 0 },
+    { layout_resize_height, "resizeheight", 'i' },
+    { layout_resize_width, "resizewidth", 'i' },
+    { runner_toggle, "runnertoggle", 0 },
+    { layout_set, "setlayout", 'l' },
+    { layout_set_master_factor, "setmfact", 'f' },
+    { opacity_change_focused, "setopacityfocus", 'f' },
+    { opacity_change_unfocused, "setopacityunfocus", 'f' },
+    { layout_shift_tag, "shifttag", 'i' },
+    { layout_shift_view, "shiftview", 'i' },
     { spawn, "spawn", 'v' },
-    { tag, "tag", 'u' },
-    { tagmon, "tagmon", 'i' },
-    { togglebar, "togglebar", 0 },
-    { togglefloating, "togglefloating", 0 },
-    { togglefullscreen, "togglefullscreen", 0 },
-    { togglegaps, "togglegaps", 0 },
-    { toggleinhibit, "toggleinhibit", 0 },
-    { toggleopacity, "toggleopacity", 0 },
-    { toggleprivate, "toggleprivate", 0 },
-    { toggletabbed, "toggletabbed", 'l' },
-    { toggletag, "toggletag", 'u' },
-    { toggletitlebar, "toggletitlebar", 0 },
-    { toggleview, "toggleview", 'u' },
-    { trayactivate, "trayactivate", 0 },
-    { traymenu, "traymenu", 0 },
-    { view, "view", 'u' },
-    { zoom, "zoom", 0 },
+    { layout_tag, "tag", 'u' },
+    { monitor_send_client, "tagmon", 'i' },
+    { bar_toggle, "togglebar", 0 },
+    { client_toggle_floating, "togglefloating", 0 },
+    { client_toggle_fullscreen, "togglefullscreen", 0 },
+    { layout_toggle_gaps, "togglegaps", 0 },
+    { input_toggle_inhibit, "toggleinhibit", 0 },
+    { opacity_toggle, "toggleopacity", 0 },
+    { privacy_toggle, "toggleprivate", 0 },
+    { layout_toggle_tabbed, "toggletabbed", 'l' },
+    { layout_toggle_tag, "toggletag", 'u' },
+    { bar_toggle_title_bars, "toggletitlebar", 0 },
+    { layout_toggle_view, "toggleview", 'u' },
+    { bar_tray_activate, "trayactivate", 0 },
+    { bar_tray_menu, "traymenu", 0 },
+    { layout_view, "view", 'u' },
+    { layout_zoom, "zoom", 0 },
 };
 
-static int line; /* of the directive being read */
+static int settings_line; /* of the directive being read */
 
-[[gnu::format(printf, 1, 2)]] static void warn(const char* fmt, ...)
+[[gnu::format(printf, 1, 2)]] static void settings_warn(const char* fmt, ...)
 {
     va_list ap;
 
-    fprintf(stderr, "g0wm: config:%d: ", line);
+    fprintf(stderr, "g0wm: config:%d: ", settings_line);
     va_start(ap, fmt);
     vfprintf(stderr, fmt, ap);
     va_end(ap);
     fputc('\n', stderr);
 }
 
-static const char* enumname(const Enum* e, int val)
+static const char* settings_enum_name(const Enum* e, int val)
 {
     for (; e->name; e++)
         if (e->val == val)
@@ -245,54 +249,54 @@ static const char* enumname(const Enum* e, int val)
     return "unknown";
 }
 
-static int enumval(const Enum* e,
-                   const char* name,
-                   int fallback,
-                   const char* what)
+static int settings_enum_value(const Enum* e,
+                               const char* name,
+                               int fallback,
+                               const char* what)
 {
     const Enum* p;
 
     for (p = e; p->name; p++)
         if (!strcmp(p->name, name))
             return p->val;
-    warn("%s is not a %s", name, what);
+    settings_warn("%s is not a %s", name, what);
     return fallback;
 }
 
-static const Action* actionbyfunc(void (*func)(const Arg*))
+static const Action* settings_action_by_func(void (*func)(const Arg*))
 {
     size_t i;
 
-    for (i = 0; i < LENGTH(actions); i++)
-        if (actions[i].func == func)
-            return &actions[i];
+    for (i = 0; i < LENGTH(settings_actions); i++)
+        if (settings_actions[i].func == func)
+            return &settings_actions[i];
     return nullptr;
 }
 
-static const Action* actionbyname(const char* name)
+static const Action* settings_action_by_name(const char* name)
 {
     size_t i;
 
     if (!name)
         return nullptr;
-    for (i = 0; i < LENGTH(actions); i++)
-        if (!strcmp(actions[i].name, name))
-            return &actions[i];
-    warn("%s is not an action", name);
+    for (i = 0; i < LENGTH(settings_actions); i++)
+        if (!strcmp(settings_actions[i].name, name))
+            return &settings_actions[i];
+    settings_warn("%s is not an action", name);
     return nullptr;
 }
 
-static const char* arrangename(void (*fn)(Monitor*))
+static const char* settings_arrange_name(void (*fn)(Monitor*))
 {
     size_t i;
 
-    for (i = 0; i < LENGTH(arranges); i++)
-        if (arranges[i].arrange == fn)
-            return arranges[i].name;
+    for (i = 0; i < LENGTH(settings_arranges); i++)
+        if (settings_arranges[i].arrange == fn)
+            return settings_arranges[i].name;
     return "tile";
 }
 
-static uint32_t packrgba(const float c[static 4])
+static uint32_t settings_pack_rgba(const float c[static 4])
 {
     return ((uint32_t)(c[0] * 255 + 0.5f) << 24) |
            ((uint32_t)(c[1] * 255 + 0.5f) << 16) |
@@ -300,7 +304,7 @@ static uint32_t packrgba(const float c[static 4])
 }
 
 /* the holes keep every name on its Scheme* index */
-static const char* const schemenames[] = {
+static const char* const settings_scheme_names[] = {
     [SchemeNorm] = "norm",
     [SchemeSel] = "sel",
     [SchemeUrg] = "urg",
@@ -315,489 +319,529 @@ static const char* const schemenames[] = {
     [SchemeRunnerSel] = "runnersel",
     [SchemeRunnerIcon] = "runnericon",
 };
-static_assert(LENGTH(schemenames) == NumSchemes);
+static_assert(LENGTH(settings_scheme_names) == NumSchemes);
 
 /* repeatable, so never missing */
-static const char* const records[] = { "layout",    "rule",     "monitor",
-                                       "autostart", "key",      "button",
-                                       "gesture",   "padbutton" };
+static const char* const settings_records[] = { "layout",  "rule",
+                                                "monitor", "autostart",
+                                                "key",     "button",
+                                                "gesture", "padbutton" };
 
-static FILE* fp;
-static int depth;
-static const char* prev; /* last top level directive */
+static FILE* settings_file;
+static int settings_depth;
+static const char* settings_previous; /* last top level directive */
 
-static void indent(void)
+static void settings_put_indent(void)
 {
     int i;
 
-    for (i = 0; i < depth; i++)
-        fputc('\t', fp);
+    for (i = 0; i < settings_depth; i++)
+        fputc('\t', settings_file);
 }
 
 /* a blank line between top level groups */
-static void start(const char* k)
+static void settings_start_group(const char* k)
 {
-    if (!depth) {
-        if (prev && strcmp(prev, k))
-            fputc('\n', fp);
-        prev = k;
+    if (!settings_depth) {
+        if (settings_previous && strcmp(settings_previous, k))
+            fputc('\n', settings_file);
+        settings_previous = k;
     }
-    indent();
-    fputs(k, fp);
+    settings_put_indent();
+    fputs(k, settings_file);
 }
 
 /* quoted only when it has to be */
-static void word(const char* s)
+static void settings_put_word(const char* s)
 {
-    fputc(' ', fp);
+    fputc(' ', settings_file);
     if (*s && !strpbrk(s, " \t\"'\\{}")) {
-        fputs(s, fp);
+        fputs(s, settings_file);
         return;
     }
-    fputc('"', fp);
+    fputc('"', settings_file);
     for (; *s; s++) {
         if (*s == '"' || *s == '\\')
-            fputc('\\', fp);
-        fputc(*s, fp);
+            fputc('\\', settings_file);
+        fputc(*s, settings_file);
     }
-    fputc('"', fp);
+    fputc('"', settings_file);
 }
 
 /* floats, so a double's digits would only be conversion noise */
-static void num(double v)
+static void settings_put_number(double v)
 {
-    fprintf(fp, " %g", round(v * 1e6) / 1e6);
+    fprintf(settings_file, " %g", round(v * 1e6) / 1e6);
 }
 
 /* a comment over k */
-static void note(const char* k, const char* s)
+static void settings_put_note(const char* k, const char* s)
 {
-    if (!depth) {
-        if (prev)
-            fputc('\n', fp);
-        prev = k;
+    if (!settings_depth) {
+        if (settings_previous)
+            fputc('\n', settings_file);
+        settings_previous = k;
     }
-    indent();
-    fprintf(fp, "# %s\n", s);
+    settings_put_indent();
+    fprintf(settings_file, "# %s\n", s);
 }
 
-static void wopen(const char* k)
+static void settings_write_open(const char* k)
 {
-    start(k);
-    fputs(" {\n", fp);
-    depth++;
+    settings_start_group(k);
+    fputs(" {\n", settings_file);
+    settings_depth++;
 }
 
-static void wclose(void)
+static void settings_write_close(void)
 {
-    depth--;
-    indent();
-    fputs("}\n", fp);
+    settings_depth--;
+    settings_put_indent();
+    fputs("}\n", settings_file);
 }
 
 /* NULL is off, not empty */
-static void wstr(const char* k, const char* v)
+static void settings_write_string(const char* k, const char* v)
 {
-    start(k);
+    settings_start_group(k);
     if (v)
-        word(v);
-    fputc('\n', fp);
+        settings_put_word(v);
+    fputc('\n', settings_file);
 }
 
-static void wint(const char* k, long v)
+static void settings_write_int(const char* k, long v)
 {
-    start(k);
-    fprintf(fp, " %ld\n", v);
+    settings_start_group(k);
+    fprintf(settings_file, " %ld\n", v);
 }
 
-static void wnum(const char* k, double v)
+static void settings_write_number(const char* k, double v)
 {
-    start(k);
-    num(v);
-    fputc('\n', fp);
+    settings_start_group(k);
+    settings_put_number(v);
+    fputc('\n', settings_file);
 }
 
-static void wbool(const char* k, int v)
+static void settings_write_bool(const char* k, int v)
 {
-    start(k);
-    fputs(v ? " true\n" : " false\n", fp);
+    settings_start_group(k);
+    fputs(v ? " true\n" : " false\n", settings_file);
 }
 
-static void whex(const char* k, uint32_t c)
+static void settings_write_hex(const char* k, uint32_t c)
 {
-    start(k);
-    fprintf(fp, " #%08x\n", c);
+    settings_start_group(k);
+    fprintf(settings_file, " #%08x\n", c);
 }
 
-static void wlist(const char* k, const char* const* v, size_t n)
+static void settings_write_list(const char* k, const char* const* v, size_t n)
 {
     size_t i;
 
-    start(k);
+    settings_start_group(k);
     for (i = 0; i < n; i++)
-        word(v[i]);
-    fputc('\n', fp);
+        settings_put_word(v[i]);
+    fputc('\n', settings_file);
 }
 
-static void wcombo(uint32_t mod, const char* last)
+static void settings_write_combo(uint32_t mod, const char* last)
 {
     const Enum* e;
 
-    fputc(' ', fp);
-    for (e = modnames; e->name; e++)
+    fputc(' ', settings_file);
+    for (e = settings_modifier_names; e->name; e++)
         if (mod & (uint32_t)e->val)
-            fprintf(fp, "%s+", e->name);
-    fputs(last, fp);
+            fprintf(settings_file, "%s+", e->name);
+    fputs(last, settings_file);
 }
 
 /* logo+alt, or none */
-static void wmods(const char* k, uint32_t mod)
+static void settings_write_mods(const char* k, uint32_t mod)
 {
     const Enum* e;
     const char* sep = " ";
 
-    start(k);
+    settings_start_group(k);
     if (!mod)
-        fputs(" none", fp);
-    for (e = modnames; e->name; e++) {
+        fputs(" none", settings_file);
+    for (e = settings_modifier_names; e->name; e++) {
         if (mod & (uint32_t)e->val) {
-            fprintf(fp, "%s%s", sep, e->name);
+            fprintf(settings_file, "%s%s", sep, e->name);
             sep = "+";
         }
     }
-    fputc('\n', fp);
+    fputc('\n', settings_file);
 }
 
-static void warg(char kind, const Arg* arg)
+static void settings_write_arg(char kind, const Arg* arg)
 {
     const char* const* v;
 
     switch (kind) {
         case 'i':
-            fprintf(fp, " %d", arg->i);
+            fprintf(settings_file, " %d", arg->i);
             break;
         case 'u':
-            fprintf(fp, " %u", arg->ui);
+            fprintf(settings_file, " %u", arg->ui);
             break;
         case 'f':
-            num(arg->f);
+            settings_put_number(arg->f);
             break;
         case 'v':
             for (v = arg->v; v && *v; v++)
-                word(*v);
+                settings_put_word(*v);
             break;
         case 'l':
             if (arg->v)
-                word(((const Layout*)arg->v)->symbol);
+                settings_put_word(((const Layout*)arg->v)->symbol);
             break;
         case 'c':
-            word(enumname(dragmodes, (int)arg->ui));
+            settings_put_word(
+                settings_enum_name(settings_drag_modes, (int)arg->ui));
             break;
     }
 }
 
-static void wlook(void)
+static void settings_write_look(void)
 {
     size_t i;
 
-    wopen("look");
-    wlist("fonts", fonts, nfonts);
-    wopen("colors");
-    note("norm", "fg bg border");
-    for (i = 0; i < LENGTH(schemenames); i++) {
-        if (!schemenames[i])
+    settings_write_open("look");
+    settings_write_list("fonts", fonts, font_count);
+    settings_write_open("colors");
+    settings_put_note("norm", "fg bg border");
+    for (i = 0; i < LENGTH(settings_scheme_names); i++) {
+        if (!settings_scheme_names[i])
             continue;
-        start(schemenames[i]);
-        fprintf(fp,
+        settings_start_group(settings_scheme_names[i]);
+        fprintf(settings_file,
                 " #%08x #%08x #%08x\n",
                 colors[i][ColFg],
                 colors[i][ColBg],
                 colors[i][ColBorder]);
     }
-    wclose();
-    whex("rootcolor", packrgba(rootcolor));
-    whex("fullscreen_bg", packrgba(fullscreen_bg));
+    settings_write_close();
+    settings_write_hex("rootcolor", settings_pack_rgba(root_color));
+    settings_write_hex("fullscreen_bg", settings_pack_rgba(fullscreen_color));
 #ifdef INTEGRATED_BACKGROUND
-    note("wallpaper", "empty for none");
-    wstr("wallpaper", wallpaper);
+    settings_put_note("wallpaper", "empty for none");
+    settings_write_string("wallpaper", wallpaper);
 #endif
-    note("tags", "up to 31");
-    wlist("tags", (const char* const*)tags, ntags);
-    wclose();
+    settings_put_note("tags", "up to 31");
+    settings_write_list("tags", (const char* const*)tags, tag_count);
+    settings_write_close();
 }
 
-static void wwindows(void)
+static void settings_write_windows(void)
 {
-    wopen("windows");
-    wint("borderpx", borderpx);
-    note("cornerstyle", "normal or squircle");
-    wstr("cornerstyle", enumname(cornerstyles, cornerstyle));
-    wint("cornerpx", cornerpx);
-    wint("gaps", gaps);
-    wint("gappx", gappx);
-    wbool("smartgaps", smartgaps);
-    wbool("titlebar", titlebar);
-    wint("titlepadding", titlepadding);
-    wbool("titlecenter", titlecenter);
-    note("titleclose", "shown with the pointer over it");
-    wbool("titleclose", titleclose);
-    whex("titleclosecolor", titleclosecolor);
-    whex("privatecolor", privatecolor);
-    note("privateround", "below 0 follows bartagdotround");
-    wnum("privateround", privateround);
-    note("alwaysprivate", "every window private, the dot marks public ones");
-    wbool("alwaysprivate", alwaysprivate);
-    whex("publiccolor", publiccolor);
-    note("privatetitle", "shown for a private window, {app} is its app id");
-    wstr("privatetitle", privatetitle);
-    note("movethreshold", "px dragged on a title before the window moves");
-    wint("movethreshold", movethreshold);
-    note("movesnap", "px at which a moved floating window sticks, 0 off");
-    wint("movesnap", movesnap);
-    wclose();
+    settings_write_open("windows");
+    settings_write_int("borderpx", border_width);
+    settings_put_note("cornerstyle", "normal or squircle");
+    settings_write_string(
+        "cornerstyle",
+        settings_enum_name(settings_corner_styles, corner_style));
+    settings_write_int("cornerpx", corner_radius);
+    settings_write_int("gaps", gaps);
+    settings_write_int("gappx", gap_size);
+    settings_write_bool("smartgaps", smart_gaps);
+    settings_write_bool("titlebar", title_bar);
+    settings_write_int("titlepadding", title_padding);
+    settings_write_bool("titlecenter", title_center);
+    settings_put_note("titleclose", "shown with the pointer over it");
+    settings_write_bool("titleclose", title_close);
+    settings_write_hex("titleclosecolor", title_close_color);
+    settings_write_hex("privatecolor", private_color);
+    settings_put_note("privateround", "below 0 follows bartagdotround");
+    settings_write_number("privateround", private_round);
+    settings_put_note("alwaysprivate",
+                      "every window private, the dot marks public ones");
+    settings_write_bool("alwaysprivate", always_private);
+    settings_write_hex("publiccolor", public_color);
+    settings_put_note("privatetitle",
+                      "shown for a private window, {app} is its app id");
+    settings_write_string("privatetitle", private_title);
+    settings_put_note("movethreshold",
+                      "px dragged on a title before the window moves");
+    settings_write_int("movethreshold", move_threshold);
+    settings_put_note("movesnap",
+                      "px at which a moved floating window sticks, 0 off");
+    settings_write_int("movesnap", move_snap);
+    settings_write_close();
 }
 
-static void wbar(void)
+static void settings_write_bar(void)
 {
-    wopen("bar");
-    wbool("showbar", showbar);
-    wbool("topbar", topbar);
-    wbool("barwintitle", barwintitle);
-    note("bartagdots", "dots instead of the tag names");
-    wbool("bartagdots", bartagdots);
-    note("bartagdotsize", "px, 0 for automatic");
-    wint("bartagdotsize", bartagdotsize);
-    note("bartagdotgap", "px between dots, 0 for automatic");
-    wint("bartagdotgap", bartagdotgap);
-    note("bartagdotwidth", "selected pill, times the dot size");
-    wnum("bartagdotwidth", bartagdotwidth);
-    note("bartagdotround", "0 square to 1 fully round corners");
-    wnum("bartagdotround", bartagdotround);
-    note("barurgentpulse", "ms per pulse of an urgent tag, 0 off");
-    wint("barurgentpulse", barurgentpulse);
-    wbool("barltsymbol", barltsymbol);
-    wint("barboxradius", barboxradius);
-    wint("barpadding", barpadding);
-    note("barheight", "times the font height, 0 for automatic");
-    wnum("barheight", barheight);
-    note("barsinglemon", "one bar only, on the first monitor");
-    wbool("barsinglemon", barsinglemon);
-    note("barstatus", "focus, all or main");
-    wstr("barstatus", enumname(barstatuses, barstatus));
-    wbool("showsystray", showsystray);
-    wint("systrayspacing", systrayspacing);
-    wint("systraypadding", systraypadding);
-    note("systrayiconsize", "0 fills the bar");
-    wint("systrayiconsize", systrayiconsize);
-    wbool("shownotifications", shownotifications);
-    note("notification_timeout", "seconds");
-    wint("notification_timeout", notification_timeout);
-    wint("notification_linewidth", notification_linewidth);
-    wint("notification_lineradius", notification_lineradius);
-    wstr("notification_actionsign", notification_actionsign);
-    note("runner_placeholder", "shown while nothing is typed");
-    wstr("runner_placeholder", runner_placeholder);
-    note("runner_max_candidates", "0 for none");
-    wint("runner_max_candidates", runner_max_candidates);
-    note("runner_pillheight", "0 fits the font");
-    wint("runner_pillheight", runner_pillheight);
-    note("runner_pillpadding", "0 for automatic");
-    wint("runner_pillpadding", runner_pillpadding);
-    note("runner_pillround", "below 0 follows bartagdotround");
-    wnum("runner_pillround", runner_pillround);
-    wbool("runner_fuzzy", runner_fuzzy);
-    note("runner_icons", "none, selected or all");
-    wstr("runner_icons", enumname(runnericons, runner_icons));
-    note("runner_iconsize", "0 fits the font");
-    wint("runner_iconsize", runner_iconsize);
-    note("runner_iconround", "0 square to 1 round, for a missing icon");
-    wnum("runner_iconround", runner_iconround);
-    wint("runner_iconborder", runner_iconborder);
-    note("runner_history_size", "0 for none");
-    wint("runner_history_size", runner_history_size);
-    wstr("runner_shell", runner_shell);
-    note("runner_terminal", "runs a line starting with runner_termprefix");
-    wstr("runner_terminal", runner_terminal);
-    wstr("runner_termprefix", runner_termprefix);
-    note("runner_runprefix", "runs a command without a terminal");
-    wstr("runner_runprefix", runner_runprefix);
-    wstr("runner_calcprefix", runner_calcprefix);
-    wstr("runner_searchprefix", runner_searchprefix);
-    note("runner_searchurl", "%s is the query, opened with xdg-open");
-    wstr("runner_searchurl", runner_searchurl);
-    wstr("runner_windowprefix", runner_windowprefix);
-    wstr("runner_tagprefix", runner_tagprefix);
-    note("runner_files", "lists the files of a path starting with / or ~");
-    wbool("runner_files", runner_files);
-    note("runner_paths", "searched after $PATH");
-    wstr("runner_paths", runner_paths);
-    note("runner_calc_precision", "significant digits, up to 17");
-    wint("runner_calc_precision", runner_calc_precision);
-    wclose();
+    settings_write_open("bar");
+    settings_write_bool("showbar", bar_enabled);
+    settings_write_bool("topbar", bar_top);
+    settings_write_bool("barwintitle", bar_window_title);
+    settings_put_note("bartagdots", "dots instead of the tag names");
+    settings_write_bool("bartagdots", bar_tag_dots);
+    settings_put_note("bartagdotsize", "px, 0 for automatic");
+    settings_write_int("bartagdotsize", bar_tag_dot_size);
+    settings_put_note("bartagdotgap", "px between dots, 0 for automatic");
+    settings_write_int("bartagdotgap", bar_tag_dot_gap);
+    settings_put_note("bartagdotwidth", "selected pill, times the dot size");
+    settings_write_number("bartagdotwidth", bar_tag_dot_width);
+    settings_put_note("bartagdotround", "0 square to 1 fully round corners");
+    settings_write_number("bartagdotround", bar_tag_dot_round);
+    settings_put_note("barurgentpulse", "ms per pulse of an urgent tag, 0 off");
+    settings_write_int("barurgentpulse", bar_urgent_pulse);
+    settings_write_bool("barltsymbol", bar_layout_symbol);
+    settings_write_int("barboxradius", bar_box_radius);
+    settings_write_int("barpadding", bar_padding);
+    settings_put_note("barheight", "times the font height, 0 for automatic");
+    settings_write_number("barheight", bar_height);
+    settings_put_note("barsinglemon", "one bar only, on the first monitor");
+    settings_write_bool("barsinglemon", bar_single_monitor);
+    settings_put_note("barstatus", "focus, all or main");
+    settings_write_string(
+        "barstatus", settings_enum_name(settings_bar_statuses, bar_status));
+    settings_write_bool("showsystray", systray_enabled);
+    settings_write_int("systrayspacing", systray_spacing);
+    settings_write_int("systraypadding", systray_padding);
+    settings_put_note("systrayiconsize", "0 fills the bar");
+    settings_write_int("systrayiconsize", systray_icon_size);
+    settings_write_bool("shownotifications", notifications_enabled);
+    settings_put_note("notification_timeout", "seconds");
+    settings_write_int("notification_timeout", notification_timeout);
+    settings_write_int("notification_linewidth", notification_line_width);
+    settings_write_int("notification_lineradius", notification_line_radius);
+    settings_write_string("notification_actionsign", notification_action_sign);
+    settings_put_note("runner_placeholder", "shown while nothing is typed");
+    settings_write_string("runner_placeholder", runner_placeholder);
+    settings_put_note("runner_max_candidates", "0 for none");
+    settings_write_int("runner_max_candidates", runner_max_candidates);
+    settings_put_note("runner_pillheight", "0 fits the font");
+    settings_write_int("runner_pillheight", runner_pill_height);
+    settings_put_note("runner_pillpadding", "0 for automatic");
+    settings_write_int("runner_pillpadding", runner_pill_padding);
+    settings_put_note("runner_pillround", "below 0 follows bartagdotround");
+    settings_write_number("runner_pillround", runner_pill_round);
+    settings_write_bool("runner_fuzzy", runner_fuzzy);
+    settings_put_note("runner_icons", "none, selected or all");
+    settings_write_string(
+        "runner_icons",
+        settings_enum_name(settings_runner_icons, runner_icons));
+    settings_put_note("runner_iconsize", "0 fits the font");
+    settings_write_int("runner_iconsize", runner_icon_size);
+    settings_put_note("runner_iconround",
+                      "0 square to 1 round, for a missing icon");
+    settings_write_number("runner_iconround", runner_icon_round);
+    settings_write_int("runner_iconborder", runner_icon_border);
+    settings_put_note("runner_history_size", "0 for none");
+    settings_write_int("runner_history_size", runner_history_size);
+    settings_write_string("runner_shell", runner_shell);
+    settings_put_note("runner_terminal",
+                      "runs a line starting with runner_termprefix");
+    settings_write_string("runner_terminal", runner_terminal);
+    settings_write_string("runner_termprefix", runner_terminal_prefix);
+    settings_put_note("runner_runprefix", "runs a command without a terminal");
+    settings_write_string("runner_runprefix", runner_run_prefix);
+    settings_write_string("runner_calcprefix", runner_calc_prefix);
+    settings_write_string("runner_searchprefix", runner_search_prefix);
+    settings_put_note("runner_searchurl",
+                      "%s is the query, opened with xdg-open");
+    settings_write_string("runner_searchurl", runner_search_url);
+    settings_write_string("runner_windowprefix", runner_window_prefix);
+    settings_write_string("runner_tagprefix", runner_tag_prefix);
+    settings_put_note("runner_files",
+                      "lists the files of a path starting with / or ~");
+    settings_write_bool("runner_files", runner_files);
+    settings_put_note("runner_paths", "searched after $PATH");
+    settings_write_string("runner_paths", runner_paths);
+    settings_put_note("runner_calc_precision", "significant digits, up to 17");
+    settings_write_int("runner_calc_precision", runner_calc_precision);
+    settings_write_close();
 }
 
-static void wopacity(void)
+static void settings_write_opacity(void)
 {
-    wopen("opacity");
-    wbool("opacity_enabled", opacity_enabled);
-    wnum("opacity_focus", opacity_focus);
-    wnum("opacity_unfocus", opacity_unfocus);
-    note("opacity_deco", "bar, title bars and borders");
-    wnum("opacity_deco", opacity_deco);
+    settings_write_open("opacity");
+    settings_write_bool("opacity_enabled", opacity_enabled);
+    settings_write_number("opacity_focus", opacity_focus);
+    settings_write_number("opacity_unfocus", opacity_unfocus);
+    settings_put_note("opacity_deco", "bar, title bars and borders");
+    settings_write_number("opacity_deco", opacity_decorations);
 #ifdef INTEGRATED_BACKGROUND
-    note("opacity_type", "normal or blur");
-    wstr("opacity_type", enumname(opacitykinds, opacity_type));
-    wint("blur_radius", blur_radius);
-    wint("blur_passes", blur_passes);
-    wnum("blur_saturation", blur_saturation);
-    wnum("blur_brightness", blur_brightness);
+    settings_put_note("opacity_type", "normal or blur");
+    settings_write_string(
+        "opacity_type",
+        settings_enum_name(settings_opacity_kinds, opacity_type));
+    settings_write_int("blur_radius", blur_radius);
+    settings_write_int("blur_passes", blur_passes);
+    settings_write_number("blur_saturation", blur_saturation);
+    settings_write_number("blur_brightness", blur_brightness);
 #endif
-    wclose();
+    settings_write_close();
 }
 
-static void winput(void)
+static void settings_write_input(void)
 {
-    wopen("input");
-    wbool("sloppyfocus", sloppyfocus);
-    wopen("xkb_rules");
-    wstr("rules", xkb_rules.rules);
-    wstr("model", xkb_rules.model);
-    wstr("layout", xkb_rules.layout);
-    wstr("variant", xkb_rules.variant);
-    wstr("options", xkb_rules.options);
-    wclose();
-    wint("repeat_rate", repeat_rate);
-    wint("repeat_delay", repeat_delay);
-    wstr("cursor_theme", cursor_theme);
-    wint("cursor_size", cursor_size);
-    wbool("hide_cursor_when_typing", hide_cursor_when_typing);
-    wbool("tap_to_click", tap_to_click);
-    wbool("tap_and_drag", tap_and_drag);
-    wbool("drag_lock", drag_lock);
-    wbool("natural_scrolling", natural_scrolling);
-    wbool("disable_while_typing", disable_while_typing);
-    wbool("left_handed", left_handed);
-    wbool("middle_button_emulation", middle_button_emulation);
-    note("scroll_method", "none, 2fg, edge or on-button-down");
-    wstr("scroll_method", enumname(scrollmethods, scroll_method));
-    note("click_method", "none, button-areas or clickfinger");
-    wstr("click_method", enumname(clickmethods, click_method));
-    note("send_events_mode", "enabled, disabled or disabled-on-external-mouse");
-    wstr("send_events_mode", enumname(sendevents, (int)send_events_mode));
-    note("accel_profile", "none, flat or adaptive, speed from -1 to 1");
-    wstr("accel_profile", enumname(accelprofiles, accel_profile));
-    wnum("accel_speed", accel_speed);
-    note("touchpad_natural_scrolling", "the same three, for touchpads");
-    wbool("touchpad_natural_scrolling", touchpad_natural_scrolling);
-    wstr("touchpad_accel_profile",
-         enumname(accelprofiles, touchpad_accel_profile));
-    wnum("touchpad_accel_speed", touchpad_accel_speed);
-    note("pinchzoom_mod", "held while pinching to zoom, none for off");
-    wmods("pinchzoom_mod", pinchzoom_mod);
-    note("button_map", "lrm or lmr");
-    wstr("button_map", enumname(buttonmaps, button_map));
-    note("tablet_output", "output names as wlr-randr shows them, none for all");
-    wstr("tablet_output", tablet_output);
-    note("tablet_left_handed", "buttons on the right");
-    wbool("tablet_left_handed", tablet_left_handed);
-    note("touch_output", "none: the one udev reports");
-    wstr("touch_output", touch_output);
-    wclose();
+    settings_write_open("input");
+    settings_write_bool("sloppyfocus", sloppy_focus);
+    settings_write_open("xkb_rules");
+    settings_write_string("rules", xkb_rules.rules);
+    settings_write_string("model", xkb_rules.model);
+    settings_write_string("layout", xkb_rules.layout);
+    settings_write_string("variant", xkb_rules.variant);
+    settings_write_string("options", xkb_rules.options);
+    settings_write_close();
+    settings_write_int("repeat_rate", repeat_rate);
+    settings_write_int("repeat_delay", repeat_delay);
+    settings_write_string("cursor_theme", cursor_theme);
+    settings_write_int("cursor_size", cursor_size);
+    settings_write_bool("hide_cursor_when_typing", hide_cursor_when_typing);
+    settings_write_bool("tap_to_click", tap_to_click);
+    settings_write_bool("tap_and_drag", tap_and_drag);
+    settings_write_bool("drag_lock", drag_lock);
+    settings_write_bool("natural_scrolling", natural_scrolling);
+    settings_write_bool("disable_while_typing", disable_while_typing);
+    settings_write_bool("left_handed", left_handed);
+    settings_write_bool("middle_button_emulation", middle_button_emulation);
+    settings_put_note("scroll_method", "none, 2fg, edge or on-button-down");
+    settings_write_string(
+        "scroll_method",
+        settings_enum_name(settings_scroll_methods, scroll_method));
+    settings_put_note("click_method", "none, button-areas or clickfinger");
+    settings_write_string(
+        "click_method",
+        settings_enum_name(settings_click_methods, click_method));
+    settings_put_note("send_events_mode",
+                      "enabled, disabled or disabled-on-external-mouse");
+    settings_write_string(
+        "send_events_mode",
+        settings_enum_name(settings_send_events, (int)send_events_mode));
+    settings_put_note("accel_profile",
+                      "none, flat or adaptive, speed from -1 to 1");
+    settings_write_string(
+        "accel_profile",
+        settings_enum_name(settings_accel_profiles, accel_profile));
+    settings_write_number("accel_speed", accel_speed);
+    settings_put_note("touchpad_natural_scrolling",
+                      "the same three, for touchpads");
+    settings_write_bool("touchpad_natural_scrolling",
+                        touchpad_natural_scrolling);
+    settings_write_string(
+        "touchpad_accel_profile",
+        settings_enum_name(settings_accel_profiles, touchpad_accel_profile));
+    settings_write_number("touchpad_accel_speed", touchpad_accel_speed);
+    settings_put_note("pinchzoom_mod",
+                      "held while pinching to zoom, none for off");
+    settings_write_mods("pinchzoom_mod", pinch_zoom_modifier);
+    settings_put_note("button_map", "lrm or lmr");
+    settings_write_string(
+        "button_map", settings_enum_name(settings_button_maps, tap_button_map));
+    settings_put_note("tablet_output",
+                      "output names as wlr-randr shows them, none for all");
+    settings_write_string("tablet_output", tablet_output);
+    settings_put_note("tablet_left_handed", "buttons on the right");
+    settings_write_bool("tablet_left_handed", tablet_left_handed);
+    settings_put_note("touch_output", "none: the one udev reports");
+    settings_write_string("touch_output", touch_output);
+    settings_write_close();
 }
 
-static void wmisc(void)
+static void settings_write_misc(void)
 {
-    wopen("misc");
-    note("log_level", "silent, error, info or debug");
-    wstr("log_level", enumname(loglevels, log_level));
-    note("bypass_surface_visibility",
-         "a hidden fullscreen window keeps the screen awake");
-    wbool("bypass_surface_visibility", bypass_surface_visibility);
-    note("allow_tearing", "tearing for fullscreen windows that ask for it");
-    wbool("allow_tearing", allow_tearing);
-    note("auto_vrr", "VRR for fullscreen games and videos");
-    wbool("auto_vrr", auto_vrr);
-    wclose();
+    settings_write_open("misc");
+    settings_put_note("log_level", "silent, error, info or debug");
+    settings_write_string("log_level",
+                          settings_enum_name(settings_log_levels, log_level));
+    settings_put_note("bypass_surface_visibility",
+                      "a hidden fullscreen window keeps the screen awake");
+    settings_write_bool("bypass_surface_visibility", bypass_surface_visibility);
+    settings_put_note("allow_tearing",
+                      "tearing for fullscreen windows that ask for it");
+    settings_write_bool("allow_tearing", allow_tearing);
+    settings_put_note("auto_vrr", "VRR for fullscreen games and videos");
+    settings_write_bool("auto_vrr", auto_vrr);
+    settings_write_close();
 }
 
-static void wlayouts(void)
+static void settings_write_layouts(void)
 {
     size_t i;
 
-    note("layout", "layout: symbol, then tile or tabbed");
-    for (i = 0; i < nlayouts; i++) {
-        start("layout");
-        word(layouts[i].symbol);
-        word(arrangename(layouts[i].arrange));
-        fputc('\n', fp);
+    settings_put_note("layout", "layout: symbol, then tile or tabbed");
+    for (i = 0; i < layout_count; i++) {
+        settings_start_group("layout");
+        settings_put_word(layouts[i].symbol);
+        settings_put_word(settings_arrange_name(layouts[i].arrange));
+        fputc('\n', settings_file);
     }
 }
 
-static void wrules(void)
+static void settings_write_rules(void)
 {
     size_t i;
 
-    note("rule",
-         "rule: opacity 0 keeps the default, monitor -1 is the focused one, "
-         "without private it follows alwaysprivate");
-    for (i = 0; i < nrules; i++) {
-        wopen("rule");
-        wstr("id", rules[i].id);
-        wstr("title", rules[i].title);
-        wint("tags", rules[i].tags);
-        wbool("isfloating", rules[i].isfloating);
+    settings_put_note(
+        "rule",
+        "rule: opacity 0 keeps the default, monitor -1 is the focused one, "
+        "without private it follows alwaysprivate");
+    for (i = 0; i < rule_count; i++) {
+        settings_write_open("rule");
+        settings_write_string("id", rules[i].id);
+        settings_write_string("title", rules[i].title);
+        settings_write_int("tags", rules[i].tags);
+        settings_write_bool("isfloating", rules[i].isfloating);
         if (rules[i].isprivate >= 0)
-            wbool("private", rules[i].isprivate);
-        wnum("opacity_focus", rules[i].opacity_focus);
-        wnum("opacity_unfocus", rules[i].opacity_unfocus);
-        wint("monitor", rules[i].monitor);
-        wclose();
+            settings_write_bool("private", rules[i].isprivate);
+        settings_write_number("opacity_focus", rules[i].opacity_focus);
+        settings_write_number("opacity_unfocus", rules[i].opacity_unfocus);
+        settings_write_int("monitor", rules[i].monitor);
+        settings_write_close();
     }
 }
 
-static void wmonitors(void)
+static void settings_write_monitors(void)
 {
     size_t i;
 
-    note("monitor", "monitor: the first matching name wins");
-    for (i = 0; i < nmonrules; i++) {
-        wopen("monitor");
-        wstr("name", monrules[i].name);
-        wnum("mfact", monrules[i].mfact);
-        wint("nmaster", monrules[i].nmaster);
-        wnum("scale", monrules[i].scale);
-        wstr("layout", monrules[i].lt ? monrules[i].lt->symbol : nullptr);
-        wstr("transform", enumname(transforms, (int)monrules[i].rr));
-        wint("x", monrules[i].x);
-        wint("y", monrules[i].y);
-        wint("width", monrules[i].width);
-        wint("height", monrules[i].height);
-        wint("refresh", monrules[i].refresh);
-        wclose();
+    settings_put_note("monitor", "monitor: the first matching name wins");
+    for (i = 0; i < monitor_rule_count; i++) {
+        settings_write_open("monitor");
+        settings_write_string("name", monitor_rules[i].name);
+        settings_write_number("mfact", monitor_rules[i].mfact);
+        settings_write_int("nmaster", monitor_rules[i].nmaster);
+        settings_write_number("scale", monitor_rules[i].scale);
+        settings_write_string("layout",
+                              monitor_rules[i].lt ? monitor_rules[i].lt->symbol
+                                                  : nullptr);
+        settings_write_string(
+            "transform",
+            settings_enum_name(settings_transforms, (int)monitor_rules[i].rr));
+        settings_write_int("x", monitor_rules[i].x);
+        settings_write_int("y", monitor_rules[i].y);
+        settings_write_int("width", monitor_rules[i].width);
+        settings_write_int("height", monitor_rules[i].height);
+        settings_write_int("refresh", monitor_rules[i].refresh);
+        settings_write_close();
     }
 }
 
 /* one NULL terminated run of arguments per command */
-static void wautostart(void)
+static void settings_write_autostart(void)
 {
     const char* const* p;
 
-    note("autostart", "autostart: a command, run without a shell");
+    settings_put_note("autostart", "autostart: a command, run without a shell");
     for (p = autostart; *p; p++) {
-        start("autostart");
+        settings_start_group("autostart");
         for (; *p; p++)
-            word(*p);
-        fputc('\n', fp);
+            settings_put_word(*p);
+        fputc('\n', settings_file);
     }
 }
 
-static void wkeys(void)
+static void settings_write_keys(void)
 {
     size_t i;
 
-    note("key", "key: modifiers+key, action, argument");
-    for (i = 0; i < nkeys; i++) {
-        const Action* act = actionbyfunc(keys[i].func);
+    settings_put_note("key", "key: modifiers+key, action, argument");
+    for (i = 0; i < key_count; i++) {
+        const Action* act = settings_action_by_func(keys[i].func);
         char name[64];
 
         if (!act) {
@@ -807,65 +851,71 @@ static void wkeys(void)
         }
         if (xkb_keysym_get_name(keys[i].keysym, name, sizeof name) < 0)
             continue;
-        start("key");
-        wcombo(keys[i].mod, name);
-        word(act->name);
-        warg(act->arg, &keys[i].arg);
-        fputc('\n', fp);
+        settings_start_group("key");
+        settings_write_combo(keys[i].mod, name);
+        settings_put_word(act->name);
+        settings_write_arg(act->arg, &keys[i].arg);
+        fputc('\n', settings_file);
     }
 }
 
-static void wbuttons(void)
+static void settings_write_buttons(void)
 {
     size_t i;
 
-    note("button", "button: bar area, modifiers+button, action, argument");
-    for (i = 0; i < nbuttons; i++) {
-        const Action* act = actionbyfunc(buttons[i].func);
+    settings_put_note("button",
+                      "button: bar area, modifiers+button, action, argument");
+    for (i = 0; i < button_count; i++) {
+        const Action* act = settings_action_by_func(buttons[i].func);
 
         if (!act) {
             fprintf(
                 stderr, "g0wm: click %zu calls an action with no name\n", i);
             continue;
         }
-        start("button");
-        word(enumname(clickareas, (int)buttons[i].click));
-        wcombo(buttons[i].mod, enumname(mousebuttons, (int)buttons[i].button));
-        word(act->name);
-        warg(act->arg, &buttons[i].arg);
-        fputc('\n', fp);
+        settings_start_group("button");
+        settings_put_word(
+            settings_enum_name(settings_click_areas, (int)buttons[i].click));
+        settings_write_combo(
+            buttons[i].mod,
+            settings_enum_name(settings_mouse_buttons, (int)buttons[i].button));
+        settings_put_word(act->name);
+        settings_write_arg(act->arg, &buttons[i].arg);
+        fputc('\n', settings_file);
     }
 }
 
-static void wgestures(void)
+static void settings_write_gestures(void)
 {
     size_t i;
 
-    note("gesture", "gesture: motion, fingers, action, argument");
-    for (i = 0; i < ngestures; i++) {
-        const Action* act = actionbyfunc(gestures[i].func);
+    settings_put_note("gesture", "gesture: motion, fingers, action, argument");
+    for (i = 0; i < gesture_count; i++) {
+        const Action* act = settings_action_by_func(gestures[i].func);
 
         if (!act) {
             fprintf(
                 stderr, "g0wm: gesture %zu calls an action with no name\n", i);
             continue;
         }
-        start("gesture");
-        word(enumname(gesturemotions, (int)gestures[i].motion));
-        fprintf(fp, " %u", gestures[i].fingers);
-        word(act->name);
-        warg(act->arg, &gestures[i].arg);
-        fputc('\n', fp);
+        settings_start_group("gesture");
+        settings_put_word(settings_enum_name(settings_gesture_motions,
+                                             (int)gestures[i].motion));
+        fprintf(settings_file, " %u", gestures[i].fingers);
+        settings_put_word(act->name);
+        settings_write_arg(act->arg, &gestures[i].arg);
+        fputc('\n', settings_file);
     }
 }
 
-static void wpadbuttons(void)
+static void settings_write_pad_buttons(void)
 {
     size_t i;
 
-    note("padbutton", "padbutton: button from 0, action, argument");
-    for (i = 0; i < npadbuttons; i++) {
-        const Action* act = actionbyfunc(padbuttons[i].func);
+    settings_put_note("padbutton",
+                      "padbutton: button from 0, action, argument");
+    for (i = 0; i < pad_button_count; i++) {
+        const Action* act = settings_action_by_func(pad_buttons[i].func);
 
         if (!act) {
             fprintf(stderr,
@@ -873,44 +923,45 @@ static void wpadbuttons(void)
                     i);
             continue;
         }
-        start("padbutton");
-        fprintf(fp, " %u", padbuttons[i].button);
-        word(act->name);
-        warg(act->arg, &padbuttons[i].arg);
-        fputc('\n', fp);
+        settings_start_group("padbutton");
+        fprintf(settings_file, " %u", pad_buttons[i].button);
+        settings_put_word(act->name);
+        settings_write_arg(act->arg, &pad_buttons[i].arg);
+        fputc('\n', settings_file);
     }
 }
 
-static void defaults(void)
+static void settings_write_all(void)
 {
-    note("", "a setting left out keeps its default, one with no value is off");
-    wlook();
-    wwindows();
-    wbar();
-    wopacity();
-    winput();
-    wmisc();
-    wlayouts();
-    wrules();
-    wmonitors();
-    wautostart();
-    wkeys();
-    wbuttons();
-    wgestures();
-    wpadbuttons();
+    settings_put_note(
+        "", "a setting left out keeps its default, one with no value is off");
+    settings_write_look();
+    settings_write_windows();
+    settings_write_bar();
+    settings_write_opacity();
+    settings_write_input();
+    settings_write_misc();
+    settings_write_layouts();
+    settings_write_rules();
+    settings_write_monitors();
+    settings_write_autostart();
+    settings_write_keys();
+    settings_write_buttons();
+    settings_write_gestures();
+    settings_write_pad_buttons();
 }
 
 /* the defaults, rendered; NULL and a message when they cannot be */
-static char* rendered(void)
+static char* settings_rendered_defaults(void)
 {
     char* text = nullptr;
     size_t len;
 
-    if ((fp = open_memstream(&text, &len))) {
-        depth = 0;
-        prev = nullptr;
-        defaults();
-        if (!fclose(fp))
+    if ((settings_file = open_memstream(&text, &len))) {
+        settings_depth = 0;
+        settings_previous = nullptr;
+        settings_write_all();
+        if (!fclose(settings_file))
             return text;
     }
     free(text);
@@ -918,8 +969,8 @@ static char* rendered(void)
     return nullptr;
 }
 
-static const struct scfg_directive* find(const struct scfg_block* b,
-                                         const char* k)
+static const struct scfg_directive* settings_find(const struct scfg_block* b,
+                                                  const char* k)
 {
     size_t i;
 
@@ -927,22 +978,22 @@ static const struct scfg_directive* find(const struct scfg_block* b,
         return nullptr;
     for (i = 0; i < b->directives_len; i++) {
         if (!strcmp(b->directives[i].name, k)) {
-            line = b->directives[i].lineno;
+            settings_line = b->directives[i].lineno;
             return &b->directives[i];
         }
     }
     return nullptr;
 }
 
-static const struct scfg_block* section(const struct scfg_block* b,
-                                        const char* k)
+static const struct scfg_block* settings_section(const struct scfg_block* b,
+                                                 const char* k)
 {
-    const struct scfg_directive* d = find(b, k);
+    const struct scfg_directive* d = settings_find(b, k);
 
     return d ? &d->children : nullptr;
 }
 
-static size_t count(const struct scfg_block* b, const char* k)
+static size_t settings_count(const struct scfg_block* b, const char* k)
 {
     size_t i, n = 0;
 
@@ -951,17 +1002,17 @@ static size_t count(const struct scfg_block* b, const char* k)
     return n;
 }
 
-static const char* param(const struct scfg_directive* d, size_t i)
+static const char* settings_param(const struct scfg_directive* d, size_t i)
 {
     return d && i < d->params_len ? d->params[i] : nullptr;
 }
 
-static int isbool(const char* s)
+static int settings_is_bool(const char* s)
 {
     return s && (!strcmp(s, "true") || !strcmp(s, "false"));
 }
 
-static int isnum(const char* s, double* v)
+static int settings_is_number(const char* s, double* v)
 {
     char* end;
     double x;
@@ -976,28 +1027,28 @@ static int isnum(const char* s, double* v)
     return 1;
 }
 
-static double numval(const char* s, double cur)
+static double settings_number_value(const char* s, double cur)
 {
     double v;
 
-    return isnum(s, &v) ? v : cur;
+    return settings_is_number(s, &v) ? v : cur;
 }
 
 /* a negative one would not convert */
-static unsigned int uintval(const char* s, unsigned int cur)
+static unsigned int settings_uint_value(const char* s, unsigned int cur)
 {
     double v;
 
-    if (!isnum(s, &v))
+    if (!settings_is_number(s, &v))
         return cur;
     if (v < 0 || v > UINT_MAX) {
-        warn("%s is out of range", s);
+        settings_warn("%s is out of range", s);
         return cur;
     }
     return (unsigned int)v;
 }
 
-static uint32_t hexval(const char* s, uint32_t cur)
+static uint32_t settings_hex_value(const char* s, uint32_t cur)
 {
     unsigned long v;
     char* end;
@@ -1009,60 +1060,64 @@ static uint32_t hexval(const char* s, uint32_t cur)
         if (!*end)
             return (uint32_t)v;
     }
-    warn("%s is not an #rrggbbaa color", s);
+    settings_warn("%s is not an #rrggbbaa color", s);
     return cur;
 }
 
 /* the getters keep the value config.h gave when the file has nothing usable */
-static int getbool(const struct scfg_block* b, const char* k, int cur)
+static int settings_get_bool(const struct scfg_block* b, const char* k, int cur)
 {
-    const char* s = param(find(b, k), 0);
+    const char* s = settings_param(settings_find(b, k), 0);
 
-    return isbool(s) ? *s == 't' : cur;
+    return settings_is_bool(s) ? *s == 't' : cur;
 }
 
-static double getnum(const struct scfg_block* b, const char* k, double cur)
+static double settings_get_number(const struct scfg_block* b,
+                                  const char* k,
+                                  double cur)
 {
-    return numval(param(find(b, k), 0), cur);
+    return settings_number_value(settings_param(settings_find(b, k), 0), cur);
 }
 
-static unsigned int getuint(const struct scfg_block* b,
-                            const char* k,
-                            unsigned int cur)
+static unsigned int settings_get_uint(const struct scfg_block* b,
+                                      const char* k,
+                                      unsigned int cur)
 {
-    return uintval(param(find(b, k), 0), cur);
+    return settings_uint_value(settings_param(settings_find(b, k), 0), cur);
 }
 
-static const char* getstr(const struct scfg_block* b,
-                          const char* k,
-                          const char* cur)
+static const char* settings_get_string(const struct scfg_block* b,
+                                       const char* k,
+                                       const char* cur)
 {
-    const struct scfg_directive* d = find(b, k);
+    const struct scfg_directive* d = settings_find(b, k);
 
-    return d ? param(d, 0) : cur;
+    return d ? settings_param(d, 0) : cur;
 }
 
-static int getenum(const struct scfg_block* b,
-                   const char* k,
-                   const Enum* e,
-                   int cur,
-                   const char* what)
+static int settings_get_enum(const struct scfg_block* b,
+                             const char* k,
+                             const Enum* e,
+                             int cur,
+                             const char* what)
 {
-    const char* name = getstr(b, k, nullptr);
+    const char* name = settings_get_string(b, k, nullptr);
 
-    return name ? enumval(e, name, cur, what) : cur;
+    return name ? settings_enum_value(e, name, cur, what) : cur;
 }
 
-static uint32_t gethex(const struct scfg_block* b, const char* k, uint32_t cur)
+static uint32_t settings_get_hex(const struct scfg_block* b,
+                                 const char* k,
+                                 uint32_t cur)
 {
-    return hexval(getstr(b, k, nullptr), cur);
+    return settings_hex_value(settings_get_string(b, k, nullptr), cur);
 }
 
-static void getrgba(float c[static 4],
-                    const struct scfg_block* b,
-                    const char* k)
+static void settings_get_rgba(float c[static 4],
+                              const struct scfg_block* b,
+                              const char* k)
 {
-    uint32_t v = gethex(b, k, packrgba(c));
+    uint32_t v = settings_get_hex(b, k, settings_pack_rgba(c));
 
     c[0] = ((v >> 24) & 0xFF) / 255.0f;
     c[1] = ((v >> 16) & 0xFF) / 255.0f;
@@ -1072,16 +1127,16 @@ static void getrgba(float c[static 4],
 
 /* the parsed file outlives the settings, so its strings are used in place.
  * One slot to spare: the result is NULL terminated as well as counted. */
-static const char** strlist(const struct scfg_directive* d,
-                            size_t from,
-                            size_t* n)
+static const char** settings_string_list(const struct scfg_directive* d,
+                                         size_t from,
+                                         size_t* n)
 {
     const char** v;
     size_t i;
 
     if (!d || d->params_len < from)
         return nullptr;
-    v = ecalloc(d->params_len - from + 1, sizeof *v);
+    v = util_calloc(d->params_len - from + 1, sizeof *v);
     for (i = from; i < d->params_len; i++)
         v[i - from] = d->params[i];
     if (n)
@@ -1090,7 +1145,7 @@ static const char** strlist(const struct scfg_directive* d,
 }
 
 /* logo+shift+q: the mods into *mod, returns q */
-static const char* splitmods(const char* s, uint32_t* mod)
+static const char* settings_split_mods(const char* s, uint32_t* mod)
 {
     const char* plus;
     char name[16];
@@ -1098,384 +1153,446 @@ static const char* splitmods(const char* s, uint32_t* mod)
     *mod = 0;
     while ((plus = strchr(s, '+'))) {
         snprintf(name, sizeof name, "%.*s", (int)(plus - s), s);
-        *mod |= (uint32_t)enumval(modnames, name, 0, "modifier");
+        *mod |= (uint32_t)settings_enum_value(
+            settings_modifier_names, name, 0, "modifier");
         s = plus + 1;
     }
     return s;
 }
 
-static uint32_t getmods(const struct scfg_block* b, const char* k, uint32_t cur)
+static uint32_t settings_get_mods(const struct scfg_block* b,
+                                  const char* k,
+                                  uint32_t cur)
 {
-    const char* s = getstr(b, k, nullptr);
+    const char* s = settings_get_string(b, k, nullptr);
     uint32_t mod;
 
     if (!s)
         return cur;
     if (!strcmp(s, "none"))
         return 0;
-    s = splitmods(s, &mod);
-    return mod | (uint32_t)enumval(modnames, s, 0, "modifier");
+    s = settings_split_mods(s, &mod);
+    return mod | (uint32_t)settings_enum_value(
+                     settings_modifier_names, s, 0, "modifier");
 }
 
-static const Layout* layoutbysymbol(const char* symbol)
+static const Layout* settings_layout_by_symbol(const char* symbol)
 {
     size_t i;
 
     if (!symbol)
         return nullptr;
-    for (i = 0; i < nlayouts; i++)
+    for (i = 0; i < layout_count; i++)
         if (!strcmp(layouts[i].symbol, symbol))
             return &layouts[i];
-    warn("no layout draws %s", symbol);
+    settings_warn("no layout draws %s", symbol);
     return nullptr;
 }
 
-static Arg getarg(char kind, const struct scfg_directive* d, size_t i)
+static Arg settings_get_arg(char kind, const struct scfg_directive* d, size_t i)
 {
-    const char* s = param(d, i);
+    const char* s = settings_param(d, i);
     Arg a = {};
 
     switch (kind) {
         case 'i':
-            a.i = (int)numval(s, 0);
+            a.i = (int)settings_number_value(s, 0);
             break;
         case 'u':
-            a.ui = uintval(s, 0);
+            a.ui = settings_uint_value(s, 0);
             break;
         case 'f':
-            a.f = (float)numval(s, 0);
+            a.f = (float)settings_number_value(s, 0);
             break;
         case 'v':
-            a.v = strlist(d, i, nullptr);
+            a.v = settings_string_list(d, i, nullptr);
             break;
         case 'l':
-            a.v = layoutbysymbol(s);
+            a.v = settings_layout_by_symbol(s);
             break;
         case 'c':
-            a.ui = s ? (uint32_t)enumval(dragmodes, s, CurMove, "drag mode")
+            a.ui = s ? (uint32_t)settings_enum_value(
+                           settings_drag_modes, s, CurMove, "drag mode")
                      : CurMove;
             break;
     }
     return a;
 }
 
-static void applycolors(const struct scfg_block* b)
+static void settings_apply_colors(const struct scfg_block* b)
 {
     const struct scfg_directive* d;
     size_t i, j;
 
-    for (i = 0; i < LENGTH(schemenames); i++) {
-        if (!schemenames[i] || !(d = find(b, schemenames[i])))
+    for (i = 0; i < LENGTH(settings_scheme_names); i++) {
+        if (!settings_scheme_names[i] ||
+            !(d = settings_find(b, settings_scheme_names[i])))
             continue;
         for (j = 0; j < 3; j++)
-            colors[i][j] = hexval(param(d, j), colors[i][j]);
+            colors[i][j] =
+                settings_hex_value(settings_param(d, j), colors[i][j]);
     }
 }
 
-static void applylook(const struct scfg_block* b)
+static void settings_apply_look(const struct scfg_block* b)
 {
     const char** list;
 
     if (!b)
         return;
-    if ((list = strlist(find(b, "fonts"), 0, &nfonts)))
+    if ((list =
+             settings_string_list(settings_find(b, "fonts"), 0, &font_count)))
         fonts = list;
-    applycolors(section(b, "colors"));
-    getrgba(rootcolor, b, "rootcolor");
-    getrgba(fullscreen_bg, b, "fullscreen_bg");
+    settings_apply_colors(settings_section(b, "colors"));
+    settings_get_rgba(root_color, b, "rootcolor");
+    settings_get_rgba(fullscreen_color, b, "fullscreen_bg");
 #ifdef INTEGRATED_BACKGROUND
-    wallpaper = getstr(b, "wallpaper", wallpaper);
+    wallpaper = settings_get_string(b, "wallpaper", wallpaper);
 #endif
-    if ((list = strlist(find(b, "tags"), 0, &ntags))) {
+    if ((list =
+             settings_string_list(settings_find(b, "tags"), 0, &tag_count))) {
         tags = (char**)list;
-        if (ntags > 31) { /* TAGMASK has to fit in a uint32_t */
-            warn("only the first 31 tags are used");
-            ntags = 31;
+        if (tag_count > 31) { /* TAGMASK has to fit in a uint32_t */
+            settings_warn("only the first 31 tags are used");
+            tag_count = 31;
         }
     }
 }
 
-static void applywindows(const struct scfg_block* b)
+static void settings_apply_windows(const struct scfg_block* b)
 {
     if (!b)
         return;
-    borderpx = getuint(b, "borderpx", borderpx);
-    cornerstyle =
-        getenum(b, "cornerstyle", cornerstyles, cornerstyle, "corner style");
-    cornerpx = getuint(b, "cornerpx", cornerpx);
-    gaps = (int)getnum(b, "gaps", gaps);
-    gappx = getuint(b, "gappx", gappx);
-    smartgaps = getbool(b, "smartgaps", smartgaps);
-    titlebar = getbool(b, "titlebar", titlebar);
-    titlepadding = getuint(b, "titlepadding", titlepadding);
-    titlecenter = getbool(b, "titlecenter", titlecenter);
-    titleclose = getbool(b, "titleclose", titleclose);
-    titleclosecolor = gethex(b, "titleclosecolor", titleclosecolor);
-    privatecolor = gethex(b, "privatecolor", privatecolor);
-    privateround = (float)fmin(getnum(b, "privateround", privateround), 1);
-    alwaysprivate = getbool(b, "alwaysprivate", alwaysprivate);
-    publiccolor = gethex(b, "publiccolor", publiccolor);
-    privatetitle = getstr(b, "privatetitle", privatetitle);
-    movethreshold = (int)getnum(b, "movethreshold", movethreshold);
-    movesnap = (int)getnum(b, "movesnap", movesnap);
+    border_width = settings_get_uint(b, "borderpx", border_width);
+    corner_style = settings_get_enum(
+        b, "cornerstyle", settings_corner_styles, corner_style, "corner style");
+    corner_radius = settings_get_uint(b, "cornerpx", corner_radius);
+    gaps = (int)settings_get_number(b, "gaps", gaps);
+    gap_size = settings_get_uint(b, "gappx", gap_size);
+    smart_gaps = settings_get_bool(b, "smartgaps", smart_gaps);
+    title_bar = settings_get_bool(b, "titlebar", title_bar);
+    title_padding = settings_get_uint(b, "titlepadding", title_padding);
+    title_center = settings_get_bool(b, "titlecenter", title_center);
+    title_close = settings_get_bool(b, "titleclose", title_close);
+    title_close_color =
+        settings_get_hex(b, "titleclosecolor", title_close_color);
+    private_color = settings_get_hex(b, "privatecolor", private_color);
+    private_round =
+        (float)fmin(settings_get_number(b, "privateround", private_round), 1);
+    always_private = settings_get_bool(b, "alwaysprivate", always_private);
+    public_color = settings_get_hex(b, "publiccolor", public_color);
+    private_title = settings_get_string(b, "privatetitle", private_title);
+    move_threshold =
+        (int)settings_get_number(b, "movethreshold", move_threshold);
+    move_snap = (int)settings_get_number(b, "movesnap", move_snap);
 }
 
-static void applybar(const struct scfg_block* b)
+static void settings_apply_bar(const struct scfg_block* b)
 {
     if (!b)
         return;
-    showbar = getbool(b, "showbar", showbar);
-    topbar = getbool(b, "topbar", topbar);
-    barwintitle = getbool(b, "barwintitle", barwintitle);
-    bartagdots = getbool(b, "bartagdots", bartagdots);
-    bartagdotsize = getuint(b, "bartagdotsize", bartagdotsize);
-    bartagdotgap = getuint(b, "bartagdotgap", bartagdotgap);
-    bartagdotwidth =
-        (float)fmax(getnum(b, "bartagdotwidth", bartagdotwidth), 1);
-    bartagdotround =
-        (float)fmin(fmax(getnum(b, "bartagdotround", bartagdotround), 0), 1);
-    barurgentpulse = getuint(b, "barurgentpulse", barurgentpulse);
-    barltsymbol = getbool(b, "barltsymbol", barltsymbol);
-    barboxradius = getuint(b, "barboxradius", barboxradius);
-    barpadding = getuint(b, "barpadding", barpadding);
-    barheight = (float)getnum(b, "barheight", barheight);
-    barsinglemon = getbool(b, "barsinglemon", barsinglemon);
-    barstatus =
-        getenum(b, "barstatus", barstatuses, barstatus, "bar status setting");
-    showsystray = getbool(b, "showsystray", showsystray);
-    systrayspacing = getuint(b, "systrayspacing", systrayspacing);
-    systraypadding = getuint(b, "systraypadding", systraypadding);
-    systrayiconsize = getuint(b, "systrayiconsize", systrayiconsize);
-    shownotifications = getbool(b, "shownotifications", shownotifications);
+    bar_enabled = settings_get_bool(b, "showbar", bar_enabled);
+    bar_top = settings_get_bool(b, "topbar", bar_top);
+    bar_window_title = settings_get_bool(b, "barwintitle", bar_window_title);
+    bar_tag_dots = settings_get_bool(b, "bartagdots", bar_tag_dots);
+    bar_tag_dot_size = settings_get_uint(b, "bartagdotsize", bar_tag_dot_size);
+    bar_tag_dot_gap = settings_get_uint(b, "bartagdotgap", bar_tag_dot_gap);
+    bar_tag_dot_width = (float)fmax(
+        settings_get_number(b, "bartagdotwidth", bar_tag_dot_width), 1);
+    bar_tag_dot_round = (float)fmin(
+        fmax(settings_get_number(b, "bartagdotround", bar_tag_dot_round), 0),
+        1);
+    bar_urgent_pulse = settings_get_uint(b, "barurgentpulse", bar_urgent_pulse);
+    bar_layout_symbol = settings_get_bool(b, "barltsymbol", bar_layout_symbol);
+    bar_box_radius = settings_get_uint(b, "barboxradius", bar_box_radius);
+    bar_padding = settings_get_uint(b, "barpadding", bar_padding);
+    bar_height = (float)settings_get_number(b, "barheight", bar_height);
+    bar_single_monitor =
+        settings_get_bool(b, "barsinglemon", bar_single_monitor);
+    bar_status = settings_get_enum(b,
+                                   "barstatus",
+                                   settings_bar_statuses,
+                                   bar_status,
+                                   "bar status setting");
+    systray_enabled = settings_get_bool(b, "showsystray", systray_enabled);
+    systray_spacing = settings_get_uint(b, "systrayspacing", systray_spacing);
+    systray_padding = settings_get_uint(b, "systraypadding", systray_padding);
+    systray_icon_size =
+        settings_get_uint(b, "systrayiconsize", systray_icon_size);
+    notifications_enabled =
+        settings_get_bool(b, "shownotifications", notifications_enabled);
     notification_timeout =
-        getuint(b, "notification_timeout", notification_timeout);
-    notification_linewidth =
-        getuint(b, "notification_linewidth", notification_linewidth);
-    notification_lineradius =
-        getuint(b, "notification_lineradius", notification_lineradius);
-    notification_actionsign =
-        getstr(b, "notification_actionsign", notification_actionsign);
-    runner_placeholder = getstr(b, "runner_placeholder", runner_placeholder);
+        settings_get_uint(b, "notification_timeout", notification_timeout);
+    notification_line_width =
+        settings_get_uint(b, "notification_linewidth", notification_line_width);
+    notification_line_radius = settings_get_uint(
+        b, "notification_lineradius", notification_line_radius);
+    notification_action_sign = settings_get_string(
+        b, "notification_actionsign", notification_action_sign);
+    runner_placeholder =
+        settings_get_string(b, "runner_placeholder", runner_placeholder);
     runner_max_candidates =
-        getuint(b, "runner_max_candidates", runner_max_candidates);
-    runner_pillheight = getuint(b, "runner_pillheight", runner_pillheight);
-    runner_pillpadding = getuint(b, "runner_pillpadding", runner_pillpadding);
-    runner_pillround =
-        (float)fmin(getnum(b, "runner_pillround", runner_pillround), 1);
-    runner_fuzzy = getbool(b, "runner_fuzzy", runner_fuzzy);
-    runner_icons = getenum(
-        b, "runner_icons", runnericons, runner_icons, "runner icon setting");
-    runner_iconsize = getuint(b, "runner_iconsize", runner_iconsize);
-    runner_iconround = (float)fmin(
-        fmax(getnum(b, "runner_iconround", runner_iconround), 0), 1);
-    runner_iconborder = getuint(b, "runner_iconborder", runner_iconborder);
+        settings_get_uint(b, "runner_max_candidates", runner_max_candidates);
+    runner_pill_height =
+        settings_get_uint(b, "runner_pillheight", runner_pill_height);
+    runner_pill_padding =
+        settings_get_uint(b, "runner_pillpadding", runner_pill_padding);
+    runner_pill_round = (float)fmin(
+        settings_get_number(b, "runner_pillround", runner_pill_round), 1);
+    runner_fuzzy = settings_get_bool(b, "runner_fuzzy", runner_fuzzy);
+    runner_icons = settings_get_enum(b,
+                                     "runner_icons",
+                                     settings_runner_icons,
+                                     runner_icons,
+                                     "runner icon setting");
+    runner_icon_size =
+        settings_get_uint(b, "runner_iconsize", runner_icon_size);
+    runner_icon_round = (float)fmin(
+        fmax(settings_get_number(b, "runner_iconround", runner_icon_round), 0),
+        1);
+    runner_icon_border =
+        settings_get_uint(b, "runner_iconborder", runner_icon_border);
     runner_history_size =
-        getuint(b, "runner_history_size", runner_history_size);
-    runner_shell = getstr(b, "runner_shell", runner_shell);
-    runner_terminal = getstr(b, "runner_terminal", runner_terminal);
-    runner_termprefix = getstr(b, "runner_termprefix", runner_termprefix);
-    runner_runprefix = getstr(b, "runner_runprefix", runner_runprefix);
-    runner_calcprefix = getstr(b, "runner_calcprefix", runner_calcprefix);
-    runner_searchprefix = getstr(b, "runner_searchprefix", runner_searchprefix);
-    runner_searchurl = getstr(b, "runner_searchurl", runner_searchurl);
-    runner_windowprefix = getstr(b, "runner_windowprefix", runner_windowprefix);
-    runner_tagprefix = getstr(b, "runner_tagprefix", runner_tagprefix);
-    runner_files = getbool(b, "runner_files", runner_files);
-    runner_paths = getstr(b, "runner_paths", runner_paths);
+        settings_get_uint(b, "runner_history_size", runner_history_size);
+    runner_shell = settings_get_string(b, "runner_shell", runner_shell);
+    runner_terminal =
+        settings_get_string(b, "runner_terminal", runner_terminal);
+    runner_terminal_prefix =
+        settings_get_string(b, "runner_termprefix", runner_terminal_prefix);
+    runner_run_prefix =
+        settings_get_string(b, "runner_runprefix", runner_run_prefix);
+    runner_calc_prefix =
+        settings_get_string(b, "runner_calcprefix", runner_calc_prefix);
+    runner_search_prefix =
+        settings_get_string(b, "runner_searchprefix", runner_search_prefix);
+    runner_search_url =
+        settings_get_string(b, "runner_searchurl", runner_search_url);
+    runner_window_prefix =
+        settings_get_string(b, "runner_windowprefix", runner_window_prefix);
+    runner_tag_prefix =
+        settings_get_string(b, "runner_tagprefix", runner_tag_prefix);
+    runner_files = settings_get_bool(b, "runner_files", runner_files);
+    runner_paths = settings_get_string(b, "runner_paths", runner_paths);
     runner_calc_precision =
-        getuint(b, "runner_calc_precision", runner_calc_precision);
+        settings_get_uint(b, "runner_calc_precision", runner_calc_precision);
 }
 
-static void applyopacity(const struct scfg_block* b)
+static void settings_apply_opacity(const struct scfg_block* b)
 {
     if (!b)
         return;
-    opacity_enabled = getbool(b, "opacity_enabled", opacity_enabled);
-    opacity_focus = (float)getnum(b, "opacity_focus", opacity_focus);
-    opacity_unfocus = (float)getnum(b, "opacity_unfocus", opacity_unfocus);
-    opacity_deco = (float)getnum(b, "opacity_deco", opacity_deco);
+    opacity_enabled = settings_get_bool(b, "opacity_enabled", opacity_enabled);
+    opacity_focus =
+        (float)settings_get_number(b, "opacity_focus", opacity_focus);
+    opacity_unfocus =
+        (float)settings_get_number(b, "opacity_unfocus", opacity_unfocus);
+    opacity_decorations =
+        (float)settings_get_number(b, "opacity_deco", opacity_decorations);
 #ifdef INTEGRATED_BACKGROUND
-    opacity_type = getenum(
-        b, "opacity_type", opacitykinds, opacity_type, "kind of opacity");
-    blur_radius = getuint(b, "blur_radius", blur_radius);
-    blur_passes = getuint(b, "blur_passes", blur_passes);
-    blur_saturation = (float)getnum(b, "blur_saturation", blur_saturation);
-    blur_brightness = (float)getnum(b, "blur_brightness", blur_brightness);
+    opacity_type = settings_get_enum(b,
+                                     "opacity_type",
+                                     settings_opacity_kinds,
+                                     opacity_type,
+                                     "kind of opacity");
+    blur_radius = settings_get_uint(b, "blur_radius", blur_radius);
+    blur_passes = settings_get_uint(b, "blur_passes", blur_passes);
+    blur_saturation =
+        (float)settings_get_number(b, "blur_saturation", blur_saturation);
+    blur_brightness =
+        (float)settings_get_number(b, "blur_brightness", blur_brightness);
 #endif
 }
 
-static void applyinput(const struct scfg_block* b)
+static void settings_apply_input(const struct scfg_block* b)
 {
     const struct scfg_block* x;
 
     if (!b)
         return;
-    sloppyfocus = getbool(b, "sloppyfocus", sloppyfocus);
-    if ((x = section(b, "xkb_rules"))) {
-        xkb_rules.rules = getstr(x, "rules", xkb_rules.rules);
-        xkb_rules.model = getstr(x, "model", xkb_rules.model);
-        xkb_rules.layout = getstr(x, "layout", xkb_rules.layout);
-        xkb_rules.variant = getstr(x, "variant", xkb_rules.variant);
-        xkb_rules.options = getstr(x, "options", xkb_rules.options);
+    sloppy_focus = settings_get_bool(b, "sloppyfocus", sloppy_focus);
+    if ((x = settings_section(b, "xkb_rules"))) {
+        xkb_rules.rules = settings_get_string(x, "rules", xkb_rules.rules);
+        xkb_rules.model = settings_get_string(x, "model", xkb_rules.model);
+        xkb_rules.layout = settings_get_string(x, "layout", xkb_rules.layout);
+        xkb_rules.variant =
+            settings_get_string(x, "variant", xkb_rules.variant);
+        xkb_rules.options =
+            settings_get_string(x, "options", xkb_rules.options);
     }
-    repeat_rate = (int)getnum(b, "repeat_rate", repeat_rate);
-    repeat_delay = (int)getnum(b, "repeat_delay", repeat_delay);
-    cursor_theme = getstr(b, "cursor_theme", cursor_theme);
-    cursor_size = (int)getnum(b, "cursor_size", cursor_size);
-    hide_cursor_when_typing =
-        getbool(b, "hide_cursor_when_typing", hide_cursor_when_typing);
-    tap_to_click = getbool(b, "tap_to_click", tap_to_click);
-    tap_and_drag = getbool(b, "tap_and_drag", tap_and_drag);
-    drag_lock = getbool(b, "drag_lock", drag_lock);
-    natural_scrolling = getbool(b, "natural_scrolling", natural_scrolling);
+    repeat_rate = (int)settings_get_number(b, "repeat_rate", repeat_rate);
+    repeat_delay = (int)settings_get_number(b, "repeat_delay", repeat_delay);
+    cursor_theme = settings_get_string(b, "cursor_theme", cursor_theme);
+    cursor_size = (int)settings_get_number(b, "cursor_size", cursor_size);
+    hide_cursor_when_typing = settings_get_bool(
+        b, "hide_cursor_when_typing", hide_cursor_when_typing);
+    tap_to_click = settings_get_bool(b, "tap_to_click", tap_to_click);
+    tap_and_drag = settings_get_bool(b, "tap_and_drag", tap_and_drag);
+    drag_lock = settings_get_bool(b, "drag_lock", drag_lock);
+    natural_scrolling =
+        settings_get_bool(b, "natural_scrolling", natural_scrolling);
     disable_while_typing =
-        getbool(b, "disable_while_typing", disable_while_typing);
-    left_handed = getbool(b, "left_handed", left_handed);
-    middle_button_emulation =
-        getbool(b, "middle_button_emulation", middle_button_emulation);
-    scroll_method = (enum libinput_config_scroll_method)getenum(
-        b, "scroll_method", scrollmethods, scroll_method, "scroll method");
-    click_method = (enum libinput_config_click_method)getenum(
-        b, "click_method", clickmethods, click_method, "click method");
-    send_events_mode = (uint32_t)getenum(b,
-                                         "send_events_mode",
-                                         sendevents,
-                                         (int)send_events_mode,
-                                         "send events mode");
-    accel_profile =
-        (enum libinput_config_accel_profile)getenum(b,
-                                                    "accel_profile",
-                                                    accelprofiles,
-                                                    accel_profile,
-                                                    "acceleration profile");
-    accel_speed = getnum(b, "accel_speed", accel_speed);
-    touchpad_natural_scrolling =
-        getbool(b, "touchpad_natural_scrolling", touchpad_natural_scrolling);
+        settings_get_bool(b, "disable_while_typing", disable_while_typing);
+    left_handed = settings_get_bool(b, "left_handed", left_handed);
+    middle_button_emulation = settings_get_bool(
+        b, "middle_button_emulation", middle_button_emulation);
+    scroll_method = (enum libinput_config_scroll_method)settings_get_enum(
+        b,
+        "scroll_method",
+        settings_scroll_methods,
+        scroll_method,
+        "scroll method");
+    click_method = (enum libinput_config_click_method)settings_get_enum(
+        b,
+        "click_method",
+        settings_click_methods,
+        click_method,
+        "click method");
+    send_events_mode = (uint32_t)settings_get_enum(b,
+                                                   "send_events_mode",
+                                                   settings_send_events,
+                                                   (int)send_events_mode,
+                                                   "send events mode");
+    accel_profile = (enum libinput_config_accel_profile)settings_get_enum(
+        b,
+        "accel_profile",
+        settings_accel_profiles,
+        accel_profile,
+        "acceleration profile");
+    accel_speed = settings_get_number(b, "accel_speed", accel_speed);
+    touchpad_natural_scrolling = settings_get_bool(
+        b, "touchpad_natural_scrolling", touchpad_natural_scrolling);
     touchpad_accel_profile =
-        (enum libinput_config_accel_profile)getenum(b,
-                                                    "touchpad_accel_profile",
-                                                    accelprofiles,
-                                                    touchpad_accel_profile,
-                                                    "acceleration profile");
+        (enum libinput_config_accel_profile)settings_get_enum(
+            b,
+            "touchpad_accel_profile",
+            settings_accel_profiles,
+            touchpad_accel_profile,
+            "acceleration profile");
     touchpad_accel_speed =
-        getnum(b, "touchpad_accel_speed", touchpad_accel_speed);
-    pinchzoom_mod = getmods(b, "pinchzoom_mod", pinchzoom_mod);
-    button_map = (enum libinput_config_tap_button_map)getenum(
-        b, "button_map", buttonmaps, button_map, "button map");
-    tablet_output = getstr(b, "tablet_output", tablet_output);
-    tablet_left_handed = getbool(b, "tablet_left_handed", tablet_left_handed);
-    touch_output = getstr(b, "touch_output", touch_output);
+        settings_get_number(b, "touchpad_accel_speed", touchpad_accel_speed);
+    pinch_zoom_modifier =
+        settings_get_mods(b, "pinchzoom_mod", pinch_zoom_modifier);
+    tap_button_map = (enum libinput_config_tap_button_map)settings_get_enum(
+        b, "button_map", settings_button_maps, tap_button_map, "button map");
+    tablet_output = settings_get_string(b, "tablet_output", tablet_output);
+    tablet_left_handed =
+        settings_get_bool(b, "tablet_left_handed", tablet_left_handed);
+    touch_output = settings_get_string(b, "touch_output", touch_output);
 }
 
-static void applymisc(const struct scfg_block* b)
+static void settings_apply_misc(const struct scfg_block* b)
 {
     if (!b)
         return;
-    log_level = getenum(b, "log_level", loglevels, log_level, "log level");
-    bypass_surface_visibility =
-        getbool(b, "bypass_surface_visibility", bypass_surface_visibility);
-    allow_tearing = getbool(b, "allow_tearing", allow_tearing);
-    auto_vrr = getbool(b, "auto_vrr", auto_vrr);
+    log_level = settings_get_enum(
+        b, "log_level", settings_log_levels, log_level, "log level");
+    bypass_surface_visibility = settings_get_bool(
+        b, "bypass_surface_visibility", bypass_surface_visibility);
+    allow_tearing = settings_get_bool(b, "allow_tearing", allow_tearing);
+    auto_vrr = settings_get_bool(b, "auto_vrr", auto_vrr);
 }
 
 /* none keeps the defaults: a monitor needs a layout */
-static void applylayouts(const struct scfg_block* b)
+static void settings_apply_layouts(const struct scfg_block* b)
 {
     const struct scfg_directive* d;
     Layout* out;
     size_t i, j, n = 0;
 
-    if (!count(b, "layout"))
+    if (!settings_count(b, "layout"))
         return;
-    out = ecalloc(count(b, "layout"), sizeof *out);
+    out = util_calloc(settings_count(b, "layout"), sizeof *out);
     for (i = 0; i < b->directives_len; i++) {
         const char* name;
 
         d = &b->directives[i];
-        line = d->lineno;
+        settings_line = d->lineno;
         if (strcmp(d->name, "layout"))
             continue;
-        out[n].symbol = param(d, 0) ? param(d, 0) : "[ ]";
-        name = param(d, 1) ? param(d, 1) : "tile";
-        for (j = 0; j < LENGTH(arranges); j++)
-            if (!strcmp(arranges[j].name, name))
+        out[n].symbol = settings_param(d, 0) ? settings_param(d, 0) : "[ ]";
+        name = settings_param(d, 1) ? settings_param(d, 1) : "tile";
+        for (j = 0; j < LENGTH(settings_arranges); j++)
+            if (!strcmp(settings_arranges[j].name, name))
                 break;
-        if (j < LENGTH(arranges)) {
-            out[n].arrange = arranges[j].arrange;
+        if (j < LENGTH(settings_arranges)) {
+            out[n].arrange = settings_arranges[j].arrange;
         } else {
-            out[n].arrange = tile;
-            warn("%s is not a layout, using tile", name);
+            out[n].arrange = layout_tile;
+            settings_warn("%s is not a layout, using tile", name);
         }
         n++;
     }
     layouts = out;
-    nlayouts = n;
+    layout_count = n;
 }
 
-static void applyrules(const struct scfg_block* b)
+static void settings_apply_rules(const struct scfg_block* b)
 {
     const struct scfg_block* r;
     Rule* out;
     size_t i, n = 0;
 
-    out = ecalloc(count(b, "rule") + 1, sizeof *out);
+    out = util_calloc(settings_count(b, "rule") + 1, sizeof *out);
     for (i = 0; i < b->directives_len; i++) {
         if (strcmp(b->directives[i].name, "rule"))
             continue;
         r = &b->directives[i].children;
-        out[n].id = getstr(r, "id", nullptr);
-        out[n].title = getstr(r, "title", nullptr);
-        out[n].tags = getuint(r, "tags", 0);
-        out[n].isfloating = getbool(r, "isfloating", 0);
-        out[n].isprivate = getbool(r, "private", -1);
-        out[n].opacity_focus = (float)getnum(r, "opacity_focus", 0);
-        out[n].opacity_unfocus = (float)getnum(r, "opacity_unfocus", 0);
-        out[n].monitor = (int)getnum(r, "monitor", -1);
+        out[n].id = settings_get_string(r, "id", nullptr);
+        out[n].title = settings_get_string(r, "title", nullptr);
+        out[n].tags = settings_get_uint(r, "tags", 0);
+        out[n].isfloating = settings_get_bool(r, "isfloating", 0);
+        out[n].isprivate = settings_get_bool(r, "private", -1);
+        out[n].opacity_focus =
+            (float)settings_get_number(r, "opacity_focus", 0);
+        out[n].opacity_unfocus =
+            (float)settings_get_number(r, "opacity_unfocus", 0);
+        out[n].monitor = (int)settings_get_number(r, "monitor", -1);
         n++;
     }
     rules = out;
-    nrules = n;
+    rule_count = n;
 }
 
-static void applymonitors(const struct scfg_block* b)
+static void settings_apply_monitors(const struct scfg_block* b)
 {
     const struct scfg_block* m;
     MonitorRule* out;
     size_t i, n = 0;
 
-    if (!count(b, "monitor"))
+    if (!settings_count(b, "monitor"))
         return;
-    out = ecalloc(count(b, "monitor"), sizeof *out);
+    out = util_calloc(settings_count(b, "monitor"), sizeof *out);
     for (i = 0; i < b->directives_len; i++) {
         if (strcmp(b->directives[i].name, "monitor"))
             continue;
         m = &b->directives[i].children;
-        out[n].name = getstr(m, "name", nullptr);
-        out[n].mfact = (float)getnum(m, "mfact", 0.55);
-        out[n].nmaster = (int)getnum(m, "nmaster", 1);
-        out[n].scale = (float)getnum(m, "scale", 1);
-        out[n].lt = layoutbysymbol(getstr(m, "layout", nullptr));
+        out[n].name = settings_get_string(m, "name", nullptr);
+        out[n].mfact = (float)settings_get_number(m, "mfact", 0.55);
+        out[n].nmaster = (int)settings_get_number(m, "nmaster", 1);
+        out[n].scale = (float)settings_get_number(m, "scale", 1);
+        out[n].lt = settings_layout_by_symbol(
+            settings_get_string(m, "layout", nullptr));
         if (!out[n].lt)
             out[n].lt = layouts;
-        out[n].rr =
-            (enum wl_output_transform)getenum(m,
-                                              "transform",
-                                              transforms,
-                                              WL_OUTPUT_TRANSFORM_NORMAL,
-                                              "transform");
-        out[n].x = (int)getnum(m, "x", -1);
-        out[n].y = (int)getnum(m, "y", -1);
-        out[n].width = (int)getnum(m, "width", 0);
-        out[n].height = (int)getnum(m, "height", 0);
-        out[n].refresh = (int)getnum(m, "refresh", 0);
+        out[n].rr = (enum wl_output_transform)settings_get_enum(
+            m,
+            "transform",
+            settings_transforms,
+            WL_OUTPUT_TRANSFORM_NORMAL,
+            "transform");
+        out[n].x = (int)settings_get_number(m, "x", -1);
+        out[n].y = (int)settings_get_number(m, "y", -1);
+        out[n].width = (int)settings_get_number(m, "width", 0);
+        out[n].height = (int)settings_get_number(m, "height", 0);
+        out[n].refresh = (int)settings_get_number(m, "refresh", 0);
         n++;
     }
-    monrules = out;
-    nmonrules = n;
+    monitor_rules = out;
+    monitor_rule_count = n;
 }
 
 /* back to one flat run of arguments per command, each NULL terminated */
-static void applyautostart(const struct scfg_block* b)
+static void settings_apply_autostart(const struct scfg_block* b)
 {
     const struct scfg_directive* d;
     const char** out;
@@ -1484,12 +1601,12 @@ static void applyautostart(const struct scfg_block* b)
     for (i = 0; i < b->directives_len; i++)
         if (!strcmp(b->directives[i].name, "autostart"))
             n += b->directives[i].params_len + 1;
-    out = ecalloc(n + 1, sizeof *out);
+    out = util_calloc(n + 1, sizeof *out);
 
     n = 0;
     for (i = 0; i < b->directives_len; i++) {
         d = &b->directives[i];
-        line = d->lineno;
+        settings_line = d->lineno;
         if (strcmp(d->name, "autostart") || !d->params_len)
             continue;
         for (j = 0; j < d->params_len; j++)
@@ -1499,164 +1616,174 @@ static void applyautostart(const struct scfg_block* b)
     autostart = out;
 }
 
-static void applykeys(const struct scfg_block* b)
+static void settings_apply_keys(const struct scfg_block* b)
 {
     const struct scfg_directive* d;
     const Action* act;
     Key* out;
     size_t i, n = 0;
 
-    out = ecalloc(count(b, "key") + 1, sizeof *out);
+    out = util_calloc(settings_count(b, "key") + 1, sizeof *out);
     for (i = 0; i < b->directives_len; i++) {
         const char* name;
         xkb_keysym_t sym;
 
         d = &b->directives[i];
-        line = d->lineno;
-        if (strcmp(d->name, "key") || !(act = actionbyname(param(d, 1))))
+        settings_line = d->lineno;
+        if (strcmp(d->name, "key") ||
+            !(act = settings_action_by_name(settings_param(d, 1))))
             continue;
-        name = splitmods(param(d, 0), &out[n].mod);
+        name = settings_split_mods(settings_param(d, 0), &out[n].mod);
         if ((sym = xkb_keysym_from_name(name, XKB_KEYSYM_NO_FLAGS)) ==
             XKB_KEY_NoSymbol) {
-            warn("%s is not a key", name);
+            settings_warn("%s is not a key", name);
             continue;
         }
         out[n].keysym = sym;
         out[n].func = act->func;
-        out[n].arg = getarg(act->arg, d, 2);
+        out[n].arg = settings_get_arg(act->arg, d, 2);
         n++;
     }
     keys = out;
-    nkeys = n;
+    key_count = n;
 }
 
-static void applybuttons(const struct scfg_block* b)
+static void settings_apply_buttons(const struct scfg_block* b)
 {
     const struct scfg_directive* d;
     const Action* act;
     Button* out;
     size_t i, n = 0;
 
-    out = ecalloc(count(b, "button") + 1, sizeof *out);
+    out = util_calloc(settings_count(b, "button") + 1, sizeof *out);
     for (i = 0; i < b->directives_len; i++) {
         d = &b->directives[i];
-        line = d->lineno;
-        if (strcmp(d->name, "button") || !(act = actionbyname(param(d, 2))))
+        settings_line = d->lineno;
+        if (strcmp(d->name, "button") ||
+            !(act = settings_action_by_name(settings_param(d, 2))))
             continue;
-        out[n].click = (unsigned int)enumval(
-            clickareas, param(d, 0), ClkClient, "click area");
-        out[n].button =
-            (unsigned int)enumval(mousebuttons,
-                                  splitmods(param(d, 1), &out[n].mod),
-                                  BTN_LEFT,
-                                  "button");
+        out[n].click = (unsigned int)settings_enum_value(settings_click_areas,
+                                                         settings_param(d, 0),
+                                                         ClkClient,
+                                                         "click area");
+        out[n].button = (unsigned int)settings_enum_value(
+            settings_mouse_buttons,
+            settings_split_mods(settings_param(d, 1), &out[n].mod),
+            BTN_LEFT,
+            "button");
         out[n].func = act->func;
-        out[n].arg = getarg(act->arg, d, 3);
+        out[n].arg = settings_get_arg(act->arg, d, 3);
         n++;
     }
     buttons = out;
-    nbuttons = n;
+    button_count = n;
 }
 
-static void applygestures(const struct scfg_block* b)
+static void settings_apply_gestures(const struct scfg_block* b)
 {
     const struct scfg_directive* d;
     const Action* act;
     Gesture* out;
     size_t i, n = 0;
 
-    out = ecalloc(count(b, "gesture") + 1, sizeof *out);
+    out = util_calloc(settings_count(b, "gesture") + 1, sizeof *out);
     for (i = 0; i < b->directives_len; i++) {
         d = &b->directives[i];
-        line = d->lineno;
-        if (strcmp(d->name, "gesture") || !(act = actionbyname(param(d, 2))))
+        settings_line = d->lineno;
+        if (strcmp(d->name, "gesture") ||
+            !(act = settings_action_by_name(settings_param(d, 2))))
             continue;
-        out[n].motion = (unsigned int)enumval(
-            gesturemotions, param(d, 0), SwipeLeft, "gesture motion");
-        out[n].fingers = uintval(param(d, 1), 3);
+        out[n].motion =
+            (unsigned int)settings_enum_value(settings_gesture_motions,
+                                              settings_param(d, 0),
+                                              SwipeLeft,
+                                              "gesture motion");
+        out[n].fingers = settings_uint_value(settings_param(d, 1), 3);
         out[n].func = act->func;
-        out[n].arg = getarg(act->arg, d, 3);
+        out[n].arg = settings_get_arg(act->arg, d, 3);
         n++;
     }
     gestures = out;
-    ngestures = n;
+    gesture_count = n;
 }
 
-static void applypadbuttons(const struct scfg_block* b)
+static void settings_apply_pad_buttons(const struct scfg_block* b)
 {
     const struct scfg_directive* d;
     const Action* act;
     PadButton* out;
     size_t i, n = 0;
 
-    out = ecalloc(count(b, "padbutton") + 1, sizeof *out);
+    out = util_calloc(settings_count(b, "padbutton") + 1, sizeof *out);
     for (i = 0; i < b->directives_len; i++) {
         d = &b->directives[i];
-        line = d->lineno;
-        if (strcmp(d->name, "padbutton") || !(act = actionbyname(param(d, 1))))
+        settings_line = d->lineno;
+        if (strcmp(d->name, "padbutton") ||
+            !(act = settings_action_by_name(settings_param(d, 1))))
             continue;
-        out[n].button = uintval(param(d, 0), 0);
+        out[n].button = settings_uint_value(settings_param(d, 0), 0);
         out[n].func = act->func;
-        out[n].arg = getarg(act->arg, d, 2);
+        out[n].arg = settings_get_arg(act->arg, d, 2);
         n++;
     }
-    padbuttons = out;
-    npadbuttons = n;
+    pad_buttons = out;
+    pad_button_count = n;
 }
 
 /* config.h's settings, read back: what the file is checked against and what
  * fills in for what it leaves out */
-static const struct scfg_block* builtin;
+static const struct scfg_block* settings_builtin;
 
-static void loadbuiltin(void)
+static void settings_load_builtin(void)
 {
     static struct scfg_block b;
     char* text;
     FILE* f;
 
-    if (builtin || !(text = rendered()))
+    if (settings_builtin || !(text = settings_rendered_defaults()))
         return;
     if ((f = fmemopen(text, strlen(text), "r"))) {
         if (!scfg_parse_file(&b, f))
-            builtin = &b;
+            settings_builtin = &b;
         fclose(f);
     }
     free(text);
 }
 
 /* the file's lines of kind k, or the built-in ones when it has none */
-static const struct scfg_block* lines(const struct scfg_block* b, const char* k)
+static const struct scfg_block* settings_lines(const struct scfg_block* b,
+                                               const char* k)
 {
-    return count(b, k) || !builtin ? b : builtin;
+    return settings_count(b, k) || !settings_builtin ? b : settings_builtin;
 }
 
-static void applysections(const struct scfg_block* b)
+static void settings_apply_sections(const struct scfg_block* b)
 {
-    applylook(section(b, "look"));
-    applywindows(section(b, "windows"));
-    applybar(section(b, "bar"));
-    applyopacity(section(b, "opacity"));
-    applyinput(section(b, "input"));
-    applymisc(section(b, "misc"));
+    settings_apply_look(settings_section(b, "look"));
+    settings_apply_windows(settings_section(b, "windows"));
+    settings_apply_bar(settings_section(b, "bar"));
+    settings_apply_opacity(settings_section(b, "opacity"));
+    settings_apply_input(settings_section(b, "input"));
+    settings_apply_misc(settings_section(b, "misc"));
 }
 
 /* the layouts first: the rest names them by symbol */
-static void apply(const struct scfg_block* b)
+static void settings_apply(const struct scfg_block* b)
 {
-    applylayouts(lines(b, "layout"));
+    settings_apply_layouts(settings_lines(b, "layout"));
     /* a reload has to undo a setting since left out */
-    applysections(builtin);
-    applysections(b);
-    applyrules(lines(b, "rule"));
-    applymonitors(lines(b, "monitor"));
-    applyautostart(lines(b, "autostart"));
-    applykeys(lines(b, "key"));
-    applybuttons(lines(b, "button"));
-    applygestures(lines(b, "gesture"));
-    applypadbuttons(lines(b, "padbutton"));
+    settings_apply_sections(settings_builtin);
+    settings_apply_sections(b);
+    settings_apply_rules(settings_lines(b, "rule"));
+    settings_apply_monitors(settings_lines(b, "monitor"));
+    settings_apply_autostart(settings_lines(b, "autostart"));
+    settings_apply_keys(settings_lines(b, "key"));
+    settings_apply_buttons(settings_lines(b, "button"));
+    settings_apply_gestures(settings_lines(b, "gesture"));
+    settings_apply_pad_buttons(settings_lines(b, "padbutton"));
 }
 
-static const char* settingspath(void)
+static const char* settings_path(void)
 {
     static char path[PATH_MAX];
     const char* dir = getenv("XDG_CONFIG_HOME");
@@ -1672,7 +1799,7 @@ static const char* settingspath(void)
 }
 
 /* mkdir -p, on a copy the caller owns */
-int mkdirp(char* path)
+int settings_make_dirs(char* path)
 {
     char* p;
 
@@ -1687,44 +1814,44 @@ int mkdirp(char* path)
     return mkdir(path, 0755) < 0 && errno != EEXIST ? -1 : 0;
 }
 
-static int isrecord(const char* k)
+static int settings_is_record(const char* k)
 {
     size_t i;
 
-    for (i = 0; i < LENGTH(records); i++)
-        if (!strcmp(records[i], k))
+    for (i = 0; i < LENGTH(settings_records); i++)
+        if (!strcmp(settings_records[i], k))
             return 1;
     return 0;
 }
 
-static const char* kindof(const struct scfg_directive* d)
+static const char* settings_kind_of(const struct scfg_directive* d)
 {
     if (d->params_len != 1)
         return d->params_len ? "a list" : "off";
-    if (isbool(d->params[0]))
+    if (settings_is_bool(d->params[0]))
         return "true or false";
-    if (isnum(d->params[0], nullptr))
+    if (settings_is_number(d->params[0], nullptr))
         return "a number";
     return "a string";
 }
 
 /* off takes anything, strings and lists any words */
-static int sameshape(const struct scfg_directive* want,
-                     const struct scfg_directive* got)
+static int settings_same_shape(const struct scfg_directive* want,
+                               const struct scfg_directive* got)
 {
-    const char* k = kindof(want);
+    const char* k = settings_kind_of(want);
 
     if (!want->params_len)
         return 1;
     if (!strcmp(k, "a list") || !strcmp(k, "a string"))
         return got->params_len > 0;
-    return !strcmp(k, kindof(got));
+    return !strcmp(k, settings_kind_of(got));
 }
 
-static void check(const struct scfg_block* want,
-                  const struct scfg_block* got,
-                  const char* path,
-                  int* bad)
+static void settings_check(const struct scfg_block* want,
+                           const struct scfg_block* got,
+                           const char* path,
+                           int* bad)
 {
     const struct scfg_directive* w;
     const struct scfg_directive* g;
@@ -1733,37 +1860,38 @@ static void check(const struct scfg_block* want,
 
     for (i = 0; i < want->directives_len; i++) {
         w = &want->directives[i];
-        if (!*path && isrecord(w->name))
+        if (!*path && settings_is_record(w->name))
             continue;
         snprintf(sub, sizeof sub, "%s%s%s", path, *path ? "." : "", w->name);
-        if (!(g = find(got, w->name)))
+        if (!(g = settings_find(got, w->name)))
             continue;
         if (w->children.directives_len) {
-            check(&w->children, &g->children, sub, bad);
-        } else if (!sameshape(w, g)) {
-            line = g->lineno;
-            warn("%s should be %s", sub, kindof(w));
+            settings_check(&w->children, &g->children, sub, bad);
+        } else if (!settings_same_shape(w, g)) {
+            settings_line = g->lineno;
+            settings_warn("%s should be %s", sub, settings_kind_of(w));
             (*bad)++;
         }
     }
     /* a typo, a setting this build was configured without, or a second one */
     for (i = 0; i < got->directives_len; i++) {
         g = &got->directives[i];
-        if (!*path && isrecord(g->name)) {
+        if (!*path && settings_is_record(g->name)) {
             /* what a rule or a monitor holds */
-            if ((w = find(want, g->name)) && w->children.directives_len)
-                check(&w->children, &g->children, g->name, bad);
+            if ((w = settings_find(want, g->name)) &&
+                w->children.directives_len)
+                settings_check(&w->children, &g->children, g->name, bad);
             continue;
         }
-        w = find(got, g->name);
-        if (w == g && find(want, g->name))
+        w = settings_find(got, g->name);
+        if (w == g && settings_find(want, g->name))
             continue;
         snprintf(sub, sizeof sub, "%s%s%s", path, *path ? "." : "", g->name);
-        line = g->lineno;
+        settings_line = g->lineno;
         if (w != g)
-            warn("%s is already set on line %d", sub, w->lineno);
+            settings_warn("%s is already set on line %d", sub, w->lineno);
         else
-            warn("%s is not a setting this build has", sub);
+            settings_warn("%s is not a setting this build has", sub);
         (*bad)++;
     }
 }
@@ -1771,9 +1899,9 @@ static void check(const struct scfg_block* want,
 /* -c: write the defaults when there are none, read back whatever is there,
  * then print what g0wm ends up with. Notes go to stderr, the settings to
  * stdout, so the two can be told apart. */
-int settingswrite(void)
+int settings_write(void)
 {
-    const char* path = settingspath();
+    const char* path = settings_path();
     char dir[PATH_MAX];
     char* slash;
     char* text;
@@ -1791,12 +1919,12 @@ int settingswrite(void)
         snprintf(dir, sizeof dir, "%s", path);
         if ((slash = strrchr(dir, '/')))
             *slash = '\0';
-        if (mkdirp(dir) < 0) {
+        if (settings_make_dirs(dir) < 0) {
             fprintf(
                 stderr, "g0wm: cannot create %s: %s\n", dir, strerror(errno));
             return 1;
         }
-        if (!(text = rendered()))
+        if (!(text = settings_rendered_defaults()))
             return 1;
         if (!(f = fopen(path, "w"))) {
             fprintf(
@@ -1814,17 +1942,17 @@ int settingswrite(void)
         fprintf(stderr, "g0wm: wrote %s\n", path);
     }
 
-    settingsload();
-    if (!(text = rendered()))
+    settings_load();
+    if (!(text = settings_rendered_defaults()))
         return 1;
     fputs(text, stdout);
     free(text);
     return 0;
 }
 
-void settingsload(void)
+void settings_load(void)
 {
-    const char* path = settingspath();
+    const char* path = settings_path();
     struct scfg_block* tree;
     int bad = 0;
 
@@ -1838,7 +1966,7 @@ void settingsload(void)
                 path);
         return;
     }
-    tree = ecalloc(1, sizeof *tree);
+    tree = util_calloc(1, sizeof *tree);
     if (scfg_load_file(tree, path) < 0) {
         fprintf(stderr, "g0wm: cannot read %s\n", path);
         scfg_block_finish(tree);
@@ -1846,11 +1974,11 @@ void settingsload(void)
         return;
     }
 
-    loadbuiltin();
-    if (builtin)
-        check(builtin, tree, "", &bad);
+    settings_load_builtin();
+    if (settings_builtin)
+        settings_check(settings_builtin, tree, "", &bad);
     /* never freed: the settings point into its strings */
-    apply(tree);
+    settings_apply(tree);
     if (bad)
         fprintf(stderr,
                 "g0wm: %s has %d problem%s\n",
@@ -1861,39 +1989,40 @@ void settingsload(void)
 
 /* the keymap and the repeat rate are otherwise only set when a keyboard
  * shows up; the trackpad settings are per device and still need a restart */
-static void reloadkeyboard(void)
+static void settings_reload_keyboard(void)
 {
     struct xkb_context* context;
     struct xkb_keymap* keymap;
 
-    if (!kb_group)
+    if (!keyboard_group)
         return;
     if ((context = xkb_context_new(XKB_CONTEXT_NO_FLAGS))) {
         if ((keymap = xkb_keymap_new_from_names(
                  context, &xkb_rules, XKB_KEYMAP_COMPILE_NO_FLAGS))) {
-            wlr_keyboard_set_keymap(&kb_group->wlr_group->keyboard, keymap);
+            wlr_keyboard_set_keymap(&keyboard_group->wlr_group->keyboard,
+                                    keymap);
             xkb_keymap_unref(keymap);
         }
         xkb_context_unref(context);
     }
     wlr_keyboard_set_repeat_info(
-        &kb_group->wlr_group->keyboard, repeat_rate, repeat_delay);
+        &keyboard_group->wlr_group->keyboard, repeat_rate, repeat_delay);
 }
 
-static void reloadsettings(const Arg*)
+static void settings_reload(const Arg*)
 {
     Monitor* m;
     Client* c;
-    int wasprivate = alwaysprivate;
+    int wasprivate = always_private;
 
-    settingsload();
+    settings_load();
 
     /* fewer tags than before would leave windows on bits nothing shows */
-    wl_list_for_each(m, &mons, link)
+    wl_list_for_each(m, &monitors, link)
     {
         if (!(m->tagset[m->seltags] & TAGMASK))
             m->tagset[m->seltags] = 1;
-        wlr_scene_rect_set_color(m->fullscreen_bg, fullscreen_bg);
+        wlr_scene_rect_set_color(m->fullscreen_bg, fullscreen_color);
     }
     /* what a client copied out of the settings when it was mapped: its
      * border, its own opacity and the title shown when private */
@@ -1904,29 +2033,29 @@ static void reloadsettings(const Arg*)
         c->opacity = c->opacity_unfocus = opacity_unfocus;
         c->opacity_focus = opacity_focus;
         if (!c->isfullscreen)
-            c->bw = client_is_unmanaged(c) ? 0 : borderwidth();
-        if (alwaysprivate != wasprivate)
-            c->isprivate = alwaysprivate;
-        toplevelupdate(c);
+            c->bw = client_is_unmanaged(c) ? 0 : corner_border_width();
+        if (always_private != wasprivate)
+            c->isprivate = always_private;
+        toplevel_update(c);
     }
-    if (alwaysprivate != wasprivate)
-        privacydamage();
-    wlr_scene_rect_set_color(root_bg, rootcolor);
+    if (always_private != wasprivate)
+        privacy_damage();
+    wlr_scene_rect_set_color(root_background, root_color);
 
-    reloadkeyboard();
-    tabletremap();
-    reloadmons();
-    updatemons(nullptr, nullptr);
+    settings_reload_keyboard();
+    tablet_remap();
+    monitor_reload_rules();
+    monitor_update_layout(nullptr, nullptr);
 
     /* a floating client keeps its own geometry, so a new border or title bar
-     * only reaches it through resize() */
+     * only reaches it through client_resize() */
     wl_list_for_each(c, &clients, link)
     {
         if (c->mon && c->isfloating && !c->isfullscreen)
-            resize(c, c->geom, 1);
+            client_resize(c, c->geom, 1);
     }
 
-    reloadopacity();
-    notify_settimeout(notification_timeout);
-    drawbars();
+    opacity_reload();
+    notify_set_timeout(notification_timeout);
+    bar_draw_all();
 }

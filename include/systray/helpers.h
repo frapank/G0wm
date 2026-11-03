@@ -11,12 +11,12 @@
 
 typedef void (*PropHandler)(DBusPendingCall* pcall, void* data);
 
-int request_property(DBusConnection* conn,
-                     const char* busname,
-                     const char* busobj,
-                     const char* prop,
-                     const char* iface,
-                     PropHandler handler,
-                     void* data);
+int helpers_request_property(DBusConnection* conn,
+                             const char* busname,
+                             const char* busobj,
+                             const char* prop,
+                             const char* iface,
+                             PropHandler handler,
+                             void* data);
 
 #endif

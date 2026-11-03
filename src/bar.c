@@ -42,100 +42,103 @@
 #include "util.h"
 
 /* function declarations */
-static Monitor* mainmon(void);
-static Monitor* barmonitor(void);
-static int barvisible(Monitor* m);
-static int statusescape(const char* p, uint32_t* scm);
-static void drawpill(Monitor* m,
-                     int x,
-                     int y,
-                     int w,
-                     int h,
-                     double r,
-                     int hollow,
-                     uint32_t rgba);
-static void traynotify(void* data);
-static void drawcandidates(Monitor* m, int x, int end);
-static void drawicon(Monitor* m, Icon* icon, int x, int size);
-static void drawiconholder(Monitor* m, int x, int size);
-static int runnericonsize(Monitor* m);
-static void drawtitle(Client* c);
+static Monitor* bar_main_monitor(void);
+static Monitor* bar_monitor(void);
+static int bar_visible(Monitor* m);
+static int bar_status_escape(const char* p, uint32_t* scm);
+static void bar_draw_pill(Monitor* m,
+                          int x,
+                          int y,
+                          int w,
+                          int h,
+                          double r,
+                          int hollow,
+                          uint32_t rgba);
+static void bar_tray_notify(void* data);
+static void bar_draw_candidates(Monitor* m, int x, int end);
+static void bar_draw_icon(Monitor* m, Icon* icon, int x, int size);
+static void bar_draw_icon_holder(Monitor* m, int x, int size);
+static int bar_runner_icon_size(Monitor* m);
+static void bar_draw_title_bar(Client* c);
 typedef struct {
     int linex, linew;
     int iconx, iconw, iconh; /* iconw 0 without one */
     int textx, textw;        /* the › included */
     int countx, countw;      /* queue or history position */
     char count[32];
-    int signx, signw; /* notification_actionsign */
+    int signx, signw; /* notification_action_sign */
     /* while picking, the action labels shown in place of the text */
     int chipx[NOTIFY_ACTMAX], chipw[NOTIFY_ACTMAX];
     size_t chip0, nchip;
 } NotifyBox;
 
-static void drawnotify(Monitor* m,
-                       int x,
-                       int w,
-                       const Notification* n,
-                       long hist);
-static void drawnotifytext(Monitor* m,
-                           const NotifyBox* b,
-                           int x,
-                           int w,
-                           const Notification* n,
-                           const char* text,
-                           uint32_t* scm);
-static size_t fitprefix(Monitor* m, const char* s, int w);
-static void notifybox(Monitor* m,
-                      const Notification* n,
-                      long hist,
-                      int x,
-                      int w,
-                      NotifyBox* b);
-static void notifybrowse(dbus_uint32_t id);
-static void notifypickclose(void);
-static void notifypickrun(size_t i);
-static const Notification* notifyshown(long* hist);
-static void notifysync(const Notification* n, long hist);
-static int notifytick(void* data);
-static void stopstatus(void);
+static void bar_draw_notification(Monitor* m,
+                                  int x,
+                                  int w,
+                                  const Notification* n,
+                                  long hist);
+static void bar_draw_notification_text(Monitor* m,
+                                       const NotifyBox* b,
+                                       int x,
+                                       int w,
+                                       const Notification* n,
+                                       const char* text,
+                                       uint32_t* scm);
+static size_t bar_fit_prefix(Monitor* m, const char* s, int w);
+static void bar_notification_box(Monitor* m,
+                                 const Notification* n,
+                                 long hist,
+                                 int x,
+                                 int w,
+                                 NotifyBox* b);
+static void bar_notification_browse(dbus_uint32_t id);
+static void bar_notification_pick_close(void);
+static void bar_notification_pick_run(size_t i);
+static const Notification* bar_notification_shown(long* hist);
+static void bar_notification_sync(const Notification* n, long hist);
+static int bar_notification_tick(void* data);
+static void bar_status_stop(void);
 
 /* variables */
-char stext[STATUS_MAX];
-constexpr char notifymore[] = "\xe2\x80\xba"; /* › */
-static dbus_uint32_t notifyshownid;           /* what notifyoff refers to */
-static int notifyshownhist;
-static size_t notifyoff;
+char bar_status_text[STATUS_MAX];
+constexpr char bar_notification_more[] = "\xe2\x80\xba"; /* › */
+static dbus_uint32_t
+    bar_notification_shown_id; /* what bar_notification_offset refers to */
+static int bar_notification_shown_history;
+static size_t bar_notification_offset;
 /* history entry being viewed, 0 for live; by id since indices shift */
-static dbus_uint32_t notifyviewid;
-static uint64_t notifyview_ms; /* last input, the view times out */
-static dbus_uint32_t notifyliveid;
+static dbus_uint32_t bar_notification_view_id;
+static uint64_t bar_notification_view_ms; /* last input, the view times out */
+static dbus_uint32_t bar_notification_live_id;
 /* animates the line and times out the history view */
-static struct wl_event_source* notifytimer;
+static struct wl_event_source* bar_notification_timer;
 /* redraws the bars while an urgent dot pulses */
-static struct wl_event_source* pulsetimer;
+static struct wl_event_source* bar_pulse_timer;
 constexpr int PULSE_FRAME_MS = 40;
-/* picked action, -1 when closed; the picker belongs to notifypickid */
-static long notifypicksel = -1;
-static dbus_uint32_t notifypickid;
-static int notifyboxx;  /* last drawn x, for hit testing */
-static Client* hovered; /* whose close button is under the pointer */
+/* picked action, -1 when closed; the picker belongs to bar_notification_pick_id
+ */
+static long bar_notification_pick_selected = -1;
+static dbus_uint32_t bar_notification_pick_id;
+static int bar_notification_box_x; /* last drawn x, for hit testing */
+static Client* bar_hovered;        /* whose close button is under the pointer */
 
 /* function implementations */
-bool baracceptsinput(struct wlr_scene_buffer*, double*, double*)
+bool bar_accepts_input(struct wlr_scene_buffer*, double*, double*)
 {
     return true;
 }
 
-/* The first enabled output matched by monrules[], NULL if there is none. */
-static Monitor* mainmon(void)
+/* The first enabled output matched by monitor_rules[], NULL if there is none.
+ */
+static Monitor* bar_main_monitor(void)
 {
     const MonitorRule* r;
     Monitor* m;
 
-    for (r = monrules; r < monrules + nmonrules; r++) {
-        /* mons grows at its head, so backwards is the order the outputs
+    for (r = monitor_rules; r < monitor_rules + monitor_rule_count; r++) {
+        /* monitors grows at its head, so backwards is the order the outputs
          * showed up in: under the catch-all row the oldest one wins */
-        wl_list_for_each_reverse(m, &mons, link)
+        wl_list_for_each_reverse(m, &monitors, link)
         {
             if (m->wlr_output->enabled &&
                 (!r->name || strstr(m->wlr_output->name, r->name)))
@@ -145,23 +148,24 @@ static Monitor* mainmon(void)
     return nullptr;
 }
 
-/* The monitor the bar is drawn on: the main one with barsinglemon, the
+/* The monitor the bar is drawn on: the main one with bar_single_monitor, the
  * focused one without it. */
-static Monitor* barmonitor(void)
+static Monitor* bar_monitor(void)
 {
-    return barsinglemon ? mainmon() : selmon;
+    return bar_single_monitor ? bar_main_monitor() : selected_monitor;
 }
 
-/* Whether m carries a bar. barsinglemon leaves every other monitor without
- * one, and arrangelayers() reads that off the scene node to free the height. */
-static int barvisible(Monitor* m)
+/* Whether m carries a bar. bar_single_monitor leaves every other monitor
+ * without one, and monitor_arrange_layers() reads that off the scene node to
+ * free the height. */
+static int bar_visible(Monitor* m)
 {
-    return m->wlr_output->enabled && showbar &&
-           (!barsinglemon || m == barmonitor());
+    return m->wlr_output->enabled && bar_enabled &&
+           (!bar_single_monitor || m == bar_monitor());
 }
 
 /* whether (x, y) falls in a w by h box with corners of radius r */
-static int inpill(double x, double y, int w, int h, double r)
+static int bar_in_pill(double x, double y, int w, int h, double r)
 {
     double dx, dy;
 
@@ -175,14 +179,14 @@ static int inpill(double x, double y, int w, int h, double r)
 
 /* Antialiased rounded rectangle, blended over the buffer. hollow keeps a
  * one pixel outline, as drwl_rect() does when not filled. */
-static void drawpill(Monitor* m,
-                     int x,
-                     int y,
-                     int w,
-                     int h,
-                     double r,
-                     int hollow,
-                     uint32_t rgba)
+static void bar_draw_pill(Monitor* m,
+                          int x,
+                          int y,
+                          int w,
+                          int h,
+                          double r,
+                          int hollow,
+                          uint32_t rgba)
 {
     pixman_image_t *mask, *src;
     pixman_color_t clr;
@@ -204,9 +208,9 @@ static void drawpill(Monitor* m,
                 for (sx = 0; sx < 4; sx++) {
                     fx = px + (sx + 0.5) / 4;
                     fy = py + (sy + 0.5) / 4;
-                    cov += inpill(fx, fy, w, h, r) &&
+                    cov += bar_in_pill(fx, fy, w, h, r) &&
                            !(hollow && fx > 1 && fy > 1 &&
-                             inpill(fx - 1, fy - 1, w - 2, h - 2, r - 1));
+                             bar_in_pill(fx - 1, fy - 1, w - 2, h - 2, r - 1));
                 }
             data[py * stride + px] = (uint8_t)(cov * 255 / 16);
         }
@@ -221,27 +225,27 @@ static void drawpill(Monitor* m,
 }
 
 /* the same colour at a third of its alpha */
-static uint32_t fade(uint32_t rgba)
+static uint32_t bar_fade(uint32_t rgba)
 {
     return (rgba & ~0xffu) | (rgba & 0xffu) / 3;
 }
 
-/* the dot marks the windows that differ from alwaysprivate */
-static int privatedot(Client* c, uint32_t* rgba)
+/* the dot marks the windows that differ from always_private */
+static int bar_private_dot(Client* c, uint32_t* rgba)
 {
-    if (!c->isprivate == !alwaysprivate)
+    if (!c->isprivate == !always_private)
         return 0;
-    *rgba = c->isprivate ? privatecolor : publiccolor;
+    *rgba = c->isprivate ? private_color : public_color;
     return 1;
 }
 
-static double privateradius(int d)
+static double bar_private_radius(int d)
 {
-    return d / 2.0 * (privateround < 0 ? bartagdotround : privateround);
+    return d / 2.0 * (private_round < 0 ? bar_tag_dot_round : private_round);
 }
 
 /* scheme with an opaque background */
-static uint32_t* opaquescheme(int scheme)
+static uint32_t* bar_opaque_scheme(int scheme)
 {
     static uint32_t scm[NumSchemes][3];
 
@@ -251,48 +255,49 @@ static uint32_t* opaquescheme(int scheme)
 }
 
 /* a pool of one, dropped when the size changes */
-static Buffer* sharebuf(Buffer** pool, int w, int h)
+static Buffer* bar_share_buffer(Buffer** pool, int w, int h)
 {
     if (*pool && ((*pool)->base.width != w || (*pool)->base.height != h))
-        bufpooldrop(pool, 1);
-    return bufget(pool, 1, w, h);
+        buffer_pool_drop(pool, 1);
+    return buffer_get(pool, 1, w, h);
 }
 
 /* the urgent colour breathing between full and a quarter of its alpha, one
- * cycle every barurgentpulse ms */
-static uint32_t pulse(uint32_t rgba)
+ * cycle every bar_urgent_pulse ms */
+static uint32_t bar_pulse(uint32_t rgba)
 {
-    double t = (double)(notify_now() % barurgentpulse) / barurgentpulse;
+    double t = (double)(notify_now() % bar_urgent_pulse) / bar_urgent_pulse;
     double k = 0.25 + 0.75 * (0.5 + 0.5 * cos(2 * 3.14159265358979 * t));
 
     return (rgba & ~0xffu) | (uint32_t)((rgba & 0xffu) * k);
 }
 
-static int pulsetick(void*)
+static int bar_pulse_tick(void*)
 {
-    drawbars();
+    bar_draw_all();
     return 0;
 }
 
-/* One shot: each drawbar() that still shows an urgent dot asks for the next
+/* One shot: each bar_draw() that still shows an urgent dot asks for the next
  * frame, so the timer dies with the last urgent window. */
-static void pulsearm(void)
+static void bar_pulse_arm(void)
 {
-    if (!pulsetimer)
-        pulsetimer = wl_event_loop_add_timer(event_loop, pulsetick, nullptr);
-    if (pulsetimer)
-        wl_event_source_timer_update(pulsetimer, PULSE_FRAME_MS);
+    if (!bar_pulse_timer)
+        bar_pulse_timer =
+            wl_event_loop_add_timer(event_loop, bar_pulse_tick, nullptr);
+    if (bar_pulse_timer)
+        wl_event_source_timer_update(bar_pulse_timer, PULSE_FRAME_MS);
 }
 
-void barfini(void)
+void bar_finish(void)
 {
-    if (pulsetimer)
-        wl_event_source_remove(pulsetimer);
-    pulsetimer = nullptr;
+    if (bar_pulse_timer)
+        wl_event_source_remove(bar_pulse_timer);
+    bar_pulse_timer = nullptr;
 }
 
 /* icon scaled to fit size, centered in the bar */
-static void drawicon(Monitor* m, Icon* icon, int x, int size)
+static void bar_draw_icon(Monitor* m, Icon* icon, int x, int size)
 {
     pixman_image_t* img = icon->img;
     pixman_transform_t t;
@@ -323,31 +328,31 @@ static void drawicon(Monitor* m, Icon* icon, int x, int size)
     pixman_image_set_transform(img, nullptr);
 }
 
-/* a rounded square where an icon is missing, colored by runnericon */
-static void drawiconholder(Monitor* m, int x, int size)
+/* a rounded square where an icon is missing, colored by runner_icon */
+static void bar_draw_icon_holder(Monitor* m, int x, int size)
 {
     int y = ((int)m->b.height - size) / 2;
     int bw =
-        MIN((int)round(runner_iconborder * m->wlr_output->scale), size / 2);
-    double r = size / 2.0 * runner_iconround;
+        MIN((int)round(runner_icon_border * m->wlr_output->scale), size / 2);
+    double r = size / 2.0 * runner_icon_round;
 
     if (bw > 0)
-        drawpill(
+        bar_draw_pill(
             m, x, y, size, size, r, 0, colors[SchemeRunnerIcon][ColBorder]);
-    drawpill(m,
-             x + bw,
-             y + bw,
-             size - 2 * bw,
-             size - 2 * bw,
-             MAX(r - bw, 0),
-             0,
-             colors[SchemeRunnerIcon][ColBg]);
+    bar_draw_pill(m,
+                  x + bw,
+                  y + bw,
+                  size - 2 * bw,
+                  size - 2 * bw,
+                  MAX(r - bw, 0),
+                  0,
+                  colors[SchemeRunnerIcon][ColBg]);
 }
 
-static int runnericonsize(Monitor* m)
+static int bar_runner_icon_size(Monitor* m)
 {
-    int size = runner_iconsize
-                   ? (int)round(runner_iconsize * m->wlr_output->scale)
+    int size = runner_icon_size
+                   ? (int)round(runner_icon_size * m->wlr_output->scale)
                    : m->drw->font->height;
 
     return MIN(size, (int)m->b.height);
@@ -355,9 +360,9 @@ static int runnericonsize(Monitor* m)
 
 /* The candidates after the prompt, a page at a time. The selected one sits
  * in a pill shaped like the selected tag dot. */
-static void drawcandidates(Monitor* m, int x, int end)
+static void bar_draw_candidates(Monitor* m, int x, int end)
 {
-    int n = runnercandidates(), sel = runnerselected();
+    int n = runner_candidate_count(), sel = runner_selected();
     int per = (int)MIN(runner_max_candidates, (unsigned int)n);
     int fh = m->drw->font->height, bh = (int)m->b.height;
     int i, ph, pad, mg, tw, isz, iw, holder;
@@ -365,38 +370,40 @@ static void drawcandidates(Monitor* m, int x, int end)
     const char* s;
     Icon* icon;
 
-    ph = runner_pillheight ? (int)round(runner_pillheight * scale) : fh * 4 / 3;
+    ph = runner_pill_height ? (int)round(runner_pill_height * scale)
+                            : fh * 4 / 3;
     ph = MIN(MAX(ph, fh), bh);
-    pad = runner_pillpadding ? (int)round(runner_pillpadding * scale)
-                             : m->lrpad / 2;
-    r = ph / 2.0 * (runner_pillround < 0 ? bartagdotround : runner_pillround);
+    pad = runner_pill_padding ? (int)round(runner_pill_padding * scale)
+                              : m->lrpad / 2;
+    r = ph / 2.0 *
+        (runner_pill_round < 0 ? bar_tag_dot_round : runner_pill_round);
     /* drwl_text() paints behind the text too, keep that off the round ends */
     mg = (ph - fh) / 2;
     if (mg < r)
         pad = MAX(pad, (int)ceil(r - sqrt(r * r - (r - mg) * (r - mg))));
 
-    isz = MIN(runnericonsize(m), ph);
+    isz = MIN(bar_runner_icon_size(m), ph);
     for (i = sel / per * per; i < n && i < sel / per * per + per; i++) {
-        s = runnercandidate(i);
-        icon = runner_icons == RunnerIconsAll ? runnericon(i) : nullptr;
-        holder = runner_icons == RunnerIconsAll && !icon && runnerhasicons();
+        s = runner_candidate(i);
+        icon = runner_icons == RunnerIconsAll ? runner_icon(i) : nullptr;
+        holder = runner_icons == RunnerIconsAll && !icon && runner_has_icons();
         iw = icon || holder ? isz + pad / 2 : 0;
         tw = MIN((int)drwl_font_getwidth(m->drw, s), end - x - 2 * pad - iw);
         if (tw <= 0)
             break;
         if (i == sel)
-            drawpill(m,
-                     x,
-                     (bh - ph) / 2,
-                     iw + tw + 2 * pad,
-                     ph,
-                     r,
-                     0,
-                     colors[SchemeRunnerSel][ColBg]);
+            bar_draw_pill(m,
+                          x,
+                          (bh - ph) / 2,
+                          iw + tw + 2 * pad,
+                          ph,
+                          r,
+                          0,
+                          colors[SchemeRunnerSel][ColBg]);
         if (icon)
-            drawicon(m, icon, x + pad, isz);
+            bar_draw_icon(m, icon, x + pad, isz);
         else if (holder)
-            drawiconholder(m, x + pad, isz);
+            bar_draw_icon_holder(m, x + pad, isz);
         drwl_setscheme(
             m->drw, colors[i == sel ? SchemeRunnerSel : SchemeRunnerSuggest]);
         drwl_text(m->drw, x + pad + iw, (bh - fh) / 2, tw, fh, 0, s, 0);
@@ -405,111 +412,114 @@ static void drawcandidates(Monitor* m, int x, int end)
 }
 
 /* the dot of tag i, a pill when selected; returns its cell's width */
-static int tagdot(Monitor* m,
-                  Monitor* s,
-                  uint32_t i,
-                  int* d,
-                  int* lead,
-                  int* sw)
+static int bar_tag_dot(Monitor* m,
+                       Monitor* s,
+                       uint32_t i,
+                       int* d,
+                       int* lead,
+                       int* sw)
 {
     int gap;
     double scale = m->wlr_output->scale;
 
-    *d = bartagdotsize ? MAX((int)round(bartagdotsize * scale), 1)
-                       : MAX(m->drw->font->height * 2 / 5, 4);
-    gap = bartagdotgap ? (int)round(bartagdotgap * scale) : *d * 3 / 2;
-    *sw = s->tagset[s->seltags] & 1 << i ? (int)round(*d * bartagdotwidth) : *d;
+    *d = bar_tag_dot_size ? MAX((int)round(bar_tag_dot_size * scale), 1)
+                          : MAX(m->drw->font->height * 2 / 5, 4);
+    gap = bar_tag_dot_gap ? (int)round(bar_tag_dot_gap * scale) : *d * 3 / 2;
+    *sw = s->tagset[s->seltags] & 1 << i ? (int)round(*d * bar_tag_dot_width)
+                                         : *d;
     *lead = i ? gap / 2 : m->lrpad / 2;
-    return *lead + *sw + (i == ntags - 1 ? m->lrpad / 2 : gap - gap / 2);
+    return *lead + *sw + (i == tag_count - 1 ? m->lrpad / 2 : gap - gap / 2);
 }
 
 /* title of c in the bar */
-static void drawbartitle(Monitor* m,
-                         Client* c,
-                         int x,
-                         int w,
-                         int sel,
-                         int share)
+static void bar_draw_window_title(Monitor* m,
+                                  Client* c,
+                                  int x,
+                                  int w,
+                                  int sel,
+                                  int share)
 {
     int boxs = m->drw->font->height / 9;
     int boxw = m->drw->font->height / 6 + 2;
     int boxy = (m->b.height - m->drw->font->height) / 2 + boxs;
-    double boxr = barboxradius * m->wlr_output->scale;
+    double boxr = bar_box_radius * m->wlr_output->scale;
     int scheme = sel ? SchemeSel : SchemeNorm;
     uint32_t pc;
 
-    drwl_setscheme(m->drw, share ? opaquescheme(scheme) : colors[scheme]);
+    drwl_setscheme(m->drw, share ? bar_opaque_scheme(scheme) : colors[scheme]);
     drwl_text(m->drw,
               x,
               0,
               w,
               m->b.height,
               m->lrpad / 2,
-              share ? sharetitle(c) : client_get_title(c),
+              share ? privacy_share_title(c) : client_get_title(c),
               0);
     if (c->isfloating)
-        drawpill(m, x + boxs, boxy, boxw, boxw, boxr, 1, m->drw->scheme[ColFg]);
-    if (privatedot(c, &pc))
-        drawpill(m,
-                 x + boxs + (c->isfloating ? boxw + boxs : 0),
-                 boxy,
-                 boxw,
-                 boxw,
-                 privateradius(boxw),
-                 0,
-                 pc);
+        bar_draw_pill(
+            m, x + boxs, boxy, boxw, boxw, boxr, 1, m->drw->scheme[ColFg]);
+    if (bar_private_dot(c, &pc))
+        bar_draw_pill(m,
+                      x + boxs + (c->isfloating ? boxw + boxs : 0),
+                      boxy,
+                      boxw,
+                      boxw,
+                      bar_private_radius(boxw),
+                      0,
+                      pc);
 }
 
-/* shared with barclick() */
-int tagwidth(Monitor* m, Monitor* s, uint32_t i)
+/* shared with input_bar_click() */
+int bar_tag_width(Monitor* m, Monitor* s, uint32_t i)
 {
     int d, lead, sw;
 
-    if (!bartagdots)
+    if (!bar_tag_dots)
         return (int)TEXTW(m, tags[i]);
-    return tagdot(m, s, i, &d, &lead, &sw);
+    return bar_tag_dot(m, s, i, &d, &lead, &sw);
 }
 
-void drawbar(Monitor* m)
+void bar_draw(Monitor* m)
 {
     int x, w, tw = 0, traywidth = 0;
     int boxs = m->drw->font->height / 9;
     int boxw = m->drw->font->height / 6 + 2;
     /* the little squares follow the text, which drwl centers */
     int boxy = (m->b.height - m->drw->font->height) / 2 + boxs;
-    double boxr = barboxradius * m->wlr_output->scale;
+    double boxr = bar_box_radius * m->wlr_output->scale;
     uint32_t i, occ = 0, urg = 0;
     int pulsing = 0;
     Client* c;
     Buffer *buf, *share;
     /* what the bar reports on: its own monitor, or the focused one when
-     * barsinglemon leaves a single bar standing in for the lot */
-    Monitor* s = barsinglemon && selmon ? selmon : m;
-    int sel = s == selmon;
-    int r = (int)roundf((float)barcorner(m) * m->wlr_output->scale);
+     * bar_single_monitor leaves a single bar standing in for the lot */
+    Monitor* s = bar_single_monitor && selected_monitor ? selected_monitor : m;
+    int sel = s == selected_monitor;
+    int r = (int)roundf((float)corner_bar_radius(m) * m->wlr_output->scale);
 
     /* Title bars are refreshed on the same events as the bar */
-    wl_list_for_each(c, &clients, link) if (c->mon == m) drawtitle(c);
+    wl_list_for_each(c, &clients, link) if (c->mon == m) bar_draw_title_bar(c);
 
     m->sharew = 0;
     if (!m->scene_buffer->node.enabled) {
 #ifdef INTEGRATED_BACKGROUND
-        /* a hidden bar has no backdrop either, and togglebar() comes through
+        /* a hidden bar has no backdrop either, and bar_toggle() comes through
          * here rather than through the tail of this function */
-        blurbar(m);
+        opacity_blur_bar(m);
 #endif
         return;
     }
-    if (!(buf = bufget(m->pool, LENGTH(m->pool), m->b.width, m->b.height)))
+    if (!(buf = buffer_get(m->pool, LENGTH(m->pool), m->b.width, m->b.height)))
         return;
     drwl_setimage(m->drw, buf->image);
-    cornerclear(buf->data, m->b.width, m->b.height, r);
+    corner_clear(buf->data, m->b.width, m->b.height, r);
     traywidth = tray_get_width(m->tray);
 
     /* draw status first so it can be overdrawn by tags later */
-    if (statusshown(m)) {
+    if (bar_status_shown(m)) {
         tw = STATUSW(m);
-        drawstatus(m, stext, m->b.width - (tw + traywidth), tw, 1);
+        bar_draw_status(
+            m, bar_status_text, m->b.width - (tw + traywidth), tw, 1);
     }
 
     wl_list_for_each(c, &clients, link)
@@ -521,18 +531,18 @@ void drawbar(Monitor* m)
             urg |= c->tags;
     }
     x = 0;
-    c = focustop(s);
-    for (i = 0; i < ntags && bartagdots; i++) {
+    c = client_top(s);
+    for (i = 0; i < tag_count && bar_tag_dots; i++) {
         int d, lead, sw;
         uint32_t clr;
 
-        w = tagdot(m, s, i, &d, &lead, &sw);
+        w = bar_tag_dot(m, s, i, &d, &lead, &sw);
         drwl_setscheme(m->drw, colors[SchemeNorm]);
         drwl_rect(m->drw, x, 0, w, m->b.height, 1, 1);
         if (urg & 1 << i) {
             clr = colors[SchemeUrg][ColBorder];
-            if (barurgentpulse) {
-                clr = pulse(clr);
+            if (bar_urgent_pulse) {
+                clr = bar_pulse(clr);
                 pulsing = 1;
             }
         } else if (s->tagset[s->seltags] & 1 << i)
@@ -540,20 +550,20 @@ void drawbar(Monitor* m)
         else if (occ & 1 << i)
             clr = colors[SchemeNorm][ColFg];
         else /* empty */
-            clr = fade(colors[SchemeNorm][ColFg]);
-        drawpill(m,
-                 x + lead,
-                 (m->b.height - d) / 2,
-                 sw,
-                 d,
-                 d / 2.0 * bartagdotround,
-                 0,
-                 clr);
+            clr = bar_fade(colors[SchemeNorm][ColFg]);
+        bar_draw_pill(m,
+                      x + lead,
+                      (m->b.height - d) / 2,
+                      sw,
+                      d,
+                      d / 2.0 * bar_tag_dot_round,
+                      0,
+                      clr);
         x += w;
     }
     if (pulsing)
-        pulsearm();
-    for (i = 0; i < ntags && !bartagdots; i++) {
+        bar_pulse_arm();
+    for (i = 0; i < tag_count && !bar_tag_dots; i++) {
         w = TEXTW(m, tags[i]);
         drwl_setscheme(
             m->drw,
@@ -561,25 +571,26 @@ void drawbar(Monitor* m)
         drwl_text(
             m->drw, x, 0, w, m->b.height, m->lrpad / 2, tags[i], urg & 1 << i);
         if (occ & 1 << i)
-            drawpill(m,
-                     x + w - boxs - boxw,
-                     boxy,
-                     boxw,
-                     boxw,
-                     boxr,
-                     !(sel && c && c->tags & 1 << i),
-                     m->drw->scheme[urg & 1 << i ? ColBg : ColFg]);
+            bar_draw_pill(m,
+                          x + w - boxs - boxw,
+                          boxy,
+                          boxw,
+                          boxw,
+                          boxr,
+                          !(sel && c && c->tags & 1 << i),
+                          m->drw->scheme[urg & 1 << i ? ColBg : ColFg]);
         x += w;
     }
-    if (barltsymbol) {
+    if (bar_layout_symbol) {
         w = TEXTW(m, s->ltsymbol);
         drwl_setscheme(m->drw, colors[SchemeNorm]);
         x = drwl_text(
             m->drw, x, 0, w, m->b.height, m->lrpad / 2, s->ltsymbol, 0);
     }
 
-    /* Remember the free box for notifyscroll(): the title and the notification
-     * share it, so its geometry must be measured in exactly one place. */
+    /* Remember the free box for bar_notification_scroll(): the title and the
+     * notification share it, so its geometry must be measured in exactly one
+     * place. */
     w = m->b.width - (tw + x + traywidth);
     m->b.titlew = w > m->b.height ? w : 0;
 
@@ -587,12 +598,12 @@ void drawbar(Monitor* m)
         /* The prompt takes the box over the same way a notification does,
          * and outranks one if both would want it at once. */
         if (runner_active && sel) {
-            const char* sug = runnersuggest();
-            int qlen = runner_len - runnerquery();
+            const char* sug = runner_suggest();
+            int qlen = runner_length - runner_query();
             /* the caret scales with the font, which is loaded at the output's
              * dpi, so it keeps its proportions on every monitor */
             int fh = m->drw->font->height, cw = MAX(fh / 12, 2);
-            int tx, cx, end = x + w, isz = runnericonsize(m), px = x;
+            int tx, cx, end = x + w, isz = bar_runner_icon_size(m), px = x;
             Icon* icon;
             char save;
 
@@ -600,10 +611,10 @@ void drawbar(Monitor* m)
             drwl_rect(m->drw, x, 0, w, m->b.height, 1, 1);
             /* the slot stays in every mode, so the text never jumps */
             if (runner_icons != RunnerIconsNone && isz + m->lrpad < w) {
-                if (sug && (icon = runnericon(runnerselected())))
-                    drawicon(m, icon, x + m->lrpad / 2, isz);
+                if (sug && (icon = runner_icon(runner_selected())))
+                    bar_draw_icon(m, icon, x + m->lrpad / 2, isz);
                 else
-                    drawiconholder(m, x + m->lrpad / 2, isz);
+                    bar_draw_icon_holder(m, x + m->lrpad / 2, isz);
                 px += isz + m->lrpad / 2;
             }
             drwl_text(m->drw,
@@ -612,30 +623,30 @@ void drawbar(Monitor* m)
                       end - px,
                       m->b.height,
                       m->lrpad / 2,
-                      runner_buf,
+                      runner_buffer,
                       0);
-            tx = px + m->lrpad / 2 + drwl_font_getwidth(m->drw, runner_buf);
+            tx = px + m->lrpad / 2 + drwl_font_getwidth(m->drw, runner_buffer);
 
             /* the caret tracks the cursor, which need not be at the end of
              * the text; measure just the part before it */
-            save = runner_buf[runner_cur];
-            runner_buf[runner_cur] = '\0';
-            cx = px + m->lrpad / 2 + drwl_font_getwidth(m->drw, runner_buf);
-            runner_buf[runner_cur] = save;
+            save = runner_buffer[runner_cursor];
+            runner_buffer[runner_cursor] = '\0';
+            cx = px + m->lrpad / 2 + drwl_font_getwidth(m->drw, runner_buffer);
+            runner_buffer[runner_cursor] = save;
 
             if (cx + cw <= end)
-                drawpill(m,
-                         cx,
-                         boxy,
-                         cw,
-                         fh - 2 * boxs,
-                         cw / 2.0,
-                         0,
-                         colors[SchemeRunner][ColFg]);
+                bar_draw_pill(m,
+                              cx,
+                              boxy,
+                              cw,
+                              fh - 2 * boxs,
+                              cw / 2.0,
+                              0,
+                              colors[SchemeRunner][ColFg]);
             tx += cw;
 
             drwl_setscheme(m->drw, colors[SchemeRunnerSuggest]);
-            if (!runner_len && *runner_placeholder && tx < end) {
+            if (!runner_length && *runner_placeholder && tx < end) {
                 drwl_text(m->drw,
                           tx,
                           0,
@@ -646,7 +657,8 @@ void drawbar(Monitor* m)
                           0);
             } else if (!runner_max_candidates && sug &&
                        (size_t)qlen < strlen(sug) &&
-                       !strncmp(sug, runner_buf + runner_len - qlen, qlen) &&
+                       !strncmp(
+                           sug, runner_buffer + runner_length - qlen, qlen) &&
                        tx < end) {
                 drwl_text(
                     m->drw, tx, 0, end - tx, m->b.height, 0, sug + qlen, 0);
@@ -656,30 +668,32 @@ void drawbar(Monitor* m)
                  * appended rather than spliced in. */
                 double calcval;
                 char calcbuf[48];
-                if (runnercalc(&calcval)) {
+                if (runner_calc(&calcval)) {
                     memcpy(calcbuf, "= ", 2);
-                    runnercalcformat(calcbuf + 2, sizeof calcbuf - 2, calcval);
+                    runner_calc_format(
+                        calcbuf + 2, sizeof calcbuf - 2, calcval);
                     drwl_text(
                         m->drw, tx, 0, end - tx, m->b.height, 0, calcbuf, 0);
                 }
             }
-            if (runner_max_candidates && runnercandidates())
-                drawcandidates(m, tx + m->lrpad / 2, end);
+            if (runner_max_candidates && runner_candidate_count())
+                bar_draw_candidates(m, tx + m->lrpad / 2, end);
         } else {
             /* A notification takes the box over for as long as it lasts, so the
-             * window title (if barwintitle is on) steps aside and comes back
-             * once the notification expires or is dismissed. */
+             * window title (if bar_window_title is on) steps aside and comes
+             * back once the notification expires or is dismissed. */
             long hist = -1;
-            const Notification* n =
-                shownotifications && sel ? notifyshown(&hist) : nullptr;
+            const Notification* n = notifications_enabled && sel
+                                        ? bar_notification_shown(&hist)
+                                        : nullptr;
             if (n) {
-                drawnotify(m, x, w, n, hist);
-            } else if (barwintitle && c) {
-                drawbartitle(m, c, x, w, sel, 0);
+                bar_draw_notification(m, x, w, n, hist);
+            } else if (bar_window_title && c) {
+                bar_draw_window_title(m, c, x, w, sel, 0);
                 if (c->isprivate &&
-                    (share = sharebuf(m->sharepool, w, m->b.height))) {
+                    (share = bar_share_buffer(m->sharepool, w, m->b.height))) {
                     drwl_setimage(m->drw, share->image);
-                    drawbartitle(m, c, 0, w, sel, 1);
+                    bar_draw_window_title(m, c, 0, w, sel, 1);
                     drwl_setimage(m->drw, buf->image);
                     wlr_buffer_unlock(&share->base);
                     m->sharex = x;
@@ -706,48 +720,49 @@ void drawbar(Monitor* m)
                                  traywidth,
                                  m->b.height);
 
-    cornercut(buf->data, m->b.width, m->b.height, r);
+    corner_cut(buf->data, m->b.width, m->b.height, r);
 
-    wlr_scene_buffer_set_opacity(m->scene_buffer, decoopacity());
+    wlr_scene_buffer_set_opacity(m->scene_buffer,
+                                 opacity_decorations_current());
     wlr_scene_buffer_set_dest_size(
         m->scene_buffer, m->b.real_width, m->b.real_height);
     wlr_scene_node_set_position(
         &m->scene_buffer->node,
-        m->m.x + (int)barpadding,
-        m->m.y + (topbar ? (int)barpadding
-                         : m->m.height - m->b.real_height - (int)barpadding));
+        m->m.x + (int)bar_padding,
+        m->m.y + (bar_top ? (int)bar_padding
+                          : m->m.height - m->b.real_height - (int)bar_padding));
     wlr_scene_buffer_set_buffer(m->scene_buffer, &buf->base);
     wlr_buffer_unlock(&buf->base);
 #ifdef INTEGRATED_BACKGROUND
-    blurbar(m);
+    opacity_blur_bar(m);
 #endif
 }
 
 /* whether the bar on m shows the status text */
-int statusshown(Monitor* m)
+int bar_status_shown(Monitor* m)
 {
-    if (barstatus == BarStatusMain)
-        return m == mainmon();
-    if (barstatus == BarStatusFocus)
-        return barsinglemon || m == selmon;
+    if (bar_status == BarStatusMain)
+        return m == bar_main_monitor();
+    if (bar_status == BarStatusFocus)
+        return bar_single_monitor || m == selected_monitor;
     return 1;
 }
 
-void drawbars(void)
+void bar_draw_all(void)
 {
     Monitor* m = nullptr;
 
-    wl_list_for_each(m, &mons, link) drawbar(m);
+    wl_list_for_each(m, &monitors, link) bar_draw(m);
 }
 
-/* Redraws the bar that shows what selmon is up to, which barsinglemon can
- * keep on another monitor entirely. */
-void drawselbar(void)
+/* Redraws the bar that shows what selected_monitor is up to, which
+ * bar_single_monitor can keep on another monitor entirely. */
+void bar_draw_selected(void)
 {
-    Monitor* m = barmonitor();
+    Monitor* m = bar_monitor();
 
     if (m)
-        drawbar(m);
+        bar_draw(m);
 }
 
 /* One escape at p: ^c#RRGGBB^ and ^b#RRGGBB^ set the foreground and the
@@ -756,7 +771,7 @@ void drawselbar(void)
  * (1 left, 2 right, 3 middle, 4/5 wheel up/down; ^s!^ is 1) and ^e^ closes
  * it. Returns the bytes it takes, and applies a colour to scm when that is
  * given; zero means p does not start one. */
-static int statusescape(const char* p, uint32_t* scm)
+static int bar_status_escape(const char* p, uint32_t* scm)
 {
     static constexpr char hex[] = "0123456789abcdef";
     const char* d;
@@ -803,10 +818,10 @@ static int statusescape(const char* p, uint32_t* scm)
 /* Draws the status text one colour run at a time, and returns its width
  * without the escapes. With render off it only measures, which is what
  * places the box before there is anything to draw in it. */
-int drawstatus(Monitor* m, const char* text, int x, int w, int render)
+int bar_draw_status(Monitor* m, const char* text, int x, int w, int render)
 {
     uint32_t scm[3];
-    char seg[sizeof(stext)];
+    char seg[sizeof(bar_status_text)];
     const char* p = text;
     int total = 0, sw, len, xend = x + w;
     size_t n;
@@ -830,7 +845,7 @@ int drawstatus(Monitor* m, const char* text, int x, int w, int render)
                     p += 2;
                     continue;
                 }
-                if (statusescape(p, nullptr))
+                if (bar_status_escape(p, nullptr))
                     break;
             }
             seg[n++] = *p++;
@@ -847,7 +862,7 @@ int drawstatus(Monitor* m, const char* text, int x, int w, int render)
             x += sw;
         }
 
-        if ((len = statusescape(p, scm)))
+        if ((len = bar_status_escape(p, scm)))
             p += len;
     }
 
@@ -855,15 +870,15 @@ int drawstatus(Monitor* m, const char* text, int x, int w, int render)
 }
 
 /* Copies into cmd the command for button at x pixels into the status text.
- * Must walk the text the same way drawstatus() does. */
-static int statusarea(Monitor* m,
-                      const char* text,
-                      int x,
-                      int button,
-                      char* cmd,
-                      size_t sz)
+ * Must walk the text the same way bar_draw_status() does. */
+static int bar_status_area(Monitor* m,
+                           const char* text,
+                           int x,
+                           int button,
+                           char* cmd,
+                           size_t sz)
 {
-    char seg[sizeof(stext)];
+    char seg[sizeof(bar_status_text)];
     const char* p = text;
     const char* area[STATUS_BUTTONS] = {};
     int sx = 0, len;
@@ -877,7 +892,7 @@ static int statusarea(Monitor* m,
                     p += 2;
                     continue;
                 }
-                if (statusescape(p, nullptr))
+                if (bar_status_escape(p, nullptr))
                     break;
             }
             seg[n++] = *p++;
@@ -896,7 +911,7 @@ static int statusarea(Monitor* m,
             return 1;
         }
 
-        if ((len = statusescape(p, nullptr))) {
+        if ((len = bar_status_escape(p, nullptr))) {
             if (p[1] == 's' && p[2] == '!')
                 area[0] = p + 3;
             else if (p[1] == 's')
@@ -909,95 +924,101 @@ static int statusarea(Monitor* m,
     return 0;
 }
 
-static int statuscmd(Monitor* pm, int x, int button, char* cmd, size_t sz)
+static int bar_status_command(Monitor* pm,
+                              int x,
+                              int button,
+                              char* cmd,
+                              size_t sz)
 {
-    return pm && statusshown(pm) && button >= 1 && button <= STATUS_BUTTONS &&
-           statusarea(pm, stext, x, button, cmd, sz);
+    return pm && bar_status_shown(pm) && button >= 1 &&
+           button <= STATUS_BUTTONS &&
+           bar_status_area(pm, bar_status_text, x, button, cmd, sz);
 }
 
-static void statusrun(char* cmd)
+static void bar_status_run(char* cmd)
 {
     char* argv[] = { "/bin/sh", "-c", cmd, nullptr };
 
     spawn(&(Arg){ .v = argv });
 }
 
-int statusclick(Monitor* pm, int x, int button)
+int bar_status_click(Monitor* pm, int x, int button)
 {
-    char cmd[sizeof(stext)];
+    char cmd[sizeof(bar_status_text)];
 
-    if (!statuscmd(pm, x, button, cmd, sizeof(cmd)))
+    if (!bar_status_command(pm, x, button, cmd, sizeof(cmd)))
         return 0;
-    statusrun(cmd);
+    bar_status_run(cmd);
     return 1;
 }
 
-int statusscroll(Monitor* pm, int x, double delta)
+int bar_status_scroll(Monitor* pm, int x, double delta)
 {
     /* a mouse notch is 15; touchpads send it in slices */
     constexpr double notch = 15;
     static double acc;
-    char cmd[sizeof(stext)];
+    char cmd[sizeof(bar_status_text)];
 
-    if (delta == 0 || !statuscmd(pm, x, delta < 0 ? 4 : 5, cmd, sizeof(cmd)))
+    if (delta == 0 ||
+        !bar_status_command(pm, x, delta < 0 ? 4 : 5, cmd, sizeof(cmd)))
         return 0;
     if ((acc < 0) != (delta < 0))
         acc = 0;
     for (acc += delta; acc >= notch; acc -= notch)
-        statusrun(cmd);
+        bar_status_run(cmd);
     for (; acc <= -notch; acc += notch)
-        statusrun(cmd);
+        bar_status_run(cmd);
     return 1;
 }
 
-static void traynotify(void* data)
+static void bar_tray_notify(void* data)
 {
-    drawbar((Monitor*)data);
+    bar_draw((Monitor*)data);
 }
 
-void trayactivate(const Arg* arg)
+void bar_tray_activate(const Arg* arg)
 {
-    Monitor* m = barmonitor(); /* the tray belongs to the bar clicked */
+    Monitor* m = bar_monitor(); /* the tray belongs to the bar clicked */
 
     if (!m)
         return;
-    tray_leftclicked(m->tray, arg->ui);
+    tray_left_clicked(m->tray, arg->ui);
 }
 
-void traymenu(const Arg* arg)
+void bar_tray_menu(const Arg* arg)
 {
-    Monitor* m = barmonitor();
+    Monitor* m = bar_monitor();
 
     if (!m)
         return;
-    tray_rightclicked(m->tray, arg->ui, traypopup_present);
+    tray_right_clicked(m->tray, arg->ui, traypopup_present);
 }
 
 /* the top tab, or the focused client */
-static int titlesel(Client* c)
+static int bar_title_selected(Client* c)
 {
     Monitor* m = c->mon;
 
-    return c == (m->lt[m->sellt]->arrange == tabbed && !c->isfloating
-                     ? tabtop(m)
-                     : focustop(m));
+    return c == (m->lt[m->sellt]->arrange == layout_tabbed && !c->isfloating
+                     ? layout_tab_top(m)
+                     : client_top(m));
 }
 
 /* x of the close button, w without one */
-static int titleclosex(Client* c, int w, int* d)
+static int bar_title_close_x(Client* c, int w, int* d)
 {
     Monitor* m = c->mon;
     int x;
 
     *d = MAX(m->drw->font->height * 3 / 5, 4);
-    if (!titleclose)
+    if (!title_close)
         return w;
     x = w - m->lrpad / 2 - *d;
     return x > w / 2 ? x : w;
 }
 
 /* draws the title bar of c into buf */
-static void painttitle(Client* c, Buffer* buf, int share)
+static void bar_paint_title_bar(Client* c, Buffer* buf, int share)
 {
     Monitor* m = c->mon;
     const char* title;
@@ -1005,63 +1026,63 @@ static void painttitle(Client* c, Buffer* buf, int share)
     int sel, scheme, tab, end, lead, tw, d, fd, pd, dots;
     uint32_t fg, pc;
 
-    sel = titlesel(c);
+    sel = bar_title_selected(c);
     scheme = sel ? SchemeTitleSel : SchemeTitle;
-    tab = m->lt[m->sellt]->arrange == tabbed && !c->isfloating &&
+    tab = m->lt[m->sellt]->arrange == layout_tabbed && !c->isfloating &&
           c->titlew < c->geom.width - 2 * (int)c->bw;
     fg = colors[scheme][ColFg];
-    title = share ? sharetitle(c) : client_get_title(c);
-    end = titleclosex(c, w, &d);
+    title = share ? privacy_share_title(c) : client_get_title(c);
+    end = bar_title_close_x(c, w, &d);
     fd = MAX(m->drw->font->height / 3, 3);
 
-    pd = privatedot(c, &pc);
+    pd = bar_private_dot(c, &pc);
     dots = !!c->isfloating + pd;
     lead = m->lrpad / 2 + dots * (fd + m->lrpad / 3);
-    if (titlecenter) {
+    if (title_center) {
         tw = (int)drwl_font_getwidth(m->drw, title);
         lead = MAX(MIN((w - tw) / 2, end - m->lrpad / 2 - tw), lead);
     }
 
     drwl_setimage(m->drw, buf->image);
-    drwl_setscheme(m->drw, share ? opaquescheme(scheme) : colors[scheme]);
+    drwl_setscheme(m->drw, share ? bar_opaque_scheme(scheme) : colors[scheme]);
     drwl_rect(m->drw, 0, 0, w, h, 1, 1);
     if (end > lead)
         drwl_text(m->drw, 0, 0, end, h, lead, title, 0);
 
     if (pd)
-        drawpill(m,
-                 lead - fd - m->lrpad / 3,
-                 (h - fd) / 2,
-                 fd,
-                 fd,
-                 privateradius(fd),
-                 0,
-                 pc);
+        bar_draw_pill(m,
+                      lead - fd - m->lrpad / 3,
+                      (h - fd) / 2,
+                      fd,
+                      fd,
+                      bar_private_radius(fd),
+                      0,
+                      pc);
     if (c->isfloating)
-        drawpill(m,
-                 lead - dots * (fd + m->lrpad / 3),
-                 (h - fd) / 2,
-                 fd,
-                 fd,
-                 fd / 2.0,
-                 0,
-                 fg);
+        bar_draw_pill(m,
+                      lead - dots * (fd + m->lrpad / 3),
+                      (h - fd) / 2,
+                      fd,
+                      fd,
+                      fd / 2.0,
+                      0,
+                      fg);
     if (tab && c->titlex)
-        drawpill(m,
-                 0,
-                 h / 4,
-                 (int)MAX(m->wlr_output->scale, 1),
-                 h - h / 2,
-                 0,
-                 0,
-                 fade(colors[SchemeTitle][ColFg]));
-    if (end < w && c == hovered)
-        drawpill(m, end, (h - d) / 2, d, d, d / 2.0, 0, titleclosecolor);
+        bar_draw_pill(m,
+                      0,
+                      h / 4,
+                      (int)MAX(m->wlr_output->scale, 1),
+                      h - h / 2,
+                      0,
+                      0,
+                      bar_fade(colors[SchemeTitle][ColFg]));
+    if (end < w && c == bar_hovered)
+        bar_draw_pill(m, end, (h - d) / 2, d, d, d / 2.0, 0, title_close_color);
 }
 
 /* Renders the client's own title bar. In the tabbed layout every client of the
  * group shares one row, so these end up drawn side by side as tabs. */
-static void drawtitle(Client* c)
+static void bar_draw_title_bar(Client* c)
 {
     Monitor* m = c->mon;
     Buffer *buf, *share;
@@ -1069,8 +1090,8 @@ static void drawtitle(Client* c)
 
     if (!c->title)
         return;
-    settitle(c);
-    if (!m || !titlebar || c->isfullscreen || c->titlew <= 0 ||
+    bar_place_title_bar(c);
+    if (!m || !title_bar || c->isfullscreen || c->titlew <= 0 ||
         !c->scene->node.enabled) {
         wlr_scene_node_set_enabled(&c->title->node, 0);
         return;
@@ -1079,25 +1100,25 @@ static void drawtitle(Client* c)
     w = (int)((float)c->titlew * m->wlr_output->scale);
     h = m->t.height;
     if (w != c->titlebufw) {
-        bufpooldrop(c->titlepool, LENGTH(c->titlepool));
+        buffer_pool_drop(c->titlepool, LENGTH(c->titlepool));
         c->titlebufw = w;
     }
-    if (!(buf = bufget(c->titlepool, LENGTH(c->titlepool), w, h)))
+    if (!(buf = buffer_get(c->titlepool, LENGTH(c->titlepool), w, h)))
         return;
-    painttitle(c, buf, 0);
-    if (c->isprivate && (share = sharebuf(c->sharepool, w, h))) {
-        painttitle(c, share, 1);
+    bar_paint_title_bar(c, buf, 0);
+    if (c->isprivate && (share = bar_share_buffer(c->sharepool, w, h))) {
+        bar_paint_title_bar(c, share, 1);
         wlr_buffer_unlock(&share->base);
     }
 
     wlr_scene_node_set_enabled(&c->title->node, 1);
-    wlr_scene_buffer_set_opacity(c->title, decoopacity());
+    wlr_scene_buffer_set_opacity(c->title, opacity_decorations_current());
     wlr_scene_buffer_set_buffer(c->title, &buf->base);
     wlr_buffer_unlock(&buf->base);
 }
 
 /* whether (x, y) is on c's close button */
-static int onclose(Client* c, double x, double y)
+static int bar_on_close_button(Client* c, double x, double y)
 {
     Monitor* m = c->mon;
     int bx, d;
@@ -1107,13 +1128,13 @@ static int onclose(Client* c, double x, double y)
         return 0;
     lx = (x - c->geom.x - c->bw - c->titlex) * m->wlr_output->scale;
     ly = (y - c->geom.y - c->bw) * m->wlr_output->scale;
-    bx = titleclosex(c, c->titlebufw, &d);
+    bx = bar_title_close_x(c, c->titlebufw, &d);
     return bx < c->titlebufw && ly >= 0 && ly < m->t.height &&
            lx >= bx - m->lrpad / 2 && lx < c->titlebufw;
 }
 
 /* whether (x, y) is on c's title bar */
-int ontitle(Client* c, double x, double y)
+int bar_on_title_bar(Client* c, double x, double y)
 {
     Monitor* m = c->mon;
     double lx, ly;
@@ -1125,37 +1146,39 @@ int ontitle(Client* c, double x, double y)
     return lx >= 0 && lx < c->titlebufw && ly >= 0 && ly < m->t.height;
 }
 
-int titleclick(Client* c, double x, double y)
+int bar_title_click(Client* c, double x, double y)
 {
-    if (onclose(c, x, y))
+    if (bar_on_close_button(c, x, y))
         client_send_close(c);
-    else if (ontitle(c, x, y))
-        titlegrab(c);
+    else if (bar_on_title_bar(c, x, y))
+        input_title_grab(c);
     else
         return 0;
     return 1;
 }
 
-void titlehover(Client* c, double x, double y)
+void bar_title_hover(Client* c, double x, double y)
 {
-    Client *h = c && onclose(c, x, y) ? c : nullptr, *old = hovered, *w;
+    Client *h = c && bar_on_close_button(c, x, y) ? c : nullptr,
+           *old = bar_hovered, *w;
 
     if (h == old)
         return;
-    hovered = h;
+    bar_hovered = h;
     /* old may be gone */
-    wl_list_for_each(w, &clients, link) if (w == old || w == h) drawtitle(w);
+    wl_list_for_each(w, &clients, link) if (w == old || w == h)
+        bar_draw_title_bar(w);
 }
 
 /* Background and text. drwl_text() paints its own background, so a progress
  * fill is drawn by calling this twice under different clips. */
-static void drawnotifytext(Monitor* m,
-                           const NotifyBox* b,
-                           int x,
-                           int w,
-                           const Notification* n,
-                           const char* text,
-                           uint32_t* scm)
+static void bar_draw_notification_text(Monitor* m,
+                                       const NotifyBox* b,
+                                       int x,
+                                       int w,
+                                       const Notification* n,
+                                       const char* text,
+                                       uint32_t* scm)
 {
     char buf[NOTIFY_TEXTMAX];
     size_t k, i;
@@ -1172,9 +1195,9 @@ static void drawnotifytext(Monitor* m,
                       m->b.height,
                       m->lrpad / 2,
                       n->act[i].label,
-                      (long)i == notifypicksel);
+                      (long)i == bar_notification_pick_selected);
         if (b->chip0 || b->chip0 + b->nchip < n->nact) {
-            aw = (int)drwl_font_getwidth(m->drw, notifymore);
+            aw = (int)drwl_font_getwidth(m->drw, bar_notification_more);
             if (aw <= b->textw)
                 drwl_text(m->drw,
                           b->textx + b->textw - aw,
@@ -1182,7 +1205,7 @@ static void drawnotifytext(Monitor* m,
                           aw,
                           m->b.height,
                           0,
-                          notifymore,
+                          bar_notification_more,
                           0);
         }
     } else if (b->textw > 0 &&
@@ -1190,8 +1213,8 @@ static void drawnotifytext(Monitor* m,
         drwl_text(m->drw, b->textx, 0, b->textw, m->b.height, 0, text, 0);
     } else if (b->textw > 0) {
         /* our own › instead of drwl's …, which covers the last codepoint */
-        aw = (int)drwl_font_getwidth(m->drw, notifymore);
-        k = fitprefix(m, text, b->textw - aw);
+        aw = (int)drwl_font_getwidth(m->drw, bar_notification_more);
+        k = bar_fit_prefix(m, text, b->textw - aw);
         memcpy(buf, text, k);
         buf[k] = '\0';
         if (k)
@@ -1204,7 +1227,7 @@ static void drawnotifytext(Monitor* m,
                       aw,
                       m->b.height,
                       0,
-                      notifymore,
+                      bar_notification_more,
                       0);
     }
     if (b->signw)
@@ -1214,18 +1237,18 @@ static void drawnotifytext(Monitor* m,
                   b->signw,
                   m->b.height,
                   0,
-                  notification_actionsign,
+                  notification_action_sign,
                   0);
     if (b->countw)
         drwl_text(m->drw, b->countx, 0, b->countw, m->b.height, 0, b->count, 0);
 }
 
 /* hist is its history index, -1 for the live one */
-static void drawnotify(Monitor* m,
-                       int x,
-                       int w,
-                       const Notification* n,
-                       long hist)
+static void bar_draw_notification(Monitor* m,
+                                  int x,
+                                  int w,
+                                  const Notification* n,
+                                  long hist)
 {
     int scheme = n->urgency == UrgencyLow        ? SchemeNotifyLow
                  : n->urgency == UrgencyCritical ? SchemeNotifyCrit
@@ -1240,14 +1263,16 @@ static void drawnotify(Monitor* m,
     pixman_region32_t clip;
     NotifyBox b;
 
-    notifysync(n, hist);
-    notifypicking();
-    notifyboxx = x;
-    notifybox(m, n, hist, x, w, &b);
-    text = n->text + (notifyoff < strlen(n->text) ? notifyoff : 0);
+    bar_notification_sync(n, hist);
+    bar_notification_picking();
+    bar_notification_box_x = x;
+    bar_notification_box(m, n, hist, x, w, &b);
+    text = n->text + (bar_notification_offset < strlen(n->text)
+                          ? bar_notification_offset
+                          : 0);
 
     if (n->value < 0) {
-        drawnotifytext(m, &b, x, w, n, text, colors[scheme]);
+        bar_draw_notification_text(m, &b, x, w, n, text, colors[scheme]);
     } else {
         /* the fill's background is premixed: a tint drawn over would dye the
          * text too */
@@ -1262,12 +1287,12 @@ static void drawnotify(Monitor* m,
         pixman_region32_init_rect(&clip, x, 0, (unsigned int)fw, m->b.height);
         pixman_image_set_clip_region32(m->drw->image, &clip);
         pixman_region32_fini(&clip);
-        drawnotifytext(m, &b, x, w, n, text, filled);
+        bar_draw_notification_text(m, &b, x, w, n, text, filled);
         pixman_region32_init_rect(
             &clip, x + fw, 0, (unsigned int)(w - fw), m->b.height);
         pixman_image_set_clip_region32(m->drw->image, &clip);
         pixman_region32_fini(&clip);
-        drawnotifytext(m, &b, x, w, n, text, colors[scheme]);
+        bar_draw_notification_text(m, &b, x, w, n, text, colors[scheme]);
         pixman_region32_init_rect(&clip, 0, 0, m->b.width, m->b.height);
         pixman_image_set_clip_region32(m->drw->image, &clip);
         pixman_region32_fini(&clip);
@@ -1288,14 +1313,14 @@ static void drawnotify(Monitor* m,
         if (hist >= 0)
             line = (line & ~0xffu) | (line & 0xffu) / 2;
         top = (m->b.height - full) / 2;
-        drawpill(m,
-                 b.linex,
-                 top + full - len,
-                 b.linew,
-                 len,
-                 notification_lineradius * m->wlr_output->scale,
-                 0,
-                 line);
+        bar_draw_pill(m,
+                      b.linex,
+                      top + full - len,
+                      b.linew,
+                      len,
+                      notification_line_radius * m->wlr_output->scale,
+                      0,
+                      line);
     }
 
     if (b.iconw) {
@@ -1323,19 +1348,20 @@ static void drawnotify(Monitor* m,
         pixman_image_set_transform(img, nullptr);
     }
 
-    if (notifyviewid) {
-        end = notifyview_ms + notification_timeout * 1000;
+    if (bar_notification_view_id) {
+        end = bar_notification_view_ms + notification_timeout * 1000;
         left = end > now ? end - now : 1;
         wake = !wake || left < wake ? left : wake;
     }
-    if (wake && !notifytimer)
-        notifytimer = wl_event_loop_add_timer(event_loop, notifytick, nullptr);
-    if (notifytimer)
-        wl_event_source_timer_update(notifytimer, (int)wake);
+    if (wake && !bar_notification_timer)
+        bar_notification_timer =
+            wl_event_loop_add_timer(event_loop, bar_notification_tick, nullptr);
+    if (bar_notification_timer)
+        wl_event_source_timer_update(bar_notification_timer, (int)wake);
 }
 
 /* bytes of s, cut on a codepoint, that fit in w */
-static size_t fitprefix(Monitor* m, const char* s, int w)
+static size_t bar_fit_prefix(Monitor* m, const char* s, int w)
 {
     size_t cut[NOTIFY_TEXTMAX], ncut = 0, len = strlen(s), i, lo, hi, mid;
     char buf[NOTIFY_TEXTMAX];
@@ -1359,12 +1385,12 @@ static size_t fitprefix(Monitor* m, const char* s, int w)
 }
 
 /* Shared by drawing, scrolling and hit testing so they always agree. */
-static void notifybox(Monitor* m,
-                      const Notification* n,
-                      long hist,
-                      int x,
-                      int w,
-                      NotifyBox* b)
+static void bar_notification_box(Monitor* m,
+                                 const Notification* n,
+                                 long hist,
+                                 int x,
+                                 int w,
+                                 NotifyBox* b)
 {
     int pad = m->lrpad / 2, size = m->drw->font->height, cx, end, iw, ih;
     int picking;
@@ -1372,10 +1398,10 @@ static void notifybox(Monitor* m,
 
     *b = (NotifyBox){};
     cx = x + pad;
-    if (notification_linewidth) {
+    if (notification_line_width) {
         b->linex = cx;
         b->linew =
-            (int)roundf((float)notification_linewidth * m->wlr_output->scale);
+            (int)roundf((float)notification_line_width * m->wlr_output->scale);
         b->linew = b->linew > 0 ? b->linew : 1;
         cx += b->linew + pad;
     }
@@ -1391,8 +1417,11 @@ static void notifybox(Monitor* m,
     }
 
     if (hist >= 0)
-        snprintf(
-            b->count, sizeof(b->count), "%ld/%zu", hist + 1, notify_histlen());
+        snprintf(b->count,
+                 sizeof(b->count),
+                 "%ld/%zu",
+                 hist + 1,
+                 notify_history_length());
     else if (notify_queued())
         snprintf(b->count, sizeof(b->count), "+%zu", notify_queued());
     end = x + w - pad;
@@ -1401,9 +1430,10 @@ static void notifybox(Monitor* m,
         b->countx = end - b->countw;
         end = b->countx - pad;
     }
-    picking = hist < 0 && notifypicksel >= 0 && n->id == notifypickid;
-    if (hist < 0 && n->nact && !picking && *notification_actionsign) {
-        b->signw = (int)drwl_font_getwidth(m->drw, notification_actionsign);
+    picking = hist < 0 && bar_notification_pick_selected >= 0 &&
+              n->id == bar_notification_pick_id;
+    if (hist < 0 && n->nact && !picking && *notification_action_sign) {
+        b->signw = (int)drwl_font_getwidth(m->drw, notification_action_sign);
         b->signx = end - b->signw;
         end = b->signx - pad;
     }
@@ -1423,387 +1453,398 @@ static void notifybox(Monitor* m,
             cx += b->chipw[i] + pad;
         }
         b->nchip = i - b->chip0;
-        if (i > (size_t)notifypicksel || b->chip0 >= (size_t)notifypicksel)
+        if (i > (size_t)bar_notification_pick_selected ||
+            b->chip0 >= (size_t)bar_notification_pick_selected)
             break;
     }
 }
 
 /* id 0 goes back to the live notification */
-static void notifybrowse(dbus_uint32_t id)
+static void bar_notification_browse(dbus_uint32_t id)
 {
-    notifyviewid = id;
-    notifyview_ms = notify_now();
-    drawbars();
+    bar_notification_view_id = id;
+    bar_notification_view_ms = notify_now();
+    bar_draw_all();
 }
 
 /* The history entry being viewed (its index in *hist) or the live one
  * (*hist -1). Also ends the view on timeout or when a new one comes in. */
-static const Notification* notifyshown(long* hist)
+static const Notification* bar_notification_shown(long* hist)
 {
     const Notification *cur = notify_current(), *n;
     size_t i;
 
     if (!cur) {
-        notifyliveid = 0;
-    } else if (cur->id != notifyliveid) {
-        notifyliveid = cur->id;
-        notifyviewid = 0;
+        bar_notification_live_id = 0;
+    } else if (cur->id != bar_notification_live_id) {
+        bar_notification_live_id = cur->id;
+        bar_notification_view_id = 0;
     }
-    if (notifyviewid &&
-        (notifypicksel >= 0 ||
-         notify_now() >= notifyview_ms + notification_timeout * 1000))
-        notifyviewid = 0;
+    if (bar_notification_view_id &&
+        (bar_notification_pick_selected >= 0 ||
+         notify_now() >=
+             bar_notification_view_ms + notification_timeout * 1000))
+        bar_notification_view_id = 0;
 
-    for (i = 0; notifyviewid && (n = notify_history(i)); i++)
-        if (n->id == notifyviewid) {
+    for (i = 0; bar_notification_view_id && (n = notify_history(i)); i++)
+        if (n->id == bar_notification_view_id) {
             *hist = (long)i;
             return n;
         }
-    notifyviewid = 0;
+    bar_notification_view_id = 0;
     *hist = -1;
     return cur;
 }
 
 /* Reset the scroll offset for another notification, or when this one got
  * shorter than where we'd scrolled to. */
-static void notifysync(const Notification* n, long hist)
+static void bar_notification_sync(const Notification* n, long hist)
 {
-    if (!n || notifyshownid != n->id || notifyshownhist != (hist >= 0) ||
-        notifyoff >= strlen(n->text)) {
-        notifyshownid = n ? n->id : 0;
-        notifyshownhist = hist >= 0;
-        notifyoff = 0;
+    if (!n || bar_notification_shown_id != n->id ||
+        bar_notification_shown_history != (hist >= 0) ||
+        bar_notification_offset >= strlen(n->text)) {
+        bar_notification_shown_id = n ? n->id : 0;
+        bar_notification_shown_history = hist >= 0;
+        bar_notification_offset = 0;
     }
 }
 
-static int notifytick(void*)
+static int bar_notification_tick(void*)
 {
-    drawselbar();
+    bar_draw_selected();
     return 0;
 }
 
-void notifyfini(void)
+void bar_notification_finish(void)
 {
-    if (notifytimer)
-        wl_event_source_remove(notifytimer);
-    notifytimer = nullptr;
+    if (bar_notification_timer)
+        wl_event_source_remove(bar_notification_timer);
+    bar_notification_timer = nullptr;
 }
 
 /* Also closes the picker once its notification is gone or has no actions. */
-int notifypicking(void)
+int bar_notification_picking(void)
 {
     const Notification* cur;
 
-    if (notifypicksel < 0)
+    if (bar_notification_pick_selected < 0)
         return 0;
     cur = notify_current();
-    if (!cur || cur->id != notifypickid || !cur->nact) {
-        notifypickclose();
+    if (!cur || cur->id != bar_notification_pick_id || !cur->nact) {
+        bar_notification_pick_close();
         return 0;
     }
-    if ((size_t)notifypicksel >= cur->nact) /* updated with fewer */
-        notifypicksel = (long)cur->nact - 1;
+    if ((size_t)bar_notification_pick_selected >=
+        cur->nact) /* updated with fewer */
+        bar_notification_pick_selected = (long)cur->nact - 1;
     return 1;
 }
 
-static void notifypickclose(void)
+static void bar_notification_pick_close(void)
 {
-    notifypicksel = -1;
+    bar_notification_pick_selected = -1;
     notify_hold(0);
 }
 
-static void notifypickrun(size_t i)
+static void bar_notification_pick_run(size_t i)
 {
-    notifypicksel = -1;
+    bar_notification_pick_selected = -1;
     notify_action(i); /* releases the hold */
-    drawbars();
+    bar_draw_all();
 }
 
-/* Toggles the picker; while open it owns the keyboard (notifypickkey()). */
-void notifyactions(const Arg*)
+/* Toggles the picker; while open it owns the keyboard
+ * (bar_notification_pick_key()). */
+void bar_notification_actions(const Arg*)
 {
     const Notification* cur;
 
-    if (!shownotifications)
+    if (!notifications_enabled)
         return;
-    if (notifypicking()) {
-        notifypickclose();
+    if (bar_notification_picking()) {
+        bar_notification_pick_close();
     } else if ((cur = notify_current()) && cur->nact) {
-        notifyviewid = 0;
-        notifypicksel = 0;
-        notifypickid = cur->id;
+        bar_notification_view_id = 0;
+        bar_notification_pick_selected = 0;
+        bar_notification_pick_id = cur->id;
         notify_hold(1);
     } else {
         return;
     }
-    drawbars();
+    bar_draw_all();
 }
 
 /* left/right, h/l or Tab move, Return or space runs, 1-9 run directly,
  * Escape closes */
-void notifypickkey(xkb_keysym_t sym)
+void bar_notification_pick_key(xkb_keysym_t sym)
 {
     const Notification* cur;
     long n;
 
-    if (!notifypicking() || !(cur = notify_current()))
+    if (!bar_notification_picking() || !(cur = notify_current()))
         return;
     n = (long)cur->nact;
     switch (sym) {
         case XKB_KEY_Left:
         case XKB_KEY_h:
         case XKB_KEY_ISO_Left_Tab:
-            notifypicksel = (notifypicksel + n - 1) % n;
+            bar_notification_pick_selected =
+                (bar_notification_pick_selected + n - 1) % n;
             break;
         case XKB_KEY_Right:
         case XKB_KEY_l:
         case XKB_KEY_Tab:
-            notifypicksel = (notifypicksel + 1) % n;
+            bar_notification_pick_selected =
+                (bar_notification_pick_selected + 1) % n;
             break;
         case XKB_KEY_Return:
         case XKB_KEY_KP_Enter:
         case XKB_KEY_space:
-            notifypickrun((size_t)notifypicksel);
+            bar_notification_pick_run((size_t)bar_notification_pick_selected);
             return;
         case XKB_KEY_Escape:
-            notifypickclose();
+            bar_notification_pick_close();
             break;
         default:
             if (sym >= XKB_KEY_1 && sym <= XKB_KEY_9 &&
                 (long)(sym - XKB_KEY_1) < n)
-                notifypickrun((size_t)(sym - XKB_KEY_1));
+                bar_notification_pick_run((size_t)(sym - XKB_KEY_1));
             return;
     }
-    drawbars();
+    bar_draw_all();
 }
 
 /* Scrolls the notification on by one screenful, wrapping to the start once
  * the tail has been shown. */
-void notifyscroll(const Arg*)
+void bar_notification_scroll(const Arg*)
 {
     /* the box is measured on the monitor the bar is drawn on */
-    Monitor* m = barmonitor();
+    Monitor* m = bar_monitor();
     const Notification* n;
     const char* text;
     NotifyBox b;
     long hist;
     size_t len, off, good;
 
-    if (!shownotifications || !m || !m->b.titlew || !(n = notifyshown(&hist)))
+    if (!notifications_enabled || !m || !m->b.titlew ||
+        !(n = bar_notification_shown(&hist)))
         return;
-    notifysync(n, hist);
+    bar_notification_sync(n, hist);
     if (hist >= 0)
-        notifyview_ms = notify_now();
-    notifybox(m, n, hist, 0, m->b.titlew, &b);
+        bar_notification_view_ms = notify_now();
+    bar_notification_box(m, n, hist, 0, m->b.titlew, &b);
 
     text = n->text;
     len = strlen(text);
-    off = notifyoff < len ? notifyoff : 0;
+    off = bar_notification_offset < len ? bar_notification_offset : 0;
     if (b.textw <= 0 ||
         (int)drwl_font_getwidth(m->drw, text + off) <= b.textw) {
-        notifyoff = 0;
-        drawbars();
+        bar_notification_offset = 0;
+        bar_draw_all();
         return;
     }
 
     /* on from what was shown, which left room for the › */
-    good =
-        off + fitprefix(m,
-                        text + off,
-                        b.textw - (int)drwl_font_getwidth(m->drw, notifymore));
+    good = off + bar_fit_prefix(m,
+                                text + off,
+                                b.textw - (int)drwl_font_getwidth(
+                                              m->drw, bar_notification_more));
     if (good == off) {
         /* not even one codepoint fits: force progress anyway */
         good = off + 1;
         while (good < len && (text[good] & 0xC0) == 0x80)
             good++;
     }
-    notifyoff = good < len ? good : 0;
-    drawbars();
+    bar_notification_offset = good < len ? good : 0;
+    bar_draw_all();
 }
 
-void notifyprev(const Arg*)
+void bar_notification_prev(const Arg*)
 {
     const Notification* h;
     long hist;
 
-    if (!shownotifications)
+    if (!notifications_enabled)
         return;
-    notifyshown(&hist);
+    bar_notification_shown(&hist);
     if ((h = notify_history((size_t)(hist + 1))))
-        notifybrowse(h->id);
+        bar_notification_browse(h->id);
     else if (hist >= 0) /* the oldest: just refresh the timeout */
-        notifybrowse(notifyviewid);
+        bar_notification_browse(bar_notification_view_id);
 }
 
 /* One step forward; on the live one, dismisses it for the next queued. */
-void notifynext(const Arg*)
+void bar_notification_next(const Arg*)
 {
     long hist;
 
-    if (!shownotifications)
+    if (!notifications_enabled)
         return;
-    notifyshown(&hist);
+    bar_notification_shown(&hist);
     if (hist > 0)
-        notifybrowse(notify_history((size_t)hist - 1)->id);
+        bar_notification_browse(notify_history((size_t)hist - 1)->id);
     else if (hist == 0)
-        notifybrowse(0);
+        bar_notification_browse(0);
     else
         notify_dismiss();
 }
 
 /* Puts the notification away early, giving the box back to the window title.
  * On a history entry, forgets it; with the picker open, closes the picker. */
-void notifydismiss(const Arg*)
+void bar_notification_dismiss(const Arg*)
 {
     const Notification* h;
     long hist;
 
-    if (!shownotifications)
+    if (!notifications_enabled)
         return;
-    if (notifypicking()) {
-        notifypickclose();
-        drawbars();
+    if (bar_notification_picking()) {
+        bar_notification_pick_close();
+        bar_draw_all();
         return;
     }
-    notifyshown(&hist);
+    bar_notification_shown(&hist);
     if (hist < 0) {
         notify_dismiss();
         return;
     }
-    notify_histremove((size_t)hist);
+    notify_history_remove((size_t)hist);
     if ((h = notify_history((size_t)hist)) ||
         (h = hist ? notify_history((size_t)hist - 1) : nullptr))
-        notifybrowse(h->id);
+        bar_notification_browse(h->id);
     else
-        notifybrowse(0);
+        bar_notification_browse(0);
 }
 
 /* The live and queued ones go to the history. */
-void notifydismissall(const Arg*)
+void bar_notification_dismiss_all(const Arg*)
 {
-    int browsing = notifyviewid != 0;
+    int browsing = bar_notification_view_id != 0;
 
-    if (!shownotifications)
+    if (!notifications_enabled)
         return;
-    notifyviewid = 0;
-    notify_dismissall();
+    bar_notification_view_id = 0;
+    notify_dismiss_all();
     if (browsing)
-        drawbars();
+        bar_draw_all();
 }
 
 /* Opens the notification: sends its default action and focuses the
  * sender's window, since it can't raise itself. From the pointer (arg->ui is
  * x + 1) a click on the action sign opens the picker, and with the picker
  * open a click runs the action under it or closes the picker. */
-void notifyopen(const Arg* arg)
+void bar_notification_open(const Arg* arg)
 {
     const Notification* n;
     const char* id;
-    Monitor* m = barmonitor();
+    Monitor* m = bar_monitor();
     NotifyBox b;
     Client* c;
     long hist, px = arg && arg->ui ? (long)arg->ui - 1 : -1;
     size_t i;
 
-    if (!shownotifications || !(n = notifyshown(&hist)))
+    if (!notifications_enabled || !(n = bar_notification_shown(&hist)))
         return;
     if (px >= 0 && m && hist < 0) {
-        notifybox(m, n, hist, notifyboxx, m->b.titlew, &b);
-        if (notifypicking()) {
+        bar_notification_box(
+            m, n, hist, bar_notification_box_x, m->b.titlew, &b);
+        if (bar_notification_picking()) {
             for (i = b.chip0; i < b.chip0 + b.nchip; i++)
                 if (px >= b.chipx[i] && px < b.chipx[i] + b.chipw[i]) {
-                    notifypickrun(i);
+                    bar_notification_pick_run(i);
                     return;
                 }
-            notifypickclose();
-            drawbars();
+            bar_notification_pick_close();
+            bar_draw_all();
             return;
         }
         if (b.signw && px >= b.signx - m->lrpad / 2 &&
             px < b.signx + b.signw + m->lrpad / 2) {
-            notifyactions(nullptr);
+            bar_notification_actions(nullptr);
             return;
         }
     }
     wl_list_for_each(c, &clients, link)
     {
-        id = client_get_appid(c);
+        id = client_get_app_id(c);
         if (!c->mon || client_is_unmanaged(c) ||
             (strcasecmp(id, n->app) &&
              (!*n->desktop || strcasecmp(id, n->desktop))))
             continue;
-        selmon = c->mon;
+        selected_monitor = c->mon;
         if (!VISIBLEON(c, c->mon))
-            view(&(Arg){ .ui = c->tags });
-        focusclient(c, 1);
+            layout_view(&(Arg){ .ui = c->tags });
+        client_focus(c, 1);
         break;
     }
     if (hist < 0) {
         notify_invoke();
     } else {
-        notifyviewid = 0;
-        drawbars();
+        bar_notification_view_id = 0;
+        bar_draw_all();
     }
 }
 
 /* Vertical walks the history (or the picker), horizontal scrolls the text.
  * Returns whether the wheel was consumed. */
-int notifywheel(Monitor* pm, double delta, int horizontal)
+int bar_notification_wheel(Monitor* pm, double delta, int horizontal)
 {
     /* a mouse notch is 15; touchpads send it in slices */
     constexpr double notch = 15;
     constexpr double step = 5;
     static double acc, hacc;
-    Monitor* m = barmonitor();
+    Monitor* m = bar_monitor();
     const Notification* n;
     const char* text;
     NotifyBox b;
     long hist;
 
-    if (!shownotifications || !m || m != pm || !m->b.titlew)
+    if (!notifications_enabled || !m || m != pm || !m->b.titlew)
         return 0;
-    n = notifyshown(&hist);
+    n = bar_notification_shown(&hist);
 
-    if (!horizontal && notifypicking()) {
+    if (!horizontal && bar_notification_picking()) {
         for (acc += delta; acc >= notch; acc -= notch)
-            notifypickkey(XKB_KEY_Right);
+            bar_notification_pick_key(XKB_KEY_Right);
         for (; acc <= -notch; acc += notch)
-            notifypickkey(XKB_KEY_Left);
+            bar_notification_pick_key(XKB_KEY_Left);
         return 1;
     }
     if (!horizontal) {
-        if (!n && !notify_histlen())
+        if (!n && !notify_history_length())
             return 0;
         for (acc += delta; acc >= notch; acc -= notch)
-            notifynext(nullptr);
+            bar_notification_next(nullptr);
         for (; acc <= -notch; acc += notch)
-            notifyprev(nullptr);
+            bar_notification_prev(nullptr);
         return 1;
     }
 
     if (!n)
         return 0;
-    notifysync(n, hist);
+    bar_notification_sync(n, hist);
     if (hist >= 0)
-        notifyview_ms = notify_now();
-    notifybox(m, n, hist, 0, m->b.titlew, &b);
+        bar_notification_view_ms = notify_now();
+    bar_notification_box(m, n, hist, 0, m->b.titlew, &b);
     text = n->text;
     for (hacc += delta; hacc >= step; hacc -= step)
-        if ((int)drwl_font_getwidth(m->drw, text + notifyoff) > b.textw)
+        if ((int)drwl_font_getwidth(m->drw, text + bar_notification_offset) >
+            b.textw)
             do
-                notifyoff++;
-            while ((text[notifyoff] & 0xC0) == 0x80);
+                bar_notification_offset++;
+            while ((text[bar_notification_offset] & 0xC0) == 0x80);
     for (; hacc <= -step; hacc += step)
-        while (notifyoff && (text[--notifyoff] & 0xC0) == 0x80)
+        while (bar_notification_offset &&
+               (text[--bar_notification_offset] & 0xC0) == 0x80)
             ;
-    drawbars();
+    bar_draw_all();
     return 1;
 }
 
 /* Sizes and places the client's title bar. It spans the whole window, except
  * in the tabbed layout where each client of the group only gets its own slice
  * of the shared row - which is what turns the title bars into tabs. */
-void settitle(Client* c)
+void bar_place_title_bar(Client* c)
 {
     Monitor* m = c->mon;
     Client* w;
@@ -1813,7 +1854,7 @@ void settitle(Client* c)
         return;
 
     tw = c->geom.width - 2 * (int)c->bw;
-    if (m->lt[m->sellt]->arrange == tabbed && !c->isfloating &&
+    if (m->lt[m->sellt]->arrange == layout_tabbed && !c->isfloating &&
         !c->isfullscreen) {
         wl_list_for_each(w, &clients, link)
         {
@@ -1832,15 +1873,15 @@ void settitle(Client* c)
     c->titlex = x;
     c->titlew = tw;
     wlr_scene_node_set_position(&c->title->node, (int)c->bw + x, (int)c->bw);
-    wlr_scene_buffer_set_dest_size(c->title, MAX(tw, 1), titleheight(c));
+    wlr_scene_buffer_set_dest_size(c->title, MAX(tw, 1), bar_title_height(c));
 }
 
-int titleheight(Client* c)
+int bar_title_height(Client* c)
 {
-    return titlebar && c->mon && !c->isfullscreen ? c->mon->t.real_height : 0;
+    return title_bar && c->mon && !c->isfullscreen ? c->mon->t.real_height : 0;
 }
 
-int statusin(int fd, unsigned int mask, void*)
+int bar_handle_status_input(int fd, unsigned int mask, void*)
 {
     static char buf[STATUS_MAX];
     static size_t len;
@@ -1849,9 +1890,9 @@ int statusin(int fd, unsigned int mask, void*)
     ssize_t n;
 
     if (mask & WL_EVENT_ERROR)
-        die("status in event error");
+        util_die("status in event error");
     if (mask & WL_EVENT_HANGUP) {
-        stopstatus();
+        bar_status_stop();
         return 0;
     }
 
@@ -1859,13 +1900,13 @@ int statusin(int fd, unsigned int mask, void*)
     if (n < 0) {
         if (errno == EWOULDBLOCK || errno == EAGAIN || errno == EINTR)
             return 0;
-        die("read:");
+        util_die("read:");
     }
     /* EOF: the status process is gone. The fd stays readable forever, so
      * keeping the source alive would spin the event loop at full speed and
      * starve rendering and input. */
     if (n == 0) {
-        stopstatus();
+        bar_status_stop();
         return 0;
     }
 
@@ -1879,8 +1920,8 @@ int statusin(int fd, unsigned int mask, void*)
             line = p;
     }
     if (line) {
-        snprintf(stext, sizeof(stext), "%s", line);
-        drawbars();
+        snprintf(bar_status_text, sizeof(bar_status_text), "%s", line);
+        bar_draw_all();
     }
 
     /* keep the start of the next line */
@@ -1895,7 +1936,7 @@ int statusin(int fd, unsigned int mask, void*)
 }
 
 /* Detach the bar status text from stdin, for good. */
-static void stopstatus(void)
+static void bar_status_stop(void)
 {
     if (!status_event_source)
         return;
@@ -1904,44 +1945,44 @@ static void stopstatus(void)
     status_event_source = nullptr;
 }
 
-void togglebar(const Arg*)
+void bar_toggle(const Arg*)
 {
-    /* under barsinglemon this hides the one bar from any monitor */
-    Monitor* m = barmonitor();
+    /* under bar_single_monitor this hides the one bar from any monitor */
+    Monitor* m = bar_monitor();
 
     if (!m)
         return;
     wlr_scene_node_set_enabled(&m->scene_buffer->node,
                                !m->scene_buffer->node.enabled);
-    arrangelayers(m);
-    drawbars();
+    monitor_arrange_layers(m);
+    bar_draw_all();
 }
 
-/* arrange() leaves floating clients alone, and no client redraws a title
+/* layout_arrange() leaves floating clients alone, and no client redraws a title
  * bar, so both are done by hand here */
-void toggletitlebar(const Arg*)
+void bar_toggle_title_bars(const Arg*)
 {
     Monitor* m;
     Client* c;
 
-    titlebar = !titlebar;
+    title_bar = !title_bar;
 
-    wl_list_for_each(m, &mons, link) arrange(m);
+    wl_list_for_each(m, &monitors, link) layout_arrange(m);
     wl_list_for_each(c, &clients, link)
     {
         if (c->mon && c->isfloating && !c->isfullscreen)
-            resize(c, c->geom, 1);
+            client_resize(c, c->geom, 1);
     }
-    drawbars();
+    bar_draw_all();
 
-    wl_list_for_each(m, &mons, link)
+    wl_list_for_each(m, &monitors, link)
     {
         if (m->wlr_output->enabled)
             wlr_output_schedule_frame(m->wlr_output);
     }
 }
 
-void updatebar(Monitor* m)
+void bar_update(Monitor* m)
 {
     int rw, rh;
     char fontattrs[12];
@@ -1950,13 +1991,13 @@ void updatebar(Monitor* m)
     wlr_output_transformed_resolution(m->wlr_output, &rw, &rh);
     /* the bar is narrower than the output by its padding on both sides */
     m->b.width =
-        MAX(1, rw - 2 * (int)roundf((float)barpadding * m->wlr_output->scale));
+        MAX(1, rw - 2 * (int)roundf((float)bar_padding * m->wlr_output->scale));
     m->b.real_width = (int)((float)m->b.width / m->wlr_output->scale);
 
-    wlr_scene_node_set_enabled(&m->scene_buffer->node, barvisible(m));
+    wlr_scene_node_set_enabled(&m->scene_buffer->node, bar_visible(m));
 
-    bufpooldrop(m->pool, LENGTH(m->pool));
-    bufpooldrop(m->sharepool, LENGTH(m->sharepool));
+    buffer_pool_drop(m->pool, LENGTH(m->pool));
+    buffer_pool_drop(m->sharepool, LENGTH(m->sharepool));
 
     if (m->b.scale == m->wlr_output->scale && m->drw)
         return;
@@ -1964,41 +2005,41 @@ void updatebar(Monitor* m)
     drwl_font_destroy(m->drw->font);
     snprintf(
         fontattrs, sizeof(fontattrs), "dpi=%.2f", 96. * m->wlr_output->scale);
-    if (!(drwl_font_create(m->drw, nfonts, fonts, fontattrs)))
-        die("Could not load font");
+    if (!(drwl_font_create(m->drw, font_count, fonts, fontattrs)))
+        util_die("Could not load font");
 
     m->b.scale = m->wlr_output->scale;
     m->lrpad = m->drw->font->height;
     /* the automatic height follows the font, which is loaded at the output's
-     * dpi, so barheight scales it the same on every monitor */
+     * dpi, so bar_height scales it the same on every monitor */
     m->b.height = m->drw->font->height + 2;
-    if (barheight > 0)
-        m->b.height = MAX((int)((float)m->b.height * barheight + 0.5f),
+    if (bar_height > 0)
+        m->b.height = MAX((int)((float)m->b.height * bar_height + 0.5f),
                           m->drw->font->height);
     m->b.real_height = (int)((float)m->b.height / m->wlr_output->scale);
-    m->t.height = m->drw->font->height + (int)titlepadding;
+    m->t.height = m->drw->font->height + (int)title_padding;
     m->t.real_height = (int)((float)m->t.height / m->wlr_output->scale);
 
-    if (showbar && showsystray && watcher.running) {
+    if (bar_enabled && systray_enabled && tray_watcher.running) {
         if (m->tray)
-            destroytray(m->tray);
-        /* systrayiconsize is unscaled, like cursor_size; 0 fills the bar */
-        iconsize = systrayiconsize
-                       ? (int)((float)systrayiconsize * m->wlr_output->scale)
+            tray_destroy(m->tray);
+        /* systray_icon_size is unscaled, like cursor_size; 0 fills the bar */
+        iconsize = systray_icon_size
+                       ? (int)((float)systray_icon_size * m->wlr_output->scale)
                        : m->b.height;
         m->tray =
-            createtray(m,
-                       m->b.height,
-                       MIN(iconsize, m->b.height),
-                       (int)((float)systrayspacing * m->wlr_output->scale),
-                       (int)((float)systraypadding * m->wlr_output->scale),
-                       colors[SchemeNorm],
-                       fonts,
-                       fontattrs,
-                       &traynotify,
-                       &watcher);
+            tray_create(m,
+                        m->b.height,
+                        MIN(iconsize, m->b.height),
+                        (int)((float)systray_spacing * m->wlr_output->scale),
+                        (int)((float)systray_padding * m->wlr_output->scale),
+                        colors[SchemeNorm],
+                        fonts,
+                        fontattrs,
+                        &bar_tray_notify,
+                        &tray_watcher);
         if (!m->tray)
-            die("Couldn't create tray for monitor");
-        wl_list_insert(&watcher.trays, &m->tray->link);
+            util_die("Couldn't create tray for monitor");
+        wl_list_insert(&tray_watcher.trays, &m->tray->link);
     }
 }

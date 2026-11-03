@@ -32,23 +32,23 @@ typedef struct {
     struct wl_list link;
 } Tray;
 
-[[nodiscard]] Tray* createtray(void* monitor,
-                               int height,
-                               int iconsize,
-                               int spacing,
-                               int padding,
-                               uint32_t* colorscheme,
-                               const char** fonts,
-                               const char* fontattrs,
-                               TrayNotifyCb cb,
-                               Watcher* watcher);
-void destroytray(Tray* tray);
+[[nodiscard]] Tray* tray_create(void* monitor,
+                                int height,
+                                int iconsize,
+                                int spacing,
+                                int padding,
+                                uint32_t* colorscheme,
+                                const char** fonts,
+                                const char* fontattrs,
+                                TrayNotifyCb cb,
+                                Watcher* watcher);
+void tray_destroy(Tray* tray);
 
 int tray_get_width(const Tray* tray);
 int tray_get_icon_width(const Tray* tray);
 unsigned int tray_index_at(const Tray* tray, double x);
 void tray_update(Tray* tray);
-void tray_leftclicked(Tray* tray, unsigned int index);
-void tray_rightclicked(Tray* tray, unsigned int index, MenuPresentFn present);
+void tray_left_clicked(Tray* tray, unsigned int index);
+void tray_right_clicked(Tray* tray, unsigned int index, MenuPresentFn present);
 
 #endif

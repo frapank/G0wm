@@ -44,10 +44,10 @@ typedef struct Item {
     struct wl_list link;
 } Item;
 
-[[nodiscard]] Item* createitem(const char* busname,
-                               const char* busobj,
-                               Watcher* watcher);
-void destroyitem(Item* item);
+[[nodiscard]] Item* item_create(const char* busname,
+                                const char* busobj,
+                                Watcher* watcher);
+void item_destroy(Item* item);
 
 void item_activate(Item* item);
 void item_show_menu(Item* item);

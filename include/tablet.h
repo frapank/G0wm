@@ -13,24 +13,25 @@
 #include <wlr/types/wlr_tablet_v2.h>
 #include <wlr/types/wlr_touch.h>
 
-void createtablet(struct wlr_tablet* wlr_tablet);
-void createtabletpad(struct wlr_tablet_pad* wlr_pad);
-void createtouch(struct wlr_touch* wlr_touch);
-int hastouch(void);
-void padkeyboardfocus(struct wl_listener* listener, void* data);
-void tabletaxis(struct wl_listener* listener, void* data);
-void tabletbutton(struct wl_listener* listener, void* data);
-void tabletproximity(struct wl_listener* listener, void* data);
-void tabletremap(void);
-void tablettip(struct wl_listener* listener, void* data);
-int toolfocusedby(struct wlr_tablet_v2_tablet_tool* tool,
-                  struct wlr_seat_client* client);
-void touchcancel(struct wl_listener* listener, void* data);
-void touchdown(struct wl_listener* listener, void* data);
-void touchframe(struct wl_listener* listener, void* data);
-void touchmotion(struct wl_listener* listener, void* data);
-void touchup(struct wl_listener* listener, void* data);
+void tablet_create(struct wlr_tablet* wlr_tablet);
+void tablet_create_pad(struct wlr_tablet_pad* wlr_pad);
+void tablet_create_touch(struct wlr_touch* wlr_touch);
+int tablet_has_touch(void);
+void tablet_handle_keyboard_focus_change(struct wl_listener* listener,
+                                         void* data);
+void tablet_handle_axis(struct wl_listener* listener, void* data);
+void tablet_handle_button(struct wl_listener* listener, void* data);
+void tablet_handle_proximity(struct wl_listener* listener, void* data);
+void tablet_remap(void);
+void tablet_handle_tip(struct wl_listener* listener, void* data);
+int tablet_tool_focused_by(struct wlr_tablet_v2_tablet_tool* tool,
+                           struct wlr_seat_client* client);
+void tablet_handle_touch_cancel(struct wl_listener* listener, void* data);
+void tablet_handle_touch_down(struct wl_listener* listener, void* data);
+void tablet_handle_touch_frame(struct wl_listener* listener, void* data);
+void tablet_handle_touch_motion(struct wl_listener* listener, void* data);
+void tablet_handle_touch_up(struct wl_listener* listener, void* data);
 
-extern struct wlr_tablet_manager_v2* tablet_mgr;
+extern struct wlr_tablet_manager_v2* tablet_manager;
 
 #endif

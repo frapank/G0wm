@@ -9,9 +9,11 @@
 
 #include <stddef.h>
 
-[[noreturn, gnu::format(printf, 1, 2)]] void die(const char* fmt, ...);
-[[nodiscard]] void* ecalloc(size_t nmemb, size_t size);
-[[nodiscard]] int fd_set_nonblock(int fd);
-[[nodiscard]] size_t putcp(char* dst, size_t room, unsigned long cp);
+[[noreturn, gnu::format(printf, 1, 2)]] void util_die(const char* fmt, ...);
+[[nodiscard]] void* util_calloc(size_t nmemb, size_t size);
+[[nodiscard]] int util_set_nonblock(int fd);
+[[nodiscard]] size_t util_put_codepoint(char* dst,
+                                        size_t room,
+                                        unsigned long cp);
 
 #endif

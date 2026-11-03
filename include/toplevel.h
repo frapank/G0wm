@@ -10,10 +10,11 @@
 
 #include "g0wm.h"
 
-void capturetoplevel(struct wl_listener* listener, void* data);
-void toplevelfocus(Client* c);
-void toplevelmap(Client* c);
-void toplevelunmap(Client* c);
-void toplevelupdate(Client* c);
+void toplevel_handle_new_capture_request(struct wl_listener* listener,
+                                         void* data);
+void toplevel_focus(Client* c);
+void toplevel_map(Client* c);
+void toplevel_unmap(Client* c);
+void toplevel_update(Client* c);
 
 #endif

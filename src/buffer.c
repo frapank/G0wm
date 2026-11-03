@@ -20,24 +20,24 @@
 #include "util.h"
 
 /* function declarations */
-static bool bufdatabegin(struct wlr_buffer* buffer,
-                         uint32_t flags,
-                         void** data,
-                         uint32_t* format,
-                         size_t* stride);
-static void bufdataend(struct wlr_buffer* buffer);
-static void bufdestroy(struct wlr_buffer* buffer);
-static void bufrelease(struct wl_listener* listener, void* data);
+static bool buffer_begin_data_access(struct wlr_buffer* buffer,
+                                     uint32_t flags,
+                                     void** data,
+                                     uint32_t* format,
+                                     size_t* stride);
+static void buffer_end_data_access(struct wlr_buffer* buffer);
+static void buffer_destroy(struct wlr_buffer* buffer);
+static void buffer_handle_release(struct wl_listener* listener, void* data);
 
 /* variables */
 static const struct wlr_buffer_impl buffer_impl = {
-    .destroy = bufdestroy,
-    .begin_data_ptr_access = bufdatabegin,
-    .end_data_ptr_access = bufdataend,
+    .destroy = buffer_destroy,
+    .begin_data_ptr_access = buffer_begin_data_access,
+    .end_data_ptr_access = buffer_end_data_access,
 };
 
 /* function implementations */
-static void bufdestroy(struct wlr_buffer* wlr_buffer)
+static void buffer_destroy(struct wlr_buffer* wlr_buffer)
 {
     Buffer* buf = wl_container_of(wlr_buffer, buf, base);
     if (buf->busy)
@@ -46,11 +46,11 @@ static void bufdestroy(struct wlr_buffer* wlr_buffer)
     free(buf);
 }
 
-static bool bufdatabegin(struct wlr_buffer* wlr_buffer,
-                         uint32_t flags,
-                         void** data,
-                         uint32_t* format,
-                         size_t* stride)
+static bool buffer_begin_data_access(struct wlr_buffer* wlr_buffer,
+                                     uint32_t flags,
+                                     void** data,
+                                     uint32_t* format,
+                                     size_t* stride)
 {
     Buffer* buf = wl_container_of(wlr_buffer, buf, base);
 
@@ -64,11 +64,11 @@ static bool bufdatabegin(struct wlr_buffer* wlr_buffer,
     return true;
 }
 
-static void bufdataend(struct wlr_buffer*) {}
+static void buffer_end_data_access(struct wlr_buffer*) {}
 
 /* Grabs a free width*height buffer from pool, allocating it on first use. The
  * bar and every client's title bar own a pool, as their sizes differ. */
-Buffer* bufget(Buffer** pool, size_t poollen, int width, int height)
+Buffer* buffer_get(Buffer** pool, size_t poollen, int width, int height)
 {
     size_t i, len;
     Buffer* buf = nullptr;
@@ -84,7 +84,7 @@ Buffer* bufget(Buffer** pool, size_t poollen, int width, int height)
         if (ckd_mul(&len, (size_t)width, (size_t)height) ||
             ckd_mul(&len, len, 4) || ckd_add(&len, len, sizeof(Buffer)))
             return nullptr;
-        buf = ecalloc(1, len);
+        buf = util_calloc(1, len);
         buf->image = drwl_image_create(nullptr, width, height, buf->data);
         wlr_buffer_init(&buf->base, &buffer_impl, width, height);
         pool[i] = buf;
@@ -94,12 +94,12 @@ Buffer* bufget(Buffer** pool, size_t poollen, int width, int height)
         return nullptr;
 
     buf->busy = true;
-    LISTEN(&buf->base.events.release, &buf->release, bufrelease);
+    LISTEN(&buf->base.events.release, &buf->release, buffer_handle_release);
     wlr_buffer_lock(&buf->base);
     return buf;
 }
 
-void bufpooldrop(Buffer** pool, size_t poollen)
+void buffer_pool_drop(Buffer** pool, size_t poollen)
 {
     size_t i;
 
@@ -110,7 +110,7 @@ void bufpooldrop(Buffer** pool, size_t poollen)
         }
 }
 
-static void bufrelease(struct wl_listener* listener, void*)
+static void buffer_handle_release(struct wl_listener* listener, void*)
 {
     Buffer* buf = wl_container_of(listener, buf, release);
     buf->busy = false;

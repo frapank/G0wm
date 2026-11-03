@@ -15,26 +15,26 @@ typedef struct {
     void (*arrange)(Monitor*);
 } Layout;
 
-void arrange(Monitor* m);
-void focusstack(const Arg* arg);
-void incnmaster(const Arg* arg);
-void movestack(const Arg* arg);
-void resizeheight(const Arg* arg);
-void resizewidth(const Arg* arg);
-void setlayout(const Arg* arg);
-void setmfact(const Arg* arg);
-void shifttag(const Arg* arg);
-void shiftview(const Arg* arg);
-void swapclients(Client* a, Client* b);
-void tabbed(Monitor* m);
-Client* tabtop(Monitor* m);
-void tag(const Arg* arg);
-void tile(Monitor* m);
-void togglegaps(const Arg* arg);
-void toggletabbed(const Arg* arg);
-void toggletag(const Arg* arg);
-void toggleview(const Arg* arg);
-void view(const Arg* arg);
-void zoom(const Arg* arg);
+void layout_arrange(Monitor* m);
+void layout_focus_stack(const Arg* arg);
+void layout_inc_master(const Arg* arg);
+void layout_move_stack(const Arg* arg);
+void layout_resize_height(const Arg* arg);
+void layout_resize_width(const Arg* arg);
+void layout_set(const Arg* arg);
+void layout_set_master_factor(const Arg* arg);
+void layout_shift_tag(const Arg* arg);
+void layout_shift_view(const Arg* arg);
+void layout_swap_clients(Client* a, Client* b);
+void layout_tabbed(Monitor* m);
+Client* layout_tab_top(Monitor* m);
+void layout_tag(const Arg* arg);
+void layout_tile(Monitor* m);
+void layout_toggle_gaps(const Arg* arg);
+void layout_toggle_tabbed(const Arg* arg);
+void layout_toggle_tag(const Arg* arg);
+void layout_toggle_view(const Arg* arg);
+void layout_view(const Arg* arg);
+void layout_zoom(const Arg* arg);
 
 #endif

@@ -10,11 +10,11 @@
 
 #include "g0wm.h"
 
-int barcorner(Monitor* m);
-unsigned int borderwidth(void);
-void cornerclear(uint32_t* px, int w, int h, int r);
-void cornercut(uint32_t* px, int w, int h, int r);
-int cornerradius(Client* c);
-void drawcorners(Client* c);
+int corner_bar_radius(Monitor* m);
+unsigned int corner_border_width(void);
+void corner_clear(uint32_t* px, int w, int h, int r);
+void corner_cut(uint32_t* px, int w, int h, int r);
+int corner_client_radius(Client* c);
+void corner_draw_all(Client* c);
 
 #endif

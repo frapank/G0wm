@@ -38,7 +38,7 @@ static Watcher* tray_get_watcher(const Tray* tray)
     return tray->watcher;
 }
 
-static pixman_image_t* createcanvas(int width, int height, int bgcolor)
+static pixman_image_t* tray_create_canvas(int width, int height, int bgcolor)
 {
     pixman_image_t *src, *dest;
     pixman_color_t bgcolor_pix = PIXMAN_COLOR(bgcolor);
@@ -62,7 +62,7 @@ void tray_update(Tray* tray)
     pixman_image_t *canvas = nullptr, *img;
 
     watcher = tray_get_watcher(tray);
-    n_items = watcher_get_n_items(watcher);
+    n_items = watcher_get_item_count(watcher);
 
     if (!n_items) {
         if (tray->image) {
@@ -79,7 +79,7 @@ void tray_update(Tray* tray)
     canvas_width = 2 * padding + n_items * icon_size + (n_items - 1) * spacing;
     canvas_height = tray->height;
 
-    canvas = createcanvas(canvas_width, canvas_height, tray->scheme[1]);
+    canvas = tray_create_canvas(canvas_width, canvas_height, tray->scheme[1]);
     if (!canvas)
         goto fail;
 
@@ -96,7 +96,7 @@ void tray_update(Tray* tray)
         if (item->icon) {
             /* Real icon */
             img = item->icon->img;
-            if (resize_image(img, icon_size, icon_size) < 0)
+            if (icon_resize_image(img, icon_size, icon_size) < 0)
                 goto fail;
             pixman_image_composite32(PIXMAN_OP_OVER,
                                      img,
@@ -121,7 +121,8 @@ void tray_update(Tray* tray)
             if (item->fallback_icon) {
                 g = item->fallback_icon;
             } else {
-                g = createfallbackicon(item->appid, item->fgcolor, tray->font);
+                g = icon_create_fallback(
+                    item->appid, item->fgcolor, tray->font);
                 if (!g)
                     goto fail;
                 item->fallback_icon = g;
@@ -161,7 +162,7 @@ fail:
     return;
 }
 
-void destroytray(Tray* tray)
+void tray_destroy(Tray* tray)
 {
     wl_list_remove(&tray->link);
     if (tray->image)
@@ -171,16 +172,16 @@ void destroytray(Tray* tray)
     free(tray);
 }
 
-Tray* createtray(void* monitor,
-                 int height,
-                 int iconsize,
-                 int spacing,
-                 int padding,
-                 uint32_t* colorscheme,
-                 const char** fonts,
-                 const char* fontattrs,
-                 TrayNotifyCb cb,
-                 Watcher* watcher)
+Tray* tray_create(void* monitor,
+                  int height,
+                  int iconsize,
+                  int spacing,
+                  int padding,
+                  uint32_t* colorscheme,
+                  const char** fonts,
+                  const char* fontattrs,
+                  TrayNotifyCb cb,
+                  Watcher* watcher)
 {
     Tray* tray = nullptr;
     char fontattrs_my[128];
@@ -236,7 +237,7 @@ unsigned int tray_index_at(const Tray* tray, double x)
 
     if (!tray)
         return 0;
-    n = watcher_get_n_items(tray_get_watcher(tray));
+    n = watcher_get_item_count(tray_get_watcher(tray));
     slot = tray->iconsize + tray->spacing;
     if (n < 2 || slot <= 0)
         return 0;
@@ -245,7 +246,7 @@ unsigned int tray_index_at(const Tray* tray, double x)
     return (unsigned int)MIN(MAX(i, 0), n - 1);
 }
 
-void tray_rightclicked(Tray* tray, unsigned int index, MenuPresentFn present)
+void tray_right_clicked(Tray* tray, unsigned int index, MenuPresentFn present)
 {
     Item* item;
     Watcher* watcher;
@@ -263,7 +264,7 @@ void tray_rightclicked(Tray* tray, unsigned int index, MenuPresentFn present)
     }
 }
 
-void tray_leftclicked(Tray* tray, unsigned int index)
+void tray_left_clicked(Tray* tray, unsigned int index)
 {
     Item* item;
     Watcher* watcher;

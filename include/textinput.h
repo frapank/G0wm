@@ -11,11 +11,12 @@
 
 #include "g0wm.h"
 
-void createinputmethod(struct wl_listener* listener, void* data);
-void createtextinput(struct wl_listener* listener, void* data);
-void textinputarrange(void);
-void textinputfocus(struct wl_listener* listener, void* data);
-int textinputkey(KeyboardGroup* group, struct wlr_keyboard_key_event* event);
-int textinputmodifiers(KeyboardGroup* group);
+void textinput_handle_new_input_method(struct wl_listener* listener,
+                                       void* data);
+void textinput_handle_new_text_input(struct wl_listener* listener, void* data);
+void textinput_arrange(void);
+void textinput_handle_focus_change(struct wl_listener* listener, void* data);
+int textinput_key(KeyboardGroup* group, struct wlr_keyboard_key_event* event);
+int textinput_modifiers(KeyboardGroup* group);
 
 #endif

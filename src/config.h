@@ -18,11 +18,11 @@
     }
 
 #define TAGKEYS(KEY, SKEY, TAG)                                                \
-    { MODKEY, KEY, view, { .ui = 1 << TAG } },                                 \
-        { MODKEY | WLR_MODIFIER_CTRL, KEY, toggleview, { .ui = 1 << TAG } },   \
-        { MODKEY | WLR_MODIFIER_SHIFT, SKEY, tag, { .ui = 1 << TAG } },        \
+    { MODKEY, KEY, layout_view, { .ui = 1 << TAG } },                                 \
+        { MODKEY | WLR_MODIFIER_CTRL, KEY, layout_toggle_view, { .ui = 1 << TAG } },   \
+        { MODKEY | WLR_MODIFIER_SHIFT, SKEY, layout_tag, { .ui = 1 << TAG } },        \
     {                                                                          \
-        MODKEY | WLR_MODIFIER_CTRL | WLR_MODIFIER_SHIFT, SKEY, toggletag,      \
+        MODKEY | WLR_MODIFIER_CTRL | WLR_MODIFIER_SHIFT, SKEY, layout_toggle_tag,      \
         {                                                                      \
             .ui = 1 << TAG                                                     \
         }                                                                      \
@@ -30,15 +30,15 @@
 
 #define CHVT(n)                                                                \
     {                                                                          \
-        WLR_MODIFIER_CTRL | WLR_MODIFIER_ALT, XKB_KEY_XF86Switch_VT_##n, chvt, \
+        WLR_MODIFIER_CTRL | WLR_MODIFIER_ALT, XKB_KEY_XF86Switch_VT_##n, change_vt, \
         {                                                                      \
             .ui = (n)                                                          \
         }                                                                      \
     }
 
-static const char* fonts_def[] = { "monospace:size=10" };
-const char** fonts = fonts_def;
-size_t nfonts      = LENGTH(fonts_def);
+static const char* default_fonts[] = { "monospace:size=10" };
+const char** fonts = default_fonts;
+size_t font_count      = LENGTH(default_fonts);
 
 /* fg, bg, border */
 uint32_t colors[NumSchemes][3] = {
@@ -62,46 +62,46 @@ uint32_t colors[NumSchemes][3] = {
     [SchemeRunnerIcon]    = { 0xffffffff, 0x2e2e2eff, 0x4a4a4aff },
 };
 
-float rootcolor[]     = COLOR(0x000000ff);
-float fullscreen_bg[] = { 0.0f, 0.0f, 0.0f, 1.0f };
+float root_color[]     = COLOR(0x000000ff);
+float fullscreen_color[] = { 0.0f, 0.0f, 0.0f, 1.0f };
 
 #ifdef INTEGRATED_BACKGROUND
 const char* wallpaper = ""; // empty for no wallpaper
 #endif
 
-static char* tags_def[] = { "1", "2", "3", "4", "5", "6", "7", "8", "9" };
-char** tags  = tags_def;
-size_t ntags = LENGTH(tags_def);
+static char* default_tags[] = { "1", "2", "3", "4", "5", "6", "7", "8", "9" };
+char** tags  = default_tags;
+size_t tag_count = LENGTH(default_tags);
 
-unsigned int borderpx = 1;
+unsigned int border_width = 1;
 
-int cornerstyle       = CornerNormal; // or CornerSquircle
-unsigned int cornerpx = 0;
+int corner_style       = CornerNormal; // or CornerSquircle
+unsigned int corner_radius = 0;
 
 int gaps                = 1;
-unsigned int gappx      = 3;
-int smartgaps           = 0;
+unsigned int gap_size      = 3;
+int smart_gaps           = 0;
 
-int titlebar              = 1;
-unsigned int titlepadding = 6;
-int titlecenter           = 1;
-int titleclose            = 1; // shown with the pointer over it
-uint32_t titleclosecolor  = 0xff5f57ff;
-uint32_t privatecolor     = 0x9b59f6ff;
-float privateround        = -1.0f;
-int alwaysprivate         = 0;
-uint32_t publiccolor      = 0x5bc8f5ff;
-const char* privatetitle  = "{app}";
+int title_bar              = 1;
+unsigned int title_padding = 6;
+int title_center           = 1;
+int title_close            = 1; // shown with the pointer over it
+uint32_t title_close_color  = 0xff5f57ff;
+uint32_t private_color     = 0x9b59f6ff;
+float private_round        = -1.0f;
+int always_private         = 0;
+uint32_t public_color      = 0x5bc8f5ff;
+const char* private_title  = "{app}";
 
-static Layout layouts_def[] = {
-    { "[ ]", tile },
-    { "|||", tabbed },
+static Layout default_layouts[] = {
+    { "[ ]", layout_tile },
+    { "|||", layout_tabbed },
 };
-Layout* layouts = layouts_def;
-size_t nlayouts = LENGTH(layouts_def);
+Layout* layouts = default_layouts;
+size_t layout_count = LENGTH(default_layouts);
 
 /* opacity 0 and private -1 keep the default, monitor -1 is the focused one */
-static Rule rules_def[] = {
+static Rule default_rules[] = {
     { .id              = "Placeholder",
       .title           = nullptr,
       .tags            = 0,
@@ -111,61 +111,61 @@ static Rule rules_def[] = {
       .opacity_unfocus = 0,
       .monitor         = -1 },
 };
-Rule* rules   = rules_def;
-size_t nrules = LENGTH(rules_def);
+Rule* rules   = default_rules;
+size_t rule_count = LENGTH(default_rules);
 
-int showbar     = 1;
-int topbar      = 1;
-int barwintitle = 0;
+int bar_enabled     = 1;
+int bar_top      = 1;
+int bar_window_title = 0;
 
-int bartagdots  = 1;
-unsigned int bartagdotsize = 0;
-unsigned int bartagdotgap  = 0;
-float bartagdotwidth       = 3.0f;
-float bartagdotround       = 1.0f;
-unsigned int barurgentpulse = 1200;
-int barltsymbol = 0;
+int bar_tag_dots  = 1;
+unsigned int bar_tag_dot_size = 0;
+unsigned int bar_tag_dot_gap  = 0;
+float bar_tag_dot_width       = 3.0f;
+float bar_tag_dot_round       = 1.0f;
+unsigned int bar_urgent_pulse = 1200;
+int bar_layout_symbol = 0;
 
-unsigned int barboxradius = 2;
-unsigned int barpadding   = 0;
-float barheight           = 1.1f; // times the font height, 0 for automatic
+unsigned int bar_box_radius = 2;
+unsigned int bar_padding   = 0;
+float bar_height           = 1.1f; // times the font height, 0 for automatic
 
-int barsinglemon = 0;
-int barstatus = BarStatusMain;
+int bar_single_monitor = 0;
+int bar_status = BarStatusMain;
 
-int showsystray              = 1;
-unsigned int systrayspacing  = 2;
-unsigned int systraypadding  = 2;
-unsigned int systrayiconsize = 16; // 0 fills the bar
+int systray_enabled              = 1;
+unsigned int systray_spacing  = 2;
+unsigned int systray_padding  = 2;
+unsigned int systray_icon_size = 16; // 0 fills the bar
 
-int shownotifications             = 1;
+int notifications_enabled             = 1;
 unsigned int notification_timeout = 5; // seconds
 
-unsigned int notification_linewidth  = 4;
-unsigned int notification_lineradius = 2;
+unsigned int notification_line_width  = 4;
+unsigned int notification_line_radius = 2;
 
-const char* notification_actionsign = "[r]";
+const char* notification_action_sign = "[r]";
 
 const char* runner_placeholder = "Run..."; // shown while nothing is typed
 unsigned int runner_max_candidates = 5;
-unsigned int runner_pillheight     = 1;
-unsigned int runner_pillpadding    = 1;
-float runner_pillround             = -1.0f;
+unsigned int runner_pill_height     = 1;
+unsigned int runner_pill_padding    = 1;
+float runner_pill_round             = -1.0f;
 int runner_fuzzy                   = 1;
 int runner_icons                   = RunnerIconsSelected;
-unsigned int runner_iconsize       = 0;
-float runner_iconround             = 0.4f;
-unsigned int runner_iconborder     = 1;
+unsigned int runner_icon_size       = 0;
+float runner_icon_round             = 0.4f;
+unsigned int runner_icon_border     = 1;
 unsigned int runner_history_size   = 100;
 const char* runner_shell           = "/bin/sh";
 const char* runner_terminal        = "foot";
-const char* runner_termprefix      = "!";
-const char* runner_runprefix       = "!!";
-const char* runner_calcprefix      = "=";
-const char* runner_searchprefix    = "?";
-const char* runner_searchurl       = "https://duckduckgo.com/?q=%s";
-const char* runner_windowprefix    = "@";
-const char* runner_tagprefix       = "#";
+const char* runner_terminal_prefix      = "!";
+const char* runner_run_prefix       = "!!";
+const char* runner_calc_prefix      = "=";
+const char* runner_search_prefix    = "?";
+const char* runner_search_url       = "https://duckduckgo.com/?q=%s";
+const char* runner_window_prefix    = "@";
+const char* runner_tag_prefix       = "#";
 int runner_files                   = 1;
 const char* runner_paths           = "";
 unsigned int runner_calc_precision = 10;
@@ -174,7 +174,7 @@ int opacity_enabled = 1;
 
 float opacity_focus   = 1.00f;
 float opacity_unfocus = 1.00f;
-float opacity_deco    = 1.00f; // bar, title bars and borders
+float opacity_decorations    = 1.00f; // bar, title bars and borders
 
 #ifdef INTEGRATED_BACKGROUND
 int opacity_type = OpacityNormal; // or OpacityBlur
@@ -186,12 +186,12 @@ float blur_brightness    = 1.00f;
 #endif
 
 /* the first matching name wins, keep the nullptr one last */
-static MonitorRule monrules_def[] = {
+static MonitorRule default_monitor_rules[] = {
     { .name    = nullptr,
       .mfact   = 0.55f,
       .nmaster = 1,
       .scale   = 1,
-      .lt      = &layouts_def[0],
+      .lt      = &default_layouts[0],
       .rr      = WL_OUTPUT_TRANSFORM_NORMAL,
       .x       = -1,
       .y       = -1,
@@ -199,13 +199,13 @@ static MonitorRule monrules_def[] = {
       .height  = 0,
       .refresh = 0 },
 };
-MonitorRule* monrules = monrules_def;
-size_t nmonrules      = LENGTH(monrules_def);
+MonitorRule* monitor_rules = default_monitor_rules;
+size_t monitor_rule_count      = LENGTH(default_monitor_rules);
 
-int sloppyfocus = 1;
+int sloppy_focus = 1;
 
-int movethreshold = 4;     // px dragged on a title before the window moves
-int movesnap      = 12;    // px at which a moved floating window sticks, 0 off
+int move_threshold = 4;     // px dragged on a title before the window moves
+int move_snap      = 12;    // px at which a moved floating window sticks, 0 off
 
 struct xkb_rule_names xkb_rules = {
     .options = nullptr,
@@ -243,73 +243,73 @@ enum libinput_config_accel_profile touchpad_accel_profile =
     LIBINPUT_CONFIG_ACCEL_PROFILE_ADAPTIVE;
 double touchpad_accel_speed = 0.0;
 
-enum libinput_config_tap_button_map button_map = LIBINPUT_CONFIG_TAP_MAP_LRM;
+enum libinput_config_tap_button_map tap_button_map = LIBINPUT_CONFIG_TAP_MAP_LRM;
 
 /* output names as wlr-randr shows them, nullptr for all of them */
 const char* tablet_output = nullptr;
 int tablet_left_handed    = 0; // buttons on the right
 const char* touch_output  = nullptr; // nullptr: the one udev reports
 
-static const char* termcmd[]        = { "foot", nullptr };
-static const char* filemanagercmd[] = { "thunar", nullptr };
-static const char* browsercmd[]     = { "firefox", nullptr };
+static const char* terminal_command[]        = { "foot", nullptr };
+static const char* file_manager_command[] = { "thunar", nullptr };
+static const char* browser_command[]     = { "firefox", nullptr };
 
 
 /* run without a shell */
-static const char* autostart_def[] = {
+static const char* default_autostart[] = {
     /* "example", "arg1", "arg2", nullptr, */
     nullptr
 };
-const char** autostart = autostart_def;
+const char** autostart = default_autostart;
 
-static Key keys_def[] = {
-	{ MODKEY,                    XKB_KEY_q,           spawn,            {.v = termcmd} },
-	{ MODKEY,                    XKB_KEY_f,           spawn,            {.v = filemanagercmd} },
-	{ MODKEY,                    XKB_KEY_b,           spawn,            {.v = browsercmd} },
+static Key default_keys[] = {
+	{ MODKEY,                    XKB_KEY_q,           spawn,            {.v = terminal_command} },
+	{ MODKEY,                    XKB_KEY_f,           spawn,            {.v = file_manager_command} },
+	{ MODKEY,                    XKB_KEY_b,           spawn,            {.v = browser_command} },
 	{ 0,                         XKB_KEY_Print,       spawn,            SHCMD("grim -g \"$(slurp)\" - | swappy -f -") },
-	{ MODKEY,                    XKB_KEY_c,           killclient,       {} },
-	{ MODKEY|WLR_MODIFIER_SHIFT, XKB_KEY_v,           togglefloating,   {} },
-	{ MODKEY|WLR_MODIFIER_SHIFT, XKB_KEY_p,           toggleprivate,    {} },
-	{ MODKEY|WLR_MODIFIER_SHIFT, XKB_KEY_g,           togglegaps,       {} },
-	{ MODKEY|WLR_MODIFIER_SHIFT, XKB_KEY_b,           togglebar,        {} },
-	{ MODKEY|WLR_MODIFIER_SHIFT, XKB_KEY_t,           toggletitlebar,   {} },
-	{ MODKEY,                    XKB_KEY_t,           toggletabbed,     {.v = &layouts_def[1]} },
-	{ MODKEY|WLR_MODIFIER_SHIFT, XKB_KEY_f,           togglefullscreen, {} },
-	{ MODKEY|WLR_MODIFIER_SHIFT, XKB_KEY_r,           reloadsettings,   {} },
+	{ MODKEY,                    XKB_KEY_c,           client_kill,       {} },
+	{ MODKEY|WLR_MODIFIER_SHIFT, XKB_KEY_v,           client_toggle_floating,   {} },
+	{ MODKEY|WLR_MODIFIER_SHIFT, XKB_KEY_p,           privacy_toggle,    {} },
+	{ MODKEY|WLR_MODIFIER_SHIFT, XKB_KEY_g,           layout_toggle_gaps,       {} },
+	{ MODKEY|WLR_MODIFIER_SHIFT, XKB_KEY_b,           bar_toggle,        {} },
+	{ MODKEY|WLR_MODIFIER_SHIFT, XKB_KEY_t,           bar_toggle_title_bars,   {} },
+	{ MODKEY,                    XKB_KEY_t,           layout_toggle_tabbed,     {.v = &default_layouts[1]} },
+	{ MODKEY|WLR_MODIFIER_SHIFT, XKB_KEY_f,           client_toggle_fullscreen, {} },
+	{ MODKEY|WLR_MODIFIER_SHIFT, XKB_KEY_r,           settings_reload,   {} },
 
-	{ MODKEY,                    XKB_KEY_r,           runnertoggle,     {} },
+	{ MODKEY,                    XKB_KEY_r,           runner_toggle,     {} },
 
-	{ MODKEY,                                      XKB_KEY_n, notifyscroll,     {} },
-	{ MODKEY|WLR_MODIFIER_SHIFT,                   XKB_KEY_n, notifyopen,       {} },
-	{ MODKEY|WLR_MODIFIER_CTRL,                    XKB_KEY_n, notifynext,       {} },
-	{ MODKEY|WLR_MODIFIER_ALT,                     XKB_KEY_n, notifyprev,       {} },
-	{ MODKEY|WLR_MODIFIER_CTRL|WLR_MODIFIER_SHIFT, XKB_KEY_n, notifydismissall, {} },
-	{ MODKEY,                                      XKB_KEY_a, notifyactions,    {} },
+	{ MODKEY,                                      XKB_KEY_n, bar_notification_scroll,     {} },
+	{ MODKEY|WLR_MODIFIER_SHIFT,                   XKB_KEY_n, bar_notification_open,       {} },
+	{ MODKEY|WLR_MODIFIER_CTRL,                    XKB_KEY_n, bar_notification_next,       {} },
+	{ MODKEY|WLR_MODIFIER_ALT,                     XKB_KEY_n, bar_notification_prev,       {} },
+	{ MODKEY|WLR_MODIFIER_CTRL|WLR_MODIFIER_SHIFT, XKB_KEY_n, bar_notification_dismiss_all, {} },
+	{ MODKEY,                                      XKB_KEY_a, bar_notification_actions,    {} },
 
-	{ MODKEY,                    XKB_KEY_h,           focusstack,       {.i = -1} },
-	{ MODKEY,                    XKB_KEY_j,           focusstack,       {.i = +1} },
-	{ MODKEY,                    XKB_KEY_k,           focusstack,       {.i = -1} },
-	{ MODKEY,                    XKB_KEY_l,           focusstack,       {.i = +1} },
+	{ MODKEY,                    XKB_KEY_h,           layout_focus_stack,       {.i = -1} },
+	{ MODKEY,                    XKB_KEY_j,           layout_focus_stack,       {.i = +1} },
+	{ MODKEY,                    XKB_KEY_k,           layout_focus_stack,       {.i = -1} },
+	{ MODKEY,                    XKB_KEY_l,           layout_focus_stack,       {.i = +1} },
 
-	{ MODKEY|WLR_MODIFIER_SHIFT, XKB_KEY_h,           movestack,        {.i = -1} },
-	{ MODKEY|WLR_MODIFIER_SHIFT, XKB_KEY_j,           movestack,        {.i = +1} },
-	{ MODKEY|WLR_MODIFIER_SHIFT, XKB_KEY_k,           movestack,        {.i = -1} },
-	{ MODKEY|WLR_MODIFIER_SHIFT, XKB_KEY_l,           movestack,        {.i = +1} },
+	{ MODKEY|WLR_MODIFIER_SHIFT, XKB_KEY_h,           layout_move_stack,        {.i = -1} },
+	{ MODKEY|WLR_MODIFIER_SHIFT, XKB_KEY_j,           layout_move_stack,        {.i = +1} },
+	{ MODKEY|WLR_MODIFIER_SHIFT, XKB_KEY_k,           layout_move_stack,        {.i = -1} },
+	{ MODKEY|WLR_MODIFIER_SHIFT, XKB_KEY_l,           layout_move_stack,        {.i = +1} },
 
-	{ MODKEY|WLR_MODIFIER_CTRL, XKB_KEY_h,           resizewidth,  {.i = -50} },
-	{ MODKEY|WLR_MODIFIER_CTRL, XKB_KEY_l,           resizewidth,  {.i = +50} },
-	{ MODKEY|WLR_MODIFIER_CTRL, XKB_KEY_k,           resizeheight, {.i = -50} },
-	{ MODKEY|WLR_MODIFIER_CTRL, XKB_KEY_j,           resizeheight, {.i = +50} },
+	{ MODKEY|WLR_MODIFIER_CTRL, XKB_KEY_h,           layout_resize_width,  {.i = -50} },
+	{ MODKEY|WLR_MODIFIER_CTRL, XKB_KEY_l,           layout_resize_width,  {.i = +50} },
+	{ MODKEY|WLR_MODIFIER_CTRL, XKB_KEY_k,           layout_resize_height, {.i = -50} },
+	{ MODKEY|WLR_MODIFIER_CTRL, XKB_KEY_j,           layout_resize_height, {.i = +50} },
 
-	{ MODKEY,                                    XKB_KEY_o, setopacityfocus,   {.f = +0.05f} },
-	{ MODKEY|WLR_MODIFIER_ALT,                   XKB_KEY_o, setopacityfocus,   {.f = -0.05f} },
-	{ MODKEY|WLR_MODIFIER_CTRL,                  XKB_KEY_o, setopacityunfocus, {.f = +0.05f} },
-	{ MODKEY|WLR_MODIFIER_CTRL|WLR_MODIFIER_ALT, XKB_KEY_o, setopacityunfocus, {.f = -0.05f} },
-	{ MODKEY|WLR_MODIFIER_SHIFT,                 XKB_KEY_o, toggleopacity,     {} },
+	{ MODKEY,                                    XKB_KEY_o, opacity_change_focused,   {.f = +0.05f} },
+	{ MODKEY|WLR_MODIFIER_ALT,                   XKB_KEY_o, opacity_change_focused,   {.f = -0.05f} },
+	{ MODKEY|WLR_MODIFIER_CTRL,                  XKB_KEY_o, opacity_change_unfocused, {.f = +0.05f} },
+	{ MODKEY|WLR_MODIFIER_CTRL|WLR_MODIFIER_ALT, XKB_KEY_o, opacity_change_unfocused, {.f = -0.05f} },
+	{ MODKEY|WLR_MODIFIER_SHIFT,                 XKB_KEY_o, opacity_toggle,     {} },
 
-	{ MODKEY|WLR_MODIFIER_ALT,   XKB_KEY_equal,       magnify,          {.f = +0.25f} },
-	{ MODKEY|WLR_MODIFIER_ALT,   XKB_KEY_minus,       magnify,          {.f = -0.25f} },
-	{ MODKEY|WLR_MODIFIER_ALT,   XKB_KEY_0,           magnify,          {.f = 0} },
+	{ MODKEY|WLR_MODIFIER_ALT,   XKB_KEY_equal,       magnifier_magnify,          {.f = +0.25f} },
+	{ MODKEY|WLR_MODIFIER_ALT,   XKB_KEY_minus,       magnifier_magnify,          {.f = -0.25f} },
+	{ MODKEY|WLR_MODIFIER_ALT,   XKB_KEY_0,           magnifier_magnify,          {.f = 0} },
 
 	{ 0, XKB_KEY_XF86AudioRaiseVolume,  spawn, SHCMD("wpctl set-volume @DEFAULT_AUDIO_SINK@ 5%+") },
 	{ 0, XKB_KEY_XF86AudioLowerVolume,  spawn, SHCMD("wpctl set-volume @DEFAULT_AUDIO_SINK@ 5%-") },
@@ -322,17 +322,17 @@ static Key keys_def[] = {
 	{ 0, XKB_KEY_XF86AudioPlay,         spawn, SHCMD("playerctl play-pause") },
 	{ 0, XKB_KEY_XF86AudioPrev,         spawn, SHCMD("playerctl previous") },
 
-	{ MODKEY,                    XKB_KEY_i,           incnmaster,       {.i = +1} },
-	{ MODKEY,                    XKB_KEY_d,           incnmaster,       {.i = -1} },
-	{ MODKEY,                    XKB_KEY_Return,      zoom,             {} },
-	{ MODKEY,                    XKB_KEY_Tab,         view,             {} },
-	{ MODKEY,                    XKB_KEY_space,       setlayout,        {} },
-	{ MODKEY,                    XKB_KEY_0,           view,             {.ui = ~0} },
-	{ MODKEY|WLR_MODIFIER_SHIFT, XKB_KEY_parenright,  tag,              {.ui = ~0} },
-	{ MODKEY,                    XKB_KEY_comma,       focusmon,         {.i = WLR_DIRECTION_LEFT} },
-	{ MODKEY,                    XKB_KEY_period,      focusmon,         {.i = WLR_DIRECTION_RIGHT} },
-	{ MODKEY|WLR_MODIFIER_SHIFT, XKB_KEY_less,        tagmon,           {.i = WLR_DIRECTION_LEFT} },
-	{ MODKEY|WLR_MODIFIER_SHIFT, XKB_KEY_greater,     tagmon,           {.i = WLR_DIRECTION_RIGHT} },
+	{ MODKEY,                    XKB_KEY_i,           layout_inc_master,       {.i = +1} },
+	{ MODKEY,                    XKB_KEY_d,           layout_inc_master,       {.i = -1} },
+	{ MODKEY,                    XKB_KEY_Return,      layout_zoom,             {} },
+	{ MODKEY,                    XKB_KEY_Tab,         layout_view,             {} },
+	{ MODKEY,                    XKB_KEY_space,       layout_set,        {} },
+	{ MODKEY,                    XKB_KEY_0,           layout_view,             {.ui = ~0} },
+	{ MODKEY|WLR_MODIFIER_SHIFT, XKB_KEY_parenright,  layout_tag,              {.ui = ~0} },
+	{ MODKEY,                    XKB_KEY_comma,       monitor_focus,         {.i = WLR_DIRECTION_LEFT} },
+	{ MODKEY,                    XKB_KEY_period,      monitor_focus,         {.i = WLR_DIRECTION_RIGHT} },
+	{ MODKEY|WLR_MODIFIER_SHIFT, XKB_KEY_less,        monitor_send_client,           {.i = WLR_DIRECTION_LEFT} },
+	{ MODKEY|WLR_MODIFIER_SHIFT, XKB_KEY_greater,     monitor_send_client,           {.i = WLR_DIRECTION_RIGHT} },
 	TAGKEYS(          XKB_KEY_1, XKB_KEY_exclam,                        0),
 	TAGKEYS(          XKB_KEY_2, XKB_KEY_at,                            1),
 	TAGKEYS(          XKB_KEY_3, XKB_KEY_numbersign,                    2),
@@ -343,65 +343,65 @@ static Key keys_def[] = {
 	TAGKEYS(          XKB_KEY_8, XKB_KEY_asterisk,                      7),
 	TAGKEYS(          XKB_KEY_9, XKB_KEY_parenleft,                     8),
 	{ MODKEY|WLR_MODIFIER_SHIFT, XKB_KEY_Escape,      quit,             {} },
-	{ MODKEY,                    XKB_KEY_Escape,      toggleinhibit,    {} },
+	{ MODKEY,                    XKB_KEY_Escape,      input_toggle_inhibit,    {} },
 
 	{ WLR_MODIFIER_CTRL|WLR_MODIFIER_ALT,XKB_KEY_Terminate_Server, quit, {} },
 	CHVT(1), CHVT(2), CHVT(3), CHVT(4), CHVT(5), CHVT(6),
 	CHVT(7), CHVT(8), CHVT(9), CHVT(10), CHVT(11), CHVT(12),
 };
-Key* keys    = keys_def;
-size_t nkeys = LENGTH(keys_def);
+Key* keys    = default_keys;
+size_t key_count = LENGTH(default_keys);
 
-static Button buttons_def[] = {
-	{ ClkLtSymbol, 0,      BTN_LEFT,   setlayout,      {.v = &layouts_def[0]} },
-	{ ClkLtSymbol, 0,      BTN_RIGHT,  setlayout,      {.v = &layouts_def[1]} },
+static Button default_buttons[] = {
+	{ ClkLtSymbol, 0,      BTN_LEFT,   layout_set,      {.v = &default_layouts[0]} },
+	{ ClkLtSymbol, 0,      BTN_RIGHT,  layout_set,      {.v = &default_layouts[1]} },
 
-	{ ClkTitle,    0,      BTN_MIDDLE, zoom,           {} },
-	{ ClkTitle,    0,      BTN_LEFT,   notifyopen,     {} },
-	{ ClkTitle,    0,      BTN_RIGHT,  notifydismiss,  {} },
+	{ ClkTitle,    0,      BTN_MIDDLE, layout_zoom,           {} },
+	{ ClkTitle,    0,      BTN_LEFT,   bar_notification_open,     {} },
+	{ ClkTitle,    0,      BTN_RIGHT,  bar_notification_dismiss,  {} },
 
-	{ ClkStatus,   0,      BTN_MIDDLE, spawn,          {.v = termcmd} },
+	{ ClkStatus,   0,      BTN_MIDDLE, spawn,          {.v = terminal_command} },
 
-	{ ClkTray,     0,      BTN_LEFT,   trayactivate,   {} },
-	{ ClkTray,     0,      BTN_RIGHT,  traymenu,       {} },
+	{ ClkTray,     0,      BTN_LEFT,   bar_tray_activate,   {} },
+	{ ClkTray,     0,      BTN_RIGHT,  bar_tray_menu,       {} },
 
-	{ ClkTagBar,   0,      BTN_LEFT,   view,           {} },
-	{ ClkTagBar,   0,      BTN_RIGHT,  toggleview,     {} },
-	{ ClkTagBar,   MODKEY, BTN_LEFT,   tag,            {} },
-	{ ClkTagBar,   MODKEY, BTN_RIGHT,  toggletag,      {} },
-	{ ClkTagBar,   0,      WheelUp,    shiftview,      {.i = -1} },
-	{ ClkTagBar,   0,      WheelDown,  shiftview,      {.i = +1} },
+	{ ClkTagBar,   0,      BTN_LEFT,   layout_view,           {} },
+	{ ClkTagBar,   0,      BTN_RIGHT,  layout_toggle_view,     {} },
+	{ ClkTagBar,   MODKEY, BTN_LEFT,   layout_tag,            {} },
+	{ ClkTagBar,   MODKEY, BTN_RIGHT,  layout_toggle_tag,      {} },
+	{ ClkTagBar,   0,      WheelUp,    layout_shift_view,      {.i = -1} },
+	{ ClkTagBar,   0,      WheelDown,  layout_shift_view,      {.i = +1} },
 
-	{ ClkWinTitle, 0,      WheelUp,    focusstack,     {.i = -1} },
-	{ ClkWinTitle, 0,      WheelDown,  focusstack,     {.i = +1} },
+	{ ClkWinTitle, 0,      WheelUp,    layout_focus_stack,     {.i = -1} },
+	{ ClkWinTitle, 0,      WheelDown,  layout_focus_stack,     {.i = +1} },
 
-	{ ClkClient,   MODKEY, BTN_LEFT,   moveresize,     {.ui = CurMove} },
-	{ ClkClient,   MODKEY, BTN_MIDDLE, togglefloating, {} },
-	{ ClkClient,   MODKEY, BTN_RIGHT,  moveresize,     {.ui = CurResize} },
+	{ ClkClient,   MODKEY, BTN_LEFT,   input_move_resize,     {.ui = CurMove} },
+	{ ClkClient,   MODKEY, BTN_MIDDLE, client_toggle_floating, {} },
+	{ ClkClient,   MODKEY, BTN_RIGHT,  input_move_resize,     {.ui = CurResize} },
 
-	{ ClkClient,   MODKEY, WheelUp,    magnify,        {.f = +0.25f} },
-	{ ClkClient,   MODKEY, WheelDown,  magnify,        {.f = -0.25f} },
-	{ ClkRoot,     MODKEY, WheelUp,    magnify,        {.f = +0.25f} },
-	{ ClkRoot,     MODKEY, WheelDown,  magnify,        {.f = -0.25f} },
+	{ ClkClient,   MODKEY, WheelUp,    magnifier_magnify,        {.f = +0.25f} },
+	{ ClkClient,   MODKEY, WheelDown,  magnifier_magnify,        {.f = -0.25f} },
+	{ ClkRoot,     MODKEY, WheelUp,    magnifier_magnify,        {.f = +0.25f} },
+	{ ClkRoot,     MODKEY, WheelDown,  magnifier_magnify,        {.f = -0.25f} },
 };
-Button* buttons = buttons_def;
-size_t nbuttons = LENGTH(buttons_def);
+Button* buttons = default_buttons;
+size_t button_count = LENGTH(default_buttons);
 
 /* a finger count used here is taken from the apps */
-static Gesture gestures_def[] = {
-	{ SwipeLeft,  3, shiftview, {.i = +1} },
-	{ SwipeRight, 3, shiftview, {.i = -1} },
+static Gesture default_gestures[] = {
+	{ SwipeLeft,  3, layout_shift_view, {.i = +1} },
+	{ SwipeRight, 3, layout_shift_view, {.i = -1} },
 };
-Gesture* gestures = gestures_def;
-size_t ngestures  = LENGTH(gestures_def);
+Gesture* gestures = default_gestures;
+size_t gesture_count  = LENGTH(default_gestures);
 
 /* held while pinching on a touchpad to zoom the magnifier, 0 for off */
-unsigned int pinchzoom_mod = MODKEY;
+unsigned int pinch_zoom_modifier = MODKEY;
 
 /* tablet pad buttons, counted from 0: a bound one is not sent to the app.
  * e.g. { 0, spawn, SHCMD("wtype -M ctrl z -m ctrl") } */
-PadButton* padbuttons = nullptr;
-size_t npadbuttons    = 0;
+PadButton* pad_buttons = nullptr;
+size_t pad_button_count    = 0;
 
 int log_level = WLR_ERROR;
 
