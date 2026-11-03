@@ -60,6 +60,8 @@ static void applyrules(Client* c)
         if ((!r->title || strstr(title, r->title)) &&
             (!r->id || strstr(appid, r->id))) {
             c->isfloating = r->isfloating;
+            if (r->isprivate >= 0)
+                c->isprivate = r->isprivate;
             if (r->opacity_focus > 0)
                 c->opacity_focus = r->opacity_focus;
             if (r->opacity_unfocus > 0)
@@ -176,6 +178,7 @@ void createnotify(struct wl_listener* listener, void* data)
     c->bw = borderwidth();
     c->opacity = c->opacity_unfocus = opacity_unfocus;
     c->opacity_focus = opacity_focus;
+    c->isprivate = alwaysprivate;
 
     LISTEN(&toplevel->base->surface->events.commit, &c->commit, commitnotify);
     LISTEN(&toplevel->base->surface->events.map, &c->map, mapnotify);
@@ -714,6 +717,7 @@ void unmapnotify(struct wl_listener* listener, void* data)
     c->titleblurbuf = NULL;
 #endif
     bufpooldrop(c->titlepool, LENGTH(c->titlepool));
+    bufpooldrop(c->sharepool, LENGTH(c->sharepool));
     c->titlebufw = 0;
     for (i = 0; i < 4; i++) {
         c->corner[i] = NULL;

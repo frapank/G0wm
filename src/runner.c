@@ -690,7 +690,7 @@ static void runnerwindows(void)
         if (client_is_unmanaged(c) || !c->mon)
             continue;
         id = client_get_appid(c);
-        title = client_get_title(c);
+        title = sharetitle(c);
         n = strlen(id) + strlen(title) + 3;
         runner_winlabels[i] = ecalloc(1, n);
         if (!*title || !strcmp(id, title))

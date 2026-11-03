@@ -183,6 +183,7 @@ static const Action actions[] = {
     { togglegaps, "togglegaps", 0 },
     { toggleinhibit, "toggleinhibit", 0 },
     { toggleopacity, "toggleopacity", 0 },
+    { toggleprivate, "toggleprivate", 0 },
     { toggletabbed, "toggletabbed", 'l' },
     { toggletag, "toggletag", 'u' },
     { toggletitlebar, "toggletitlebar", 0 },
@@ -510,6 +511,14 @@ static void wwindows(void)
     note("titleclose", "shown with the pointer over it");
     wbool("titleclose", titleclose);
     whex("titleclosecolor", titleclosecolor);
+    whex("privatecolor", privatecolor);
+    note("privateround", "below 0 follows bartagdotround");
+    wnum("privateround", privateround);
+    note("alwaysprivate", "every window private, the dot marks public ones");
+    wbool("alwaysprivate", alwaysprivate);
+    whex("publiccolor", publiccolor);
+    note("privatetitle", "shown for a private window, {app} is its app id");
+    wstr("privatetitle", privatetitle);
     note("movethreshold", "px dragged on a title before the window moves");
     wint("movethreshold", movethreshold);
     note("movesnap", "px at which a moved floating window sticks, 0 off");
@@ -698,13 +707,16 @@ static void wrules(void)
     size_t i;
 
     note("rule",
-         "rule: opacity 0 keeps the default, monitor -1 is the focused one");
+         "rule: opacity 0 keeps the default, monitor -1 is the focused one, "
+         "without private it follows alwaysprivate");
     for (i = 0; i < nrules; i++) {
         wopen("rule");
         wstr("id", rules[i].id);
         wstr("title", rules[i].title);
         wint("tags", rules[i].tags);
         wbool("isfloating", rules[i].isfloating);
+        if (rules[i].isprivate >= 0)
+            wbool("private", rules[i].isprivate);
         wnum("opacity_focus", rules[i].opacity_focus);
         wnum("opacity_unfocus", rules[i].opacity_unfocus);
         wint("monitor", rules[i].monitor);
@@ -1168,6 +1180,11 @@ static void applywindows(const struct scfg_block* b)
     titlecenter = getbool(b, "titlecenter", titlecenter);
     titleclose = getbool(b, "titleclose", titleclose);
     titleclosecolor = gethex(b, "titleclosecolor", titleclosecolor);
+    privatecolor = gethex(b, "privatecolor", privatecolor);
+    privateround = (float)fmin(getnum(b, "privateround", privateround), 1);
+    alwaysprivate = getbool(b, "alwaysprivate", alwaysprivate);
+    publiccolor = gethex(b, "publiccolor", publiccolor);
+    privatetitle = getstr(b, "privatetitle", privatetitle);
     movethreshold = (int)getnum(b, "movethreshold", movethreshold);
     movesnap = (int)getnum(b, "movesnap", movesnap);
 }
@@ -1379,6 +1396,7 @@ static void applyrules(const struct scfg_block* b)
         out[n].title = getstr(r, "title", NULL);
         out[n].tags = getuint(r, "tags", 0);
         out[n].isfloating = getbool(r, "isfloating", 0);
+        out[n].isprivate = getbool(r, "private", -1);
         out[n].opacity_focus = (float)getnum(r, "opacity_focus", 0);
         out[n].opacity_unfocus = (float)getnum(r, "opacity_unfocus", 0);
         out[n].monitor = (int)getnum(r, "monitor", -1);
@@ -1835,6 +1853,7 @@ void reloadsettings(const Arg* arg)
 {
     Monitor* m;
     Client* c;
+    int wasprivate = alwaysprivate;
 
     settingsload();
 
@@ -1846,7 +1865,7 @@ void reloadsettings(const Arg* arg)
         wlr_scene_rect_set_color(m->fullscreen_bg, fullscreen_bg);
     }
     /* what a client copied out of the settings when it was mapped: its
-     * border and its own opacity */
+     * border, its own opacity and the title shown when private */
     wl_list_for_each(c, &clients, link)
     {
         if (!(c->tags & TAGMASK))
@@ -1855,7 +1874,12 @@ void reloadsettings(const Arg* arg)
         c->opacity_focus = opacity_focus;
         if (!c->isfullscreen)
             c->bw = client_is_unmanaged(c) ? 0 : borderwidth();
+        if (alwaysprivate != wasprivate)
+            c->isprivate = alwaysprivate;
+        toplevelupdate(c);
     }
+    if (alwaysprivate != wasprivate)
+        privacydamage();
     wlr_scene_rect_set_color(root_bg, rootcolor);
 
     reloadkeyboard();

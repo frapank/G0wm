@@ -114,6 +114,7 @@ static void cleanupmon(struct wl_listener* listener, void* data)
 
     for (i = 0; i < LENGTH(m->pool); i++)
         wlr_buffer_drop(&m->pool[i]->base);
+    bufpooldrop(m->sharepool, LENGTH(m->sharepool));
 #ifdef INTEGRATED_BACKGROUND
     bufpooldrop(m->wallpaperpool, LENGTH(m->wallpaperpool));
     bufpooldrop(m->blurpool, LENGTH(m->blurpool));
@@ -669,9 +670,12 @@ static void rendermon(struct wl_listener* listener, void* data)
         goto skip;
     }
     gamemode(m, &pending);
+    if (!privacybefore(m, &pending))
+        goto skip;
     if (wlr_output_commit_state(m->wlr_output, &pending) &&
         (pending.committed & WLR_OUTPUT_STATE_ADAPTIVE_SYNC_ENABLED))
         m->autovrr = pending.adaptive_sync_enabled;
+    privacyafter(m);
 
 skip:
     /* Let clients know a frame has been rendered */

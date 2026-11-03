@@ -287,6 +287,7 @@ typedef struct {
     struct wlr_buffer* titleblurbuf;
 #endif
     Buffer* titlepool[2];
+    Buffer* sharepool[1];
     int titlex, titlew; /* title bar placement, relative to the border box */
     int titlebufw;      /* pixel width titlepool was allocated at */
     Buffer* cornerpool[4][2];
@@ -294,7 +295,7 @@ typedef struct {
     uint32_t cornercolor;        /* and the colour it was drawn with */
     unsigned int bw;
     uint32_t tags;
-    int isfloating, isurgent, isfullscreen;
+    int isfloating, isurgent, isfullscreen, isprivate;
     float opacity;         /* the one in effect, focused or not */
     float opacity_focus;   /* used while the client holds focus */
     float opacity_unfocus; /* used while it does not */
@@ -402,8 +403,11 @@ struct Monitor {
     struct wlr_buffer* zoombuf;      /* the latest of them */
     struct wlr_texture* zoomtex;     /* zoombuf, to draw from */
     struct wlr_fbox zoomsrc;         /* the part of it on show */
+    struct wlr_buffer* shown;
     Drwl* drw;
     Buffer* pool[2];
+    Buffer* sharepool[1];
+    int sharex, sharew;
 #ifdef INTEGRATED_BACKGROUND
     Buffer* wallpaperpool[1];
     Buffer* blurpool[1];        /* wallpaperpool, blurred */
@@ -435,6 +439,7 @@ typedef struct {
     const char* title;
     uint32_t tags;
     int isfloating;
+    int isprivate;
     float opacity_focus;   /* 0 keeps the default from config.h */
     float opacity_unfocus; /* 0 keeps the default from config.h */
     int monitor;
@@ -521,6 +526,13 @@ void locksession(struct wl_listener* listener, void* data);
 void magnifierdrop(Monitor* m);
 int magnifierframe(Monitor* m, struct wlr_output_state* state);
 void magnifierzoom(Monitor* m, float z);
+void privacyafter(Monitor* m);
+int privacybefore(Monitor* m, struct wlr_output_state* state);
+void privacycapture(struct wl_listener* listener, void* data);
+void privacydamage(void);
+void privacyfini(void);
+void shieldclient(Client* c);
+const char* sharetitle(Client* c);
 void magnify(const Arg* arg);
 void mapnotify(struct wl_listener* listener, void* data);
 void movestack(const Arg* arg);
@@ -632,6 +644,7 @@ void togglefullscreen(const Arg* arg);
 void togglegaps(const Arg* arg);
 void toggleinhibit(const Arg* arg);
 void toggleopacity(const Arg* arg);
+void toggleprivate(const Arg* arg);
 void toggletabbed(const Arg* arg);
 void toggletag(const Arg* arg);
 void toggletitlebar(const Arg* arg);
@@ -696,6 +709,7 @@ extern struct wl_list clients; /* tiling order */
 extern struct wl_list fstack;  /* focus order */
 extern struct wlr_ext_foreign_toplevel_list_v1* ext_toplevel_list;
 extern struct wlr_foreign_toplevel_manager_v1* foreign_toplevel_mgr;
+extern struct wlr_screencopy_manager_v1* screencopy_mgr;
 extern struct wlr_idle_notifier_v1* idle_notifier;
 extern struct wlr_keyboard_shortcuts_inhibit_manager_v1* kb_inhibit_mgr;
 extern struct wlr_output_manager_v1* output_mgr;
@@ -763,6 +777,11 @@ extern unsigned int titlepadding;
 extern int titlecenter;
 extern int titleclose;
 extern uint32_t titleclosecolor;
+extern uint32_t privatecolor;
+extern float privateround;
+extern int alwaysprivate;
+extern uint32_t publiccolor;
+extern const char* privatetitle;
 extern Layout* layouts;
 extern size_t nlayouts;
 extern Rule* rules;
