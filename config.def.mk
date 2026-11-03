@@ -1,4 +1,4 @@
-_VERSION = 1.0.0-dev
+_VERSION = 1.2.0
 VERSION  = $(shell git describe --tags --dirty 2>/dev/null || echo $(_VERSION))
 
 PKG_CONFIG = pkg-config
@@ -19,7 +19,5 @@ XLIBS = xcb xcb-icccm
 
 BACKGROUND = -DINTEGRATED_BACKGROUND
 
-# g0wm itself only uses C99 features, but wlroots' headers use anonymous unions (C11).
-# To avoid warnings about them, we do not use -std=c99 and instead of using the
-# gmake default 'CC=c99', we use cc.
+# cc and not the gmake default c99, the Makefile asks for -std=gnu23
 CC = cc
