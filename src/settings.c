@@ -512,6 +512,8 @@ static void wwindows(void)
     wbool("titleclose", titleclose);
     whex("titleclosecolor", titleclosecolor);
     whex("privatecolor", privatecolor);
+    note("privateround", "below 0 follows bartagdotround");
+    wnum("privateround", privateround);
     note("privatetitle", "shown for a private window, {app} is its app id");
     wstr("privatetitle", privatetitle);
     note("movethreshold", "px dragged on a title before the window moves");
@@ -1174,6 +1176,7 @@ static void applywindows(const struct scfg_block* b)
     titleclose = getbool(b, "titleclose", titleclose);
     titleclosecolor = gethex(b, "titleclosecolor", titleclosecolor);
     privatecolor = gethex(b, "privatecolor", privatecolor);
+    privateround = (float)fmin(getnum(b, "privateround", privateround), 1);
     privatetitle = getstr(b, "privatetitle", privatetitle);
     movethreshold = (int)getnum(b, "movethreshold", movethreshold);
     movesnap = (int)getnum(b, "movesnap", movesnap);
