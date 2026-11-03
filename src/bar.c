@@ -5,9 +5,42 @@
  *
  * the bar, the status text, the window title bars and the tray
  */
-#include "g0wm.h"
-
+#include <dbus/dbus.h>
+#include <drwl.h>
+#include <errno.h>
+#include <math.h>
+#include <pixman.h>
+#include <stdbool.h>
+#include <stddef.h>
+#include <stdint.h>
+#include <stdio.h>
+#include <string.h>
 #include <strings.h>
+#include <sys/types.h>
+#include <unistd.h>
+#include <wayland-server-core.h>
+#include <wlr/types/wlr_buffer.h>
+#include <wlr/types/wlr_output.h>
+#include <wlr/types/wlr_scene.h>
+#include <xkbcommon/xkbcommon.h>
+
+#include "bar.h"
+#include "buffer.h"
+#include "client.h"
+#include "corner.h"
+#include "g0wm.h"
+#include "input.h"
+#include "layout.h"
+#include "monitor.h"
+#include "notify.h"
+#include "opacity.h"
+#include "privacy.h"
+#include "runner.h"
+#include "settings.h"
+#include "systray/icon.h"
+#include "systray/tray.h"
+#include "traypopup.h"
+#include "util.h"
 
 /* function declarations */
 static Monitor* mainmon(void);
@@ -68,6 +101,7 @@ static int notifytick(void* data);
 static void stopstatus(void);
 
 /* variables */
+char stext[STATUS_MAX];
 static const char notifymore[] = "\xe2\x80\xba"; /* › */
 static dbus_uint32_t notifyshownid;              /* what notifyoff refers to */
 static int notifyshownhist;

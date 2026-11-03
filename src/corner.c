@@ -5,7 +5,22 @@
  * rounded corners: each corner is a small buffer of its own, the straight
  * borders stop where it begins
  */
+#include <drwl.h>
+#include <math.h>
+#include <stddef.h>
+#include <stdint.h>
+#include <stdlib.h>
+#include <wlr/types/wlr_buffer.h>
+#include <wlr/types/wlr_scene.h>
+
+#include "buffer.h"
+#include "client.h"
+#include "corner.h"
 #include "g0wm.h"
+#include "monitor.h"
+#include "opacity.h"
+#include "settings.h"
+#include "util.h"
 
 #define CORNER_SAMPLES 4 /* per axis, so sixteen coverage samples a pixel */
 

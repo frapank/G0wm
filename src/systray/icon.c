@@ -4,7 +4,7 @@
  * SPDX-License-Identifier: GPL-3.0-or-later
  */
 
-#include "icon.h"
+#include "systray/icon.h"
 
 #include <fcft/fcft.h>
 #include <gdk-pixbuf/gdk-pixbuf.h>

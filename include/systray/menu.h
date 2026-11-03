@@ -4,8 +4,8 @@
  * SPDX-License-Identifier: GPL-3.0-or-later
  */
 
-#ifndef MENU_H
-#define MENU_H
+#ifndef G0WM_SYSTRAY_MENU_H
+#define G0WM_SYSTRAY_MENU_H
 
 #include <dbus/dbus.h>
 
@@ -26,4 +26,4 @@ void menu_show(DBusConnection* conn,
 /* Takes the entry chosen or opens its submenu, a negative index cancels. */
 void menu_pick(Menu* menu, int index);
 
-#endif /* MENU_H */
+#endif

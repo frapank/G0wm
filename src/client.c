@@ -5,7 +5,40 @@
  *
  * client lifecycle: mapping, geometry, focus and decorations
  */
+#include <stddef.h>
+#include <stdint.h>
+#include <stdlib.h>
+#include <string.h>
+#include <wayland-server-core.h>
+#include <wlr/types/wlr_compositor.h>
+#include <wlr/types/wlr_layer_shell_v1.h>
+#include <wlr/types/wlr_scene.h>
+#include <wlr/types/wlr_seat.h>
+#include <wlr/types/wlr_xdg_activation_v1.h>
+#include <wlr/types/wlr_xdg_decoration_v1.h>
+#include <wlr/types/wlr_xdg_dialog_v1.h>
+#include <wlr/types/wlr_xdg_shell.h>
+#include <wlr/types/wlr_xdg_system_bell_v1.h>
+#include <wlr/util/box.h>
+#include <wlr/util/edges.h>
+
+#include "bar.h"
+#include "buffer.h"
+#include "client.h"
+#include "corner.h"
 #include "g0wm.h"
+#include "input.h"
+#include "layout.h"
+#include "lock.h"
+#include "monitor.h"
+#include "opacity.h"
+#include "settings.h"
+#include "textinput.h"
+#include "toplevel.h"
+#include "util.h"
+#include "xdg-shell-protocol.h"
+
+#define MAPWAIT_MS 200 /* longest a new client may take to fit its tile */
 
 /* function declarations */
 static void applybounds(Client* c, struct wlr_box* bbox);

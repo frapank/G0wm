@@ -5,7 +5,27 @@
  *
  * XWayland surfaces
  */
+#include <wayland-server-core.h>
+#include <wlr/types/wlr_compositor.h>
+#include <wlr/types/wlr_scene.h>
+#include <wlr/types/wlr_xcursor_manager.h>
+#include <wlr/util/box.h>
+#include <wlr/xcursor.h>
+#ifdef XWAYLAND
+#include <wlr/xwayland.h>
+#include <xcb/xcb_icccm.h>
+#endif
+
+#include "bar.h"
+#include "client.h"
+#include "corner.h"
 #include "g0wm.h"
+#include "input.h"
+#include "layout.h"
+#include "opacity.h"
+#include "settings.h"
+#include "util.h"
+#include "xwayland.h"
 
 /* function declarations */
 #ifdef XWAYLAND

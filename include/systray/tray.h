@@ -4,11 +4,11 @@
  * SPDX-License-Identifier: GPL-3.0-or-later
  */
 
-#ifndef TRAY_H
-#define TRAY_H
+#ifndef G0WM_SYSTRAY_TRAY_H
+#define G0WM_SYSTRAY_TRAY_H
 
-#include "menu.h"
-#include "watcher.h"
+#include "systray/menu.h"
+#include "systray/watcher.h"
 
 #include <pixman.h>
 #include <wayland-util.h>
@@ -51,4 +51,4 @@ void tray_update(Tray* tray);
 void tray_leftclicked(Tray* tray, unsigned int index);
 void tray_rightclicked(Tray* tray, unsigned int index, MenuPresentFn present);
 
-#endif /* TRAY_H */
+#endif

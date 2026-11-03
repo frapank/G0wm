@@ -42,7 +42,7 @@ endif
 export MESS RESET RED GREEN YELLOW MAGENTA CYAN
 
 # flags for compiling
-G0WMCPPFLAGS = -I$(INCDIR) -I$(INCDIR)/systray -I$(EXTDIR) -I$(GENDIR) \
+G0WMCPPFLAGS = -I$(INCDIR) -isystem $(EXTDIR) -I$(GENDIR) \
 	-DWLR_USE_UNSTABLE -D_POSIX_C_SOURCE=200809L \
 	-DVERSION=\"$(VERSION)\" $(XWAYLAND) $(BACKGROUND) -MMD -MP
 G0WMDEVCFLAGS = -g -Wpedantic -Wall -Wextra -Wdeclaration-after-statement \
@@ -136,7 +136,7 @@ config.mk: config.def.mk configure
 
 # Formatting, per .clang-format. external/ is vendored and config*.h are
 # alignment-sensitive tables, so neither is reformatted.
-FMT_SRC = $(filter-out $(INCDIR)/config.h, \
+FMT_SRC = $(filter-out $(SRCDIR)/config.h, \
 	$(wildcard $(SRCDIR)/*.c $(SRCDIR)/systray/*.c \
 	$(INCDIR)/*.h $(INCDIR)/systray/*.h))
 

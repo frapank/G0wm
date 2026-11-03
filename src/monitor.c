@@ -5,14 +5,56 @@
  *
  * outputs, their layout and the layer-shell surfaces on them
  */
+#include <drwl.h>
+#include <stdbool.h>
+#include <stddef.h>
+#include <stdint.h>
+#include <stdio.h>
+#include <stdlib.h>
+#include <string.h>
+#include <time.h>
+#include <wayland-server-core.h>
+#include <wlr/types/wlr_buffer.h>
+#include <wlr/types/wlr_compositor.h>
+#include <wlr/types/wlr_content_type_v1.h>
+#include <wlr/types/wlr_cursor.h>
+#include <wlr/types/wlr_layer_shell_v1.h>
+#include <wlr/types/wlr_output.h>
+#include <wlr/types/wlr_output_layout.h>
+#include <wlr/types/wlr_output_management_v1.h>
+#include <wlr/types/wlr_output_power_management_v1.h>
+#include <wlr/types/wlr_scene.h>
+#include <wlr/types/wlr_seat.h>
+#include <wlr/types/wlr_session_lock_v1.h>
+#include <wlr/types/wlr_tearing_control_v1.h>
+#include <wlr/types/wlr_xcursor_manager.h>
+#include <wlr/util/box.h>
+#include <wlr/util/log.h>
+
+#include "bar.h"
+#include "buffer.h"
+#include "client.h"
 #include "g0wm.h"
+#include "input.h"
+#include "layout.h"
+#include "lock.h"
+#include "magnifier.h"
+#include "monitor.h"
+#include "opacity.h"
+#include "privacy.h"
+#include "settings.h"
+#include "systray/tray.h"
+#include "tablet.h"
+#include "util.h"
 
 /* function declarations */
+static void applymonrules(Monitor* m, struct wlr_output_state* state);
 static void arrangelayer(Monitor* m,
                          struct wl_list* list,
                          struct wlr_box* usable_area,
                          int exclusive);
 static void cleanupmon(struct wl_listener* listener, void* data);
+static void closemon(Monitor* m);
 static void commitlayersurfacenotify(struct wl_listener* listener, void* data);
 static void destroylayersurfacenotify(struct wl_listener* listener, void* data);
 static Monitor* dirtomon(enum wlr_direction dir);
@@ -150,7 +192,7 @@ static void cleanupmon(struct wl_listener* listener, void* data)
     free(m);
 }
 
-void closemon(Monitor* m)
+static void closemon(Monitor* m)
 {
     /* update selmon if needed and
      * move closed monitor's clients to the focused one */
@@ -261,7 +303,7 @@ void createlayersurface(struct wl_listener* listener, void* data)
 
 /* the first matching rule onto the monitor and the state about to be
  * committed; also the path a reload takes */
-void applymonrules(Monitor* m, struct wlr_output_state* state)
+static void applymonrules(Monitor* m, struct wlr_output_state* state)
 {
     struct wlr_output* wlr_output = m->wlr_output;
     struct wlr_output_mode* mode = NULL;

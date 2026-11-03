@@ -5,7 +5,29 @@
  *
  * session lock
  */
+#include <stddef.h>
+#include <stdlib.h>
+#include <wayland-server-core.h>
+#include <wlr/types/wlr_scene.h>
+#include <wlr/types/wlr_seat.h>
+#include <wlr/types/wlr_session_lock_v1.h>
+
+#include "client.h"
 #include "g0wm.h"
+#include "input.h"
+#include "lock.h"
+#include "monitor.h"
+#include "traypopup.h"
+#include "util.h"
+
+typedef struct {
+    struct wlr_scene_tree* scene;
+
+    struct wlr_session_lock_v1* lock;
+    struct wl_listener new_surface;
+    struct wl_listener unlock;
+    struct wl_listener destroy;
+} SessionLock;
 
 /* function declarations */
 static void createlocksurface(struct wl_listener* listener, void* data);
@@ -14,6 +36,7 @@ static void destroysessionlock(struct wl_listener* listener, void* data);
 static void unlocksession(struct wl_listener* listener, void* data);
 
 /* variables */
+int locked;
 static struct wlr_session_lock_v1* cur_lock;
 
 /* function implementations */

@@ -2,7 +2,136 @@
  * SPDX-FileCopyrightText: 2020 dwl team
  * SPDX-FileCopyrightText: 2026 frapank
  * SPDX-License-Identifier: GPL-3.0-or-later
- *
+ */
+
+#ifndef G0WM_CLIENT_H
+#define G0WM_CLIENT_H
+
+#include <errno.h>
+#include <math.h>
+#include <stdbool.h>
+#include <stddef.h>
+#include <stdint.h>
+#include <sys/wait.h>
+#include <wayland-server-core.h>
+#include <wlr/types/wlr_buffer.h>
+#include <wlr/types/wlr_compositor.h>
+#include <wlr/types/wlr_ext_foreign_toplevel_list_v1.h>
+#include <wlr/types/wlr_ext_image_capture_source_v1.h>
+#include <wlr/types/wlr_foreign_toplevel_management_v1.h>
+#include <wlr/types/wlr_fractional_scale_v1.h>
+#include <wlr/types/wlr_keyboard.h>
+#include <wlr/types/wlr_layer_shell_v1.h>
+#include <wlr/types/wlr_scene.h>
+#include <wlr/types/wlr_seat.h>
+#include <wlr/types/wlr_xdg_decoration_v1.h>
+#include <wlr/types/wlr_xdg_shell.h>
+#include <wlr/util/box.h>
+#include <wlr/util/edges.h>
+#ifdef XWAYLAND
+#include <wlr/xwayland.h>
+#include <xcb/xcb_icccm.h>
+#endif
+
+#include "buffer.h"
+#include "g0wm.h"
+#include "monitor.h"
+#include "xdg-shell-protocol.h"
+
+#define VISIBLEON(C, M)                                                        \
+    ((M) && (C)->mon == (M) && ((C)->tags & (M)->tagset[(M)->seltags]))
+
+enum { XDGShell, LayerShell, X11 }; /* client types */
+
+struct Client {
+    /* Must keep this field first */
+    unsigned int type; /* XDGShell or X11* */
+
+    Monitor* mon;
+    struct wlr_scene_tree* scene;
+    struct wlr_scene_rect* border[4];   /* top, bottom, left, right */
+    struct wlr_scene_buffer* corner[4]; /* tl, tr, bl, br */
+    struct wlr_scene_tree* scene_surface;
+    struct wl_list link;
+    struct wl_list flink;
+    struct wlr_box geom;   /* layout-relative, includes border */
+    struct wlr_box prev;   /* layout-relative, includes border */
+    struct wlr_box bounds; /* only width and height are used */
+    union {
+        struct wlr_xdg_surface* xdg;
+        struct wlr_xwayland_surface* xwayland;
+    } surface;
+    struct wlr_xdg_toplevel_decoration_v1* decoration;
+    struct wl_listener commit;
+    struct wl_listener map;
+    struct wl_listener maximize;
+    struct wl_listener unmap;
+    struct wl_listener destroy;
+    struct wl_listener set_title;
+    struct wl_listener fullscreen;
+    struct wl_listener set_decoration_mode;
+    struct wl_listener destroy_decoration;
+#ifdef XWAYLAND
+    struct wl_listener activate;
+    struct wl_listener associate;
+    struct wl_listener dissociate;
+    struct wl_listener configure;
+    struct wl_listener set_hints;
+    struct wl_listener minimize;
+#endif
+    struct wlr_scene_buffer* title;
+#ifdef INTEGRATED_BACKGROUND
+    struct wlr_scene_buffer* blur; /* frosted wallpaper, below the whole box */
+    struct wlr_buffer* blurbuf;    /* what blur's node was last handed */
+    struct wlr_scene_buffer* titleblur; /* the same, for the title bar */
+    struct wlr_buffer* titleblurbuf;
+#endif
+    Buffer* titlepool[2];
+    Buffer* sharepool[1];
+    int titlex, titlew; /* title bar placement, relative to the border box */
+    int titlebufw;      /* pixel width titlepool was allocated at */
+    Buffer* cornerpool[4][2];
+    int cornerbufr, cornerbufbw; /* radius and border cornerpool was drawn at */
+    uint32_t cornercolor;        /* and the colour it was drawn with */
+    unsigned int bw;
+    uint32_t tags;
+    int isfloating, isurgent, isfullscreen, isprivate;
+    float opacity;         /* the one in effect, focused or not */
+    float opacity_focus;   /* used while the client holds focus */
+    float opacity_unfocus; /* used while it does not */
+    int borderscheme;      /* scheme its border is drawn in, to redo it */
+    uint32_t resize;       /* configure serial of a pending resize */
+    struct wl_event_source* mapwait; /* set while a new client is held back */
+    struct wlr_foreign_toplevel_handle_v1* ftl;
+    struct wlr_ext_foreign_toplevel_handle_v1* eftl;
+    struct wlr_ext_image_capture_source_v1* capture;
+    struct wl_listener ftl_activate;
+    struct wl_listener ftl_close;
+    struct wl_listener ftl_fullscreen;
+};
+
+void activateclient(Client* c);
+void createdecoration(struct wl_listener* listener, void* data);
+void createnotify(struct wl_listener* listener, void* data);
+void createpopup(struct wl_listener* listener, void* data);
+void destroynotify(struct wl_listener* listener, void* data);
+void focusclient(Client* c, int lift);
+Client* focustop(Monitor* m);
+void fullscreennotify(struct wl_listener* listener, void* data);
+void killclient(const Arg* arg);
+void mapnotify(struct wl_listener* listener, void* data);
+void resize(Client* c, struct wlr_box geo, int interact);
+void ringbell(struct wl_listener* listener, void* data);
+void setfloating(Client* c, int floating);
+void setfullscreen(Client* c, int fullscreen);
+void setmon(Client* c, Monitor* m, uint32_t newtags);
+void togglefloating(const Arg* arg);
+void togglefullscreen(const Arg* arg);
+void unmapnotify(struct wl_listener* listener, void* data);
+void updatetitle(struct wl_listener* listener, void* data);
+void urgent(struct wl_listener* listener, void* data);
+
+/*
  * Attempt to consolidate unavoidable suck into one file, away from g0wm.c. This
  * file is not meant to be pretty.  We use a .h file with static inline
  * functions instead of a separate .c module, or function pointers like sway, so
@@ -418,3 +547,5 @@ static inline int client_wants_fullscreen(Client* c)
 #endif
     return c->surface.xdg->toplevel->requested.fullscreen;
 }
+
+#endif

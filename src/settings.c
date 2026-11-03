@@ -4,13 +4,47 @@
  *
  * ~/.config/g0wm/config: written from config.h, read back over it
  */
+#include <drwl.h>
 #include <errno.h>
+#include <libinput.h>
 #include <limits.h>
+#include <linux/input-event-codes.h>
+#include <math.h>
 #include <scfg.h>
 #include <stdarg.h>
+#include <stdbool.h>
+#include <stddef.h>
+#include <stdint.h>
+#include <stdio.h>
+#include <stdlib.h>
+#include <string.h>
+#include <sys/stat.h>
+#include <unistd.h>
+#include <wayland-server-core.h>
+#include <wayland-server-protocol.h>
+#include <wlr/types/wlr_keyboard.h>
+#include <wlr/types/wlr_scene.h>
+#include <wlr/util/log.h>
+#include <xkbcommon/xkbcommon.h>
 
+#include "bar.h"
+#include "client.h"
+#include "corner.h"
 #include "g0wm.h"
+#include "input.h"
+#include "layout.h"
+#include "magnifier.h"
+#include "monitor.h"
+#include "notify.h"
+#include "opacity.h"
+#include "privacy.h"
+#include "runner.h"
+#include "settings.h"
+#include "tablet.h"
+#include "toplevel.h"
 #include "util.h"
+
+static void reloadsettings(const Arg* arg);
 
 /* the only file that includes it: these are the definitions */
 #include "config.h"
@@ -1850,7 +1884,7 @@ static void reloadkeyboard(void)
         &kb_group->wlr_group->keyboard, repeat_rate, repeat_delay);
 }
 
-void reloadsettings(const Arg* arg)
+static void reloadsettings(const Arg* arg)
 {
     Monitor* m;
     Client* c;

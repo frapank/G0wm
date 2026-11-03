@@ -5,7 +5,104 @@
  *
  * setup, teardown and the event loop
  */
+#include <dbus/dbus.h>
+#include <drwl.h>
+#include <fcntl.h>
+#include <gdk-pixbuf/gdk-pixbuf.h>
+#include <signal.h>
+#include <stdbool.h>
+#include <stddef.h>
+#include <stdio.h>
+#include <stdlib.h>
+#include <string.h>
+#include <sys/types.h>
+#include <sys/wait.h>
+#include <unistd.h>
+#include <wayland-server-core.h>
+#include <wlr/backend.h>
+#include <wlr/backend/session.h>
+#include <wlr/render/allocator.h>
+#include <wlr/render/wlr_renderer.h>
+#include <wlr/types/wlr_alpha_modifier_v1.h>
+#include <wlr/types/wlr_buffer.h>
+#include <wlr/types/wlr_compositor.h>
+#include <wlr/types/wlr_content_type_v1.h>
+#include <wlr/types/wlr_cursor.h>
+#include <wlr/types/wlr_cursor_shape_v1.h>
+#include <wlr/types/wlr_data_control_v1.h>
+#include <wlr/types/wlr_data_device.h>
+#include <wlr/types/wlr_drm.h>
+#include <wlr/types/wlr_export_dmabuf_v1.h>
+#include <wlr/types/wlr_ext_data_control_v1.h>
+#include <wlr/types/wlr_ext_foreign_toplevel_list_v1.h>
+#include <wlr/types/wlr_ext_image_capture_source_v1.h>
+#include <wlr/types/wlr_ext_image_copy_capture_v1.h>
+#include <wlr/types/wlr_foreign_toplevel_management_v1.h>
+#include <wlr/types/wlr_fractional_scale_v1.h>
+#include <wlr/types/wlr_gamma_control_v1.h>
+#include <wlr/types/wlr_idle_inhibit_v1.h>
+#include <wlr/types/wlr_idle_notify_v1.h>
+#include <wlr/types/wlr_input_method_v2.h>
+#include <wlr/types/wlr_keyboard_shortcuts_inhibit_v1.h>
+#include <wlr/types/wlr_layer_shell_v1.h>
+#include <wlr/types/wlr_linux_dmabuf_v1.h>
+#include <wlr/types/wlr_linux_drm_syncobj_v1.h>
+#include <wlr/types/wlr_output.h>
+#include <wlr/types/wlr_output_layout.h>
+#include <wlr/types/wlr_output_management_v1.h>
+#include <wlr/types/wlr_output_power_management_v1.h>
+#include <wlr/types/wlr_pointer_constraints_v1.h>
+#include <wlr/types/wlr_pointer_gestures_v1.h>
+#include <wlr/types/wlr_presentation_time.h>
+#include <wlr/types/wlr_primary_selection_v1.h>
+#include <wlr/types/wlr_relative_pointer_v1.h>
+#include <wlr/types/wlr_scene.h>
+#include <wlr/types/wlr_screencopy_v1.h>
+#include <wlr/types/wlr_seat.h>
+#include <wlr/types/wlr_security_context_v1.h>
+#include <wlr/types/wlr_server_decoration.h>
+#include <wlr/types/wlr_session_lock_v1.h>
+#include <wlr/types/wlr_single_pixel_buffer_v1.h>
+#include <wlr/types/wlr_subcompositor.h>
+#include <wlr/types/wlr_tablet_v2.h>
+#include <wlr/types/wlr_tearing_control_v1.h>
+#include <wlr/types/wlr_text_input_v3.h>
+#include <wlr/types/wlr_viewporter.h>
+#include <wlr/types/wlr_virtual_keyboard_v1.h>
+#include <wlr/types/wlr_virtual_pointer_v1.h>
+#include <wlr/types/wlr_xcursor_manager.h>
+#include <wlr/types/wlr_xdg_activation_v1.h>
+#include <wlr/types/wlr_xdg_decoration_v1.h>
+#include <wlr/types/wlr_xdg_dialog_v1.h>
+#include <wlr/types/wlr_xdg_foreign_registry.h>
+#include <wlr/types/wlr_xdg_foreign_v1.h>
+#include <wlr/types/wlr_xdg_foreign_v2.h>
+#include <wlr/types/wlr_xdg_output_v1.h>
+#include <wlr/types/wlr_xdg_shell.h>
+#include <wlr/types/wlr_xdg_system_bell_v1.h>
+#include <wlr/util/box.h>
+#include <wlr/util/log.h>
+#ifdef XWAYLAND
+#include <wlr/xwayland.h>
+#endif
+
+#include "bar.h"
+#include "client.h"
+#include "dbus.h"
 #include "g0wm.h"
+#include "input.h"
+#include "lock.h"
+#include "monitor.h"
+#include "notify.h"
+#include "privacy.h"
+#include "settings.h"
+#include "systray/watcher.h"
+#include "tablet.h"
+#include "textinput.h"
+#include "toplevel.h"
+#include "traypopup.h"
+#include "util.h"
+#include "xwayland.h"
 
 /* function declarations */
 static void autostartexec(void);
@@ -19,6 +116,8 @@ static bool globalfilter(const struct wl_client* client,
 static void gpureset(struct wl_listener* listener, void* data);
 static void gpurecreate(void* data);
 static void handlesig(int signo);
+static const char* notifytoken(void);
+static void run(void);
 static void setup(void);
 
 /* variables */
@@ -36,6 +135,8 @@ static struct wlr_output_power_manager_v1* power_mgr;
 static struct wlr_session_lock_manager_v1* session_lock_mgr;
 static struct wlr_security_context_manager_v1* security_context_mgr;
 static struct wlr_xdg_foreign_registry* foreign_registry;
+static struct wlr_backend* backend;
+static struct wlr_compositor* compositor;
 static DBusConnection* bus_conn;
 static struct wl_event_source* bus_source;
 /* global event handlers */
@@ -90,6 +191,7 @@ static struct wl_listener output_mgr_apply = { .notify = outputmgrapply };
 static struct wl_listener output_mgr_test = { .notify = outputmgrtest };
 static struct wl_listener output_power_mgr_set_mode = { .notify =
                                                             powermgrsetmode };
+static struct wl_listener request_activate = { .notify = urgent };
 static struct wl_listener request_cursor = { .notify = setcursor };
 static struct wl_listener request_set_psel = { .notify = setpsel };
 static struct wl_listener request_set_sel = { .notify = setsel };
@@ -107,16 +209,13 @@ static pid_t* autostart_pids;
 static size_t autostart_len;
 
 /* variables the other modules share, declared in g0wm.h */
-int locked;
 void* exclusive_focus;
 struct wl_event_loop* event_loop;
-struct wlr_backend* backend;
 struct wlr_scene* scene;
 struct wlr_scene_tree* layers[NUM_LAYERS];
 struct wlr_scene_tree* drag_icon;
 struct wlr_renderer* drw;
 struct wlr_allocator* alloc;
-struct wlr_compositor* compositor;
 struct wlr_content_type_manager_v1* content_type_mgr;
 struct wlr_tearing_control_manager_v1* tearing_mgr;
 struct wl_list clients; /* tiling order */
@@ -132,7 +231,6 @@ struct wlr_pointer_gestures_v1* pointer_gestures;
 struct wlr_relative_pointer_manager_v1* relative_pointer_mgr;
 struct wlr_cursor* cursor;
 struct wlr_xcursor_manager* cursor_mgr;
-struct last_cursor_state last_cursor;
 struct wlr_scene_rect* root_bg;
 #ifdef INTEGRATED_BACKGROUND
 GdkPixbuf* wallpaper_src; /* full-res decode, cached across resizes */
@@ -140,21 +238,12 @@ GdkPixbuf* wallpaper_src; /* full-res decode, cached across resizes */
 struct wlr_scene_rect* locked_bg;
 struct wlr_seat* seat;
 KeyboardGroup* kb_group;
-unsigned int cursor_mode;
-Client* grabc;
 struct wlr_output_layout* output_layout;
 struct wlr_box sgeom;
 struct wl_list mons;
 Monitor* selmon;
-char stext[STATUS_MAX];
 struct wl_event_source* status_event_source;
 Watcher watcher = { .running = 0 };
-int runner_active;
-char runner_buf[256];
-int runner_len;
-int runner_cur;       /* cursor offset into runner_buf, 0..runner_len */
-int runner_repeating; /* the armed repeat belongs to the prompt */
-struct wl_listener request_activate = { .notify = urgent };
 #ifdef XWAYLAND
 struct wlr_xwayland* xwayland;
 #endif /* XWAYLAND */
@@ -461,7 +550,7 @@ static void handlesig(int signo)
 
 static char notifytokentag; /* marks the tokens handed out below */
 
-const char* notifytoken(void)
+static const char* notifytoken(void)
 {
     struct wlr_xdg_activation_token_v1* token =
         wlr_xdg_activation_token_v1_create(activation);
@@ -483,7 +572,7 @@ void quit(const Arg* arg)
     wl_display_terminate(dpy);
 }
 
-void run(void)
+static void run(void)
 {
     /* Add a Unix socket to the Wayland display. */
     const char* socket = wl_display_add_socket_auto(dpy);
