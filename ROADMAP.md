@@ -152,6 +152,9 @@ OBS.
   (rounded or squircle).
 - [x] Show the placeholder text instead of the real title in the bar, the tabs
   and the foreign toplevel list, since the title often holds the sensitive part.
+- [x] Keep the real title on screen: screen sharing gets a copy of the title
+  bar and of the bar title drawn with the placeholder, pasted where the masks
+  go. A rotated or zoomed output gets a black box there instead.
 - [x] Spike: the output capture source and screencopy copy the buffer
   already composed for the screen. ext-image-copy-capture can still be masked
   without patching wlroots, by wrapping the source's `copy_frame`.

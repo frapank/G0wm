@@ -287,6 +287,7 @@ typedef struct {
     struct wlr_buffer* titleblurbuf;
 #endif
     Buffer* titlepool[2];
+    Buffer* sharepool[1];
     int titlex, titlew; /* title bar placement, relative to the border box */
     int titlebufw;      /* pixel width titlepool was allocated at */
     Buffer* cornerpool[4][2];
@@ -405,6 +406,8 @@ struct Monitor {
     struct wlr_buffer* shown;
     Drwl* drw;
     Buffer* pool[2];
+    Buffer* sharepool[1];
+    int sharex, sharew;
 #ifdef INTEGRATED_BACKGROUND
     Buffer* wallpaperpool[1];
     Buffer* blurpool[1];        /* wallpaperpool, blurred */
@@ -529,6 +532,7 @@ void privacycapture(struct wl_listener* listener, void* data);
 void privacydamage(void);
 void privacyfini(void);
 void shieldclient(Client* c);
+const char* sharetitle(Client* c);
 void magnify(const Arg* arg);
 void mapnotify(struct wl_listener* listener, void* data);
 void movestack(const Arg* arg);
@@ -611,7 +615,6 @@ void setwallpaper(Monitor* m);
 #endif /* INTEGRATED_BACKGROUND */
 void shifttag(const Arg* arg);
 void shiftview(const Arg* arg);
-const char* showntitle(Client* c);
 void spawn(const Arg* arg);
 void startdrag(struct wl_listener* listener, void* data);
 int statusin(int fd, unsigned int mask, void* data);

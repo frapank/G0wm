@@ -114,6 +114,7 @@ static void cleanupmon(struct wl_listener* listener, void* data)
 
     for (i = 0; i < LENGTH(m->pool); i++)
         wlr_buffer_drop(&m->pool[i]->base);
+    bufpooldrop(m->sharepool, LENGTH(m->sharepool));
 #ifdef INTEGRATED_BACKGROUND
     bufpooldrop(m->wallpaperpool, LENGTH(m->wallpaperpool));
     bufpooldrop(m->blurpool, LENGTH(m->blurpool));
