@@ -148,6 +148,7 @@ Borders, gaps and title bars.
 | `titleclosecolor` | <img src="../.github/assets/color-ff5f57.svg" width="12" height="12"> `#ff5f57ff` | Color of the close button. |
 | `privatetitle` | `{app}` | Shown instead of the title of a private window, in the title bar, the tabs, the bar, the runner and the window list given to other apps. `{app}` is replaced by the app id. |
 | `privatecolor` | <img src="../.github/assets/color-9b59f6.svg" width="12" height="12"> `#9b59f6ff` | Color of the dot on a private window. |
+| `privateround` | `-1` | Roundness of that dot, from `0` (square) to `1` (round). Below `0` it follows `bartagdotround`. |
 | `movethreshold` | `4` | Pixels to drag a title bar before the window starts moving. |
 | `movesnap` | `12` | Distance in pixels at which a moved floating window sticks to an edge. `0` turns it off. |
 

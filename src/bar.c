@@ -191,6 +191,11 @@ static uint32_t fade(uint32_t rgba)
     return (rgba & ~0xffu) | (rgba & 0xffu) / 3;
 }
 
+static double privateradius(int d)
+{
+    return d / 2.0 * (privateround < 0 ? bartagdotround : privateround);
+}
+
 /* the urgent colour breathing between full and a quarter of its alpha, one
  * cycle every barurgentpulse ms */
 static uint32_t pulse(uint32_t rgba)
@@ -594,7 +599,7 @@ void drawbar(Monitor* m)
                              boxy,
                              boxw,
                              boxw,
-                             boxr,
+                             privateradius(boxw),
                              0,
                              privatecolor);
             } else {
@@ -963,7 +968,7 @@ static void drawtitle(Client* c)
                  (h - fd) / 2,
                  fd,
                  fd,
-                 fd / 2.0,
+                 privateradius(fd),
                  0,
                  privatecolor);
     if (c->isfloating)
