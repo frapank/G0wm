@@ -1,5 +1,6 @@
 /*
- * See LICENSE file for copyright and license details.
+ * SPDX-FileCopyrightText: 2026 frapank
+ * SPDX-License-Identifier: GPL-3.0-or-later
  *
  * magnifier: zooms a monitor in around the pointer. While zoomed the scene is
  * rendered unzoomed into buffers of our own, and the part on show is drawn

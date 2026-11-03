@@ -8,6 +8,8 @@ anything big.
 - Run `make format` before committing, the CI checks it.
 - Build with `./configure --debug` and fix the warnings you add.
 - Keep comments short. Say why, not what.
+- New files start with the SPDX header the others have, `reuse lint`
+  checks it.
 - A new setting goes in `include/config.h`, `src/settings.c` and
   `docs/settings.md`.
 

@@ -1,5 +1,6 @@
 /*
- * See LICENSE file for copyright and license details.
+ * SPDX-FileCopyrightText: 2026 frapank
+ * SPDX-License-Identifier: GPL-3.0-or-later
  *
  * text-input-v3 and input-method-v2: the bridge between apps and an input
  * method, with its keyboard grab and candidate popup

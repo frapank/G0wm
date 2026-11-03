@@ -1,3 +1,9 @@
+/*
+ * SPDX-FileCopyrightText: janetski
+ * SPDX-FileCopyrightText: 2026 frapank
+ * SPDX-License-Identifier: GPL-3.0-or-later
+ */
+
 #include "item.h"
 
 #include "helpers.h"

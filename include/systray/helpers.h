@@ -1,3 +1,9 @@
+/*
+ * SPDX-FileCopyrightText: janetski
+ * SPDX-FileCopyrightText: 2026 frapank
+ * SPDX-License-Identifier: GPL-3.0-or-later
+ */
+
 #ifndef HELPERS_H
 #define HELPERS_H
 

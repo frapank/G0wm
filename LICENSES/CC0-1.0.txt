@@ -1,9 +1,3 @@
-dwl is originally based on TinyWL, which is used under the following license:
-
-This work is licensed under CC0, which effectively puts it in the public domain.
-
----
-
 Creative Commons Legal Code
 
 CC0 1.0 Universal

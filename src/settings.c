@@ -1,5 +1,6 @@
 /*
- * See LICENSE file for copyright and license details.
+ * SPDX-FileCopyrightText: 2026 frapank
+ * SPDX-License-Identifier: GPL-3.0-or-later
  *
  * ~/.config/g0wm/config: written from config.h, read back over it
  */

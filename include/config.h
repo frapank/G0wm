@@ -1,3 +1,9 @@
+/*
+ * SPDX-FileCopyrightText: 2020 dwl team
+ * SPDX-FileCopyrightText: 2026 frapank
+ * SPDX-License-Identifier: GPL-3.0-or-later
+ */
+
 /* Default values, used to write a new config. Once the file exists
  * it is the one that counts. */
 

@@ -15,17 +15,17 @@ dwl.
 
 Through dwl, the tree also carries:
 
-| File | Project | License | Covers |
-| --- | --- | --- | --- |
-| [`license/dwm.txt`](../license/dwm.txt) | [dwm] | MIT/X Consortium | `src/util.c`, `include/util.h` and the tags/layout model |
-| [`license/sway.txt`](../license/sway.txt) | [sway] | MIT | parts of the wlroots plumbing |
-| [`license/tinywl.txt`](../license/tinywl.txt) | tinywl | CC0 | the compositor skeleton dwl was built on |
+| Project | License | Covers |
+| --- | --- | --- |
+| [dwm] | [MIT](../LICENSES/MIT.txt) | `src/util.c`, `include/util.h` and the tags/layout model |
+| [sway] | [MIT](../LICENSES/MIT.txt) | parts of the wlroots plumbing |
+| tinywl | [CC0-1.0](../LICENSES/CC0-1.0.txt) | the compositor skeleton dwl was built on |
 
 ## Vendored code
 
 | File | Project | License |
 | --- | --- | --- |
-| [`external/drwl.h`](../external/drwl.h) | [drwl] by sewn and notchoc, including Björn Höhrmann's UTF-8 decoder | MIT ([`license/drwl.txt`](../license/drwl.txt)) |
+| [`external/drwl.h`](../external/drwl.h) | [drwl] by sewn and notchoc, including Björn Höhrmann's UTF-8 decoder | [MIT](../LICENSES/MIT.txt) |
 
 `drwl` is what draws every piece of text g0wm puts on screen: the bar, the
 title bars, the notifications and the runner.

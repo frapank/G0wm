@@ -1,5 +1,7 @@
 /*
- * See LICENSE file for copyright and license details.
+ * SPDX-FileCopyrightText: Hansvon
+ * SPDX-FileCopyrightText: 2026 frapank
+ * SPDX-License-Identifier: GPL-3.0-or-later
  *
  * opacity, the blurred wallpaper and the frosted decorations
  */

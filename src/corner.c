@@ -1,5 +1,6 @@
 /*
- * See LICENSE file for copyright and license details.
+ * SPDX-FileCopyrightText: 2026 frapank
+ * SPDX-License-Identifier: GPL-3.0-or-later
  *
  * rounded corners: each corner is a small buffer of its own, the straight
  * borders stop where it begins

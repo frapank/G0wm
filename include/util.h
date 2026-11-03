@@ -1,4 +1,8 @@
-/* See license/dwm.txt for copyright and license details. */
+/*
+ * SPDX-FileCopyrightText: 2020 dwl team
+ * SPDX-FileCopyrightText: 2026 frapank
+ * SPDX-License-Identifier: MIT
+ */
 
 void die(const char* fmt, ...);
 void* ecalloc(size_t nmemb, size_t size);

@@ -1,3 +1,8 @@
+/*
+ * SPDX-FileCopyrightText: 2026 frapank
+ * SPDX-License-Identifier: GPL-3.0-or-later
+ */
+
 #ifndef G0WMNOTIFY_H
 #define G0WMNOTIFY_H
 
