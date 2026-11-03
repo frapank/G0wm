@@ -96,6 +96,7 @@ static Rule rules_def[] = {
       .title           = NULL,
       .tags            = 0,
       .isfloating      = 1,
+      .isprivate       = 0,
       .opacity_focus   = 0,
       .opacity_unfocus = 0,
       .monitor         = -1 },

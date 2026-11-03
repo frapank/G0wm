@@ -130,7 +130,7 @@ Keeps a window (a password manager, a private chat) out of screenshots and
 screen shares, for any app that goes through the portal, such as Discord or
 OBS.
 
-- [ ] Add a `private` option to the window rules.
+- [x] Add a `private` option to the window rules.
 - [x] Add `toggleprivate` (<kbd>Super</kbd> <kbd>Shift</kbd> <kbd>P</kbd>), with
   a purple dot next to the title, in the tabs too.
 - [x] Black out private windows in what ext-image-copy-capture hands out
