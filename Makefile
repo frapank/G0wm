@@ -58,19 +58,11 @@ PKG_LIBS   := $(shell $(PKG_CONFIG) --libs $(PKGS))
 G0WMCFLAGS = -std=gnu23 $(PKG_CFLAGS) $(WLR_INCS) $(G0WMCPPFLAGS) $(G0WMDEVCFLAGS) $(CFLAGS)
 LDLIBS    = $(PKG_LIBS) $(WLR_LIBS) -lm $(LIBS)
 
-# Sources. The systray and its dbus glue come from the bar-systray patch.
-SRC = $(SRCDIR)/g0wm.c $(SRCDIR)/bar.c $(SRCDIR)/buffer.c $(SRCDIR)/client.c \
-	$(SRCDIR)/corner.c $(SRCDIR)/input.c $(SRCDIR)/layout.c $(SRCDIR)/lock.c \
-	$(SRCDIR)/magnifier.c $(SRCDIR)/monitor.c $(SRCDIR)/opacity.c \
-	$(SRCDIR)/privacy.c \
-	$(SRCDIR)/util.c $(SRCDIR)/dbus.c $(SRCDIR)/settings.c \
-	$(SRCDIR)/notify.c $(SRCDIR)/runner.c $(SRCDIR)/tablet.c \
-	$(SRCDIR)/textinput.c $(SRCDIR)/toplevel.c $(SRCDIR)/traypopup.c \
-	$(SRCDIR)/systray/watcher.c $(SRCDIR)/systray/tray.c \
-	$(SRCDIR)/systray/item.c $(SRCDIR)/systray/icon.c \
-	$(SRCDIR)/systray/menu.c $(SRCDIR)/systray/helpers.c
-ifneq ($(XWAYLAND),)
-SRC += $(SRCDIR)/xwayland.c
+# Sources, one directory per area. The systray and its dbus glue come from
+# the bar-systray patch.
+SRC = $(wildcard $(SRCDIR)/*/*.c $(SRCDIR)/*/*/*.c)
+ifeq ($(XWAYLAND),)
+SRC := $(filter-out $(SRCDIR)/window/xwayland.c,$(SRC))
 endif
 OBJ = $(SRC:$(SRCDIR)/%.c=$(BUILDDIR)/%.o)
 
@@ -114,7 +106,7 @@ $(BUILDDIR)/version: FORCE
 	@mkdir -p $(@D)
 	@echo '$(VERSION)' | cmp -s - $@ || echo '$(VERSION)' >$@
 
-$(BUILDDIR)/g0wm.o $(BUILDDIR)/monitor.o: $(BUILDDIR)/version
+$(BUILDDIR)/core/g0wm/main.o $(BUILDDIR)/output/monitor.o: $(BUILDDIR)/version
 
 $(ENUMHDR:%=$(GENDIR)/%-protocol.h): SCANMODE = enum-header
 $(SERVERHDR:%=$(GENDIR)/%-protocol.h): SCANMODE = server-header
@@ -136,9 +128,9 @@ config.mk: config.def.mk configure
 
 # Formatting, per .clang-format. external/ is vendored and config*.h are
 # alignment-sensitive tables, so neither is reformatted.
-FMT_SRC = $(filter-out $(SRCDIR)/config.h, \
-	$(wildcard $(SRCDIR)/*.c $(SRCDIR)/systray/*.c \
-	$(INCDIR)/*.h $(INCDIR)/systray/*.h))
+FMT_SRC = $(filter-out $(SRCDIR)/core/settings/config.h, \
+	$(wildcard $(SRCDIR)/*/*.c $(SRCDIR)/*/*/*.c $(SRCDIR)/*/*/*.h \
+	$(INCDIR)/*/*.h $(INCDIR)/*/*/*.h))
 
 format:
 	@$(MESS) '[$(CYAN)FORMAT$(RESET)] %s\n' 'Formatting...'
