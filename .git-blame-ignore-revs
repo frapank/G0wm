@@ -12,3 +12,6 @@ da54fa3e604701c5daeb53aed4c1a22e5f61ede3
 
 # Prefix functions and variables with module name
 92bf3b925a667458cb190a4823089a90014c0723
+
+# Reorganize sources into subdirectories
+b0dd0ea94b09dcaf81c02167012743a7dbc4a445
