@@ -98,7 +98,7 @@ static int privacy_black_out(struct wlr_buffer* buf, Patch* p, int n)
     size_t stride;
     void* data;
     double sx, sy;
-    int i, ntex = 0, ok;
+    int ntex = 0, ok;
 
     if (wlr_buffer_begin_data_ptr_access(
             buf, WLR_BUFFER_DATA_PTR_ACCESS_WRITE, &data, &format, &stride)) {
@@ -108,7 +108,7 @@ static int privacy_black_out(struct wlr_buffer* buf, Patch* p, int n)
             wlr_buffer_end_data_ptr_access(buf);
             return 0;
         }
-        for (i = 0; i < n; i++) {
+        for (int i = 0; i < n; i++) {
             if (!wlr_box_intersection(&b, &p[i].box, &all))
                 continue;
             if (!p[i].buf)
@@ -140,7 +140,7 @@ static int privacy_black_out(struct wlr_buffer* buf, Patch* p, int n)
 
     if (!(pass = wlr_renderer_begin_buffer_pass(renderer, buf, nullptr)))
         return 0;
-    for (i = 0; i < n; i++) {
+    for (int i = 0; i < n; i++) {
         if (!wlr_box_intersection(&b, &p[i].box, &all))
             continue;
         if (!p[i].buf ||
@@ -247,7 +247,7 @@ void privacy_after_commit(Monitor* m)
     struct wlr_screencopy_frame_v1* f;
     Patch b[MAXBOXES];
     Copy* cp;
-    int i, gone;
+    int gone;
 
     m->shown = nullptr;
     wl_array_for_each(cp, &privacy_copies)
@@ -259,7 +259,7 @@ void privacy_after_commit(Monitor* m)
                 gone = 0;
         }
         if (gone) {
-            for (i = 0; i < privacy_mask_count; i++) {
+            for (int i = 0; i < privacy_mask_count; i++) {
                 b[i] = privacy_masks[i];
                 b[i].box.x -= cp->box.x;
                 b[i].box.y -= cp->box.y;
@@ -331,7 +331,7 @@ static int privacy_private_boxes(Monitor* m, Patch* out)
     Buffer* sp;
     Client* c;
     double k;
-    int i, n = 0, nb, t, x, y;
+    int n = 0, nb, t, x, y;
 
     wl_list_for_each(c, &clients, link)
     {
@@ -356,7 +356,7 @@ static int privacy_private_boxes(Monitor* m, Patch* out)
                               ? sp
                               : nullptr;
         }
-        for (i = 0; i < nb; i++) {
+        for (int i = 0; i < nb; i++) {
             if (n == MAXBOXES)
                 goto full;
             switch (privacy_to_buffer(m, b[i], &out[n].box)) {
@@ -437,12 +437,11 @@ static void privacy_handle_shield_destroy(struct wl_listener* listener, void*)
 const char* privacy_share_title(Client* c)
 {
     static char buf[256];
-    const char* s;
     size_t n = 0;
 
     if (!c->isprivate)
         return client_get_title(c);
-    for (s = private_title; *s && n < sizeof(buf) - 1; s++) {
+    for (const char* s = private_title; *s && n < sizeof(buf) - 1; s++) {
         if (!strncmp(s, "{app}", 5)) {
             n += snprintf(buf + n, sizeof(buf) - n, "%s", client_get_app_id(c));
             n = MIN(n, sizeof(buf) - 1);

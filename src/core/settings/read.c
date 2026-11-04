@@ -51,9 +51,7 @@ static int settings_enum_value(const Enum* e,
                                int fallback,
                                const char* what)
 {
-    const Enum* p;
-
-    for (p = e; p->name; p++)
+    for (const Enum* p = e; p->name; p++)
         if (!strcmp(p->name, name))
             return p->val;
     settings_warn("%s is not a %s", name, what);
@@ -62,11 +60,9 @@ static int settings_enum_value(const Enum* e,
 
 static const Action* settings_action_by_name(const char* name)
 {
-    size_t i;
-
     if (!name)
         return nullptr;
-    for (i = 0; i < settings_action_count; i++)
+    for (size_t i = 0; i < settings_action_count; i++)
         if (!strcmp(settings_actions[i].name, name))
             return &settings_actions[i];
     settings_warn("%s is not an action", name);
@@ -76,11 +72,9 @@ static const Action* settings_action_by_name(const char* name)
 static const struct scfg_directive* settings_find(const struct scfg_block* b,
                                                   const char* k)
 {
-    size_t i;
-
     if (!b)
         return nullptr;
-    for (i = 0; i < b->directives_len; i++) {
+    for (size_t i = 0; i < b->directives_len; i++) {
         if (!strcmp(b->directives[i].name, k)) {
             settings_line = b->directives[i].lineno;
             return &b->directives[i];
@@ -99,9 +93,9 @@ static const struct scfg_block* settings_section(const struct scfg_block* b,
 
 static size_t settings_count(const struct scfg_block* b, const char* k)
 {
-    size_t i, n = 0;
+    size_t n = 0;
 
-    for (i = 0; i < b->directives_len; i++)
+    for (size_t i = 0; i < b->directives_len; i++)
         n += !strcmp(b->directives[i].name, k);
     return n;
 }
@@ -236,12 +230,11 @@ static const char** settings_string_list(const struct scfg_directive* d,
                                          size_t* n)
 {
     const char** v;
-    size_t i;
 
     if (!d || d->params_len < from)
         return nullptr;
     v = util_calloc(d->params_len - from + 1, sizeof *v);
-    for (i = from; i < d->params_len; i++)
+    for (size_t i = from; i < d->params_len; i++)
         v[i - from] = d->params[i];
     if (n)
         *n = d->params_len - from;
@@ -282,11 +275,9 @@ static uint32_t settings_get_mods(const struct scfg_block* b,
 
 static const Layout* settings_layout_by_symbol(const char* symbol)
 {
-    size_t i;
-
     if (!symbol)
         return nullptr;
-    for (i = 0; i < layout_count; i++)
+    for (size_t i = 0; i < layout_count; i++)
         if (!strcmp(layouts[i].symbol, symbol))
             return &layouts[i];
     settings_warn("no layout draws %s", symbol);
@@ -326,13 +317,12 @@ static Arg settings_get_arg(char kind, const struct scfg_directive* d, size_t i)
 static void settings_apply_colors(const struct scfg_block* b)
 {
     const struct scfg_directive* d;
-    size_t i, j;
 
-    for (i = 0; i < NumSchemes; i++) {
+    for (size_t i = 0; i < NumSchemes; i++) {
         if (!settings_scheme_names[i] ||
             !(d = settings_find(b, settings_scheme_names[i])))
             continue;
-        for (j = 0; j < 3; j++)
+        for (size_t j = 0; j < 3; j++)
             colors[i][j] =
                 settings_hex_value(settings_param(d, j), colors[i][j]);
     }
@@ -601,12 +591,12 @@ static void settings_apply_layouts(const struct scfg_block* b)
 {
     const struct scfg_directive* d;
     Layout* out;
-    size_t i, j, n = 0;
+    size_t j, n = 0;
 
     if (!settings_count(b, "layout"))
         return;
     out = util_calloc(settings_count(b, "layout"), sizeof *out);
-    for (i = 0; i < b->directives_len; i++) {
+    for (size_t i = 0; i < b->directives_len; i++) {
         const char* name;
 
         d = &b->directives[i];
@@ -634,10 +624,10 @@ static void settings_apply_rules(const struct scfg_block* b)
 {
     const struct scfg_block* r;
     Rule* out;
-    size_t i, n = 0;
+    size_t n = 0;
 
     out = util_calloc(settings_count(b, "rule") + 1, sizeof *out);
-    for (i = 0; i < b->directives_len; i++) {
+    for (size_t i = 0; i < b->directives_len; i++) {
         if (strcmp(b->directives[i].name, "rule"))
             continue;
         r = &b->directives[i].children;
@@ -661,12 +651,12 @@ static void settings_apply_monitors(const struct scfg_block* b)
 {
     const struct scfg_block* m;
     MonitorRule* out;
-    size_t i, n = 0;
+    size_t n = 0;
 
     if (!settings_count(b, "monitor"))
         return;
     out = util_calloc(settings_count(b, "monitor"), sizeof *out);
-    for (i = 0; i < b->directives_len; i++) {
+    for (size_t i = 0; i < b->directives_len; i++) {
         if (strcmp(b->directives[i].name, "monitor"))
             continue;
         m = &b->directives[i].children;
@@ -700,20 +690,20 @@ static void settings_apply_autostart(const struct scfg_block* b)
 {
     const struct scfg_directive* d;
     const char** out;
-    size_t i, j, n = 0;
+    size_t n = 0;
 
-    for (i = 0; i < b->directives_len; i++)
+    for (size_t i = 0; i < b->directives_len; i++)
         if (!strcmp(b->directives[i].name, "autostart"))
             n += b->directives[i].params_len + 1;
     out = util_calloc(n + 1, sizeof *out);
 
     n = 0;
-    for (i = 0; i < b->directives_len; i++) {
+    for (size_t i = 0; i < b->directives_len; i++) {
         d = &b->directives[i];
         settings_line = d->lineno;
         if (strcmp(d->name, "autostart") || !d->params_len)
             continue;
-        for (j = 0; j < d->params_len; j++)
+        for (size_t j = 0; j < d->params_len; j++)
             out[n++] = d->params[j];
         out[n++] = nullptr;
     }
@@ -725,10 +715,10 @@ static void settings_apply_keys(const struct scfg_block* b)
     const struct scfg_directive* d;
     const Action* act;
     Key* out;
-    size_t i, n = 0;
+    size_t n = 0;
 
     out = util_calloc(settings_count(b, "key") + 1, sizeof *out);
-    for (i = 0; i < b->directives_len; i++) {
+    for (size_t i = 0; i < b->directives_len; i++) {
         const char* name;
         xkb_keysym_t sym;
 
@@ -757,10 +747,10 @@ static void settings_apply_buttons(const struct scfg_block* b)
     const struct scfg_directive* d;
     const Action* act;
     Button* out;
-    size_t i, n = 0;
+    size_t n = 0;
 
     out = util_calloc(settings_count(b, "button") + 1, sizeof *out);
-    for (i = 0; i < b->directives_len; i++) {
+    for (size_t i = 0; i < b->directives_len; i++) {
         d = &b->directives[i];
         settings_line = d->lineno;
         if (strcmp(d->name, "button") ||
@@ -788,10 +778,10 @@ static void settings_apply_gestures(const struct scfg_block* b)
     const struct scfg_directive* d;
     const Action* act;
     Gesture* out;
-    size_t i, n = 0;
+    size_t n = 0;
 
     out = util_calloc(settings_count(b, "gesture") + 1, sizeof *out);
-    for (i = 0; i < b->directives_len; i++) {
+    for (size_t i = 0; i < b->directives_len; i++) {
         d = &b->directives[i];
         settings_line = d->lineno;
         if (strcmp(d->name, "gesture") ||
@@ -816,10 +806,10 @@ static void settings_apply_pad_buttons(const struct scfg_block* b)
     const struct scfg_directive* d;
     const Action* act;
     PadButton* out;
-    size_t i, n = 0;
+    size_t n = 0;
 
     out = util_calloc(settings_count(b, "padbutton") + 1, sizeof *out);
-    for (i = 0; i < b->directives_len; i++) {
+    for (size_t i = 0; i < b->directives_len; i++) {
         d = &b->directives[i];
         settings_line = d->lineno;
         if (strcmp(d->name, "padbutton") ||
@@ -885,9 +875,7 @@ void settings_apply(const struct scfg_block* b)
 
 static int settings_is_record(const char* k)
 {
-    size_t i;
-
-    for (i = 0; i < LENGTH(settings_records); i++)
+    for (size_t i = 0; i < LENGTH(settings_records); i++)
         if (!strcmp(settings_records[i], k))
             return 1;
     return 0;
@@ -925,9 +913,8 @@ void settings_check(const struct scfg_block* want,
     const struct scfg_directive* w;
     const struct scfg_directive* g;
     char sub[256];
-    size_t i;
 
-    for (i = 0; i < want->directives_len; i++) {
+    for (size_t i = 0; i < want->directives_len; i++) {
         w = &want->directives[i];
         if (!*path && settings_is_record(w->name))
             continue;
@@ -943,7 +930,7 @@ void settings_check(const struct scfg_block* want,
         }
     }
     /* a typo, a setting this build was configured without, or a second one */
-    for (i = 0; i < got->directives_len; i++) {
+    for (size_t i = 0; i < got->directives_len; i++) {
         g = &got->directives[i];
         if (!*path && settings_is_record(g->name)) {
             /* what a rule or a monitor holds */

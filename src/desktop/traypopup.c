@@ -82,7 +82,7 @@ void traypopup_dismiss(void)
 void traypopup_present(const char* const* labels, int n, Menu* menu)
 {
     Monitor* m;
-    int i, tw, maxw = 0;
+    int tw, maxw = 0;
 
     if (traypopup_state.menu && traypopup_state.menu != menu)
         traypopup_dismiss();
@@ -95,7 +95,7 @@ void traypopup_present(const char* const* labels, int n, Menu* menu)
 
     if (n > TRAYPOPUP_ITEMS_MAX)
         n = TRAYPOPUP_ITEMS_MAX;
-    for (i = 0; i < n; i++) {
+    for (int i = 0; i < n; i++) {
         snprintf(traypopup_state.labels[i],
                  sizeof(traypopup_state.labels[i]),
                  "%s",
@@ -143,7 +143,7 @@ static void traypopup_draw(void)
     Monitor* m;
     Buffer* buf;
     uint32_t border[3];
-    int i, rowh, rowsh, bw, bh, bd, r;
+    int rowh, rowsh, bw, bh, bd, r;
 
     if (!traypopup_state.n ||
         !(m = monitor_at(traypopup_state.x + traypopup_state.w / 2,
@@ -186,7 +186,7 @@ static void traypopup_draw(void)
     drwl_setscheme(m->drw, border);
     drwl_rect(m->drw, 0, 0, (unsigned int)bw, (unsigned int)bh, 1, 1);
 
-    for (i = 0; i < traypopup_state.n; i++) {
+    for (int i = 0; i < traypopup_state.n; i++) {
         drwl_setscheme(
             m->drw, colors[i == traypopup_state.sel ? SchemeSel : SchemeNorm]);
         drwl_text(m->drw,

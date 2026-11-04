@@ -36,9 +36,7 @@ static const char* settings_enum_name(const Enum* e, int val)
 
 static const Action* settings_action_by_func(void (*func)(const Arg*))
 {
-    size_t i;
-
-    for (i = 0; i < settings_action_count; i++)
+    for (size_t i = 0; i < settings_action_count; i++)
         if (settings_actions[i].func == func)
             return &settings_actions[i];
     return nullptr;
@@ -46,9 +44,7 @@ static const Action* settings_action_by_func(void (*func)(const Arg*))
 
 static const char* settings_arrange_name(void (*fn)(Monitor*))
 {
-    size_t i;
-
-    for (i = 0; i < settings_arrange_count; i++)
+    for (size_t i = 0; i < settings_arrange_count; i++)
         if (settings_arranges[i].arrange == fn)
             return settings_arranges[i].name;
     return "tile";
@@ -56,9 +52,7 @@ static const char* settings_arrange_name(void (*fn)(Monitor*))
 
 static void settings_put_indent(void)
 {
-    int i;
-
-    for (i = 0; i < settings_depth; i++)
+    for (int i = 0; i < settings_depth; i++)
         fputc('\t', settings_file);
 }
 
@@ -159,20 +153,16 @@ static void settings_write_hex(const char* k, uint32_t c)
 
 static void settings_write_list(const char* k, const char* const* v, size_t n)
 {
-    size_t i;
-
     settings_start_group(k);
-    for (i = 0; i < n; i++)
+    for (size_t i = 0; i < n; i++)
         settings_put_word(v[i]);
     fputc('\n', settings_file);
 }
 
 static void settings_write_combo(uint32_t mod, const char* last)
 {
-    const Enum* e;
-
     fputc(' ', settings_file);
-    for (e = settings_modifier_names; e->name; e++)
+    for (const Enum* e = settings_modifier_names; e->name; e++)
         if (mod & (uint32_t)e->val)
             fprintf(settings_file, "%s+", e->name);
     fputs(last, settings_file);
@@ -181,13 +171,12 @@ static void settings_write_combo(uint32_t mod, const char* last)
 /* logo+alt, or none */
 static void settings_write_mods(const char* k, uint32_t mod)
 {
-    const Enum* e;
     const char* sep = " ";
 
     settings_start_group(k);
     if (!mod)
         fputs(" none", settings_file);
-    for (e = settings_modifier_names; e->name; e++) {
+    for (const Enum* e = settings_modifier_names; e->name; e++) {
         if (mod & (uint32_t)e->val) {
             fprintf(settings_file, "%s%s", sep, e->name);
             sep = "+";
@@ -227,13 +216,11 @@ static void settings_write_arg(char kind, const Arg* arg)
 
 static void settings_write_look(void)
 {
-    size_t i;
-
     settings_write_open("look");
     settings_write_list("fonts", fonts, font_count);
     settings_write_open("colors");
     settings_put_note("norm", "fg bg border");
-    for (i = 0; i < NumSchemes; i++) {
+    for (size_t i = 0; i < NumSchemes; i++) {
         if (!settings_scheme_names[i])
             continue;
         settings_start_group(settings_scheme_names[i]);
@@ -484,10 +471,8 @@ static void settings_write_misc(void)
 
 static void settings_write_layouts(void)
 {
-    size_t i;
-
     settings_put_note("layout", "layout: symbol, then tile or tabbed");
-    for (i = 0; i < layout_count; i++) {
+    for (size_t i = 0; i < layout_count; i++) {
         settings_start_group("layout");
         settings_put_word(layouts[i].symbol);
         settings_put_word(settings_arrange_name(layouts[i].arrange));
@@ -497,13 +482,11 @@ static void settings_write_layouts(void)
 
 static void settings_write_rules(void)
 {
-    size_t i;
-
     settings_put_note(
         "rule",
         "rule: opacity 0 keeps the default, monitor -1 is the focused one, "
         "without private it follows alwaysprivate");
-    for (i = 0; i < rule_count; i++) {
+    for (size_t i = 0; i < rule_count; i++) {
         settings_write_open("rule");
         settings_write_string("id", rules[i].id);
         settings_write_string("title", rules[i].title);
@@ -520,10 +503,8 @@ static void settings_write_rules(void)
 
 static void settings_write_monitors(void)
 {
-    size_t i;
-
     settings_put_note("monitor", "monitor: the first matching name wins");
-    for (i = 0; i < monitor_rule_count; i++) {
+    for (size_t i = 0; i < monitor_rule_count; i++) {
         settings_write_open("monitor");
         settings_write_string("name", monitor_rules[i].name);
         settings_write_number("mfact", monitor_rules[i].mfact);
@@ -547,10 +528,8 @@ static void settings_write_monitors(void)
 /* one NULL terminated run of arguments per command */
 static void settings_write_autostart(void)
 {
-    const char* const* p;
-
     settings_put_note("autostart", "autostart: a command, run without a shell");
-    for (p = autostart; *p; p++) {
+    for (const char* const* p = autostart; *p; p++) {
         settings_start_group("autostart");
         for (; *p; p++)
             settings_put_word(*p);
@@ -560,10 +539,8 @@ static void settings_write_autostart(void)
 
 static void settings_write_keys(void)
 {
-    size_t i;
-
     settings_put_note("key", "key: modifiers+key, action, argument");
-    for (i = 0; i < key_count; i++) {
+    for (size_t i = 0; i < key_count; i++) {
         const Action* act = settings_action_by_func(keys[i].func);
         char name[64];
 
@@ -584,11 +561,9 @@ static void settings_write_keys(void)
 
 static void settings_write_buttons(void)
 {
-    size_t i;
-
     settings_put_note("button",
                       "button: bar area, modifiers+button, action, argument");
-    for (i = 0; i < button_count; i++) {
+    for (size_t i = 0; i < button_count; i++) {
         const Action* act = settings_action_by_func(buttons[i].func);
 
         if (!act) {
@@ -610,10 +585,8 @@ static void settings_write_buttons(void)
 
 static void settings_write_gestures(void)
 {
-    size_t i;
-
     settings_put_note("gesture", "gesture: motion, fingers, action, argument");
-    for (i = 0; i < gesture_count; i++) {
+    for (size_t i = 0; i < gesture_count; i++) {
         const Action* act = settings_action_by_func(gestures[i].func);
 
         if (!act) {
@@ -633,11 +606,9 @@ static void settings_write_gestures(void)
 
 static void settings_write_pad_buttons(void)
 {
-    size_t i;
-
     settings_put_note("padbutton",
                       "padbutton: button from 0, action, argument");
-    for (i = 0; i < pad_button_count; i++) {
+    for (size_t i = 0; i < pad_button_count; i++) {
         const Action* act = settings_action_by_func(pad_buttons[i].func);
 
         if (!act) {

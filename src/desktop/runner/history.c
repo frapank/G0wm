@@ -42,11 +42,11 @@ static const char* runner_history_path(void)
 
 void runner_trim_history(void)
 {
-    int i, drop = runner_history_count - (int)MIN(runner_history_size, INT_MAX);
+    int drop = runner_history_count - (int)MIN(runner_history_size, INT_MAX);
 
     if (drop <= 0)
         return;
-    for (i = 0; i < drop; i++)
+    for (int i = 0; i < drop; i++)
         free(runner_history[i]);
     memmove(runner_history,
             runner_history + drop,
@@ -89,7 +89,6 @@ static void runner_write_history(void)
     char tmp[PATH_MAX + 4], dir[PATH_MAX];
     char* slash;
     FILE* f;
-    int i;
 
     if (!path)
         return;
@@ -101,7 +100,7 @@ static void runner_write_history(void)
         fprintf(stderr, "g0wm: cannot write %s: %s\n", path, strerror(errno));
         return;
     }
-    for (i = 0; i < runner_history_count; i++)
+    for (int i = 0; i < runner_history_count; i++)
         fprintf(f, "%s\n", runner_history[i]);
     if (fclose(f) != 0 || rename(tmp, path) < 0) {
         fprintf(stderr, "g0wm: cannot write %s: %s\n", path, strerror(errno));
@@ -118,13 +117,13 @@ void runner_weigh(void)
     const char* line;
     char** hit;
     size_t n;
-    int i, off, mode, w;
+    int off, mode, w;
 
-    for (i = 0; i < runner_command_count; i++)
+    for (int i = 0; i < runner_command_count; i++)
         runner_use[i] = 0;
-    for (i = 0; i < runner_app_count; i++)
+    for (int i = 0; i < runner_app_count; i++)
         runner_app_use[i] = 0;
-    for (i = 0; i < runner_history_count; i++) {
+    for (int i = 0; i < runner_history_count; i++) {
         w = 1 + (i + 1) * 4 / runner_history_count;
         mode = runner_mode(runner_history[i], &off);
         line = runner_history[i] + off;

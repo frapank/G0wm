@@ -104,7 +104,6 @@ static void monitor_arrange_layer(Monitor* m,
 
 void monitor_arrange_layers(Monitor* m)
 {
-    int i;
     struct wlr_box usable_area = m->m;
     LayerSurface* l;
     uint32_t layers_above_shell[] = {
@@ -121,7 +120,7 @@ void monitor_arrange_layers(Monitor* m)
     }
 
     /* Arrange exclusive surfaces from top->bottom */
-    for (i = 3; i >= 0; i--)
+    for (int i = 3; i >= 0; i--)
         monitor_arrange_layer(m, &m->layers[i], &usable_area, 1);
 
     if (!wlr_box_equal(&usable_area, &m->w)) {
@@ -130,11 +129,11 @@ void monitor_arrange_layers(Monitor* m)
     }
 
     /* Arrange non-exclusive surfaces from top->bottom */
-    for (i = 3; i >= 0; i--)
+    for (int i = 3; i >= 0; i--)
         monitor_arrange_layer(m, &m->layers[i], &usable_area, 0);
 
     /* Find topmost keyboard interactive layer, if such a layer exists */
-    for (i = 0; i < (int)LENGTH(layers_above_shell); i++) {
+    for (int i = 0; i < (int)LENGTH(layers_above_shell); i++) {
         wl_list_for_each_reverse(l, &m->layers[layers_above_shell[i]], link)
         {
             if (lock_active ||
@@ -154,15 +153,14 @@ static void monitor_handle_destroy(struct wl_listener* listener, void*)
 {
     Monitor* m = wl_container_of(listener, m, destroy);
     LayerSurface *l, *tmp;
-    size_t i;
 
     /* m->layers[i] are intentionally not unlinked */
-    for (i = 0; i < LENGTH(m->layers); i++) {
+    for (size_t i = 0; i < LENGTH(m->layers); i++) {
         wl_list_for_each_safe(l, tmp, &m->layers[i], link)
             wlr_layer_surface_v1_destroy(l->layer_surface);
     }
 
-    for (i = 0; i < LENGTH(m->pool); i++)
+    for (size_t i = 0; i < LENGTH(m->pool); i++)
         wlr_buffer_drop(&m->pool[i]->base);
     buffer_pool_drop(m->sharepool, LENGTH(m->sharepool));
 #ifdef INTEGRATED_BACKGROUND
@@ -317,11 +315,11 @@ static void monitor_apply_rules(Monitor* m, struct wlr_output_state* state)
 {
     struct wlr_output* wlr_output = m->wlr_output;
     struct wlr_output_mode* mode = nullptr;
-    const MonitorRule* r;
-    size_t i;
 
     m->gaps = gaps;
-    for (r = monitor_rules; r < monitor_rules + monitor_rule_count; r++) {
+    for (const MonitorRule* r = monitor_rules;
+         r < monitor_rules + monitor_rule_count;
+         r++) {
         if (r->name && !strstr(wlr_output->name, r->name))
             continue;
         m->m.x = r->x;
@@ -332,7 +330,7 @@ static void monitor_apply_rules(Monitor* m, struct wlr_output_state* state)
         m->lt[1] = &layouts[layout_count > 1 && r->lt != &layouts[1]];
         snprintf(
             m->ltsymbol, LENGTH(m->ltsymbol), "%s", m->lt[m->sellt]->symbol);
-        for (i = 0; i < LENGTH(m->taglt); i++) {
+        for (size_t i = 0; i < LENGTH(m->taglt); i++) {
             m->taglt[i][0] = m->lt[0];
             m->taglt[i][1] = m->lt[1];
         }
@@ -410,7 +408,6 @@ void monitor_handle_new_output(struct wl_listener*, void* data)
     struct wlr_output* wlr_output = data;
     struct wlr_output_state state;
     Monitor* m;
-    size_t i;
 
     if (!wlr_output_init_render(wlr_output, allocator, renderer))
         return;
@@ -418,7 +415,7 @@ void monitor_handle_new_output(struct wl_listener*, void* data)
     m = wlr_output->data = util_calloc(1, sizeof(*m));
     m->wlr_output = wlr_output;
 
-    for (i = 0; i < LENGTH(m->layers); i++)
+    for (size_t i = 0; i < LENGTH(m->layers); i++)
         wl_list_init(&m->layers[i]);
 
     wlr_output_state_init(&state);

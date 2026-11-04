@@ -80,11 +80,9 @@ int corner_bar_radius(Monitor* m)
  * hands back a used one and corner_cut() only fades what it finds there. */
 void corner_clear(uint32_t* px, int w, int h, int r)
 {
-    int i, x, y;
-
-    for (i = 0; i < 4 && r > 0; i++)
-        for (y = 0; y < r; y++)
-            for (x = 0; x < r; x++)
+    for (int i = 0; i < 4 && r > 0; i++)
+        for (int y = 0; y < r; y++)
+            for (int x = 0; x < r; x++)
                 px[(size_t)(i & 2 ? h - 1 - y : y) * (size_t)w +
                    (size_t)(i & 1 ? w - 1 - x : x)] = 0;
 }
@@ -96,16 +94,15 @@ void corner_cut(uint32_t* px, int w, int h, int r)
     uint8_t* cov;
     uint32_t a, p;
     size_t o;
-    int i, x, y;
 
     if (r <= 0)
         return;
 
     /* bw = r, no inner curve: the cut goes all the way through */
     cov = corner_coverage(r, r);
-    for (i = 0; i < 4; i++) {
-        for (y = 0; y < r; y++) {
-            for (x = 0; x < r; x++) {
+    for (int i = 0; i < 4; i++) {
+        for (int y = 0; y < r; y++) {
+            for (int x = 0; x < r; x++) {
                 a = cov[(size_t)y * (size_t)r + (size_t)x];
                 o = (size_t)(i & 2 ? h - 1 - y : y) * (size_t)w +
                     (size_t)(i & 1 ? w - 1 - x : x);
@@ -140,13 +137,13 @@ static uint8_t* corner_coverage(int r, int bw)
 {
     uint8_t* cov = util_calloc((size_t)r * (size_t)r, 1);
     double n = corner_exponent(), ri = r - bw, sx, sy;
-    int x, y, i, j, in;
+    int in;
 
-    for (y = 0; y < r; y++) {
-        for (x = 0; x < r; x++) {
+    for (int y = 0; y < r; y++) {
+        for (int x = 0; x < r; x++) {
             in = 0;
-            for (j = 0; j < CORNER_SAMPLES; j++) {
-                for (i = 0; i < CORNER_SAMPLES; i++) {
+            for (int j = 0; j < CORNER_SAMPLES; j++) {
+                for (int i = 0; i < CORNER_SAMPLES; i++) {
                     sx = ((double)r - (x + (i + 0.5) / CORNER_SAMPLES)) / r;
                     sy = ((double)r - (y + (j + 0.5) / CORNER_SAMPLES)) / r;
                     if (pow(sx, n) + pow(sy, n) > 1.0)
@@ -173,11 +170,11 @@ static void corner_draw(uint32_t* px,
                         uint32_t color)
 {
     uint32_t a;
-    int x, y, sx, sy;
+    int sx, sy;
 
-    for (y = 0; y < r; y++) {
+    for (int y = 0; y < r; y++) {
         sy = corner & 2 ? r - 1 - y : y;
-        for (x = 0; x < r; x++) {
+        for (int x = 0; x < r; x++) {
             sx = corner & 1 ? r - 1 - x : x;
             a = cov[(size_t)sy * (size_t)r + (size_t)sx];
             px[(size_t)y * (size_t)r + (size_t)x] =
@@ -197,13 +194,13 @@ void corner_draw_all(Client* c)
     Buffer* buf;
     uint8_t* cov;
     uint32_t color;
-    int i, r = corner_client_radius(c), rp, bwp;
+    int r = corner_client_radius(c), rp, bwp;
     int pos[4][2];
 
     if (!c->corner[0])
         return;
     if (!r || !m) {
-        for (i = 0; i < 4; i++)
+        for (int i = 0; i < 4; i++)
             wlr_scene_node_set_enabled(&c->corner[i]->node, 0);
         return;
     }
@@ -216,7 +213,7 @@ void corner_draw_all(Client* c)
     pos[2][1] = c->geom.height - r;
     pos[3][0] = c->geom.width - r;
     pos[3][1] = c->geom.height - r;
-    for (i = 0; i < 4; i++) {
+    for (int i = 0; i < 4; i++) {
         wlr_scene_node_set_position(&c->corner[i]->node, pos[i][0], pos[i][1]);
         wlr_scene_buffer_set_dest_size(c->corner[i], r, r);
         wlr_scene_node_set_enabled(&c->corner[i]->node, 1);
@@ -231,14 +228,14 @@ void corner_draw_all(Client* c)
         return;
 
     if (rp != c->cornerbufr)
-        for (i = 0; i < 4; i++)
+        for (int i = 0; i < 4; i++)
             buffer_pool_drop(c->cornerpool[i], LENGTH(c->cornerpool[i]));
     c->cornerbufr = rp;
     c->cornerbufbw = bwp;
     c->cornercolor = color;
 
     cov = corner_coverage(rp, bwp);
-    for (i = 0; i < 4; i++) {
+    for (int i = 0; i < 4; i++) {
         if (!(buf = buffer_get(
                   c->cornerpool[i], LENGTH(c->cornerpool[i]), rp, rp)))
             continue;

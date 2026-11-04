@@ -49,11 +49,9 @@ static struct {
 /* function implementations */
 static int input_gesture_bound(int pinch, uint32_t fingers)
 {
-    const Gesture* g;
-
     if (lock_active)
         return 0;
-    for (g = gestures; g < gestures + gesture_count; g++)
+    for (const Gesture* g = gestures; g < gestures + gesture_count; g++)
         if ((g->motion >= PinchIn) == pinch && g->fingers == fingers)
             return 1;
     return 0;
@@ -61,9 +59,7 @@ static int input_gesture_bound(int pinch, uint32_t fingers)
 
 static void input_gesture_run(unsigned int motion)
 {
-    const Gesture* g;
-
-    for (g = gestures; g < gestures + gesture_count; g++)
+    for (const Gesture* g = gestures; g < gestures + gesture_count; g++)
         if (g->motion == motion && g->fingers == input_gesture.fingers &&
             g->func)
             g->func(&g->arg);

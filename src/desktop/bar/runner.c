@@ -87,7 +87,7 @@ void bar_draw_candidates(Monitor* m, int x, int end)
     int n = runner_candidate_count(), sel = runner_selected();
     int per = (int)MIN(runner_max_candidates, (unsigned int)n);
     int fh = m->drw->font->height, bh = (int)m->b.height;
-    int i, ph, pad, mg, tw, isz, iw, holder;
+    int ph, pad, mg, tw, isz, iw, holder;
     double scale = m->wlr_output->scale, r;
     const char* s;
     Icon* icon;
@@ -105,7 +105,7 @@ void bar_draw_candidates(Monitor* m, int x, int end)
         pad = MAX(pad, (int)ceil(r - sqrt(r * r - (r - mg) * (r - mg))));
 
     isz = MIN(bar_runner_icon_size(m), ph);
-    for (i = sel / per * per; i < n && i < sel / per * per + per; i++) {
+    for (int i = sel / per * per; i < n && i < sel / per * per + per; i++) {
         s = runner_candidate(i);
         icon = runner_icons == RunnerIconsAll ? runner_icon(i) : nullptr;
         holder = runner_icons == RunnerIconsAll && !icon && runner_has_icons();

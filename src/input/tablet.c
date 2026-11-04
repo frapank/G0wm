@@ -219,11 +219,11 @@ static void tablet_handle_pad_button(struct wl_listener* listener, void* data)
 {
     TabletPad* p = wl_container_of(listener, p, button);
     struct wlr_tablet_pad_button_event* event = data;
-    const PadButton* b;
 
     wlr_idle_notifier_v1_notify_activity(idle_notifier, seat);
     /* bound buttons are not forwarded */
-    for (b = pad_buttons; !lock_active && b < pad_buttons + pad_button_count;
+    for (const PadButton* b = pad_buttons;
+         !lock_active && b < pad_buttons + pad_button_count;
          b++) {
         if (b->button == event->button && b->func) {
             if (event->state == WLR_BUTTON_PRESSED)
@@ -509,11 +509,10 @@ static int tablet_tip_bound(void)
 {
     struct wlr_keyboard* keyboard = wlr_seat_get_keyboard(seat);
     uint32_t mods = keyboard ? wlr_keyboard_get_modifiers(keyboard) : 0;
-    const Button* b;
 
     if (lock_active)
         return 0;
-    for (b = buttons; b < buttons + button_count; b++)
+    for (const Button* b = buttons; b < buttons + button_count; b++)
         if (b->click == ClkClient && b->button == BTN_LEFT && b->func &&
             CLEANMASK(mods) == CLEANMASK(b->mod))
             return 1;

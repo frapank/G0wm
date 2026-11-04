@@ -59,9 +59,9 @@ int runner_mode(const char* s, int* off)
 {
     const char* p;
     size_t n, len = 0;
-    int m, mode = ModeApp;
+    int mode = ModeApp;
 
-    for (m = 0; m < NumModes; m++) {
+    for (int m = 0; m < NumModes; m++) {
         p = runner_prefixes[m] ? *runner_prefixes[m] : nullptr;
         if (!p || !(n = strlen(p)) || n <= len || strncmp(s, p, n) ||
             !runner_mode_on(m))
@@ -275,7 +275,7 @@ static void runner_set_source(int mode)
 
 void runner_filter(void)
 {
-    int i, fold = 1, off, mode = runner_mode(runner_buffer, &off);
+    int fold = 1, off, mode = runner_mode(runner_buffer, &off);
     int qlen = runner_length - off, *use = nullptr;
     const char* q = runner_buffer + off;
     double calcval;
@@ -285,19 +285,19 @@ void runner_filter(void)
     runner_set_source(mode);
     /* with nothing typed yet a short list shows all of it */
     if (!qlen && (mode == ModeWindow || mode == ModeTag || mode == ModeFile))
-        for (i = 0; i < runner_source_count; i++)
+        for (int i = 0; i < runner_source_count; i++)
             runner_matches[runner_match_count++] = i;
     if (!qlen || runner_calc(&calcval))
         return;
     /* an uppercase letter makes the match case sensitive */
-    for (i = 0; i < qlen; i++)
+    for (int i = 0; i < qlen; i++)
         if (q[i] >= 'A' && q[i] <= 'Z')
             fold = 0;
     if (runner_source == (const char**)runner_commands)
         use = runner_use;
     else if (runner_source == (const char**)runner_app_names)
         use = runner_app_use;
-    for (i = 0; i < runner_source_count; i++) {
+    for (int i = 0; i < runner_source_count; i++) {
         runner_scores[i] = runner_score(runner_source[i], q, qlen, fold);
         if (runner_alt_names && runner_alt_names[i])
             runner_scores[i] =

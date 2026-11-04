@@ -70,10 +70,10 @@ static void buffer_end_data_access(struct wlr_buffer*) {}
  * bar and every client's title bar own a pool, as their sizes differ. */
 Buffer* buffer_get(Buffer** pool, size_t poollen, int width, int height)
 {
-    size_t i, len;
+    size_t len;
     Buffer* buf = nullptr;
 
-    for (i = 0; i < poollen; i++) {
+    for (size_t i = 0; i < poollen; i++) {
         if (pool[i]) {
             if (pool[i]->busy)
                 continue;
@@ -101,9 +101,7 @@ Buffer* buffer_get(Buffer** pool, size_t poollen, int width, int height)
 
 void buffer_pool_drop(Buffer** pool, size_t poollen)
 {
-    size_t i;
-
-    for (i = 0; i < poollen; i++)
+    for (size_t i = 0; i < poollen; i++)
         if (pool[i]) {
             wlr_buffer_drop(&pool[i]->base);
             pool[i] = nullptr;
