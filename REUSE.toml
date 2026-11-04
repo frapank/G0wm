@@ -87,7 +87,8 @@ SPDX-License-Identifier = "GPL-3.0-or-later"
 
 [[annotations]]
 path = [
-    ".clang-format", ".editorconfig", ".github/**", "*.md", "docs/*.md",
+    ".clang-format", ".editorconfig", ".git-blame-ignore-revs", ".github/**",
+    "*.md", "docs/*.md",
     "configure", "packaging/**",
 ]
 SPDX-FileCopyrightText = "2026 frapank"

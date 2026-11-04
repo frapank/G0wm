@@ -1,0 +1,14 @@
+# Mechanical changes, skipped by git blame and by GitHub's blame view.
+# git config blame.ignoreRevsFile .git-blame-ignore-revs uses it locally.
+
+# Follow the REUSE specification for licensing
+03bf7311da469f0652ec819c7b8bd7f6d0e06ec5
+
+# Give every module its own header
+bf48c9ef4e123582c3f961efcdbca12ed1d668ab
+
+# Change C version from generic C99 to C23 (GNU)
+0860fb403b837de60848570f4c3d5092931ae9ca
+
+# Name every function and variable after its module
+e4ac3677173d14663f05d5448adf5140cb028123

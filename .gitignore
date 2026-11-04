@@ -3,3 +3,4 @@ build/
 .ccls-cache
 config.mk
 src/config.h.*.bak
+compile_commands.json
