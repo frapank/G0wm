@@ -21,6 +21,7 @@
 #include <wlr/util/box.h>
 #include <wlr/util/edges.h>
 
+#include "core/activation.h"
 #include "core/g0wm.h"
 #include "core/settings.h"
 #include "core/util.h"

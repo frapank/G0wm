@@ -34,7 +34,6 @@ static void run(void);
 
 /* variables */
 Monitor* selected_monitor;
-static char activation_token_tag; /* marks the tokens handed out below */
 
 /* function implementations */
 static void run_autostart(void)
@@ -85,23 +84,6 @@ void handle_signal(int signo)
     } else if (signo == SIGINT || signo == SIGTERM) {
         quit(nullptr);
     }
-}
-
-const char* activation_token_new(void)
-{
-    struct wlr_xdg_activation_token_v1* token =
-        wlr_xdg_activation_token_v1_create(activation);
-
-    if (!token)
-        return nullptr;
-    token->data = &activation_token_tag;
-    return wlr_xdg_activation_token_v1_get_name(token);
-}
-
-/* a window activating with one of these was asked for by the user */
-int activation_token_ours(const struct wlr_xdg_activation_token_v1* token)
-{
-    return token && token->data == &activation_token_tag;
 }
 
 void quit(const Arg*)
