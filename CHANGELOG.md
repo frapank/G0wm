@@ -4,14 +4,22 @@
 
 ### Added
 
-- Private windows, blacked out in screen captures, with the `private` rule
-  and the `alwaysprivate` setting
+- Private windows, blacked out in screen captures, with the `private` rule,
+  the `toggleprivate` action (Super+Shift+P) and the `alwaysprivate` setting
+- Settings for the private windows: `privatetitle`, `privatecolor`,
+  `privateround` and `publiccolor`
 
 ### Changed
 
 - Building needs a C23 compiler, GCC 14 or Clang 18 and newer
-- The built-in defaults moved from `include/config.h` to `src/config.h`
+- The sources are split into one directory per area, each module with its own
+  header
+- The built-in defaults moved from `include/config.h` to
+  `src/core/settings/config.h`
 - Every file states its license, following the REUSE specification
+- Licenses moved from `license/` to `LICENSES/`
+- Shorter README, updated man page, `FEATURES.md` renamed to `features.md`
+- Added the changelog, contributing guide, issue templates and editorconfig
 
 ### Fixed
 

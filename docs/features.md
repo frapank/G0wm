@@ -24,6 +24,7 @@ Here is a list of the main additions in g0wm:
 - `gestures`: a three-finger swipe on the touchpad switches tag
 - `wallpaper`: g0wm draws the wallpaper by itself
 - `xwayland`: g0wm supports X11 apps through Xwayland
+- `private windows`: a window can be marked private, and screen sharing shows it as a black box
 
 - `statusbar`: the status bar from dwl is kept, and it reads the status text from a script (as in dwl)
 - `notify`: notifications are displayed in the status bar with icons, priority levels and actions
