@@ -105,6 +105,52 @@ OBS.
   and `{title}`, is drawn with fcft, and the shape follows the window border
   (rounded or squircle).
 
+### Protocols per client
+
+Every client can bind the powerful protocols today: screen capture, the
+clipboard, fake input, the list of open windows. Lets the config give them
+only to the programs that need them.
+
+- [ ] Add a `protocols` block to the config: a list of programs for each of
+  `screencopy`, `export-dmabuf`, `data-control` (both versions),
+  `virtual-keyboard`, `virtual-pointer`, `input-method` and
+  `foreign-toplevel`.
+- [ ] Stay permissive by default: a protocol that is not in the block is open
+  to every client, as it is now. Once a protocol is listed, only the listed
+  programs see it, and everyone else gets no such global.
+- [ ] Filter the globals with `wl_display_set_global_filter()`. Tell a client
+  by its executable (`wl_client_get_credentials()` and `/proc/<pid>/exe`), and
+  a sandboxed app by the app id of its security context
+  (`security_context_manager` already exists).
+- [ ] Log every refusal, such as `denied screencopy to grim`, so a broken tool
+  can be traced.
+- [ ] Document that the filter applies when a client connects, so a reload
+  affects only new clients, and that the portal backend (such as
+  `xdg-desktop-portal-wlr`) must be in the `screencopy` list or Discord and OBS
+  lose the screen.
+- [ ] Limiting `export-dmabuf` to trusted programs also narrows the gap in
+  private windows above.
+
+### Private notifications
+
+A message with personal text can show up in the middle of a call or a share.
+Notifications are hidden by default, like a private window, and a key shows
+them.
+
+- [ ] Hide the notifications by default: the bar shows a short placeholder
+  instead of the summary and body, on the real screen too. History is hidden
+  the same way.
+- [ ] Add a key and an action (`toggleprivatenotify`, next to `toggleprivate`)
+  that switches between hidden and shown.
+- [ ] Add a `privatenotify` option, on by default. Set to 0, notifications are
+  shown by default and the key hides them.
+- [ ] Draw a dot in the bar for the state that differs from the default,
+  the same way the dot of private windows works: when hidden is the default
+  and notifications are shown, it uses `publiccolor` (light blue). When shown
+  is the default and they are hidden, it uses `privatecolor` (purple).
+- [ ] Make the position and the two colors of the dot settable in the config,
+  with `publiccolor` and `privatecolor` as defaults.
+
 ## Quality and security
 
 ### Static analysis in CI
