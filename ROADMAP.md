@@ -64,52 +64,16 @@ wvkbd only needs layer-shell, virtual-keyboard and touch, which g0wm has.
 - [ ] Bind showing and hiding wvkbd (`pkill -USR1/-USR2 wvkbd`) to a key, a
   swipe or a clickable status area.
 
-### text-input-v3 and input-method-v2
-
-Lets the compositor bridge apps (text-input) and input methods
-(input-method): fcitx5 and ibus for CJK and other scripts, emoji and Unicode
-pickers, keyboards that open by themselves. Nothing changes until an input
-method connects.
-
-- [x] Add `src/textinput.c` with the two managers.
-- [x] Make the active text-input follow the keyboard focus (enter/leave).
-- [x] Relay state between them: surrounding text, cursor rectangle and content
-  type from the app, preedit and commit strings from the input method.
-- [x] Hand the keys to the input method while it holds a keyboard grab
-  (`keypress` in `input.c`).
-- [x] Place the candidate popup next to the text cursor, clamped to the
-  monitor.
-- [x] Test with fcitx5 and with an input-method keyboard such as squeekboard,
-  which then opens on its own when a text field is touched. Chromium and
-  Electron need `--enable-wayland-ime`.
-
-## Accessibility
-
-### Magnifier
-
-Zooms the screen around the pointer, for low vision.
-
-- [x] Add a zoom action and a per-monitor zoom level (e.g. MODKEY+scroll),
-  with a key to reset it.
-- [x] While zoomed, render the scene to an offscreen buffer and draw the
-  region around the pointer scaled onto the output.
-- [x] Move that region with the pointer: placed proportionally, the pointer
-  stays where it really is, so input needs no remapping.
-- [x] Use the software cursor while zoomed so it gets magnified too, and turn
-  off direct scanout and tearing while zoomed.
-
-## Control
-
 ### IPC socket
 
 Lets other programs drive g0wm and follow what it does, so scripts, external
 bars and switchers no longer need a key binding or a polling loop.
 
-- [ ] Add `src/ipc.c`: a Unix socket in
+- [ ] Add `src/core/ipc.c`: a Unix socket in
   `$XDG_RUNTIME_DIR/g0wm.$WAYLAND_DISPLAY.sock` (mode 0600), added to the
-  event loop like the D-Bus connection in `dbus.c`.
+  event loop like the D-Bus connection in `src/core/dbus.c`.
 - [ ] Run commands through the same action table that the key bindings use in
-  `settings.c`, so `view 3` or `spawn foot` work without a second parser.
+  `src/core/settings/`, so `view 3` or `spawn foot` work without a second parser.
 - [ ] Answer queries (`clients`, `tags`, `outputs`, `focused`) in JSON.
 - [ ] Add `subscribe` for events (focus, tag, title, urgent, layout, output),
   emitted where the state already changes. Give each subscriber a bounded
@@ -130,16 +94,6 @@ Keeps a window (a password manager, a private chat) out of screenshots and
 screen shares, for any app that goes through the portal, such as Discord or
 OBS.
 
-- [x] Add a `private` option to the window rules.
-- [x] Add `toggleprivate` (<kbd>Super</kbd> <kbd>Shift</kbd> <kbd>P</kbd>), with
-  a purple dot next to the title, in the tabs too.
-- [x] Black out private windows in what ext-image-copy-capture hands out
-  (`src/privacy.c`): the whole frame when sharing that one window, its area
-  when sharing the screen. The screen itself is left alone.
-- [x] Do the same for wlr-screencopy, which xdg-desktop-portal-wlr before 0.8
-  and grim before 1.5 use: its copies are made inside the output commit, so
-  they are painted over right after it, before the clients hear they are
-  ready. Checked against wlroots 0.19.2, 0.20.2 and master (2026-11-02).
 - [ ] export-dmabuf hands out the screen's own buffer, so it cannot be masked:
   hide it while a private window is shown, or drop it.
 - [ ] Add a share mode (key and IPC command) with an indicator in the bar.
@@ -150,11 +104,65 @@ OBS.
   config (`private` block) and overridable per rule. The text can use `{app}`
   and `{title}`, is drawn with fcft, and the shape follows the window border
   (rounded or squircle).
-- [x] Show the placeholder text instead of the real title in the bar, the tabs
-  and the foreign toplevel list, since the title often holds the sensitive part.
-- [x] Keep the real title on screen: screen sharing gets a copy of the title
-  bar and of the bar title drawn with the placeholder, pasted where the masks
-  go. A rotated or zoomed output gets a black box there instead.
-- [x] Spike: the output capture source and screencopy copy the buffer
-  already composed for the screen. ext-image-copy-capture can still be masked
-  without patching wlroots, by wrapping the source's `copy_frame`.
+
+## Quality and security
+
+### Static analysis in CI
+
+Catches use-after-free, leaks and null dereferences on every pull request,
+before a build is even run.
+
+- [ ] Add a CodeQL workflow for C, on pushes to main, pull requests and once a
+  week. It needs a real build between `init` and `analyze`, so run `make` the
+  way `ci.yml` does.
+- [ ] Check that it works inside the `archlinux` container: wlroots 0.20 is not
+  packaged on the Ubuntu runners.
+- [ ] Go through the first results in the Security tab, fix or dismiss them.
+- [ ] Make `tray_get_watcher()` and `item_get_watcher()` trust their argument,
+  as every caller passes a valid one. Their null checks make `gcc -fanalyzer`
+  assume it can be null, and it reports four dereferences.
+
+### Headless tests with sanitizers
+
+Starts the real compositor in CI, the way weston tests itself, so a crash at
+startup, on a new client or on exit fails the build.
+
+- [ ] Run g0wm with `WLR_BACKENDS=headless` and `WLR_RENDERER=pixman`, in a
+  temporary `XDG_RUNTIME_DIR` and `XDG_CONFIG_HOME`.
+- [ ] Add a small client in `tests/` that maps an xdg toplevel, commits a
+  buffer and exits, so no terminal or font is needed.
+- [ ] Feed a few status lines on stdin, then stop g0wm with SIGTERM. Fail on a
+  non-zero exit or on any ASan or UBSan report.
+- [ ] Run it from `make test` and in the sanitizers job of `ci.yml`.
+- [ ] Add unit tests for the parts that need no display: the runner
+  calculator in `src/desktop/runner/calc.c`, `notify_demarkup()` in
+  `src/desktop/notify/message.c`, `util_put_codepoint()` and the settings
+  parser in `src/core/settings/read.c`.
+
+### File descriptors in child processes
+
+Every program g0wm starts inherits the descriptors that are open at the time.
+None leaks today, but nothing prevents it either.
+
+- [ ] Open files with close-on-exec: `"e"` in the `fopen()` modes of
+  `src/desktop/runner/` and `src/core/settings/`, `O_CLOEXEC` in any new `open()`. The one in
+  `spawn()` stays as it is: it becomes the child's stdin.
+- [ ] Call `close_range(3, ~0U, 0)` in the child before `execvp()`, in
+  `spawn()` and in the autostart loop of `src/core/g0wm/main.c`, so descriptors opened by
+  libraries do not reach launched programs either.
+
+### Settings in one struct
+
+The 128 settings are separate globals, defined in `src/core/settings/config.h`.
+A reload overwrites them in place and never frees the old values.
+the scfg tree and the `keys`, `rules` and `layouts` arrays stay
+allocated, partly because `Monitor.lt` points into `layouts`
+
+- [ ] Group them in one struct, with a part per section such as bar, runner,
+  input and opacity, reached through a single pointer, as sway does with its
+  config.
+- [ ] Move one section per commit, starting with the smallest.
+- [ ] On reload, parse into a new struct, point the monitors at its layouts,
+  then free the old one.
+- [ ] Keep the running settings when the file has errors, instead of applying
+  the part that could be read.
