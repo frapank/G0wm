@@ -85,6 +85,7 @@
 #include <wlr/xwayland.h>
 #endif
 
+#include "core/activation.h"
 #include "core/dbus.h"
 #include "core/g0wm.h"
 #include "core/settings.h"

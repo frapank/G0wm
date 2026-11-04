@@ -81,7 +81,6 @@ typedef struct Monitor Monitor;
 
 void check_idle_inhibitor(struct wlr_surface* exclude);
 void change_vt(const Arg* arg);
-int activation_token_ours(const struct wlr_xdg_activation_token_v1* token);
 void quit(const Arg* arg);
 void spawn(const Arg* arg);
 
