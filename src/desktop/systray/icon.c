@@ -139,7 +139,6 @@ static int icon_file(char* out,
     const char* datadirs = getenv("XDG_DATA_DIRS");
     const char* home = getenv("HOME");
     char bases[512], *base, *saveptr;
-    size_t i;
     int n;
 
     /* some items hand out a path where the spec asks for a name */
@@ -147,7 +146,7 @@ static int icon_file(char* out,
         return icon_try(out, outsz, "%s", name);
 
     if (themepath && *themepath) {
-        for (i = 0; i < LENGTH(icon_sizes); i++)
+        for (size_t i = 0; i < LENGTH(icon_sizes); i++)
             if (icon_try(out,
                          outsz,
                          "%s/hicolor/%dx%d/apps/%s.png",
@@ -179,7 +178,7 @@ static int icon_file(char* out,
 
     for (base = strtok_r(bases, ":", &saveptr); base;
          base = strtok_r(nullptr, ":", &saveptr)) {
-        for (i = 0; i < LENGTH(icon_sizes); i++)
+        for (size_t i = 0; i < LENGTH(icon_sizes); i++)
             if (icon_try(out,
                          outsz,
                          "%s/icons/hicolor/%dx%d/apps/%s.png",
@@ -208,7 +207,7 @@ static Icon* icon_from_pixbuf(GdkPixbuf* pb)
     const guchar *src, *srow;
     uint8_t* argb;
     Icon* icon;
-    int w, h, rowstride, nch, x, y, size;
+    int w, h, rowstride, nch, size;
     size_t i = 0;
 
     w = gdk_pixbuf_get_width(pb);
@@ -220,9 +219,9 @@ static Icon* icon_from_pixbuf(GdkPixbuf* pb)
         ckd_mul(&size, size, 4) || !(argb = malloc((size_t)size)))
         return nullptr;
 
-    for (y = 0; y < h; y++) {
+    for (int y = 0; y < h; y++) {
         srow = src + (size_t)y * rowstride;
-        for (x = 0; x < w; x++, srow += nch, i += 4) {
+        for (int x = 0; x < w; x++, srow += nch, i += 4) {
             argb[i + 0] = nch == 4 ? srow[3] : 0xff;
             argb[i + 1] = srow[0];
             argb[i + 2] = srow[1];

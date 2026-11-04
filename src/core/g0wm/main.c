@@ -39,16 +39,15 @@ static char activation_token_tag; /* marks the tokens handed out below */
 /* function implementations */
 static void run_autostart(void)
 {
-    const char* const* p;
     size_t i = 0;
 
     /* count entries */
-    for (p = autostart; *p; autostart_len++, p++)
+    for (const char* const* p = autostart; *p; autostart_len++, p++)
         while (*++p)
             ;
 
     autostart_pids = calloc(autostart_len, sizeof(pid_t));
-    for (p = autostart; *p; i++, p++) {
+    for (const char* const* p = autostart; *p; i++, p++) {
         if ((autostart_pids[i] = fork()) == 0) {
             setsid();
             execvp(*p, (char* const*)p);

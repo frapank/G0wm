@@ -338,8 +338,6 @@ void check_idle_inhibitor(struct wlr_surface* exclude)
 
 void cleanup(void)
 {
-    size_t i;
-
     cleanup_listeners();
 #ifdef XWAYLAND
     wlr_xwayland_destroy(xwayland);
@@ -348,7 +346,7 @@ void cleanup(void)
     wl_display_destroy_clients(display);
 
     /* kill child processes */
-    for (i = 0; i < autostart_len; i++) {
+    for (size_t i = 0; i < autostart_len; i++) {
         if (0 < autostart_pids[i]) {
             kill(autostart_pids[i], SIGTERM);
             waitpid(autostart_pids[i], nullptr, 0);
@@ -498,12 +496,11 @@ static bool filter_global(const struct wl_client* client,
         "zwp_virtual_keyboard_manager_v1",
     };
     const char* name = wl_global_get_interface(global)->name;
-    size_t i;
 
     if (!wlr_security_context_manager_v1_lookup_client(security_context_manager,
                                                        client))
         return true;
-    for (i = 0; i < LENGTH(privileged); i++)
+    for (size_t i = 0; i < LENGTH(privileged); i++)
         if (!strcmp(name, privileged[i]))
             return false;
     return true;
@@ -560,13 +557,13 @@ static void recreate_renderer(void*)
 
 void setup(void)
 {
-    int drm_fd, i, sig[] = { SIGCHLD, SIGINT, SIGTERM, SIGPIPE };
+    int drm_fd, sig[] = { SIGCHLD, SIGINT, SIGTERM, SIGPIPE };
     struct sigaction sa = { .sa_flags = SA_RESTART,
                             .sa_handler = handle_signal };
     char cursor_size_str[8];
     sigemptyset(&sa.sa_mask);
 
-    for (i = 0; i < (int)LENGTH(sig); i++)
+    for (int i = 0; i < (int)LENGTH(sig); i++)
         sigaction(sig[i], &sa, nullptr);
 
     wlr_log_init(log_level, nullptr);
@@ -586,7 +583,7 @@ void setup(void)
     /* Initialize the scene graph used to lay out windows */
     scene = wlr_scene_create();
     root_background = wlr_scene_rect_create(&scene->tree, 0, 0, root_color);
-    for (i = 0; i < NUM_LAYERS; i++)
+    for (int i = 0; i < NUM_LAYERS; i++)
         layers[i] = wlr_scene_tree_create(&scene->tree);
     drag_icon = wlr_scene_tree_create(&scene->tree);
     wlr_scene_node_place_below(&drag_icon->node, &layers[LyrBlock]->node);

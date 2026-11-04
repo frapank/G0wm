@@ -90,13 +90,12 @@ static void client_apply_rules(Client* c)
     const char *appid, *title;
     uint32_t newtags = 0;
     int i;
-    const Rule* r;
     Monitor *mon = selected_monitor, *m;
 
     appid = client_get_app_id(c);
     title = client_get_title(c);
 
-    for (r = rules; r < rules + rule_count; r++) {
+    for (const Rule* r = rules; r < rules + rule_count; r++) {
         if ((!r->title || strstr(title, r->title)) &&
             (!r->id || strstr(appid, r->id))) {
             c->isfloating = r->isfloating;
@@ -410,7 +409,6 @@ void client_handle_map(struct wl_listener* listener, void*)
     Client* p = nullptr;
     Client *w, *c = wl_container_of(listener, c, map);
     Monitor* m;
-    int i;
     int th;
 
     /* Create scene tree for this client and its border */
@@ -438,7 +436,7 @@ void client_handle_map(struct wl_listener* listener, void*)
         goto unset_fullscreen;
     }
 
-    for (i = 0; i < 4; i++) {
+    for (int i = 0; i < 4; i++) {
         c->border[i] = wlr_scene_rect_create(
             c->scene, 0, 0, (float[]){ 0.0f, 0.0f, 0.0f, 0.0f });
         c->border[i]->node.data = c;
@@ -736,7 +734,6 @@ void client_handle_unmap(struct wl_listener* listener, void*)
 {
     /* Called when the surface is unmapped, and should no longer be shown. */
     Client* c = wl_container_of(listener, c, unmap);
-    int i;
 
     toplevel_unmap(c);
     if (c->mapwait) {
@@ -776,7 +773,7 @@ void client_handle_unmap(struct wl_listener* listener, void*)
     buffer_pool_drop(c->titlepool, LENGTH(c->titlepool));
     buffer_pool_drop(c->sharepool, LENGTH(c->sharepool));
     c->titlebufw = 0;
-    for (i = 0; i < 4; i++) {
+    for (int i = 0; i < 4; i++) {
         c->corner[i] = nullptr;
         buffer_pool_drop(c->cornerpool[i], LENGTH(c->cornerpool[i]));
     }

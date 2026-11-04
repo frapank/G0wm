@@ -281,12 +281,12 @@ static Icon* notify_image_data(DBusMessage* msg, const char* name)
     dbus_int32_t v[3], bps, ch;
     dbus_bool_t alpha;
     const uint8_t* data;
-    int i, len;
+    int len;
 
     if (!notify_hint(msg, name, DBUS_TYPE_STRUCT, &var))
         return nullptr;
     dbus_message_iter_recurse(&var, &st);
-    for (i = 0; i < 3; i++, dbus_message_iter_next(&st)) {
+    for (int i = 0; i < 3; i++, dbus_message_iter_next(&st)) {
         if (dbus_message_iter_get_arg_type(&st) != DBUS_TYPE_INT32)
             return nullptr;
         dbus_message_iter_get_basic(&st, &v[i]);
@@ -529,7 +529,6 @@ static DBusHandlerResult notify_handle_capabilities(DBusConnection* conn,
     DBusMessage* reply = dbus_message_new_method_return(msg);
     DBusMessageIter iter, arr;
     const char* caps[] = { "body", "body-markup", "actions", "icon-static" };
-    size_t i;
     DBusHandlerResult res = DBUS_HANDLER_RESULT_HANDLED;
 
     if (!reply)
@@ -538,7 +537,7 @@ static DBusHandlerResult notify_handle_capabilities(DBusConnection* conn,
     dbus_message_iter_init_append(reply, &iter);
     if (!dbus_message_iter_open_container(&iter, DBUS_TYPE_ARRAY, "s", &arr))
         res = DBUS_HANDLER_RESULT_NEED_MEMORY;
-    for (i = 0;
+    for (size_t i = 0;
          res == DBUS_HANDLER_RESULT_HANDLED && i < sizeof(caps) / sizeof(*caps);
          i++)
         if (!dbus_message_iter_append_basic(&arr, DBUS_TYPE_STRING, &caps[i]))

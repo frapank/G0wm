@@ -56,10 +56,11 @@ bool bar_accepts_input(struct wlr_scene_buffer*, double*, double*)
  */
 Monitor* bar_main_monitor(void)
 {
-    const MonitorRule* r;
     Monitor* m;
 
-    for (r = monitor_rules; r < monitor_rules + monitor_rule_count; r++) {
+    for (const MonitorRule* r = monitor_rules;
+         r < monitor_rules + monitor_rule_count;
+         r++) {
         /* monitors grows at its head, so backwards is the order the outputs
          * showed up in: under the catch-all row the oldest one wins */
         wl_list_for_each_reverse(m, &monitors, link)
@@ -115,7 +116,7 @@ void bar_draw_pill(Monitor* m,
     pixman_image_t *mask, *src;
     pixman_color_t clr;
     uint8_t* data;
-    int stride, px, py, sx, sy, cov;
+    int stride, sy, cov;
     double fx, fy;
 
     if (w <= 0 || h <= 0 ||
@@ -126,10 +127,10 @@ void bar_draw_pill(Monitor* m,
     stride = pixman_image_get_stride(mask);
 
     /* 4x4 supersampling */
-    for (py = 0; py < h; py++)
-        for (px = 0; px < w; px++) {
+    for (int py = 0; py < h; py++)
+        for (int px = 0; px < w; px++) {
             for (cov = 0, sy = 0; sy < 4; sy++)
-                for (sx = 0; sx < 4; sx++) {
+                for (int sx = 0; sx < 4; sx++) {
                     fx = px + (sx + 0.5) / 4;
                     fy = py + (sy + 0.5) / 4;
                     cov += bar_in_pill(fx, fy, w, h, r) &&
@@ -296,7 +297,7 @@ void bar_draw(Monitor* m)
     /* the little squares follow the text, which drwl centers */
     int boxy = (m->b.height - m->drw->font->height) / 2 + boxs;
     double boxr = bar_box_radius * m->wlr_output->scale;
-    uint32_t i, occ = 0, urg = 0;
+    uint32_t occ = 0, urg = 0;
     int pulsing = 0;
     Client* c;
     Buffer *buf, *share;
@@ -341,7 +342,7 @@ void bar_draw(Monitor* m)
     }
     x = 0;
     c = client_top(s);
-    for (i = 0; i < tag_count && bar_tag_dots; i++) {
+    for (uint32_t i = 0; i < tag_count && bar_tag_dots; i++) {
         int d, lead, sw;
         uint32_t clr;
 
@@ -372,7 +373,7 @@ void bar_draw(Monitor* m)
     }
     if (pulsing)
         bar_pulse_arm();
-    for (i = 0; i < tag_count && !bar_tag_dots; i++) {
+    for (uint32_t i = 0; i < tag_count && !bar_tag_dots; i++) {
         w = TEXTW(m, tags[i]);
         drwl_setscheme(
             m->drw,

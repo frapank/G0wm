@@ -141,12 +141,11 @@ static int input_key_binding(uint32_t mods, xkb_keysym_t sym)
      * processing keys, rather than passing them on to the client for its own
      * processing.
      */
-    const Key* k;
     struct wlr_keyboard_shortcuts_inhibitor_v1* inhibitor =
         input_focused_inhibitor();
     int inhibited = inhibitor && inhibitor->active;
 
-    for (k = keys; k < keys + key_count; k++) {
+    for (const Key* k = keys; k < keys + key_count; k++) {
         if (CLEANMASK(mods) == CLEANMASK(k->mod) &&
             xkb_keysym_to_lower(sym) == xkb_keysym_to_lower(k->keysym) &&
             k->func && (!inhibited || k->func == input_toggle_inhibit)) {
@@ -159,7 +158,6 @@ static int input_key_binding(uint32_t mods, xkb_keysym_t sym)
 
 static void input_handle_key(struct wl_listener* listener, void* data)
 {
-    int i;
     /* This event is raised when a key is pressed or released. */
     KeyboardGroup* group = wl_container_of(listener, group, key);
     struct wlr_keyboard_key_event* event = data;
@@ -240,7 +238,7 @@ static void input_handle_key(struct wl_listener* listener, void* data)
     /* On _press_ if there is no active screen locker,
      * attempt to process a compositor keybinding. */
     if (!lock_active && event->state == WL_KEYBOARD_KEY_STATE_PRESSED) {
-        for (i = 0; i < nsyms; i++)
+        for (int i = 0; i < nsyms; i++)
             handled = input_key_binding(mods, syms[i]) || handled;
     }
 
@@ -286,7 +284,6 @@ static void input_handle_modifiers(struct wl_listener* listener, void*)
 static int input_key_repeat(void* data)
 {
     KeyboardGroup* group = data;
-    int i;
     if (!group->nsyms || group->wlr_group->keyboard.repeat_info.rate <= 0)
         return 0;
     /* the repeat of the key that opened the picker would close it */
@@ -314,7 +311,7 @@ static int input_key_repeat(void* data)
         group->key_repeat_source,
         1000 / group->wlr_group->keyboard.repeat_info.rate);
 
-    for (i = 0; i < group->nsyms; i++)
+    for (int i = 0; i < group->nsyms; i++)
         input_key_binding(group->mods, group->keysyms[i]);
 
     return 0;

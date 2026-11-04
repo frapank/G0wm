@@ -60,7 +60,7 @@ void runner_build_cache(void)
     struct stat st;
     DIR* d;
     struct dirent* e;
-    int i, w;
+    int w = 0;
     size_t cap = 0;
 
     for (dir = strtok_r(p, ":", &saveptr); dir;
@@ -93,7 +93,7 @@ void runner_build_cache(void)
     free(p);
 
     qsort(runner_commands, runner_command_count, sizeof(char*), runner_compare);
-    for (i = 0, w = 0; i < runner_command_count; i++) {
+    for (int i = 0; i < runner_command_count; i++) {
         if (w && !strcmp(runner_commands[w - 1], runner_commands[i]))
             free(runner_commands[i]);
         else
@@ -300,7 +300,7 @@ static void runner_free_app(RunnerApp* a)
 void runner_build_apps(void)
 {
     char *p = runner_app_dirs(), *dir, *saveptr;
-    int i, w, order = 0;
+    int w = 0, order = 0;
 
     for (dir = strtok_r(p, ":", &saveptr); dir;
          dir = strtok_r(nullptr, ":", &saveptr))
@@ -309,7 +309,7 @@ void runner_build_apps(void)
 
     /* the first of an id wins, then the hidden ones go */
     qsort(runner_apps, runner_app_count, sizeof(RunnerApp), runner_by_id);
-    for (i = 0, w = 0; i < runner_app_count; i++) {
+    for (int i = 0; i < runner_app_count; i++) {
         if ((w && !strcmp(runner_apps[w - 1].id, runner_apps[i].id)) ||
             runner_apps[i].hide)
             runner_free_app(&runner_apps[i]);
@@ -327,7 +327,7 @@ void runner_build_apps(void)
         !(runner_app_use =
               realloc(runner_app_use, MAX(runner_app_count, 1) * sizeof(int))))
         util_die("realloc:");
-    for (i = 0; i < runner_app_count; i++) {
+    for (int i = 0; i < runner_app_count; i++) {
         runner_app_names[i] = runner_apps[i].name;
         runner_app_generic_names[i] = runner_apps[i].gname;
     }

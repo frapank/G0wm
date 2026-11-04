@@ -186,7 +186,6 @@ void input_handle_button(struct wl_listener*, void* data)
         .v = nullptr
     }; /* .v is the widest member: zeroes the whole union */
     Client* c;
-    const Button* b;
 
     wlr_idle_notifier_v1_notify_activity(idle_notifier, seat);
     input_cursor_activity();
@@ -245,7 +244,7 @@ void input_handle_button(struct wl_listener*, void* data)
                 event->button == BTN_LEFT &&
                 bar_title_click(c, cursor->x, cursor->y))
                 return;
-            for (b = buttons; b < buttons + button_count; b++) {
+            for (const Button* b = buttons; b < buttons + button_count; b++) {
                 if (CLEANMASK(mods) == CLEANMASK(b->mod) &&
                     event->button == b->button && click == b->click &&
                     b->func) {
@@ -803,7 +802,6 @@ static int input_wheel_binding(const struct wlr_pointer_axis_event* event)
     unsigned int wheel = event->delta < 0 ? WheelUp : WheelDown;
     unsigned int click, mode;
     int title;
-    const Button* b;
     Client* c;
     Arg arg;
 
@@ -811,7 +809,7 @@ static int input_wheel_binding(const struct wlr_pointer_axis_event* event)
     click =
         c ? ClkClient : input_bar_click(monitor_at(cursor->x, cursor->y), &arg);
     title = c && bar_on_title_bar(c, cursor->x, cursor->y);
-    for (b = buttons; b < buttons + button_count; b++) {
+    for (const Button* b = buttons; b < buttons + button_count; b++) {
         if (CLEANMASK(mods) != CLEANMASK(b->mod) || b->button != wheel ||
             (b->click != click && !(b->click == ClkWinTitle && title)) ||
             !b->func)
@@ -844,9 +842,8 @@ void input_node_at(double x,
     struct wlr_scene_surface* scene_surface = nullptr;
     Client* c = nullptr;
     LayerSurface* l = nullptr;
-    int layer;
 
-    for (layer = NUM_LAYERS - 1; !surface && layer >= 0; layer--) {
+    for (int layer = NUM_LAYERS - 1; !surface && layer >= 0; layer--) {
         if (!(node = wlr_scene_node_at(&layers[layer]->node, x, y, nx, ny)))
             continue;
 

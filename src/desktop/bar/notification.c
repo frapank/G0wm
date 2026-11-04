@@ -93,13 +93,13 @@ static void bar_draw_notification_text(Monitor* m,
                                        uint32_t* scm)
 {
     char buf[NOTIFY_TEXTMAX];
-    size_t k, i;
+    size_t k;
     int aw;
 
     drwl_setscheme(m->drw, scm);
     drwl_rect(m->drw, x, 0, (unsigned int)w, m->b.height, 1, 1);
     if (b->nchip) {
-        for (i = b->chip0; i < b->chip0 + b->nchip; i++)
+        for (size_t i = b->chip0; i < b->chip0 + b->nchip; i++)
             drwl_text(m->drw,
                       b->chipx[i],
                       0,
@@ -275,12 +275,12 @@ void bar_draw_notification(Monitor* m,
 /* bytes of s, cut on a codepoint, that fit in w */
 static size_t bar_fit_prefix(Monitor* m, const char* s, int w)
 {
-    size_t cut[NOTIFY_TEXTMAX], ncut = 0, len = strlen(s), i, lo, hi, mid;
+    size_t cut[NOTIFY_TEXTMAX], ncut = 0, len = strlen(s), lo, hi, mid;
     char buf[NOTIFY_TEXTMAX];
 
     if (len >= sizeof(buf) || w <= 0)
         return 0;
-    for (i = 1; i <= len; i++)
+    for (size_t i = 1; i <= len; i++)
         if (i == len || (s[i] & 0xC0) != 0x80)
             cut[ncut++] = i;
     /* width grows with length: binary search */
@@ -384,7 +384,6 @@ static void bar_notification_browse(dbus_uint32_t id)
 const Notification* bar_notification_shown(long* hist)
 {
     const Notification *cur = notify_current(), *n;
-    size_t i;
 
     if (!cur) {
         bar_notification_live_id = 0;
@@ -398,7 +397,7 @@ const Notification* bar_notification_shown(long* hist)
              bar_notification_view_ms + notification_timeout * 1000))
         bar_notification_view_id = 0;
 
-    for (i = 0; bar_notification_view_id && (n = notify_history(i)); i++)
+    for (size_t i = 0; bar_notification_view_id && (n = notify_history(i)); i++)
         if (n->id == bar_notification_view_id) {
             *hist = (long)i;
             return n;
@@ -653,7 +652,6 @@ void bar_notification_open(const Arg* arg)
     NotifyBox b;
     Client* c;
     long hist, px = arg && arg->ui ? (long)arg->ui - 1 : -1;
-    size_t i;
 
     if (!notifications_enabled || !(n = bar_notification_shown(&hist)))
         return;
@@ -661,7 +659,7 @@ void bar_notification_open(const Arg* arg)
         bar_notification_box(
             m, n, hist, bar_notification_box_x, m->b.titlew, &b);
         if (bar_notification_picking()) {
-            for (i = b.chip0; i < b.chip0 + b.nchip; i++)
+            for (size_t i = b.chip0; i < b.chip0 + b.nchip; i++)
                 if (px >= b.chipx[i] && px < b.chipx[i] + b.chipw[i]) {
                     bar_notification_pick_run(i);
                     return;

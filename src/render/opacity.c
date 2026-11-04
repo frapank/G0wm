@@ -232,20 +232,18 @@ static void opacity_blur_rows(uint32_t* dst,
                               int h,
                               int r)
 {
-    int x, y, i;
-
-    for (y = 0; y < h; y++) {
+    for (int y = 0; y < h; y++) {
         const uint32_t* s = src + (size_t)y * (size_t)w;
         uint32_t* d = dst + (size_t)y * (size_t)w;
         uint32_t sr = 0, sg = 0, sb = 0, n = 0;
 
-        for (i = 0; i <= r && i < w; i++) {
+        for (int i = 0; i <= r && i < w; i++) {
             sr += (s[i] >> 16) & 0xff;
             sg += (s[i] >> 8) & 0xff;
             sb += s[i] & 0xff;
             n++;
         }
-        for (x = 0; x < w; x++) {
+        for (int x = 0; x < w; x++) {
             d[x] = 0xff000000u | ((sr / n) << 16) | ((sg / n) << 8) | (sb / n);
             if (x - r >= 0) {
                 sr -= (s[x - r] >> 16) & 0xff;
@@ -272,14 +270,13 @@ static void opacity_blur_shrink(uint32_t* dst,
                                 int d)
 {
     int sw = MAX(1, w / d), sh = MAX(1, h / d);
-    int x, y, i, j;
 
-    for (y = 0; y < sh; y++)
-        for (x = 0; x < sw; x++) {
+    for (int y = 0; y < sh; y++)
+        for (int x = 0; x < sw; x++) {
             uint32_t sr = 0, sg = 0, sb = 0, n = 0;
 
-            for (j = y * d; j < MIN(h, (y + 1) * d); j++)
-                for (i = x * d; i < MIN(w, (x + 1) * d); i++) {
+            for (int j = y * d; j < MIN(h, (y + 1) * d); j++)
+                for (int i = x * d; i < MIN(w, (x + 1) * d); i++) {
                     uint32_t px = src[(size_t)j * (size_t)w + (size_t)i];
 
                     sr += (px >> 16) & 0xff;
@@ -315,12 +312,10 @@ static void opacity_blur_source_box(Monitor* m,
  * that is what makes it read as glass rather than as a smudge. */
 static void opacity_blur_tint(uint32_t* px, size_t n)
 {
-    size_t i;
-
     if (blur_saturation == 1.0f && blur_brightness == 1.0f)
         return;
 
-    for (i = 0; i < n; i++) {
+    for (size_t i = 0; i < n; i++) {
         float r = (float)((px[i] >> 16) & 0xff);
         float g = (float)((px[i] >> 8) & 0xff);
         float b = (float)(px[i] & 0xff);
@@ -343,10 +338,8 @@ static void opacity_blur_transpose(uint32_t* dst,
                                    int w,
                                    int h)
 {
-    int x, y;
-
-    for (y = 0; y < h; y++)
-        for (x = 0; x < w; x++)
+    for (int y = 0; y < h; y++)
+        for (int x = 0; x < w; x++)
             dst[(size_t)x * (size_t)h + (size_t)y] =
                 src[(size_t)y * (size_t)w + (size_t)x];
 }
@@ -360,7 +353,6 @@ static void opacity_blur_wallpaper(Monitor* m)
     Buffer* buf;
     Client* c;
     uint32_t *a, *b, *t;
-    unsigned int i;
     int w = m->wallpaperw, h = m->wallpaperh;
     int d, sw, sh, r;
 
@@ -391,13 +383,13 @@ static void opacity_blur_wallpaper(Monitor* m)
     b = util_calloc((size_t)sw * (size_t)sh, sizeof(*b));
 
     opacity_blur_shrink(a, m->wallpaperpool[0]->data, w, h, d);
-    for (i = 0; i < blur_passes; i++) {
+    for (unsigned int i = 0; i < blur_passes; i++) {
         opacity_blur_rows(b, a, sw, sh, r);
         t = a, a = b, b = t;
     }
     opacity_blur_transpose(b, a, sw, sh);
     t = a, a = b, b = t;
-    for (i = 0; i < blur_passes; i++) {
+    for (unsigned int i = 0; i < blur_passes; i++) {
         opacity_blur_rows(b, a, sh, sw, r);
         t = a, a = b, b = t;
     }
@@ -434,12 +426,10 @@ float opacity_decorations_current(void)
  * a bar stays see-through with opacity_decorations left at 1. */
 static int opacity_decorations_translucent(void)
 {
-    size_t i, j;
-
     if (opacity_decorations_current() < 1.0f)
         return 1;
-    for (i = 0; i < LENGTH(colors); i++)
-        for (j = 1; j < LENGTH(colors[i]); j++) /* 0 is the foreground */
+    for (size_t i = 0; i < LENGTH(colors); i++)
+        for (size_t j = 1; j < LENGTH(colors[i]); j++) /* 0 is the foreground */
             if ((colors[i][j] & 0xff) < 0xff)
                 return 1;
     return 0;

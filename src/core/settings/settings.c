@@ -243,9 +243,7 @@ static const char* settings_path(void)
 /* mkdir -p, on a copy the caller owns */
 int settings_make_dirs(char* path)
 {
-    char* p;
-
-    for (p = path + 1; *p; p++) {
+    for (char* p = path + 1; *p; p++) {
         if (*p != '/')
             continue;
         *p = '\0';
