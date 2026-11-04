@@ -1,5 +1,6 @@
-g0wm
+/g0wm
 build/
 .ccls-cache
 config.mk
-include/config.h.*.bak
+src/core/settings/config.h.*.bak
+compile_commands.json

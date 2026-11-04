@@ -53,7 +53,7 @@ EOF
 }
 
 defaults() {
-	_version=0.8-dev
+	_version=1.2.0
 	cc=cc
 	linker=
 	pkg_config=pkg-config

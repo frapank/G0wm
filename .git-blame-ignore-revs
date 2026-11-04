@@ -1,0 +1,17 @@
+# Mechanical changes, skipped by git blame and by GitHub's blame view.
+# git config blame.ignoreRevsFile .git-blame-ignore-revs uses it locally.
+
+# Switch to REUSE licensing
+972b24395fc5546b389e311815b804d1f1bc213e
+
+# Add a header for each module
+5b6fded741a77c2f260a4360a432b7542384a61f
+
+# Move from C99 to C23 (gnu23)
+da54fa3e604701c5daeb53aed4c1a22e5f61ede3
+
+# Prefix functions and variables with module name
+92bf3b925a667458cb190a4823089a90014c0723
+
+# Reorganize sources into subdirectories
+b0dd0ea94b09dcaf81c02167012743a7dbc4a445
