@@ -5,7 +5,7 @@
 
 **The Wayland compositor that wants to be a desktop environment**
 
-[![C](https://img.shields.io/badge/C-99%2B-A8B9CC?style=flat-square&logo=c)](https://en.wikipedia.org/wiki/C_(programming_language))
+[![C](https://img.shields.io/badge/C-23-A8B9CC?style=flat-square&logo=c)](https://en.wikipedia.org/wiki/C_(programming_language))
 [![wlroots](https://img.shields.io/badge/wlroots-0.20-blue?style=flat-square)](https://gitlab.freedesktop.org/wlroots/wlroots)
 ![Platform](https://img.shields.io/badge/platform-linux-lightgrey?style=flat-square&logo=linux&logoColor=white)
 ![Status](https://img.shields.io/badge/status-stable-green?style=flat-square)
@@ -36,7 +36,8 @@ when hovered.
 
 **Dependencies:** wlroots 0.20 (with the libinput backend), wayland,
 wayland-protocols, libinput, xkbcommon, pixman, fcft, libdbus, gdk-pixbuf,
-[libscfg](https://git.sr.ht/~emersion/scfg), pkg-config
+[libscfg](https://git.sr.ht/~emersion/scfg), pkg-config, a C23 compiler
+(GCC 14 or Clang 18 and newer)
 
 **X11 support:** libxcb, libxcb-icccm, Xwayland
 
@@ -64,8 +65,10 @@ See `./configure --help` for the other options (toolchain, `--debug`, `--native`
 ## License
 
 **GPL-3.0-or-later**, see [`LICENSE`](LICENSE). Parts taken from dwl and other
-projects keep their original licenses, stored in `license/`. Where each part
-comes from, and the thanks owed to the patch authors, is in
+projects keep their original licenses. The project follows [REUSE](https://reuse.software):
+each file states its license, the texts are in [`LICENSES/`](LICENSES) and
+[`REUSE.toml`](REUSE.toml) covers the files that cannot carry a header. Where
+each part comes from, and the thanks owed to the patch authors, is in
 [docs/credits.md](docs/credits.md).
 
 [Features]: docs/features.md
