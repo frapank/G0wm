@@ -5,11 +5,14 @@ SPDX-PackageDownloadLocation = "https://github.com/frapank/G0wm"
 # the parts of dwl that came from dwm, sway and tinywl
 [[annotations]]
 path = [
-    "src/g0wm.c", "src/client.c", "src/input.c", "src/layout.c",
-    "src/lock.c", "src/monitor.c", "src/xwayland.c",
-    "include/client.h", "include/g0wm.h", "src/config.h",
-    "include/input.h", "include/layout.h", "include/lock.h",
-    "include/monitor.h", "include/settings.h", "include/xwayland.h",
+    "src/core/g0wm/**", "src/core/settings/config.h", "src/input/pointer.c",
+    "src/input/keyboard.c", "src/input/gesture.c", "src/input/seat.c",
+    "src/input/internal.h", "src/output/lock.c", "src/output/monitor.c",
+    "src/window/client.c", "src/window/layout.c", "src/window/xwayland.c",
+    "include/core/g0wm.h", "include/core/settings.h", "include/input/pointer.h",
+    "include/input/keyboard.h", "include/input/gesture.h", "include/input/seat.h",
+    "include/output/lock.h", "include/output/monitor.h", "include/window/client.h",
+    "include/window/layout.h", "include/window/xwayland.h",
 ]
 precedence = "aggregate"
 SPDX-FileCopyrightText = [
@@ -35,7 +38,7 @@ SPDX-FileCopyrightText = [
 SPDX-License-Identifier = "MIT AND CC0-1.0"
 
 [[annotations]]
-path = ["src/util.c", "include/util.h"]
+path = ["src/core/util.c", "include/core/util.h"]
 precedence = "aggregate"
 SPDX-FileCopyrightText = [
     "2006-2019 Anselm R Garbe <anselm@garbe.ca>",

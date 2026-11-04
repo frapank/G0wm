@@ -17,7 +17,7 @@ Through dwl, the tree also carries:
 
 | Project | License | Covers |
 | --- | --- | --- |
-| [dwm] | [MIT](../LICENSES/MIT.txt) | `src/util.c`, `include/util.h` and the tags/layout model |
+| [dwm] | [MIT](../LICENSES/MIT.txt) | `src/core/util.c`, `include/core/util.h` and the tags/layout model |
 | [sway] | [MIT](../LICENSES/MIT.txt) | parts of the wlroots plumbing |
 | tinywl | [CC0-1.0](../LICENSES/CC0-1.0.txt) | the compositor skeleton dwl was built on |
 
