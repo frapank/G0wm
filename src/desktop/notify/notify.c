@@ -18,31 +18,28 @@
 
 /* variables */
 NotifyState notify_state;
-static const DBusObjectPathVTable notify_vtable = { .message_function =
-                                                        notify_handle_message };
+static const DBusObjectPathVTable notify_vtable = { .message_function = notify_handle_message };
 
 /* function implementations */
 uint64_t notify_now(void)
 {
-    struct timespec ts;
+    struct timespec now;
 
-    clock_gettime(CLOCK_MONOTONIC, &ts);
-    return (uint64_t)ts.tv_sec * 1000 + (uint64_t)ts.tv_nsec / 1'000'000;
+    clock_gettime(CLOCK_MONOTONIC, &now);
+    return (uint64_t)now.tv_sec * 1000 + (uint64_t)now.tv_nsec / 1'000'000;
 }
 
-void notify_start(DBusConnection* conn,
+void notify_start(DBusConnection* connection,
                   struct wl_event_loop* loop,
                   unsigned int timeout_secs,
                   void (*redraw)(void),
                   const char* (*token)(void))
 {
-    int r;
-
-    if (!conn || !loop)
+    if (!connection || !loop)
         return;
 
     notify_state = (typeof(notify_state)){};
-    notify_state.conn = conn;
+    notify_state.conn = connection;
     notify_state.loop = loop;
     notify_set_timeout(timeout_secs);
     notify_state.redraw = redraw;
@@ -50,9 +47,9 @@ void notify_start(DBusConnection* conn,
 
     /* if another daemon (mako, dunst, swaync, ...) already owns the name,
      * don't fight it for it: just stay disabled */
-    r = dbus_bus_request_name(
-        conn, NOTIFY_NAME, DBUS_NAME_FLAG_DO_NOT_QUEUE, nullptr);
-    if (r != DBUS_REQUEST_NAME_REPLY_PRIMARY_OWNER) {
+    const int reply =
+        dbus_bus_request_name(connection, NOTIFY_NAME, DBUS_NAME_FLAG_DO_NOT_QUEUE, nullptr);
+    if (reply != DBUS_REQUEST_NAME_REPLY_PRIMARY_OWNER) {
         fprintf(stderr,
                 "Couldn't own %s (another notification daemon is likely "
                 "running), bar notifications not available\n",
@@ -60,9 +57,8 @@ void notify_start(DBusConnection* conn,
         return;
     }
 
-    if (!dbus_connection_register_object_path(
-            conn, NOTIFY_OPATH, &notify_vtable, nullptr)) {
-        dbus_bus_release_name(conn, NOTIFY_NAME, nullptr);
+    if (!dbus_connection_register_object_path(connection, NOTIFY_OPATH, &notify_vtable, nullptr)) {
+        dbus_bus_release_name(connection, NOTIFY_NAME, nullptr);
         fprintf(stderr, "Couldn't register %s\n", NOTIFY_OPATH);
         return;
     }
@@ -72,8 +68,6 @@ void notify_start(DBusConnection* conn,
 
 void notify_stop(void)
 {
-    Notification n;
-
     if (!notify_state.running)
         return;
 
@@ -81,9 +75,10 @@ void notify_stop(void)
      * to hear that their notification went away */
     notify_state.redraw = nullptr;
     while (notify_state.nqueue) {
-        notify_unqueue(0, &n);
-        notify_closed(n.id, ClosedUndefined);
-        notify_release(&n);
+        Notification notification;
+        notify_unqueue(0, &notification);
+        notify_closed(notification.id, ClosedUndefined);
+        notify_release(&notification);
     }
     notify_clear(ClosedUndefined);
     while (notify_state.nhist)

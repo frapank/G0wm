@@ -17,12 +17,9 @@
 #include "window/toplevel.h"
 
 /* function declarations */
-static void toplevel_handle_request_activate(struct wl_listener* listener,
-                                             void* data);
-static void toplevel_handle_request_close(struct wl_listener* listener,
-                                          void* data);
-static void toplevel_handle_request_fullscreen(struct wl_listener* listener,
-                                               void* data);
+static void toplevel_handle_request_activate(struct wl_listener* listener, void*);
+static void toplevel_handle_request_close(struct wl_listener* listener, void*);
+static void toplevel_handle_request_fullscreen(struct wl_listener* listener, void* data);
 
 /* variables */
 static Client* toplevel_active;
@@ -30,139 +27,131 @@ static Client* toplevel_active;
 /* function implementations */
 void toplevel_handle_new_capture_request(struct wl_listener*, void* data)
 {
-    struct wlr_ext_foreign_toplevel_image_capture_source_manager_v1_request*
-        req = data;
-    Client* c = req->toplevel_handle->data;
+    struct wlr_ext_foreign_toplevel_image_capture_source_manager_v1_request* req = data;
+    Client* client = req->toplevel_handle->data;
 
-    if (!c)
+    if (!client)
         return;
-    if (!c->capture &&
-        !(c->capture = wlr_ext_image_capture_source_v1_create_with_scene_node(
-              &c->scene_surface->node, event_loop, allocator, renderer)))
+    if (!client->capture &&
+        !(client->capture = wlr_ext_image_capture_source_v1_create_with_scene_node(
+              &client->scene_surface->node, event_loop, allocator, renderer)))
         return;
-    privacy_shield_client(c);
-    wlr_ext_foreign_toplevel_image_capture_source_manager_v1_request_accept(
-        req, c->capture);
+    privacy_shield_client(client);
+    wlr_ext_foreign_toplevel_image_capture_source_manager_v1_request_accept(req, client->capture);
 }
 
-static void toplevel_handle_request_activate(struct wl_listener* listener,
-                                             void*)
+static void toplevel_handle_request_activate(struct wl_listener* listener, void*)
 {
-    Client* c = wl_container_of(listener, c, ftl_activate);
-    client_activate(c);
+    Client* client = wl_container_of(listener, client, ftl_activate);
+    client_activate(client);
 }
 
 static void toplevel_handle_request_close(struct wl_listener* listener, void*)
 {
-    Client* c = wl_container_of(listener, c, ftl_close);
-    client_send_close(c);
+    Client* client = wl_container_of(listener, client, ftl_close);
+    client_send_close(client);
 }
 
-static void toplevel_handle_request_fullscreen(struct wl_listener* listener,
-                                               void* data)
+static void toplevel_handle_request_fullscreen(struct wl_listener* listener, void* data)
 {
-    Client* c = wl_container_of(listener, c, ftl_fullscreen);
+    Client* client = wl_container_of(listener, client, ftl_fullscreen);
     struct wlr_foreign_toplevel_handle_v1_fullscreen_event* event = data;
-    client_set_fullscreen(c, event->fullscreen);
+    client_set_fullscreen(client, event->fullscreen);
 }
 
-void toplevel_focus(Client* c)
+void toplevel_focus(Client* client)
 {
-    if (c && client_is_unmanaged(c))
+    if (client && client_is_unmanaged(client))
         return;
-    if (c && !c->ftl)
-        c = nullptr;
-    if (c == toplevel_active)
+    if (client && !client->ftl)
+        client = nullptr;
+    if (client == toplevel_active)
         return;
     if (toplevel_active)
         wlr_foreign_toplevel_handle_v1_set_activated(toplevel_active->ftl, 0);
-    if ((toplevel_active = c))
-        wlr_foreign_toplevel_handle_v1_set_activated(c->ftl, 1);
+    if ((toplevel_active = client))
+        wlr_foreign_toplevel_handle_v1_set_activated(client->ftl, 1);
 }
 
-void toplevel_map(Client* c)
+void toplevel_map(Client* client)
 {
-    Client* p = client_get_parent(c);
+    Client* parent = client_get_parent(client);
 
-    c->ftl = wlr_foreign_toplevel_handle_v1_create(foreign_toplevel_manager);
-    if (c->ftl) {
-        c->ftl->data = c;
-        LISTEN(&c->ftl->events.request_activate,
-               &c->ftl_activate,
+    client->ftl = wlr_foreign_toplevel_handle_v1_create(foreign_toplevel_manager);
+    if (client->ftl) {
+        client->ftl->data = client;
+        LISTEN(&client->ftl->events.request_activate, &client->ftl_activate,
                toplevel_handle_request_activate);
-        LISTEN(&c->ftl->events.request_close,
-               &c->ftl_close,
+        LISTEN(&client->ftl->events.request_close, &client->ftl_close,
                toplevel_handle_request_close);
-        LISTEN(&c->ftl->events.request_fullscreen,
-               &c->ftl_fullscreen,
+        LISTEN(&client->ftl->events.request_fullscreen, &client->ftl_fullscreen,
                toplevel_handle_request_fullscreen);
-        if (p && p->ftl)
-            wlr_foreign_toplevel_handle_v1_set_parent(c->ftl, p->ftl);
+        if (parent && parent->ftl)
+            wlr_foreign_toplevel_handle_v1_set_parent(client->ftl, parent->ftl);
     }
-    c->eftl = wlr_ext_foreign_toplevel_handle_v1_create(
+    client->eftl = wlr_ext_foreign_toplevel_handle_v1_create(
         ext_toplevel_list,
-        &(struct wlr_ext_foreign_toplevel_handle_v1_state){
-            .title = privacy_share_title(c), .app_id = client_get_app_id(c) });
-    if (c->eftl)
-        c->eftl->data = c;
+        &(struct wlr_ext_foreign_toplevel_handle_v1_state){ .title = privacy_share_title(client),
+                                                            .app_id = client_get_app_id(client) });
+    if (client->eftl)
+        client->eftl->data = client;
 
-    toplevel_update(c);
-    if (client_surface(c) == seat->keyboard_state.focused_surface)
-        toplevel_focus(c);
+    toplevel_update(client);
+    if (client_surface(client) == seat->keyboard_state.focused_surface)
+        toplevel_focus(client);
 }
 
-void toplevel_unmap(Client* c)
+void toplevel_unmap(Client* client)
 {
-    if (c == toplevel_active)
+    if (client == toplevel_active)
         toplevel_active = nullptr;
-    if (c->ftl) {
-        wl_list_remove(&c->ftl_activate.link);
-        wl_list_remove(&c->ftl_close.link);
-        wl_list_remove(&c->ftl_fullscreen.link);
-        wlr_foreign_toplevel_handle_v1_destroy(c->ftl);
-        c->ftl = nullptr;
+    if (client->ftl) {
+        wl_list_remove(&client->ftl_activate.link);
+        wl_list_remove(&client->ftl_close.link);
+        wl_list_remove(&client->ftl_fullscreen.link);
+        wlr_foreign_toplevel_handle_v1_destroy(client->ftl);
+        client->ftl = nullptr;
     }
-    if (c->eftl) {
-        wlr_ext_foreign_toplevel_handle_v1_destroy(c->eftl);
-        c->eftl = nullptr;
+    if (client->eftl) {
+        wlr_ext_foreign_toplevel_handle_v1_destroy(client->eftl);
+        client->eftl = nullptr;
     }
-    c->capture = nullptr; /* freed with the scene node */
+    client->capture = nullptr; /* freed with the scene node */
 }
 
-void toplevel_update(Client* c)
+void toplevel_update(Client* client)
 {
-    const char* title = privacy_share_title(c);
-    const char* appid = client_get_app_id(c);
-    struct wlr_output* out = c->mon ? c->mon->wlr_output : nullptr;
-    struct wlr_foreign_toplevel_handle_v1_output *o, *tmp;
-    int on = 0;
+    const char* title = privacy_share_title(client);
+    const char* appid = client_get_app_id(client);
+    struct wlr_output* monitor_output = client->mon ? client->mon->wlr_output : nullptr;
+    int output_present = 0;
 
-    if (!c->ftl && !c->eftl)
+    if (!client->ftl && !client->eftl)
         return;
-    if (c->eftl && (!c->eftl->title || strcmp(c->eftl->title, title) ||
-                    !c->eftl->app_id || strcmp(c->eftl->app_id, appid)))
+    if (client->eftl && (!client->eftl->title || strcmp(client->eftl->title, title) ||
+                         !client->eftl->app_id || strcmp(client->eftl->app_id, appid)))
         wlr_ext_foreign_toplevel_handle_v1_update_state(
-            c->eftl,
-            &(struct wlr_ext_foreign_toplevel_handle_v1_state){
-                .title = title, .app_id = appid });
-    if (!c->ftl)
+            client->eftl,
+            &(struct wlr_ext_foreign_toplevel_handle_v1_state){ .title = title, .app_id = appid });
+    if (!client->ftl)
         return;
-    if (!c->ftl->title || strcmp(c->ftl->title, title))
-        wlr_foreign_toplevel_handle_v1_set_title(c->ftl, title);
-    if (!c->ftl->app_id || strcmp(c->ftl->app_id, appid))
-        wlr_foreign_toplevel_handle_v1_set_app_id(c->ftl, appid);
+    if (!client->ftl->title || strcmp(client->ftl->title, title))
+        wlr_foreign_toplevel_handle_v1_set_title(client->ftl, title);
+    if (!client->ftl->app_id || strcmp(client->ftl->app_id, appid))
+        wlr_foreign_toplevel_handle_v1_set_app_id(client->ftl, appid);
 
-    wl_list_for_each_safe(o, tmp, &c->ftl->outputs, link)
-    {
-        if (o->output == out)
-            on = 1;
+    struct wlr_foreign_toplevel_handle_v1_output* handle_output;
+    struct wlr_foreign_toplevel_handle_v1_output* tmp;
+    wl_list_for_each_safe(handle_output, tmp, &client->ftl->outputs, link) {
+        if (handle_output->output == monitor_output)
+            output_present = 1;
         else
-            wlr_foreign_toplevel_handle_v1_output_leave(c->ftl, o->output);
+            wlr_foreign_toplevel_handle_v1_output_leave(client->ftl, handle_output->output);
     }
-    if (out && !on)
-        wlr_foreign_toplevel_handle_v1_output_enter(c->ftl, out);
+    if (monitor_output && !output_present)
+        wlr_foreign_toplevel_handle_v1_output_enter(client->ftl, monitor_output);
 
-    if (!(c->ftl->state & WLR_FOREIGN_TOPLEVEL_HANDLE_V1_STATE_FULLSCREEN) !=
-        !c->isfullscreen)
-        wlr_foreign_toplevel_handle_v1_set_fullscreen(c->ftl, c->isfullscreen);
+    if (!(client->ftl->state & WLR_FOREIGN_TOPLEVEL_HANDLE_V1_STATE_FULLSCREEN) !=
+        !client->isfullscreen)
+        wlr_foreign_toplevel_handle_v1_set_fullscreen(client->ftl, client->isfullscreen);
 }

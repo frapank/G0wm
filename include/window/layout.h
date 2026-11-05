@@ -15,7 +15,7 @@ typedef struct {
     void (*arrange)(Monitor*);
 } Layout;
 
-void layout_arrange(Monitor* m);
+void layout_arrange(Monitor* monitor);
 void layout_focus_stack(const Arg* arg);
 void layout_inc_master(const Arg* arg);
 void layout_move_stack(const Arg* arg);
@@ -25,16 +25,16 @@ void layout_set(const Arg* arg);
 void layout_set_master_factor(const Arg* arg);
 void layout_shift_tag(const Arg* arg);
 void layout_shift_view(const Arg* arg);
-void layout_swap_clients(Client* a, Client* b);
-void layout_tabbed(Monitor* m);
-Client* layout_tab_top(Monitor* m);
+void layout_swap_clients(Client* first, Client* second);
+void layout_tabbed(Monitor* monitor);
+Client* layout_tab_top(Monitor* monitor);
 void layout_tag(const Arg* arg);
-void layout_tile(Monitor* m);
-void layout_toggle_gaps(const Arg* arg);
+void layout_tile(Monitor* monitor);
+void layout_toggle_gaps(const Arg*);
 void layout_toggle_tabbed(const Arg* arg);
 void layout_toggle_tag(const Arg* arg);
 void layout_toggle_view(const Arg* arg);
 void layout_view(const Arg* arg);
-void layout_zoom(const Arg* arg);
+void layout_zoom(const Arg*);
 
 #endif

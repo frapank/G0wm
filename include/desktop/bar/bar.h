@@ -22,13 +22,13 @@
 
 extern char bar_status_text[STATUS_MAX];
 
-bool bar_accepts_input(struct wlr_scene_buffer* buffer, double* sx, double* sy);
+bool bar_accepts_input(struct wlr_scene_buffer*, double*, double*);
 void bar_finish(void);
-void bar_draw(Monitor* m);
+void bar_draw(Monitor* monitor);
 void bar_draw_all(void);
 void bar_draw_selected(void);
-int bar_tag_width(Monitor* m, Monitor* s, uint32_t i);
-void bar_toggle(const Arg* arg);
-void bar_update(Monitor* m);
+int bar_tag_width(Monitor* monitor, Monitor* target, uint32_t tag);
+void bar_toggle(const Arg*);
+void bar_update(Monitor* monitor);
 
 #endif

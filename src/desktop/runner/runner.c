@@ -57,18 +57,18 @@ static struct timespec runner_app_stamp;
 static char* runner_app_cache;
 
 /* function implementations */
-int runner_compare(const void* a, const void* b)
+int runner_compare(const void* first, const void* second)
 {
-    return strcmp(*(char* const*)a, *(char* const*)b);
+    return strcmp(*(char* const*)first, *(char* const*)second);
 }
 
-void runner_append(char** s, size_t* n, const char* add, size_t len)
+void runner_append(char** text, size_t* length, const char* addition, size_t addition_length)
 {
-    if (!(*s = realloc(*s, *n + len + 1)))
+    if (!(*text = realloc(*text, *length + addition_length + 1)))
         util_die("realloc:");
-    memcpy(*s + *n, add, len);
-    *n += len;
-    (*s)[*n] = '\0';
+    memcpy(*text + *length, addition, addition_length);
+    *length += addition_length;
+    (*text)[*length] = '\0';
 }
 
 int runner_query(void)
@@ -82,14 +82,12 @@ int runner_query(void)
 static void runner_select(int step)
 {
     if (runner_match_count)
-        runner_selection =
-            (runner_selection + step + runner_match_count) % runner_match_count;
+        runner_selection = (runner_selection + step + runner_match_count) % runner_match_count;
 }
 
 const char* runner_suggest(void)
 {
-    return runner_match_count ? runner_source[runner_matches[runner_selection]]
-                              : nullptr;
+    return runner_match_count ? runner_source[runner_matches[runner_selection]] : nullptr;
 }
 
 int runner_candidate_count(void)
@@ -99,8 +97,7 @@ int runner_candidate_count(void)
 
 const char* runner_candidate(int i)
 {
-    return i >= 0 && i < runner_match_count ? runner_source[runner_matches[i]]
-                                            : nullptr;
+    return i >= 0 && i < runner_match_count ? runner_source[runner_matches[i]] : nullptr;
 }
 
 int runner_selected(void)
@@ -114,18 +111,16 @@ int runner_has_icons(void)
 }
 
 /* the icon of candidate i, read the first time it's asked for */
-Icon* runner_icon(int i)
+Icon* runner_icon(int match_index)
 {
-    RunnerApp* a;
-
-    if (!runner_has_icons() || i < 0 || i >= runner_match_count)
+    if (!runner_has_icons() || match_index < 0 || match_index >= runner_match_count)
         return nullptr;
-    a = &runner_apps[runner_matches[i]];
-    if (!a->imgread) {
-        a->imgread = 1;
-        a->img = icon_create_from_name(a->icon, nullptr, 64);
+    RunnerApp* app = &runner_apps[runner_matches[match_index]];
+    if (!app->imgread) {
+        app->imgread = 1;
+        app->img = icon_create_from_name(app->icon, nullptr, 64);
     }
-    return a->img;
+    return app->img;
 }
 
 /* runner_buffer holds UTF-8, so the cursor steps over whole codepoints: it
@@ -145,8 +140,7 @@ static int runner_next(int i)
     if (i < runner_length)
         do
             i++;
-        while (i < runner_length &&
-               ((unsigned char)runner_buffer[i] & 0xC0) == 0x80);
+        while (i < runner_length && ((unsigned char)runner_buffer[i] & 0xC0) == 0x80);
     return i;
 }
 
@@ -163,31 +157,27 @@ static void runner_cut(int from, int to)
  * the terminal. */
 static void runner_exec(const char* cmd, int term)
 {
-    char* sh =
-        (char*)(runner_shell && *runner_shell ? runner_shell : "/bin/sh");
-    char* argv[6];
+    char* shell = (char*)(runner_shell && *runner_shell ? runner_shell : "/bin/sh");
     char* script = nullptr;
-    char *path = nullptr, *saved = nullptr;
-    size_t n;
-    Arg a;
+    char* path = nullptr;
+    char* saved = nullptr;
 
-    argv[0] = sh;
+    char* argv[6];
+    argv[0] = shell;
     argv[1] = "-c";
     argv[2] = (char*)cmd;
     argv[3] = nullptr;
     if (term) {
-        n = strlen(runner_terminal) + 32;
-        script = util_calloc(1, n);
-        snprintf(script,
-                 n,
-                 *cmd ? "exec %s \"$0\" -c \"$1\"" : "exec %s",
+        const size_t script_size = strlen(runner_terminal) + 32;
+        script = util_calloc(1, script_size);
+        snprintf(script, script_size, *cmd ? "exec %s \"$0\" -c \"$1\"" : "exec %s",
                  runner_terminal);
         argv[2] = script;
-        argv[3] = sh;
+        argv[3] = shell;
         argv[4] = (char*)cmd;
         argv[5] = nullptr;
     }
-    a.v = argv;
+    const Arg spawn_arg = { .v = argv };
     /* only the child gets the wider PATH */
     if (runner_paths && *runner_paths) {
         path = runner_search_path();
@@ -195,7 +185,7 @@ static void runner_exec(const char* cmd, int term)
             util_die("strdup:");
         setenv("PATH", path, 1);
     }
-    spawn(&a);
+    spawn(&spawn_arg);
     if (path) {
         if (saved)
             setenv("PATH", saved, 1);
@@ -215,39 +205,36 @@ static void runner_open(const char* what)
 }
 
 /* runner_search_url with q in place of its %s, or after it without one */
-static void runner_search(const char* q)
+static void runner_search(const char* query)
 {
     const char* url = runner_search_url;
-    const char* at = strstr(url, "%s");
-    char *s, *p;
-
-    p = s = util_calloc(1, strlen(url) + 3 * strlen(q) + 1);
-    if (at) {
-        memcpy(p, url, at - url);
-        p += at - url;
+    const char* placeholder = strstr(url, "%s");
+    char* result = util_calloc(1, strlen(url) + 3 * strlen(query) + 1);
+    char* write_at = result;
+    if (placeholder) {
+        memcpy(write_at, url, placeholder - url);
+        write_at += placeholder - url;
     } else {
-        p = stpcpy(p, url);
+        write_at = stpcpy(write_at, url);
     }
-    for (; *q; q++)
-        if (isalnum((unsigned char)*q) || strchr("-_.~", *q))
-            *p++ = *q;
+    for (; *query; query++)
+        if (isalnum((unsigned char)*query) || strchr("-_.~", *query))
+            *write_at++ = *query;
         else
-            p += sprintf(p, "%%%02X", (unsigned char)*q);
-    if (at)
-        strcpy(p, at + 2);
-    runner_open(s);
-    free(s);
+            write_at += sprintf(write_at, "%%%02X", (unsigned char)*query);
+    if (placeholder)
+        strcpy(write_at, placeholder + 2);
+    runner_open(result);
+    free(result);
 }
 
-static void runner_focus(Client* c)
+static void runner_focus(Client* client)
 {
-    Client* w;
-
     /* it may have closed while the prompt was up */
-    wl_list_for_each(w, &clients, link)
-    {
-        if (w == c) {
-            client_activate(c);
+    Client* candidate;
+    wl_list_for_each(candidate, &clients, link) {
+        if (candidate == client) {
+            client_activate(client);
             return;
         }
     }
@@ -256,14 +243,14 @@ static void runner_focus(Client* c)
 static void runner_enter(void)
 {
     const char* sug = runner_suggest();
-    const char* cmd;
-    char line[sizeof runner_buffer];
-    RunnerApp* app;
-    char *exec, *path;
     int off, mode = runner_mode(runner_buffer, &off);
 
     runner_active = 0;
-    cmd = sug ? sug : runner_buffer + off;
+    const char* cmd = sug ? sug : runner_buffer + off;
+    char line[sizeof runner_buffer];
+    RunnerApp* app;
+    char* exec;
+    char* path;
     switch (mode) {
         case ModeApp:
             /* nothing to open, or a bare expression that Tab turns into
@@ -295,13 +282,11 @@ static void runner_enter(void)
             break;
         case ModeWindow:
             if (sug)
-                runner_focus(
-                    runner_window_clients[runner_matches[runner_selection]]);
+                runner_focus(runner_window_clients[runner_matches[runner_selection]]);
             return;
         case ModeTag:
             if (sug)
-                layout_view(
-                    &(Arg){ .ui = 1u << runner_matches[runner_selection] });
+                layout_view(&(Arg){ .ui = 1u << runner_matches[runner_selection] });
             return;
         case ModeFile:
             snprintf(line, sizeof line, "%.*s%s", off, runner_buffer, cmd);
@@ -320,15 +305,12 @@ void runner_toggle(const Arg*)
     if (!selected_monitor)
         return;
     if (!runner_active) {
-        if (runner_stale(
-                runner_search_path(), &runner_cache_path, &runner_stamp) ||
+        if (runner_stale(runner_search_path(), &runner_cache_path, &runner_stamp) ||
             !runner_commands) {
             runner_free_cache();
             runner_build_cache();
         }
-        if (runner_stale(
-                runner_app_dirs(), &runner_app_cache, &runner_app_stamp) ||
-            !runner_apps) {
+        if (runner_stale(runner_app_dirs(), &runner_app_cache, &runner_app_stamp) || !runner_apps) {
             runner_free_apps();
             runner_build_apps();
         }
@@ -353,10 +335,9 @@ void runner_toggle(const Arg*)
 
 void runner_key(xkb_keysym_t sym, uint32_t mods, uint32_t codepoint)
 {
-    const char* sug;
-    char before[sizeof runner_buffer];
     int tab = 0;
 
+    char before[sizeof runner_buffer];
     memcpy(before, runner_buffer, runner_length + 1);
 
     /* Ctrl+<letter> line-editing, readline-style. Ctrl doesn't change the
@@ -368,20 +349,15 @@ void runner_key(xkb_keysym_t sym, uint32_t mods, uint32_t codepoint)
         runner_length = 0;
         runner_cursor = 0;
         runner_buffer[0] = '\0';
-    } else if (mods & WLR_MODIFIER_CTRL &&
-               xkb_keysym_to_lower(sym) == XKB_KEY_a) {
+    } else if (mods & WLR_MODIFIER_CTRL && xkb_keysym_to_lower(sym) == XKB_KEY_a) {
         runner_cursor = 0;
-    } else if (mods & WLR_MODIFIER_CTRL &&
-               xkb_keysym_to_lower(sym) == XKB_KEY_e) {
+    } else if (mods & WLR_MODIFIER_CTRL && xkb_keysym_to_lower(sym) == XKB_KEY_e) {
         runner_cursor = runner_length;
-    } else if (mods & WLR_MODIFIER_CTRL &&
-               xkb_keysym_to_lower(sym) == XKB_KEY_f) {
+    } else if (mods & WLR_MODIFIER_CTRL && xkb_keysym_to_lower(sym) == XKB_KEY_f) {
         runner_cursor = runner_next(runner_cursor);
-    } else if (mods & WLR_MODIFIER_CTRL &&
-               xkb_keysym_to_lower(sym) == XKB_KEY_b) {
+    } else if (mods & WLR_MODIFIER_CTRL && xkb_keysym_to_lower(sym) == XKB_KEY_b) {
         runner_cursor = runner_prev(runner_cursor);
-    } else if (mods & WLR_MODIFIER_CTRL &&
-               xkb_keysym_to_lower(sym) == XKB_KEY_w) {
+    } else if (mods & WLR_MODIFIER_CTRL && xkb_keysym_to_lower(sym) == XKB_KEY_w) {
         /* delete the word behind the cursor: skip trailing spaces, then the
          * run of non-spaces before them, same as a shell's line editor.
          * Byte-wise is safe here: no UTF-8 continuation byte is a space. */
@@ -435,21 +411,18 @@ void runner_key(xkb_keysym_t sym, uint32_t mods, uint32_t codepoint)
             case XKB_KEY_ISO_Left_Tab: {
                 /* The first Tab takes the selected candidate, the next ones
                  * move to the following candidate. Shift goes backwards. */
-                int back =
-                    sym == XKB_KEY_ISO_Left_Tab || mods & WLR_MODIFIER_SHIFT;
+                int back = sym == XKB_KEY_ISO_Left_Tab || mods & WLR_MODIFIER_SHIFT;
                 if (runner_match_count && (runner_cycling || back))
                     runner_select(back ? -1 : 1);
-                sug = runner_suggest();
-                if (sug &&
-                    runner_query() + strlen(sug) < sizeof(runner_buffer)) {
-                    runner_length = runner_query() + (int)strlen(sug);
-                    memcpy(
-                        runner_buffer + runner_query(), sug, strlen(sug) + 1);
+                const char* suggestion = runner_suggest();
+                if (suggestion && runner_query() + strlen(suggestion) < sizeof(runner_buffer)) {
+                    runner_length = runner_query() + (int)strlen(suggestion);
+                    memcpy(runner_buffer + runner_query(), suggestion, strlen(suggestion) + 1);
                     runner_cursor = runner_length;
                     runner_cycling = 1;
                     /* a completed directory lists what is inside it */
                     tab = runner_query() < runner_length;
-                } else if (!sug) {
+                } else if (!suggestion) {
                     runner_calc_fill();
                 }
                 break;
@@ -459,19 +432,17 @@ void runner_key(xkb_keysym_t sym, uint32_t mods, uint32_t codepoint)
                  * controls are what Ctrl combinations and the like produce,
                  * and util_put_codepoint() turns away surrogates and
                  * out-of-range values */
-                char enc[5];
-                int n;
-
                 if (codepoint < 0x20 || (codepoint >= 0x7f && codepoint < 0xa0))
                     break;
-                n = (int)util_put_codepoint(enc, sizeof enc, codepoint);
-                if (n && runner_length + n < (int)sizeof(runner_buffer)) {
-                    memmove(runner_buffer + runner_cursor + n,
-                            runner_buffer + runner_cursor,
-                            runner_length - runner_cursor + 1);
-                    memcpy(runner_buffer + runner_cursor, enc, n);
-                    runner_cursor += n;
-                    runner_length += n;
+                char encoded[5];
+                const int encoded_length =
+                    (int)util_put_codepoint(encoded, sizeof encoded, codepoint);
+                if (encoded_length && runner_length + encoded_length < (int)sizeof(runner_buffer)) {
+                    memmove(runner_buffer + runner_cursor + encoded_length,
+                            runner_buffer + runner_cursor, runner_length - runner_cursor + 1);
+                    memcpy(runner_buffer + runner_cursor, encoded, encoded_length);
+                    runner_cursor += encoded_length;
+                    runner_length += encoded_length;
                 }
                 break;
             }

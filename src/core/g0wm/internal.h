@@ -23,6 +23,6 @@ extern size_t autostart_len;
 
 void cleanup(void);
 void setup(void);
-void handle_signal(int signo);
+void handle_unix_signal(int signo);
 
 #endif

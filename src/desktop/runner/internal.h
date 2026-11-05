@@ -12,17 +12,7 @@
 #include "core/g0wm.h"
 #include "desktop/systray/icon.h"
 
-enum {
-    ModeApp,
-    ModeRun,
-    ModeTerm,
-    ModeCalc,
-    ModeSearch,
-    ModeWindow,
-    ModeTag,
-    ModeFile,
-    NumModes
-};
+enum { ModeApp, ModeRun, ModeTerm, ModeCalc, ModeSearch, ModeWindow, ModeTag, ModeFile, NumModes };
 
 typedef struct {
     char* id;
@@ -53,8 +43,8 @@ extern char** runner_app_generic_names;
 extern int runner_app_count;
 extern int* runner_app_use;
 
-int runner_compare(const void* a, const void* b);
-void runner_append(char** s, size_t* n, const char* add, size_t len);
+int runner_compare(const void* first, const void* second);
+void runner_append(char** text, size_t* length, const char* addition, size_t addition_length);
 char* runner_search_path(void);
 void runner_build_cache(void);
 void runner_free_cache(void);
@@ -62,15 +52,15 @@ char* runner_app_dirs(void);
 void runner_build_apps(void);
 void runner_free_apps(void);
 char* runner_app_exec(const char* exec);
-int runner_stale(char* p, char** cache, struct timespec* stamp);
+int runner_stale(char* paths, char** cache, struct timespec* stamp);
 void runner_trim_history(void);
 void runner_read_history(void);
 void runner_weigh(void);
 void runner_record(const char* cmd);
 void runner_recall(int step);
 int runner_calc_fill(void);
-int runner_mode(const char* s, int* off);
-char* runner_expand(const char* s, size_t len);
+int runner_mode(const char* text, int* offset);
+char* runner_expand(const char* text, size_t length);
 void runner_free_entries(void);
 void runner_filter(void);
 

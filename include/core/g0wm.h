@@ -80,8 +80,8 @@ typedef struct LayerSurface LayerSurface;
 typedef struct Monitor Monitor;
 
 void check_idle_inhibitor(struct wlr_surface* exclude);
-void change_vt(const Arg* arg);
-void quit(const Arg* arg);
+void change_virtual_console(const Arg* arg);
+void quit(const Arg*);
 void spawn(const Arg* arg);
 
 extern void* exclusive_focus;

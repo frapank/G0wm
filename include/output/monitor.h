@@ -105,16 +105,16 @@ struct Monitor {
     int lrpad;
 };
 
-void monitor_arrange_layers(Monitor* m);
-void monitor_handle_new_layer_surface(struct wl_listener* listener, void* data);
-void monitor_handle_new_output(struct wl_listener* listener, void* data);
+void monitor_arrange_layers(Monitor* monitor);
+void monitor_handle_new_layer_surface(struct wl_listener*, void* data);
+void monitor_handle_new_output(struct wl_listener*, void* data);
 void monitor_focus(const Arg* arg);
-void monitor_handle_config_apply(struct wl_listener* listener, void* data);
-void monitor_handle_config_test(struct wl_listener* listener, void* data);
-void monitor_handle_power_set_mode(struct wl_listener* listener, void* data);
+void monitor_handle_config_apply(struct wl_listener*, void* data);
+void monitor_handle_config_test(struct wl_listener*, void* data);
+void monitor_handle_power_set_mode(struct wl_listener*, void* data);
 void monitor_reload_rules(void);
 void monitor_send_client(const Arg* arg);
-void monitor_update_layout(struct wl_listener* listener, void* data);
+void monitor_update_layout(struct wl_listener*, void*);
 Monitor* monitor_at(double x, double y);
 
 #endif

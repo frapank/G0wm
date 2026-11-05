@@ -31,241 +31,241 @@ static Client* bar_hovered; /* whose close button is under the pointer */
 
 /* function implementations */
 /* the top tab, or the focused client */
-static int bar_title_selected(Client* c)
+static int bar_title_selected(Client* client)
 {
-    Monitor* m = c->mon;
+    Monitor* monitor = client->mon;
 
-    return c == (m->lt[m->sellt]->arrange == layout_tabbed && !c->isfloating
-                     ? layout_tab_top(m)
-                     : client_top(m));
+    return client == (monitor->lt[monitor->sellt]->arrange == layout_tabbed && !client->isfloating
+                          ? layout_tab_top(monitor)
+                          : client_top(monitor));
 }
 
-/* x of the close button, w without one */
-static int bar_title_close_x(Client* c, int w, int* d)
+/* x of the close button, bar_width without one */
+static int bar_title_close_x(Client* client, int bar_width, int* button_size)
 {
-    Monitor* m = c->mon;
-    int x;
+    Monitor* monitor = client->mon;
 
-    *d = MAX(m->drw->font->height * 3 / 5, 4);
+    *button_size = MAX(monitor->drw->font->height * 3 / 5, 4);
     if (!title_close)
-        return w;
-    x = w - m->lrpad / 2 - *d;
-    return x > w / 2 ? x : w;
+        return bar_width;
+    const int button_x = bar_width - monitor->lrpad / 2 - *button_size;
+    return button_x > bar_width / 2 ? button_x : bar_width;
 }
 
-/* draws the title bar of c into buf */
-static void bar_paint_title_bar(Client* c, Buffer* buf, int share)
+/* draws the title bar of client into buffer */
+static void bar_paint_title_bar(Client* client, Buffer* buffer, int for_sharing)
 {
-    Monitor* m = c->mon;
-    const char* title;
-    int w = buf->base.width, h = buf->base.height;
-    int sel, scheme, tab, end, lead, tw, d, fd, pd, dots;
-    uint32_t fg, pc;
+    Monitor* monitor = client->mon;
+    const int buffer_width = buffer->base.width;
+    const int buffer_height = buffer->base.height;
 
-    sel = bar_title_selected(c);
-    scheme = sel ? SchemeTitleSel : SchemeTitle;
-    tab = m->lt[m->sellt]->arrange == layout_tabbed && !c->isfloating &&
-          c->titlew < c->geom.width - 2 * (int)c->bw;
-    fg = colors[scheme][ColFg];
-    title = share ? privacy_share_title(c) : client_get_title(c);
-    end = bar_title_close_x(c, w, &d);
-    fd = MAX(m->drw->font->height / 3, 3);
+    const int is_selected = bar_title_selected(client);
+    const int scheme_index = is_selected ? SchemeTitleSel : SchemeTitle;
+    const int is_tab = monitor->lt[monitor->sellt]->arrange == layout_tabbed &&
+                       !client->isfloating &&
+                       client->titlew < client->geom.width - 2 * (int)client->bw;
+    const uint32_t foreground = colors[scheme_index][ColFg];
+    const char* title = for_sharing ? privacy_share_title(client) : client_get_title(client);
+    int close_button_size;
+    const int close_button_x = bar_title_close_x(client, buffer_width, &close_button_size);
+    const int dot_size = MAX(monitor->drw->font->height / 3, 3);
 
-    pd = bar_private_dot(c, &pc);
-    dots = !!c->isfloating + pd;
-    lead = m->lrpad / 2 + dots * (fd + m->lrpad / 3);
+    uint32_t private_dot_color;
+    const int has_private_dot = bar_private_dot(client, &private_dot_color);
+    const int dot_count = !!client->isfloating + has_private_dot;
+    int text_start = monitor->lrpad / 2 + dot_count * (dot_size + monitor->lrpad / 3);
     if (title_center) {
-        tw = (int)drwl_font_getwidth(m->drw, title);
-        lead = MAX(MIN((w - tw) / 2, end - m->lrpad / 2 - tw), lead);
+        const int text_width = (int)drwl_font_getwidth(monitor->drw, title);
+        text_start = MAX(
+            MIN((buffer_width - text_width) / 2, close_button_x - monitor->lrpad / 2 - text_width),
+            text_start);
     }
 
-    drwl_setimage(m->drw, buf->image);
-    drwl_setscheme(m->drw, share ? bar_opaque_scheme(scheme) : colors[scheme]);
-    drwl_rect(m->drw, 0, 0, w, h, 1, 1);
-    if (end > lead)
-        drwl_text(m->drw, 0, 0, end, h, lead, title, 0);
+    drwl_setimage(monitor->drw, buffer->image);
+    drwl_setscheme(monitor->drw,
+                   for_sharing ? bar_opaque_scheme(scheme_index) : colors[scheme_index]);
+    drwl_rect(monitor->drw, 0, 0, buffer_width, buffer_height, 1, 1);
+    if (close_button_x > text_start)
+        drwl_text(monitor->drw, 0, 0, close_button_x, buffer_height, text_start, title, 0);
 
-    if (pd)
-        bar_draw_pill(m,
-                      lead - fd - m->lrpad / 3,
-                      (h - fd) / 2,
-                      fd,
-                      fd,
-                      bar_private_radius(fd),
-                      0,
-                      pc);
-    if (c->isfloating)
-        bar_draw_pill(m,
-                      lead - dots * (fd + m->lrpad / 3),
-                      (h - fd) / 2,
-                      fd,
-                      fd,
-                      fd / 2.0,
-                      0,
-                      fg);
-    if (tab && c->titlex)
-        bar_draw_pill(m,
-                      0,
-                      h / 4,
-                      (int)MAX(m->wlr_output->scale, 1),
-                      h - h / 2,
-                      0,
-                      0,
+    if (has_private_dot)
+        bar_draw_pill(monitor, text_start - dot_size - monitor->lrpad / 3,
+                      (buffer_height - dot_size) / 2, dot_size, dot_size,
+                      bar_private_radius(dot_size), 0, private_dot_color);
+    if (client->isfloating)
+        bar_draw_pill(monitor, text_start - dot_count * (dot_size + monitor->lrpad / 3),
+                      (buffer_height - dot_size) / 2, dot_size, dot_size, dot_size / 2.0, 0,
+                      foreground);
+    if (is_tab && client->titlex)
+        bar_draw_pill(monitor, 0, buffer_height / 4, (int)MAX(monitor->wlr_output->scale, 1),
+                      buffer_height - buffer_height / 2, 0, 0,
                       bar_fade(colors[SchemeTitle][ColFg]));
-    if (end < w && c == bar_hovered)
-        bar_draw_pill(m, end, (h - d) / 2, d, d, d / 2.0, 0, title_close_color);
+    if (close_button_x < buffer_width && client == bar_hovered)
+        bar_draw_pill(monitor, close_button_x, (buffer_height - close_button_size) / 2,
+                      close_button_size, close_button_size, close_button_size / 2.0, 0,
+                      title_close_color);
 }
 
 /* Renders the client's own title bar. In the tabbed layout every client of the
  * group shares one row, so these end up drawn side by side as tabs. */
-void bar_draw_title_bar(Client* c)
+void bar_draw_title_bar(Client* client)
 {
-    Monitor* m = c->mon;
-    Buffer *buf, *share;
-    int w, h;
-
-    if (!c->title)
+    if (!client->title)
         return;
-    bar_place_title_bar(c);
-    if (!m || !title_bar || c->isfullscreen || c->titlew <= 0 ||
-        !c->scene->node.enabled) {
-        wlr_scene_node_set_enabled(&c->title->node, 0);
+    Monitor* monitor = client->mon;
+
+    bar_place_title_bar(client);
+    if (!monitor || !title_bar || client->isfullscreen || client->titlew <= 0 ||
+        !client->scene->node.enabled) {
+        wlr_scene_node_set_enabled(&client->title->node, 0);
         return;
     }
 
-    w = (int)((float)c->titlew * m->wlr_output->scale);
-    h = m->t.height;
-    if (w != c->titlebufw) {
-        buffer_pool_drop(c->titlepool, LENGTH(c->titlepool));
-        c->titlebufw = w;
+    const int buffer_width = (int)((float)client->titlew * monitor->wlr_output->scale);
+    const int buffer_height = monitor->t.height;
+    if (buffer_width != client->titlebufw) {
+        buffer_pool_drop(client->titlepool, LENGTH(client->titlepool));
+        client->titlebufw = buffer_width;
     }
-    if (!(buf = buffer_get(c->titlepool, LENGTH(c->titlepool), w, h)))
+    Buffer* buffer =
+        buffer_get(client->titlepool, LENGTH(client->titlepool), buffer_width, buffer_height);
+    if (!buffer)
         return;
-    bar_paint_title_bar(c, buf, 0);
-    if (c->isprivate && (share = bar_share_buffer(c->sharepool, w, h))) {
-        bar_paint_title_bar(c, share, 1);
-        wlr_buffer_unlock(&share->base);
+    bar_paint_title_bar(client, buffer, 0);
+    Buffer* share_buffer = client->isprivate
+                               ? bar_share_buffer(client->sharepool, buffer_width, buffer_height)
+                               : nullptr;
+    if (share_buffer) {
+        bar_paint_title_bar(client, share_buffer, 1);
+        wlr_buffer_unlock(&share_buffer->base);
     }
 
-    wlr_scene_node_set_enabled(&c->title->node, 1);
-    wlr_scene_buffer_set_opacity(c->title, opacity_decorations_current());
-    wlr_scene_buffer_set_buffer(c->title, &buf->base);
-    wlr_buffer_unlock(&buf->base);
+    wlr_scene_node_set_enabled(&client->title->node, 1);
+    wlr_scene_buffer_set_opacity(client->title, opacity_decorations_current());
+    wlr_scene_buffer_set_buffer(client->title, &buffer->base);
+    wlr_buffer_unlock(&buffer->base);
 }
 
-/* whether (x, y) is on c's close button */
-static int bar_on_close_button(Client* c, double x, double y)
+/* whether (pointer_x, pointer_y) is on client's close button */
+static int bar_on_close_button(Client* client, double pointer_x, double pointer_y)
 {
-    Monitor* m = c->mon;
-    int bx, d;
-    double lx, ly;
+    Monitor* monitor = client->mon;
 
-    if (!m || !c->title || !c->title->node.enabled)
+    if (!monitor || !client->title || !client->title->node.enabled)
         return 0;
-    lx = (x - c->geom.x - c->bw - c->titlex) * m->wlr_output->scale;
-    ly = (y - c->geom.y - c->bw) * m->wlr_output->scale;
-    bx = bar_title_close_x(c, c->titlebufw, &d);
-    return bx < c->titlebufw && ly >= 0 && ly < m->t.height &&
-           lx >= bx - m->lrpad / 2 && lx < c->titlebufw;
+    const double buffer_x =
+        (pointer_x - client->geom.x - client->bw - client->titlex) * monitor->wlr_output->scale;
+    const double buffer_y = (pointer_y - client->geom.y - client->bw) * monitor->wlr_output->scale;
+    int close_button_size;
+    const int close_button_x = bar_title_close_x(client, client->titlebufw, &close_button_size);
+    return close_button_x < client->titlebufw && buffer_y >= 0 && buffer_y < monitor->t.height &&
+           buffer_x >= close_button_x - monitor->lrpad / 2 && buffer_x < client->titlebufw;
 }
 
-/* whether (x, y) is on c's title bar */
-int bar_on_title_bar(Client* c, double x, double y)
+/* whether (pointer_x, pointer_y) is on client's title bar */
+int bar_on_title_bar(Client* client, double pointer_x, double pointer_y)
 {
-    Monitor* m = c->mon;
-    double lx, ly;
+    Monitor* monitor = client->mon;
 
-    if (!m || !c->title || !c->title->node.enabled)
+    if (!monitor || !client->title || !client->title->node.enabled)
         return 0;
-    lx = (x - c->geom.x - c->bw - c->titlex) * m->wlr_output->scale;
-    ly = (y - c->geom.y - c->bw) * m->wlr_output->scale;
-    return lx >= 0 && lx < c->titlebufw && ly >= 0 && ly < m->t.height;
+    const double buffer_x =
+        (pointer_x - client->geom.x - client->bw - client->titlex) * monitor->wlr_output->scale;
+    const double buffer_y = (pointer_y - client->geom.y - client->bw) * monitor->wlr_output->scale;
+    return buffer_x >= 0 && buffer_x < client->titlebufw && buffer_y >= 0 &&
+           buffer_y < monitor->t.height;
 }
 
-int bar_title_click(Client* c, double x, double y)
+int bar_title_click(Client* client, double pointer_x, double pointer_y)
 {
-    if (bar_on_close_button(c, x, y))
-        client_send_close(c);
-    else if (bar_on_title_bar(c, x, y))
-        input_title_grab(c);
+    if (bar_on_close_button(client, pointer_x, pointer_y))
+        client_send_close(client);
+    else if (bar_on_title_bar(client, pointer_x, pointer_y))
+        input_title_grab(client);
     else
         return 0;
     return 1;
 }
 
-void bar_title_hover(Client* c, double x, double y)
+void bar_title_hover(Client* client, double pointer_x, double pointer_y)
 {
-    Client *h = c && bar_on_close_button(c, x, y) ? c : nullptr,
-           *old = bar_hovered, *w;
+    Client* now_hovered =
+        client && bar_on_close_button(client, pointer_x, pointer_y) ? client : nullptr;
+    Client* previously_hovered = bar_hovered;
 
-    if (h == old)
+    if (now_hovered == previously_hovered)
         return;
-    bar_hovered = h;
-    /* old may be gone */
-    wl_list_for_each(w, &clients, link) if (w == old || w == h)
-        bar_draw_title_bar(w);
+    bar_hovered = now_hovered;
+    /* previously_hovered may be gone */
+    Client* other_client;
+    wl_list_for_each(other_client, &clients, link) {
+        if (other_client == previously_hovered || other_client == now_hovered)
+            bar_draw_title_bar(other_client);
+    }
 }
 
 /* Sizes and places the client's title bar. It spans the whole window, except
  * in the tabbed layout where each client of the group only gets its own slice
  * of the shared row - which is what turns the title bars into tabs. */
-void bar_place_title_bar(Client* c)
+void bar_place_title_bar(Client* client)
 {
-    Monitor* m = c->mon;
-    Client* w;
-    int i = 0, n = 0, x = 0, tw;
+    Monitor* monitor = client->mon;
 
-    if (!c->title || !m)
+    if (!client->title || !monitor)
         return;
 
-    tw = c->geom.width - 2 * (int)c->bw;
-    if (m->lt[m->sellt]->arrange == layout_tabbed && !c->isfloating &&
-        !c->isfullscreen) {
-        wl_list_for_each(w, &clients, link)
-        {
-            if (!VISIBLEON(w, m) || w->isfloating || w->isfullscreen)
+    int slice_x = 0;
+    int slice_width = client->geom.width - 2 * (int)client->bw;
+    if (monitor->lt[monitor->sellt]->arrange == layout_tabbed && !client->isfloating &&
+        !client->isfullscreen) {
+        int tab_index = 0;
+        int tab_count = 0;
+        Client* other_client;
+
+        wl_list_for_each(other_client, &clients, link) {
+            if (!VISIBLEON(other_client, monitor) || other_client->isfloating ||
+                other_client->isfullscreen)
                 continue;
-            if (w == c)
-                i = n;
-            n++;
+            if (other_client == client)
+                tab_index = tab_count;
+            tab_count++;
         }
-        if (n) {
-            x = tw * i / n;
-            tw = tw * (i + 1) / n - x;
+        if (tab_count) {
+            slice_x = slice_width * tab_index / tab_count;
+            slice_width = slice_width * (tab_index + 1) / tab_count - slice_x;
         }
     }
 
-    c->titlex = x;
-    c->titlew = tw;
-    wlr_scene_node_set_position(&c->title->node, (int)c->bw + x, (int)c->bw);
-    wlr_scene_buffer_set_dest_size(c->title, MAX(tw, 1), bar_title_height(c));
+    client->titlex = slice_x;
+    client->titlew = slice_width;
+    wlr_scene_node_set_position(&client->title->node, (int)client->bw + slice_x, (int)client->bw);
+    wlr_scene_buffer_set_dest_size(client->title, MAX(slice_width, 1), bar_title_height(client));
 }
 
-int bar_title_height(Client* c)
+int bar_title_height(Client* client)
 {
-    return title_bar && c->mon && !c->isfullscreen ? c->mon->t.real_height : 0;
+    return title_bar && client->mon && !client->isfullscreen ? client->mon->t.real_height : 0;
 }
 
 /* layout_arrange() leaves floating clients alone, and no client redraws a title
  * bar, so both are done by hand here */
 void bar_toggle_title_bars(const Arg*)
 {
-    Monitor* m;
-    Client* c;
 
     title_bar = !title_bar;
 
-    wl_list_for_each(m, &monitors, link) layout_arrange(m);
-    wl_list_for_each(c, &clients, link)
-    {
-        if (c->mon && c->isfloating && !c->isfullscreen)
-            client_resize(c, c->geom, 1);
+    Monitor* monitor;
+    wl_list_for_each(monitor, &monitors, link)
+        layout_arrange(monitor);
+    Client* client;
+    wl_list_for_each(client, &clients, link) {
+        if (client->mon && client->isfloating && !client->isfullscreen)
+            client_resize(client, client->geom, 1);
     }
     bar_draw_all();
 
-    wl_list_for_each(m, &monitors, link)
-    {
-        if (m->wlr_output->enabled)
-            wlr_output_schedule_frame(m->wlr_output);
+    wl_list_for_each(monitor, &monitors, link) {
+        if (monitor->wlr_output->enabled)
+            wlr_output_schedule_frame(monitor->wlr_output);
     }
 }

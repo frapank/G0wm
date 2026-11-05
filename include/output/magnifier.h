@@ -10,9 +10,9 @@
 
 #include "core/g0wm.h"
 
-void magnifier_drop(Monitor* m);
-int magnifier_frame(Monitor* m, struct wlr_output_state* state);
-void magnifier_zoom(Monitor* m, float z);
+void magnifier_drop(Monitor* monitor);
+int magnifier_frame(Monitor* monitor, struct wlr_output_state* state);
+void magnifier_zoom(Monitor* monitor, float zoom_level);
 void magnifier_magnify(const Arg* arg);
 
 #endif

@@ -11,13 +11,13 @@
 
 #include <wayland-server-core.h>
 
-void input_handle_hold_begin(struct wl_listener* listener, void* data);
-void input_handle_hold_end(struct wl_listener* listener, void* data);
-void input_handle_pinch_begin(struct wl_listener* listener, void* data);
-void input_handle_pinch_end(struct wl_listener* listener, void* data);
-void input_handle_pinch_update(struct wl_listener* listener, void* data);
-void input_handle_swipe_begin(struct wl_listener* listener, void* data);
-void input_handle_swipe_end(struct wl_listener* listener, void* data);
-void input_handle_swipe_update(struct wl_listener* listener, void* data);
+void input_handle_hold_begin(struct wl_listener*, void* data);
+void input_handle_hold_end(struct wl_listener*, void* data);
+void input_handle_pinch_begin(struct wl_listener*, void* data);
+void input_handle_pinch_end(struct wl_listener*, void* data);
+void input_handle_pinch_update(struct wl_listener*, void* data);
+void input_handle_swipe_begin(struct wl_listener*, void* data);
+void input_handle_swipe_end(struct wl_listener*, void* data);
+void input_handle_swipe_update(struct wl_listener*, void* data);
 
 #endif

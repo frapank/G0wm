@@ -36,12 +36,8 @@ typedef struct {
                                           int rowstride,
                                           int alpha,
                                           int size);
-[[nodiscard]] FallbackIcon* icon_create_fallback(const char* appname,
-                                                 int fgcolor,
-                                                 struct fcft_font* font);
+[[nodiscard]] FallbackIcon* icon_create_fallback(const char* appname, int, struct fcft_font* font);
 void icon_destroy(Icon* icon);
-[[nodiscard]] int icon_resize_image(pixman_image_t* orig,
-                                    int new_width,
-                                    int new_height);
+[[nodiscard]] int icon_resize_image(pixman_image_t* image, int new_width, int new_height);
 
 #endif

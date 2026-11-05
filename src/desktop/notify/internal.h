@@ -45,17 +45,17 @@ typedef struct {
 extern NotifyState notify_state;
 
 void notify_closed(dbus_uint32_t id, dbus_uint32_t reason);
-void notify_release(Notification* n);
-int notify_same_slot(const Notification* a, const Notification* b);
-void notify_history_push(Notification* n);
+void notify_release(Notification* notification);
+int notify_same_slot(const Notification* first, const Notification* second);
+void notify_history_push(Notification* notification);
 void notify_unqueue(size_t i, Notification* dst);
-void notify_enqueue(Notification* n, int front);
-int notify_arm(unsigned int ms);
+void notify_enqueue(Notification* notification, int front);
+int notify_arm(unsigned int timeout_ms);
 int notify_show(void);
 void notify_show_next(void);
 void notify_clear(dbus_uint32_t reason);
-DBusHandlerResult notify_handle_message(DBusConnection* conn,
-                                        DBusMessage* msg,
+DBusHandlerResult notify_handle_message(DBusConnection* connection,
+                                        DBusMessage* message,
                                         void* data);
 
 #endif

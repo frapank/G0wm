@@ -108,26 +108,26 @@ struct Client {
     struct wl_listener ftl_fullscreen;
 };
 
-void client_activate(Client* c);
-void client_handle_new_decoration(struct wl_listener* listener, void* data);
-void client_handle_new_toplevel(struct wl_listener* listener, void* data);
-void client_handle_new_popup(struct wl_listener* listener, void* data);
-void client_handle_destroy(struct wl_listener* listener, void* data);
-void client_focus(Client* c, int lift);
-Client* client_top(Monitor* m);
-void client_handle_request_fullscreen(struct wl_listener* listener, void* data);
-void client_kill(const Arg* arg);
-void client_handle_map(struct wl_listener* listener, void* data);
-void client_resize(Client* c, struct wlr_box geo, int interact);
-void client_handle_ring_bell(struct wl_listener* listener, void* data);
-void client_set_floating(Client* c, int floating);
-void client_set_fullscreen(Client* c, int fullscreen);
-void client_set_monitor(Client* c, Monitor* m, uint32_t newtags);
-void client_toggle_floating(const Arg* arg);
-void client_toggle_fullscreen(const Arg* arg);
-void client_handle_unmap(struct wl_listener* listener, void* data);
-void client_handle_set_title(struct wl_listener* listener, void* data);
-void client_handle_request_activate(struct wl_listener* listener, void* data);
+void client_activate(Client* client);
+void client_handle_new_decoration(struct wl_listener*, void* data);
+void client_handle_new_toplevel(struct wl_listener*, void* data);
+void client_handle_new_popup(struct wl_listener*, void* data);
+void client_handle_destroy(struct wl_listener* listener, void*);
+void client_focus(Client* client, int lift);
+Client* client_top(Monitor* monitor);
+void client_handle_request_fullscreen(struct wl_listener* listener, void*);
+void client_kill(const Arg*);
+void client_handle_map(struct wl_listener* listener, void*);
+void client_resize(Client* client, struct wlr_box geo, int interact);
+void client_handle_ring_bell(struct wl_listener*, void* data);
+void client_set_floating(Client* client, int floating);
+void client_set_fullscreen(Client* client, int fullscreen);
+void client_set_monitor(Client* client, Monitor* monitor, uint32_t newtags);
+void client_toggle_floating(const Arg*);
+void client_toggle_fullscreen(const Arg*);
+void client_handle_unmap(struct wl_listener* listener, void*);
+void client_handle_set_title(struct wl_listener* listener, void*);
+void client_handle_request_activate(struct wl_listener*, void* data);
 
 /*
  * Attempt to consolidate unavoidable suck into one file, away from g0wm.c. This
@@ -388,9 +388,9 @@ static inline int client_is_rendered_on_monitor(Client* c, Monitor* m)
     int unused_lx, unused_ly;
     if (!wlr_scene_node_coords(&c->scene->node, &unused_lx, &unused_ly))
         return 0;
-    wl_list_for_each(s,
-                     &client_surface(c)->current_outputs,
-                     link) if (s->output == m->wlr_output) return 1;
+    wl_list_for_each(s, &client_surface(c)->current_outputs, link)
+        if (s->output == m->wlr_output)
+            return 1;
     return 0;
 }
 
