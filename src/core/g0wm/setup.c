@@ -499,8 +499,7 @@ static void recreate_renderer(void*)
     }
 
     /* before the old renderer goes, so the textures are freed while it lives */
-    wlr_scene_node_for_each_buffer(&scene->tree.node, drop_texture, nullptr)
-        ;
+    wlr_scene_node_for_each_buffer(&scene->tree.node, drop_texture, nullptr);
 
     wlr_allocator_destroy(old_alloc);
     wlr_renderer_destroy(old_drw);

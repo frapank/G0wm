@@ -17,6 +17,7 @@ InsertNewlineAtEOF: true
 AllowShortFunctionsOnASingleLine: Inline
 AllowShortIfStatementsOnASingleLine: Never
 AllowShortLoopsOnASingleLine: false
+AllowShortBlocksOnASingleLine: Empty
 BinPackArguments: true
 AllowAllParametersOfDeclarationOnNextLine: false
 PenaltyReturnTypeOnItsOwnLine: 200
@@ -29,7 +30,6 @@ ForEachMacros:
   - wl_list_for_each_reverse
   - wl_list_for_each_reverse_safe
   - wl_array_for_each
-  - wlr_scene_node_for_each_buffer
 
 # "if (x)" and "for (...)" get a space, "wl_list_for_each(...)" does not.
 SpaceBeforeParens: Custom

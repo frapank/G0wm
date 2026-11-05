@@ -55,8 +55,7 @@ void notify_history_push(Notification* notification)
     }
     size_t i;
     for (i = 0; i < notify_state.nhist && !notify_same_slot(&notify_state.hist[i], notification);
-         i++)
-        ;
+         i++) {}
     if (i == notify_state.nhist && notify_state.nhist == NOTIFY_HISTMAX)
         i = notify_state.nhist - 1; /* full: drop the oldest */
     if (i < notify_state.nhist) {
@@ -87,8 +86,7 @@ void notify_enqueue(Notification* notification, int front)
     size_t i;
 
     if (notify_state.nqueue == NOTIFY_QUEUEMAX) {
-        for (i = 0; i < notify_state.nqueue && !notify_state.queue[i].timeout_ms; i++)
-            ;
+        for (i = 0; i < notify_state.nqueue && !notify_state.queue[i].timeout_ms; i++) {}
         notify_unqueue(i < notify_state.nqueue ? i : 0, &old);
         notify_closed(old.id, ClosedUndefined);
         notify_history_push(&old);
@@ -146,8 +144,7 @@ void notify_show_next(void)
             if (notify_state.queue[i].urgency == UrgencyCritical && !notify_state.queue[i].seen)
                 break;
         if (i == notify_state.nqueue)
-            for (i = 0; i < notify_state.nqueue && !notify_state.queue[i].timeout_ms; i++)
-                ;
+            for (i = 0; i < notify_state.nqueue && !notify_state.queue[i].timeout_ms; i++) {}
         notify_unqueue(i < notify_state.nqueue ? i : 0, &notify_state.cur);
         if (!notify_show()) {
             notify_closed(notify_state.cur.id, ClosedUndefined);

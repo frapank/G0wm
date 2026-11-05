@@ -23,13 +23,8 @@ typedef struct {
     size_t size_pixman;
 } Icon;
 
-[[nodiscard]] Icon* icon_create(const uint8_t* buf,
-                                int width,
-                                int height,
-                                int size);
-[[nodiscard]] Icon* icon_create_from_name(const char* name,
-                                          const char* themepath,
-                                          int size);
+[[nodiscard]] Icon* icon_create(const uint8_t* buf, int width, int height, int size);
+[[nodiscard]] Icon* icon_create_from_name(const char* name, const char* themepath, int size);
 [[nodiscard]] Icon* icon_create_from_data(const uint8_t* data,
                                           int width,
                                           int height,

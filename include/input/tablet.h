@@ -23,8 +23,7 @@ void tablet_handle_button(struct wl_listener*, void* data);
 void tablet_handle_proximity(struct wl_listener*, void* data);
 void tablet_remap(void);
 void tablet_handle_tip(struct wl_listener*, void* data);
-int tablet_tool_focused_by(struct wlr_tablet_v2_tablet_tool* tool,
-                           struct wlr_seat_client* client);
+int tablet_tool_focused_by(struct wlr_tablet_v2_tablet_tool* tool, struct wlr_seat_client* client);
 void tablet_handle_touch_cancel(struct wl_listener*, void* data);
 void tablet_handle_touch_down(struct wl_listener*, void* data);
 void tablet_handle_touch_frame(struct wl_listener*, void*);

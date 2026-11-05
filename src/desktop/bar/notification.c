@@ -735,8 +735,7 @@ int bar_notification_wheel(Monitor* pointer_monitor, double delta, int horizonta
 
     /* Scroll back to the left the same way, stopping at the start. */
     for (; horizontal_accumulator <= -scroll_step; horizontal_accumulator += scroll_step)
-        while (bar_notification_offset && (text[--bar_notification_offset] & 0xC0) == 0x80)
-            ;
+        while (bar_notification_offset && (text[--bar_notification_offset] & 0xC0) == 0x80) {}
 
     bar_draw_all();
     return 1;
