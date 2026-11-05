@@ -48,11 +48,10 @@ struct Monitor {
     struct wlr_scene_buffer* scene_buffer; /* bar buffer */
 #ifdef INTEGRATED_BACKGROUND
     struct wlr_scene_buffer* wallpaper; /* wallpaper buffer */
-    struct wlr_buffer* wallpaperbuf; /* what wallpaper's node was last handed */
-    struct wlr_scene_buffer* barblur; /* the bar's own frosted backdrop */
+    struct wlr_buffer* wallpaperbuf;    /* what wallpaper's node was last handed */
+    struct wlr_scene_buffer* barblur;   /* the bar's own frosted backdrop */
 #endif
-    struct wlr_scene_rect*
-        fullscreen_bg; /* See monitor_handle_new_output() for info */
+    struct wlr_scene_rect* fullscreen_bg; /* See monitor_handle_new_output() for info */
     struct wl_listener frame;
     struct wl_listener destroy;
     struct wl_listener request_state;
@@ -62,8 +61,8 @@ struct Monitor {
     struct {
         int width, height;
         int real_width, real_height; /* non-scaled */
-        int titlew; /* free box shared by the window title and the
-                     * notification, 0 when it doesn't fit */
+        int titlew;                  /* free box shared by the window title and the
+                                      * notification, 0 when it doesn't fit */
         float scale;
     } b; /* bar area */
     struct {
@@ -85,8 +84,8 @@ struct Monitor {
     int nmaster;
     char ltsymbol[16];
     int asleep;
-    int autovrr; /* 1 turned on by monitor_game_mode(), -1 refused */
-    float zoom;  /* magnifier level, 1 is off */
+    int autovrr;                     /* 1 turned on by monitor_game_mode(), -1 refused */
+    float zoom;                      /* magnifier level, 1 is off */
     struct wlr_swapchain* zoomchain; /* the frames, rendered unzoomed */
     struct wlr_buffer* zoombuf;      /* the latest of them */
     struct wlr_texture* zoomtex;     /* zoombuf, to draw from */

@@ -51,9 +51,7 @@ void input_motion(uint32_t time,
                   double delta_y_unaccel);
 void input_handle_motion(struct wl_listener*, void* data);
 void input_move_resize(const Arg* arg);
-void input_set_client_cursor(struct wlr_surface* surface,
-                             int hotspot_x,
-                             int hotspot_y);
+void input_set_client_cursor(struct wlr_surface* surface, int hotspot_x, int hotspot_y);
 void input_handle_request_cursor(struct wl_listener*, void* data);
 void input_handle_request_cursor_shape(struct wl_listener*, void* data);
 void input_title_grab(Client* client);

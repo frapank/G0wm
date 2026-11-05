@@ -653,8 +653,7 @@ static void monitor_handle_frame(struct wl_listener* listener, void*)
         /* done here rather than on focus changes so that buffers a client
          * adds later (subsurfaces, videos) are covered too */
         wlr_scene_node_for_each_buffer(&client->scene_surface->node, opacity_set_scene_buffer,
-                                       client)
-            ;
+                                       client);
 #ifdef INTEGRATED_BACKGROUND
         opacity_blur_client(client);
 #endif

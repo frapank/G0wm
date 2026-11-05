@@ -112,8 +112,7 @@ static int textinput_surface_coords(struct wlr_surface* surface, int* x, int* y)
 {
     SurfaceFind find = { .surface = surface };
 
-    wlr_scene_node_for_each_buffer(&scene->tree.node, textinput_find_surface, &find)
-        ;
+    wlr_scene_node_for_each_buffer(&scene->tree.node, textinput_find_surface, &find);
     *x = find.x;
     *y = find.y;
     return find.found;

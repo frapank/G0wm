@@ -35,8 +35,7 @@ static void run_autostart(void)
 {
     for (const char* const* argv = autostart; *argv; argv++) {
         autostart_len++;
-        while (*++argv)
-            ;
+        while (*++argv) {}
     }
 
     autostart_pids = calloc(autostart_len, sizeof(pid_t));
@@ -51,8 +50,7 @@ static void run_autostart(void)
             perror(nullptr);
             _exit(1);
         }
-        while (*++argv)
-            ;
+        while (*++argv) {}
     }
 }
 

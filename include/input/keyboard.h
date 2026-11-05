@@ -28,7 +28,7 @@ struct KeyboardGroup {
 
     struct wl_listener modifiers;
     struct wlr_virtual_keyboard_v1* vkb; /* NULL for the physical keyboards */
-    uint32_t imkeys[KEY_CNT / 32]; /* held keys whose press went to the IM */
+    uint32_t imkeys[KEY_CNT / 32];       /* held keys whose press went to the IM */
     struct wl_listener key;
     struct wl_listener destroy;
 };
