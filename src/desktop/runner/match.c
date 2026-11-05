@@ -55,126 +55,129 @@ static int runner_mode_on(int mode)
 /* The mode s asks for by its prefix, the longest one if several fit. *off
  * is where the rest starts, past the prefix and any blanks after it. An
  * empty prefix turns its mode off. */
-int runner_mode(const char* s, int* off)
+int runner_mode(const char* text, int* offset)
 {
-    const char* p;
-    size_t n, len = 0;
+    size_t best_length = 0;
     int mode = ModeApp;
 
-    for (int m = 0; m < NumModes; m++) {
-        p = runner_prefixes[m] ? *runner_prefixes[m] : nullptr;
-        if (!p || !(n = strlen(p)) || n <= len || strncmp(s, p, n) ||
-            !runner_mode_on(m))
+    for (int candidate = 0; candidate < NumModes; candidate++) {
+        const char* prefix = runner_prefixes[candidate] ? *runner_prefixes[candidate] : nullptr;
+        if (!prefix)
             continue;
-        mode = m;
-        len = n;
+        const size_t prefix_length = strlen(prefix);
+        if (!prefix_length || prefix_length <= best_length ||
+            strncmp(text, prefix, prefix_length) || !runner_mode_on(candidate))
+            continue;
+        mode = candidate;
+        best_length = prefix_length;
     }
     /* a path is matched by the name after its last slash */
     if (mode == ModeApp && runner_files &&
-        (*s == '/' || (*s == '~' && (!s[1] || s[1] == '/')))) {
-        p = strrchr(s, '/');
-        *off = p ? (int)(p - s) + 1 : 0;
+        (*text == '/' || (*text == '~' && (!text[1] || text[1] == '/')))) {
+        const char* last_slash = strrchr(text, '/');
+        *offset = last_slash ? (int)(last_slash - text) + 1 : 0;
         return ModeFile;
     }
-    while (len && (s[len] == ' ' || s[len] == '\t'))
-        len++;
-    *off = (int)len;
+    while (best_length && (text[best_length] == ' ' || text[best_length] == '\t'))
+        best_length++;
+    *offset = (int)best_length;
     return mode;
 }
 
-static int runner_fold(int ch, int fold)
+static int runner_fold(int character, int fold)
 {
-    return fold && ch >= 'A' && ch <= 'Z' ? ch - 'A' + 'a' : ch;
+    return fold && character >= 'A' && character <= 'Z' ? character - 'A' + 'a' : character;
 }
 
 /* 0 when cand doesn't match q. Without runner_fuzzy only a prefix matches,
  * with it the letters of q just have to show up in order. The start of the
  * name, the start of a word and letters typed in a row score higher. */
-static int runner_score(const char* cand, const char* q, int qlen, int fold)
+static int runner_score(const char* candidate, const char* query, int query_length, int fold)
 {
-    int score = 0, run = 0, i = 0, j, clen = (int)strlen(cand);
+    const int candidate_length = (int)strlen(candidate);
 
-    if (clen == qlen && !strcmp(cand, q))
+    if (candidate_length == query_length && !strcmp(candidate, query))
         return 1 << 24;
     if (!runner_fuzzy)
-        return !strncmp(cand, q, qlen);
-    for (j = 0; cand[j] && i < qlen; j++) {
-        if (runner_fold((unsigned char)cand[j], fold) !=
-            runner_fold((unsigned char)q[i], fold)) {
+        return !strncmp(candidate, query, query_length);
+    int score = 0;
+    int run = 0;
+    int query_index = 0;
+    int candidate_index = 0;
+    for (; candidate[candidate_index] && query_index < query_length; candidate_index++) {
+        if (runner_fold((unsigned char)candidate[candidate_index], fold) !=
+            runner_fold((unsigned char)query[query_index], fold)) {
             run = 0;
             continue;
         }
         score += 1 + 3 * run;
-        if (j == 0)
+        if (candidate_index == 0)
             score += 8;
-        else if (strchr("-_. ", cand[j - 1]))
+        else if (strchr("-_. ", candidate[candidate_index - 1]))
             score += 4;
         run++;
-        i++;
+        query_index++;
     }
-    if (i < qlen)
+    if (query_index < query_length)
         return 0;
-    if (j == qlen)
+    if (candidate_index == query_length)
         score += 20;
     /* the shorter name wins a tie */
-    return MAX(score * 8 - (clen - qlen), 1);
+    return MAX(score * 8 - (candidate_length - query_length), 1);
 }
 
-static int runner_by_score(const void* a, const void* b)
+static int runner_by_score(const void* first, const void* second)
 {
-    int x = *(const int*)a, y = *(const int*)b;
+    const int left = *(const int*)first;
+    const int right = *(const int*)second;
 
-    if (runner_scores[x] != runner_scores[y])
-        return runner_scores[y] - runner_scores[x];
-    return x - y;
+    if (runner_scores[left] != runner_scores[right])
+        return runner_scores[right] - runner_scores[left];
+    return left - right;
 }
 
 /* the open windows, the last focused first */
 static void runner_windows(void)
 {
-    const char *id, *title;
-    size_t n;
-    Client* c;
-    int i = 0;
-
     while (runner_window_count)
         free(runner_window_labels[--runner_window_count]);
-    n = wl_list_length(&focus_stack);
+    size_t window_count = wl_list_length(&focus_stack);
     if (!(runner_window_clients =
-              realloc(runner_window_clients, MAX(n, 1) * sizeof(Client*))) ||
+              realloc(runner_window_clients, MAX(window_count, 1) * sizeof(Client*))) ||
         !(runner_window_labels =
-              realloc(runner_window_labels, MAX(n, 1) * sizeof(char*))))
+              realloc(runner_window_labels, MAX(window_count, 1) * sizeof(char*))))
         util_die("realloc:");
-    wl_list_for_each(c, &focus_stack, flink)
-    {
-        if (client_is_unmanaged(c) || !c->mon)
+    int window_index = 0;
+    Client* client;
+    wl_list_for_each(client, &focus_stack, flink) {
+        if (client_is_unmanaged(client) || !client->mon)
             continue;
-        id = client_get_app_id(c);
-        title = privacy_share_title(c);
-        n = strlen(id) + strlen(title) + 3;
-        runner_window_labels[i] = util_calloc(1, n);
+        const char* id = client_get_app_id(client);
+        const char* title = privacy_share_title(client);
+        const size_t label_size = strlen(id) + strlen(title) + 3;
+        runner_window_labels[window_index] = util_calloc(1, label_size);
         if (!*title || !strcmp(id, title))
-            snprintf(runner_window_labels[i], n, "%s", id);
+            snprintf(runner_window_labels[window_index], label_size, "%s", id);
         else
-            snprintf(runner_window_labels[i], n, "%s: %s", id, title);
-        runner_window_clients[i++] = c;
+            snprintf(runner_window_labels[window_index], label_size, "%s: %s", id, title);
+        runner_window_clients[window_index++] = client;
     }
-    runner_window_count = i;
+    runner_window_count = window_index;
 }
 
 /* the first len bytes of s, ~ standing for $HOME */
-char* runner_expand(const char* s, size_t len)
+char* runner_expand(const char* text, size_t length)
 {
     const char* home = getenv("HOME");
     char* out = nullptr;
-    size_t n = 0;
+    size_t out_length = 0;
 
-    if (len && *s == '~' && home) {
-        runner_append(&out, &n, home, strlen(home));
-        s++;
-        len--;
+    if (length && *text == '~' && home) {
+        runner_append(&out, &out_length, home, strlen(home));
+        text++;
+        length--;
     }
-    runner_append(&out, &n, s, len);
+    runner_append(&out, &out_length, text, length);
     return out;
 }
 
@@ -188,45 +191,41 @@ void runner_free_entries(void)
 
 /* what is in the typed directory, dot files only once the name starts with a
  * dot, and a slash after each directory */
-static void runner_read_entries(int off)
+static void runner_read_entries(int offset)
 {
-    int hidden = runner_buffer[off] == '.';
-    struct dirent* e;
-    struct stat st;
-    char* dir;
-    size_t n;
-    DIR* d;
+    const int hidden = runner_buffer[offset] == '.';
 
-    if (!off) {
+    if (!offset) {
         runner_free_entries();
         return;
     }
-    dir = runner_expand(runner_buffer, off);
-    if (runner_entry_dir && runner_entry_hidden == hidden &&
-        !strcmp(dir, runner_entry_dir)) {
+    char* dir = runner_expand(runner_buffer, offset);
+    if (runner_entry_dir && runner_entry_hidden == hidden && !strcmp(dir, runner_entry_dir)) {
         free(dir);
         return;
     }
     runner_free_entries();
     runner_entry_dir = dir;
     runner_entry_hidden = hidden;
-    if (!(d = opendir(dir)))
+    DIR* directory = opendir(dir);
+    if (!directory)
         return;
-    while ((e = readdir(d))) {
-        if (!strcmp(e->d_name, ".") || !strcmp(e->d_name, "..") ||
-            (*e->d_name == '.' && !hidden))
+    for (struct dirent* entry; (entry = readdir(directory));) {
+        if (!strcmp(entry->d_name, ".") || !strcmp(entry->d_name, "..") ||
+            (*entry->d_name == '.' && !hidden))
             continue;
-        if (!(runner_entries = realloc(
-                  runner_entries, (runner_entry_count + 1) * sizeof(char*))))
+        if (!(runner_entries = realloc(runner_entries, (runner_entry_count + 1) * sizeof(char*))))
             util_die("realloc:");
-        n = strlen(e->d_name);
-        runner_entries[runner_entry_count] = util_calloc(1, n + 2);
-        memcpy(runner_entries[runner_entry_count], e->d_name, n);
-        if (fstatat(dirfd(d), e->d_name, &st, 0) == 0 && S_ISDIR(st.st_mode))
-            runner_entries[runner_entry_count][n] = '/';
+        const size_t name_length = strlen(entry->d_name);
+        runner_entries[runner_entry_count] = util_calloc(1, name_length + 2);
+        memcpy(runner_entries[runner_entry_count], entry->d_name, name_length);
+        struct stat file_info;
+        if (fstatat(dirfd(directory), entry->d_name, &file_info, 0) == 0 &&
+            S_ISDIR(file_info.st_mode))
+            runner_entries[runner_entry_count][name_length] = '/';
         runner_entry_count++;
     }
-    closedir(d);
+    closedir(directory);
     qsort(runner_entries, runner_entry_count, sizeof(char*), runner_compare);
 }
 
@@ -265,44 +264,44 @@ static void runner_set_source(int mode)
     }
     if (runner_source_count > runner_room) {
         runner_room = runner_source_count;
-        if (!(runner_matches =
-                  realloc(runner_matches, runner_room * sizeof(int))) ||
-            !(runner_scores =
-                  realloc(runner_scores, runner_room * sizeof(int))))
+        if (!(runner_matches = realloc(runner_matches, runner_room * sizeof(int))) ||
+            !(runner_scores = realloc(runner_scores, runner_room * sizeof(int))))
             util_die("realloc:");
     }
 }
 
 void runner_filter(void)
 {
-    int fold = 1, off, mode = runner_mode(runner_buffer, &off);
-    int qlen = runner_length - off, *use = nullptr;
-    const char* q = runner_buffer + off;
-    double calcval;
+    int offset;
+    const int mode = runner_mode(runner_buffer, &offset);
+    const int query_length = runner_length - offset;
+    const char* query = runner_buffer + offset;
+    int fold = 1;
+    int* use = nullptr;
 
     runner_match_count = 0;
     runner_selection = 0;
     runner_set_source(mode);
     /* with nothing typed yet a short list shows all of it */
-    if (!qlen && (mode == ModeWindow || mode == ModeTag || mode == ModeFile))
+    if (!query_length && (mode == ModeWindow || mode == ModeTag || mode == ModeFile))
         for (int i = 0; i < runner_source_count; i++)
             runner_matches[runner_match_count++] = i;
-    if (!qlen || runner_calc(&calcval))
+    double calc_value;
+    if (!query_length || runner_calc(&calc_value))
         return;
     /* an uppercase letter makes the match case sensitive */
-    for (int i = 0; i < qlen; i++)
-        if (q[i] >= 'A' && q[i] <= 'Z')
+    for (int i = 0; i < query_length; i++)
+        if (query[i] >= 'A' && query[i] <= 'Z')
             fold = 0;
     if (runner_source == (const char**)runner_commands)
         use = runner_use;
     else if (runner_source == (const char**)runner_app_names)
         use = runner_app_use;
     for (int i = 0; i < runner_source_count; i++) {
-        runner_scores[i] = runner_score(runner_source[i], q, qlen, fold);
+        runner_scores[i] = runner_score(runner_source[i], query, query_length, fold);
         if (runner_alt_names && runner_alt_names[i])
             runner_scores[i] =
-                MAX(runner_scores[i],
-                    runner_score(runner_alt_names[i], q, qlen, fold));
+                MAX(runner_scores[i], runner_score(runner_alt_names[i], query, query_length, fold));
         if (runner_scores[i]) {
             if (use)
                 runner_scores[i] += MIN(use[i], 1 << 16) * 16;

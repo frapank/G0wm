@@ -39,27 +39,26 @@ typedef struct {
     int has_submenu;
 } MenuItem;
 
-static int menu_extract(DBusMessageIter* av, struct wl_array* menu);
-static int menu_present(Menu* menu, struct wl_array* m);
-static void menu_destroy_submenus(struct wl_array* m);
+static int menu_extract(DBusMessageIter* array_variant, struct wl_array* layout_node);
+static int menu_present(Menu* menu, struct wl_array* layout_node);
+static void menu_destroy_submenus(struct wl_array* layout_node);
 
-static void menu_item_init(MenuItem* mi)
+static void menu_item_init(MenuItem* item)
 {
-    wl_array_init(&mi->submenu);
-    mi->id = -1;
-    *mi->label = '\0';
-    mi->has_submenu = 0;
+    wl_array_init(&item->submenu);
+    item->id = -1;
+    *item->label = '\0';
+    item->has_submenu = 0;
 }
 
 static void menu_destroy_submenus(struct wl_array* layout_node)
 {
-    MenuItem* mi;
+    MenuItem* item;
 
-    wl_array_for_each(mi, layout_node)
-    {
-        if (mi->has_submenu) {
-            menu_destroy_submenus(&mi->submenu);
-            wl_array_release(&mi->submenu);
+    wl_array_for_each(item, layout_node) {
+        if (item->has_submenu) {
+            menu_destroy_submenus(&item->submenu);
+            wl_array_release(&item->submenu);
         }
     }
 }
@@ -76,9 +75,9 @@ static void menu_destroy(Menu* menu)
 static void menu_send_clicked(const char* busname,
                               const char* busobj,
                               int itemid,
-                              DBusConnection* conn)
+                              DBusConnection* connection)
 {
-    DBusMessage* msg = nullptr;
+    DBusMessage* message = nullptr;
     DBusMessageIter iter = DBUS_MESSAGE_ITER_INIT_CLOSED;
     DBusMessageIter sub = DBUS_MESSAGE_ITER_INIT_CLOSED;
     const char* data = "";
@@ -87,61 +86,59 @@ static void menu_send_clicked(const char* busname,
 
     timestamp = time(nullptr);
 
-    msg =
-        dbus_message_new_method_call(busname, busobj, DBUSMENU_IFACE, "Event");
-    if (!msg)
+    message = dbus_message_new_method_call(busname, busobj, DBUSMENU_IFACE, "Event");
+    if (!message)
         goto fail;
 
-    dbus_message_iter_init_append(msg, &iter);
+    dbus_message_iter_init_append(message, &iter);
     if (!dbus_message_iter_append_basic(&iter, DBUS_TYPE_INT32, &itemid) ||
         !dbus_message_iter_append_basic(&iter, DBUS_TYPE_STRING, &eventid) ||
-        !dbus_message_iter_open_container(
-            &iter, DBUS_TYPE_VARIANT, DBUS_TYPE_STRING_AS_STRING, &sub) ||
+        !dbus_message_iter_open_container(&iter, DBUS_TYPE_VARIANT, DBUS_TYPE_STRING_AS_STRING,
+                                          &sub) ||
         !dbus_message_iter_append_basic(&sub, DBUS_TYPE_STRING, &data) ||
         !dbus_message_iter_close_container(&iter, &sub) ||
         !dbus_message_iter_append_basic(&iter, DBUS_TYPE_UINT32, &timestamp)) {
         goto fail;
     }
 
-    if (!dbus_connection_send_with_reply(conn, msg, nullptr, -1))
+    if (!dbus_connection_send_with_reply(connection, message, nullptr, -1))
         goto fail;
 
-    dbus_message_unref(msg);
+    dbus_message_unref(message);
     return;
 
 fail:
     dbus_message_iter_abandon_container_if_open(&iter, &sub);
-    if (msg)
-        dbus_message_unref(msg);
+    if (message)
+        dbus_message_unref(message);
 }
 
 /* Hands a level to the presenter. Empty labels are not entries. */
 static int menu_present(Menu* menu, struct wl_array* layout_node)
 {
-    const char* labels[ITEMS_MAX];
-    MenuItem* mi;
-    int n = 0;
+    int label_count = 0;
 
-    wl_array_for_each(mi, layout_node)
-    {
-        if (!*mi->label)
+    const char* labels[ITEMS_MAX];
+    MenuItem* item;
+    wl_array_for_each(item, layout_node) {
+        if (!*item->label)
             continue;
-        if (n == ITEMS_MAX)
+        if (label_count == ITEMS_MAX)
             break;
-        labels[n++] = mi->label;
+        labels[label_count++] = item->label;
     }
 
-    if (!n)
+    if (!label_count)
         return -1;
 
     menu->shown = layout_node;
-    menu->present(labels, n, menu);
+    menu->present(labels, label_count, menu);
     return 0;
 }
 
 void menu_pick(Menu* menu, int index)
 {
-    MenuItem* mi;
+    MenuItem* item;
     int i = 0;
 
     if (!menu)
@@ -149,18 +146,17 @@ void menu_pick(Menu* menu, int index)
     if (index < 0 || !menu->shown)
         goto done;
 
-    wl_array_for_each(mi, menu->shown)
-    {
-        if (!*mi->label)
+    wl_array_for_each(item, menu->shown) {
+        if (!*item->label)
             continue;
         if (i++ != index)
             continue;
 
-        if (mi->has_submenu) {
-            if (menu_present(menu, &mi->submenu) == 0)
+        if (item->has_submenu) {
+            if (menu_present(menu, &item->submenu) == 0)
                 return; /* the presenter answers again, on the submenu */
         } else {
-            menu_send_clicked(menu->busname, menu->busobj, mi->id, menu->conn);
+            menu_send_clicked(menu->busname, menu->busobj, item->id, menu->conn);
         }
         break;
     }
@@ -169,34 +165,33 @@ done:
     menu_destroy(menu);
 }
 
-static void menu_item_create(MenuItem* mi,
+static void menu_item_create(MenuItem* item,
                              dbus_int32_t id,
                              const char* label,
                              int toggle_state,
                              int has_submenu)
 {
-    char* out;
 
     if (toggle_state == 0)
-        strcpy(mi->label, "☐ ");
+        strcpy(item->label, "☐ ");
     else if (toggle_state == 1)
-        strcpy(mi->label, "✓ ");
+        strcpy(item->label, "✓ ");
     else
-        strcpy(mi->label, "  ");
+        strcpy(item->label, "  ");
 
     /* Remove "mnemonics" (underscores which mark keyboard shortcuts) */
-    out = mi->label + strlen(mi->label);
+    char* out = item->label + strlen(item->label);
     for (; *label; label++)
         if (*label != '_')
             *out++ = *label;
     *out = '\0';
 
     if (has_submenu) {
-        mi->has_submenu = 1;
-        strcat(mi->label, " →");
+        item->has_submenu = 1;
+        strcat(item->label, " →");
     }
 
-    mi->id = id;
+    item->id = id;
 }
 
 /**
@@ -210,63 +205,66 @@ static void menu_item_create(MenuItem* mi,
  */
 static int menu_read_dict(DBusMessageIter* dict,
                           dbus_int32_t itemid,
-                          MenuItem* mi,
+                          MenuItem* item,
                           int* has_submenu)
 {
-    DBusMessageIter member, val;
-    const char *children_display = nullptr, *label = nullptr,
-               *toggle_type = nullptr;
+    DBusMessageIter member;
+    DBusMessageIter val;
+    const char* children_display = nullptr;
+    const char* label = nullptr;
+    const char* toggle_type = nullptr;
     const char* key;
-    dbus_bool_t visible = TRUE, enabled = TRUE;
+    dbus_bool_t visible = TRUE;
+    dbus_bool_t enabled = TRUE;
     dbus_int32_t toggle_state = 1;
-    int r;
+    int result;
 
     do {
         dbus_message_iter_recurse(dict, &member);
         if (dbus_message_iter_get_arg_type(&member) != DBUS_TYPE_STRING) {
-            r = -1;
+            result = -1;
             goto fail;
         }
         dbus_message_iter_get_basic(&member, &key);
 
         dbus_message_iter_next(&member);
         if (dbus_message_iter_get_arg_type(&member) != DBUS_TYPE_VARIANT) {
-            r = -1;
+            result = -1;
             goto fail;
         }
         dbus_message_iter_recurse(&member, &val);
 
         if (strcmp(key, "visible") == 0) {
             if (dbus_message_iter_get_arg_type(&val) != DBUS_TYPE_BOOLEAN) {
-                r = -1;
+                result = -1;
                 goto fail;
             }
             dbus_message_iter_get_basic(&val, &visible);
 
         } else if (strcmp(key, "enabled") == 0) {
             if (dbus_message_iter_get_arg_type(&val) != DBUS_TYPE_BOOLEAN) {
-                r = -1;
+                result = -1;
                 goto fail;
             }
             dbus_message_iter_get_basic(&val, &enabled);
 
         } else if (strcmp(key, "toggle-type") == 0) {
             if (dbus_message_iter_get_arg_type(&val) != DBUS_TYPE_STRING) {
-                r = -1;
+                result = -1;
                 goto fail;
             }
             dbus_message_iter_get_basic(&val, &toggle_type);
 
         } else if (strcmp(key, "toggle-state") == 0) {
             if (dbus_message_iter_get_arg_type(&val) != DBUS_TYPE_INT32) {
-                r = -1;
+                result = -1;
                 goto fail;
             }
             dbus_message_iter_get_basic(&val, &toggle_state);
 
         } else if (strcmp(key, "children-display") == 0) {
             if (dbus_message_iter_get_arg_type(&val) != DBUS_TYPE_STRING) {
-                r = -1;
+                result = -1;
                 goto fail;
             }
             dbus_message_iter_get_basic(&val, &children_display);
@@ -276,7 +274,7 @@ static int menu_read_dict(DBusMessageIter* dict,
 
         } else if (strcmp(key, "label") == 0) {
             if (dbus_message_iter_get_arg_type(&val) != DBUS_TYPE_STRING) {
-                r = -1;
+                result = -1;
                 goto fail;
             }
             dbus_message_iter_get_basic(&val, &label);
@@ -298,15 +296,15 @@ static int menu_read_dict(DBusMessageIter* dict,
     }
 
     if (toggle_type && strcmp(toggle_type, "checkmark") == 0)
-        menu_item_create(mi, itemid, label, toggle_state, *has_submenu);
+        menu_item_create(item, itemid, label, toggle_state, *has_submenu);
     else
-        menu_item_create(mi, itemid, label, -1, *has_submenu);
+        menu_item_create(item, itemid, label, -1, *has_submenu);
 
     return 0;
 
 fail:
     fprintf(stderr, "Error parsing menu data\n");
-    return r;
+    return result;
 }
 
 /**
@@ -316,94 +314,95 @@ fail:
  * @param[in] mi
  * @param[out] status <0 on error, 0 on success, >0 if menuitem was skipped
  */
-static int menu_extract_item(DBusMessageIter* strct, MenuItem* mi)
+static int menu_extract_item(DBusMessageIter* structure, MenuItem* item)
 {
-    DBusMessageIter val, dict;
+    DBusMessageIter val;
+    DBusMessageIter dict;
     dbus_int32_t itemid;
     int has_submenu = 0;
-    int r;
+    int result;
 
-    dbus_message_iter_recurse(strct, &val);
+    dbus_message_iter_recurse(structure, &val);
     if (dbus_message_iter_get_arg_type(&val) != DBUS_TYPE_INT32) {
-        r = -1;
+        result = -1;
         goto fail;
     }
     dbus_message_iter_get_basic(&val, &itemid);
 
-    if (!dbus_message_iter_next(&val) ||
-        dbus_message_iter_get_arg_type(&val) != DBUS_TYPE_ARRAY) {
-        r = -1;
+    if (!dbus_message_iter_next(&val) || dbus_message_iter_get_arg_type(&val) != DBUS_TYPE_ARRAY) {
+        result = -1;
         goto fail;
     }
     dbus_message_iter_recurse(&val, &dict);
     if (dbus_message_iter_get_arg_type(&dict) != DBUS_TYPE_DICT_ENTRY) {
-        r = -1;
+        result = -1;
         goto fail;
     }
 
-    r = menu_read_dict(&dict, itemid, mi, &has_submenu);
-    if (r < 0) {
+    result = menu_read_dict(&dict, itemid, item, &has_submenu);
+    if (result < 0) {
         goto fail;
 
-    } else if (r == 0 && has_submenu) {
+    } else if (result == 0 && has_submenu) {
         dbus_message_iter_next(&val);
         if (dbus_message_iter_get_arg_type(&val) != DBUS_TYPE_ARRAY)
             goto fail;
-        r = menu_extract(&val, &mi->submenu);
-        if (r < 0)
+        result = menu_extract(&val, &item->submenu);
+        if (result < 0)
             goto fail;
     }
 
-    return r;
+    return result;
 
 fail:
-    return r;
+    return result;
 }
 
-static int menu_extract(DBusMessageIter* av, struct wl_array* layout_node)
+static int menu_extract(DBusMessageIter* array_variant, struct wl_array* layout_node)
 {
-    DBusMessageIter variant, menuitem;
-    MenuItem* mi;
-    int r;
+    DBusMessageIter variant;
+    DBusMessageIter menuitem;
+    MenuItem* item;
+    int result;
 
-    dbus_message_iter_recurse(av, &variant);
+    dbus_message_iter_recurse(array_variant, &variant);
     if (dbus_message_iter_get_arg_type(&variant) != DBUS_TYPE_VARIANT) {
-        r = -1;
+        result = -1;
         goto fail;
     }
 
-    mi = wl_array_add(layout_node, sizeof(MenuItem));
-    if (!mi) {
-        r = -ENOMEM;
+    item = wl_array_add(layout_node, sizeof(MenuItem));
+    if (!item) {
+        result = -ENOMEM;
         goto fail;
     }
-    menu_item_init(mi);
+    menu_item_init(item);
 
     do {
         dbus_message_iter_recurse(&variant, &menuitem);
         if (dbus_message_iter_get_arg_type(&menuitem) != DBUS_TYPE_STRUCT) {
-            r = -1;
+            result = -1;
             goto fail;
         }
 
-        r = menu_extract_item(&menuitem, mi);
-        if (r < 0)
+        result = menu_extract_item(&menuitem, item);
+        if (result < 0)
             goto fail;
-        else if (r == 0) {
-            mi = wl_array_add(layout_node, sizeof(MenuItem));
-            if (!mi) {
-                r = -ENOMEM;
+        else if (result == 0) {
+            item = wl_array_add(layout_node, sizeof(MenuItem));
+            if (!item) {
+                result = -ENOMEM;
                 goto fail;
             }
-            menu_item_init(mi);
+            menu_item_init(item);
         }
-        /* r > 0: no action was performed on mi */
+        /* r > 0: no action was performed on item */
     } while (dbus_message_iter_next(&variant));
 
     return 0;
 
 fail:
-    return r;
+    return result;
 }
 
 static void menu_handle_layout_ready(DBusPendingCall* pending, void* data)
@@ -411,51 +410,52 @@ static void menu_handle_layout_ready(DBusPendingCall* pending, void* data)
     Menu* menu = data;
 
     DBusMessage* reply = nullptr;
-    DBusMessageIter iter, strct;
+    DBusMessageIter iter;
+    DBusMessageIter structure;
     dbus_uint32_t revision;
-    int r;
+    int result;
 
     reply = dbus_pending_call_steal_reply(pending);
     if (!reply || dbus_message_get_type(reply) == DBUS_MESSAGE_TYPE_ERROR) {
-        r = -1;
+        result = -1;
         goto fail;
     }
 
     dbus_message_iter_init(reply, &iter);
     if (dbus_message_iter_get_arg_type(&iter) != DBUS_TYPE_UINT32) {
-        r = -1;
+        result = -1;
         goto fail;
     }
     dbus_message_iter_get_basic(&iter, &revision);
 
     if (!dbus_message_iter_next(&iter) ||
         dbus_message_iter_get_arg_type(&iter) != DBUS_TYPE_STRUCT) {
-        r = -1;
+        result = -1;
         goto fail;
     }
-    dbus_message_iter_recurse(&iter, &strct);
+    dbus_message_iter_recurse(&iter, &structure);
 
     /*
      * id 0 is the root, which contains nothing of interest.
      * Traverse past it.
      */
-    if (dbus_message_iter_get_arg_type(&strct) != DBUS_TYPE_INT32 ||
-        !dbus_message_iter_next(&strct) ||
-        dbus_message_iter_get_arg_type(&strct) != DBUS_TYPE_ARRAY ||
-        !dbus_message_iter_next(&strct) ||
-        dbus_message_iter_get_arg_type(&strct) != DBUS_TYPE_ARRAY) {
-        r = -1;
+    if (dbus_message_iter_get_arg_type(&structure) != DBUS_TYPE_INT32 ||
+        !dbus_message_iter_next(&structure) ||
+        dbus_message_iter_get_arg_type(&structure) != DBUS_TYPE_ARRAY ||
+        !dbus_message_iter_next(&structure) ||
+        dbus_message_iter_get_arg_type(&structure) != DBUS_TYPE_ARRAY) {
+        result = -1;
         goto fail;
     }
 
     /* Root traversed over, extract the menu */
     wl_array_init(&menu->layout);
-    r = menu_extract(&strct, &menu->layout);
-    if (r < 0)
+    result = menu_extract(&structure, &menu->layout);
+    if (result < 0)
         goto fail;
 
-    r = menu_present(menu, &menu->layout);
-    if (r < 0)
+    result = menu_present(menu, &menu->layout);
+    if (result < 0)
         goto fail;
 
     dbus_message_unref(reply);
@@ -472,47 +472,47 @@ fail:
 
 static int menu_request_layout(Menu* menu)
 {
-    DBusMessage* msg = nullptr;
+    DBusMessage* message = nullptr;
     DBusMessageIter iter = DBUS_MESSAGE_ITER_INIT_CLOSED;
     DBusMessageIter strings = DBUS_MESSAGE_ITER_INIT_CLOSED;
     DBusPendingCall* pending = nullptr;
-    dbus_int32_t parentid, depth;
-    int r;
+    dbus_int32_t parentid;
+    dbus_int32_t depth;
+    int result;
 
     parentid = 0;
     depth = -1;
 
     /* menu busobj request answer didn't arrive yet. */
     if (!menu->busobj) {
-        r = -1;
+        result = -1;
         goto fail;
     }
 
-    msg = dbus_message_new_method_call(
-        menu->busname, menu->busobj, DBUSMENU_IFACE, "GetLayout");
-    if (!msg) {
-        r = -ENOMEM;
+    message =
+        dbus_message_new_method_call(menu->busname, menu->busobj, DBUSMENU_IFACE, "GetLayout");
+    if (!message) {
+        result = -ENOMEM;
         goto fail;
     }
 
-    dbus_message_iter_init_append(msg, &iter);
+    dbus_message_iter_init_append(message, &iter);
     if (!dbus_message_iter_append_basic(&iter, DBUS_TYPE_INT32, &parentid) ||
         !dbus_message_iter_append_basic(&iter, DBUS_TYPE_INT32, &depth) ||
-        !dbus_message_iter_open_container(
-            &iter, DBUS_TYPE_ARRAY, DBUS_TYPE_STRING_AS_STRING, &strings) ||
+        !dbus_message_iter_open_container(&iter, DBUS_TYPE_ARRAY, DBUS_TYPE_STRING_AS_STRING,
+                                          &strings) ||
         !dbus_message_iter_close_container(&iter, &strings)) {
-        r = -ENOMEM;
+        result = -ENOMEM;
         goto fail;
     }
 
-    if (!dbus_connection_send_with_reply(menu->conn, msg, &pending, -1) ||
-        !dbus_pending_call_set_notify(
-            pending, menu_handle_layout_ready, menu, nullptr)) {
-        r = -ENOMEM;
+    if (!dbus_connection_send_with_reply(menu->conn, message, &pending, -1) ||
+        !dbus_pending_call_set_notify(pending, menu_handle_layout_ready, menu, nullptr)) {
+        result = -ENOMEM;
         goto fail;
     }
 
-    dbus_message_unref(msg);
+    dbus_message_unref(message);
     return 0;
 
 fail:
@@ -521,10 +521,10 @@ fail:
         dbus_pending_call_unref(pending);
     }
     dbus_message_iter_abandon_container_if_open(&iter, &strings);
-    if (msg)
-        dbus_message_unref(msg);
+    if (message)
+        dbus_message_unref(message);
     menu_destroy(menu);
-    return r;
+    return result;
 }
 
 static void menu_handle_about_to_show(DBusPendingCall* pending, void* data)
@@ -551,15 +551,16 @@ fail:
     menu_destroy(menu);
 }
 
-void menu_show(DBusConnection* conn,
+void menu_show(DBusConnection* connection,
                const char* busname,
                const char* busobj,
                MenuPresentFn present)
 {
-    DBusMessage* msg = nullptr;
+    DBusMessage* message = nullptr;
     DBusPendingCall* pending = nullptr;
     Menu* menu = nullptr;
-    char *busname_dup = nullptr, *busobj_dup = nullptr;
+    char* busname_dup = nullptr;
+    char* busobj_dup = nullptr;
     dbus_int32_t parentid = 0;
 
     /* the item may expose no menu, or its Menu property is still in flight */
@@ -572,32 +573,30 @@ void menu_show(DBusConnection* conn,
     if (!menu || !busname_dup || !busobj_dup)
         goto fail;
 
-    menu->conn = conn;
+    menu->conn = connection;
     menu->busname = busname_dup;
     menu->busobj = busobj_dup;
     menu->present = present;
 
-    msg = dbus_message_new_method_call(
-        menu->busname, menu->busobj, DBUSMENU_IFACE, "AboutToShow");
-    if (!msg)
+    message =
+        dbus_message_new_method_call(menu->busname, menu->busobj, DBUSMENU_IFACE, "AboutToShow");
+    if (!message)
         goto fail;
 
-    if (!dbus_message_append_args(
-            msg, DBUS_TYPE_INT32, &parentid, DBUS_TYPE_INVALID) ||
-        !dbus_connection_send_with_reply(menu->conn, msg, &pending, -1) ||
-        !dbus_pending_call_set_notify(
-            pending, menu_handle_about_to_show, menu, nullptr)) {
+    if (!dbus_message_append_args(message, DBUS_TYPE_INT32, &parentid, DBUS_TYPE_INVALID) ||
+        !dbus_connection_send_with_reply(menu->conn, message, &pending, -1) ||
+        !dbus_pending_call_set_notify(pending, menu_handle_about_to_show, menu, nullptr)) {
         goto fail;
     }
 
-    dbus_message_unref(msg);
+    dbus_message_unref(message);
     return;
 
 fail:
     if (pending)
         dbus_pending_call_unref(pending);
-    if (msg)
-        dbus_message_unref(msg);
+    if (message)
+        dbus_message_unref(message);
     free(busname_dup);
     free(busobj_dup);
     free(menu);

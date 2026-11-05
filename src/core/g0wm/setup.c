@@ -112,14 +112,10 @@
 
 /* function declarations */
 static void cleanup_listeners(void);
-static void handle_new_idle_inhibitor(struct wl_listener* listener, void* data);
-static void handle_idle_inhibitor_destroy(struct wl_listener* listener,
-                                          void* data);
-static bool filter_global(const struct wl_client* client,
-                          const struct wl_global* global,
-                          void* data);
-static void handle_gpu_reset(struct wl_listener* listener, void* data);
-static void recreate_renderer(void* data);
+static void handle_new_idle_inhibitor(struct wl_listener*, void* data);
+static void handle_idle_inhibitor_destroy(struct wl_listener* listener, void* data);
+static void handle_gpu_reset(struct wl_listener*, void*);
+static void recreate_renderer(void*);
 
 /* variables */
 struct wl_display* display;
@@ -140,133 +136,76 @@ struct wlr_backend* backend;
 static struct wlr_compositor* compositor;
 static DBusConnection* bus_connection;
 static struct wl_event_source* bus_source;
-/* global event handlers */
+
+/* Global event handlers: each wl_listener binds a wlroots signal to its
+ * handler. setup() subscribes them (wl_signal_add), cleanup() removes them.
+ * They stay global because wlroots links the struct itself into the signal
+ * list, so it must outlive the subscription (there are other wl_listeners
+ * it other files */
 static struct wl_listener cursor_axis = { .notify = input_handle_axis };
 static struct wl_listener cursor_button = { .notify = input_handle_button };
 static struct wl_listener cursor_frame = { .notify = input_handle_frame };
-static struct wl_listener cursor_hold_begin = { .notify =
-                                                    input_handle_hold_begin };
+static struct wl_listener cursor_hold_begin = { .notify = input_handle_hold_begin };
 static struct wl_listener cursor_hold_end = { .notify = input_handle_hold_end };
 static struct wl_listener cursor_motion = { .notify = input_handle_motion };
-static struct wl_listener cursor_motion_absolute = {
-    .notify = input_handle_motion_absolute
-};
-static struct wl_listener cursor_pinch_begin = { .notify =
-                                                     input_handle_pinch_begin };
-static struct wl_listener cursor_pinch_end = { .notify =
-                                                   input_handle_pinch_end };
-static struct wl_listener cursor_pinch_update = {
-    .notify = input_handle_pinch_update
-};
-static struct wl_listener cursor_swipe_begin = { .notify =
-                                                     input_handle_swipe_begin };
-static struct wl_listener cursor_swipe_end = { .notify =
-                                                   input_handle_swipe_end };
-static struct wl_listener cursor_swipe_update = {
-    .notify = input_handle_swipe_update
-};
+static struct wl_listener cursor_motion_absolute = { .notify = input_handle_motion_absolute };
+static struct wl_listener cursor_pinch_begin = { .notify = input_handle_pinch_begin };
+static struct wl_listener cursor_pinch_end = { .notify = input_handle_pinch_end };
+static struct wl_listener cursor_pinch_update = { .notify = input_handle_pinch_update };
+static struct wl_listener cursor_swipe_begin = { .notify = input_handle_swipe_begin };
+static struct wl_listener cursor_swipe_end = { .notify = input_handle_swipe_end };
+static struct wl_listener cursor_swipe_update = { .notify = input_handle_swipe_update };
 static struct wl_listener cursor_tablet_axis = { .notify = tablet_handle_axis };
-static struct wl_listener cursor_tablet_button = { .notify =
-                                                       tablet_handle_button };
-static struct wl_listener cursor_tablet_proximity = {
-    .notify = tablet_handle_proximity
-};
+static struct wl_listener cursor_tablet_button = { .notify = tablet_handle_button };
+static struct wl_listener cursor_tablet_proximity = { .notify = tablet_handle_proximity };
 static struct wl_listener cursor_tablet_tip = { .notify = tablet_handle_tip };
-static struct wl_listener cursor_touch_cancel = {
-    .notify = tablet_handle_touch_cancel
-};
-static struct wl_listener cursor_touch_down = { .notify =
-                                                    tablet_handle_touch_down };
-static struct wl_listener cursor_touch_frame = {
-    .notify = tablet_handle_touch_frame
-};
-static struct wl_listener cursor_touch_motion = {
-    .notify = tablet_handle_touch_motion
-};
-static struct wl_listener cursor_touch_up = { .notify =
-                                                  tablet_handle_touch_up };
+static struct wl_listener cursor_touch_cancel = { .notify = tablet_handle_touch_cancel };
+static struct wl_listener cursor_touch_down = { .notify = tablet_handle_touch_down };
+static struct wl_listener cursor_touch_frame = { .notify = tablet_handle_touch_frame };
+static struct wl_listener cursor_touch_motion = { .notify = tablet_handle_touch_motion };
+static struct wl_listener cursor_touch_up = { .notify = tablet_handle_touch_up };
 static struct wl_listener gpu_reset = { .notify = handle_gpu_reset };
-static struct wl_listener keyboard_focus_change = {
-    .notify = tablet_handle_keyboard_focus_change
-};
-static struct wl_listener text_input_focus_change = {
-    .notify = textinput_handle_focus_change
-};
+static struct wl_listener keyboard_focus_change = { .notify = tablet_handle_keyboard_focus_change };
+static struct wl_listener text_input_focus_change = { .notify = textinput_handle_focus_change };
 static struct wl_listener layout_change = { .notify = monitor_update_layout };
-static struct wl_listener new_capture_request = {
-    .notify = toplevel_handle_new_capture_request
-};
-static struct wl_listener new_capture_session = {
-    .notify = privacy_handle_new_capture_session
-};
-static struct wl_listener new_idle_inhibitor = {
-    .notify = handle_new_idle_inhibitor
-};
-static struct wl_listener new_input_device = { .notify =
-                                                   input_handle_new_input };
-static struct wl_listener new_input_method = {
-    .notify = textinput_handle_new_input_method
-};
-static struct wl_listener new_keyboard_inhibitor = {
-    .notify = input_handle_new_keyboard_inhibitor
-};
-static struct wl_listener new_text_input = {
-    .notify = textinput_handle_new_text_input
-};
-static struct wl_listener new_virtual_keyboard = {
-    .notify = input_handle_new_virtual_keyboard
-};
-static struct wl_listener new_virtual_pointer = {
-    .notify = input_handle_new_virtual_pointer
-};
-static struct wl_listener new_pointer_constraint = {
-    .notify = input_handle_new_pointer_constraint
-};
+static struct wl_listener new_capture_request = { .notify = toplevel_handle_new_capture_request };
+static struct wl_listener new_capture_session = { .notify = privacy_handle_new_capture_session };
+static struct wl_listener new_idle_inhibitor = { .notify = handle_new_idle_inhibitor };
+static struct wl_listener new_input_device = { .notify = input_handle_new_input };
+static struct wl_listener new_input_method = { .notify = textinput_handle_new_input_method };
+static struct wl_listener new_keyboard_inhibitor = { .notify =
+                                                         input_handle_new_keyboard_inhibitor };
+static struct wl_listener new_text_input = { .notify = textinput_handle_new_text_input };
+static struct wl_listener new_virtual_keyboard = { .notify = input_handle_new_virtual_keyboard };
+static struct wl_listener new_virtual_pointer = { .notify = input_handle_new_virtual_pointer };
+static struct wl_listener new_pointer_constraint = { .notify =
+                                                         input_handle_new_pointer_constraint };
 static struct wl_listener new_output = { .notify = monitor_handle_new_output };
-static struct wl_listener new_xdg_toplevel = { .notify =
-                                                   client_handle_new_toplevel };
+static struct wl_listener new_xdg_toplevel = { .notify = client_handle_new_toplevel };
 static struct wl_listener new_xdg_popup = { .notify = client_handle_new_popup };
-static struct wl_listener new_xdg_decoration = {
-    .notify = client_handle_new_decoration
-};
-static struct wl_listener new_layer_surface = {
-    .notify = monitor_handle_new_layer_surface
-};
-static struct wl_listener output_manager_apply = {
-    .notify = monitor_handle_config_apply
-};
-static struct wl_listener output_manager_test = {
-    .notify = monitor_handle_config_test
-};
-static struct wl_listener output_power_set_mode = {
-    .notify = monitor_handle_power_set_mode
-};
-static struct wl_listener request_activate = {
-    .notify = client_handle_request_activate
-};
-static struct wl_listener request_cursor = { .notify =
-                                                 input_handle_request_cursor };
+static struct wl_listener new_xdg_decoration = { .notify = client_handle_new_decoration };
+static struct wl_listener new_layer_surface = { .notify = monitor_handle_new_layer_surface };
+static struct wl_listener output_manager_apply = { .notify = monitor_handle_config_apply };
+static struct wl_listener output_manager_test = { .notify = monitor_handle_config_test };
+static struct wl_listener output_power_set_mode = { .notify = monitor_handle_power_set_mode };
+static struct wl_listener request_activate = { .notify = client_handle_request_activate };
+static struct wl_listener request_cursor = { .notify = input_handle_request_cursor };
 static struct wl_listener request_set_primary_selection = {
     .notify = input_handle_request_primary_selection
 };
-static struct wl_listener request_set_selection = {
-    .notify = input_handle_request_selection
-};
-static struct wl_listener request_set_cursor_shape = {
-    .notify = input_handle_request_cursor_shape
-};
+static struct wl_listener request_set_selection = { .notify = input_handle_request_selection };
+static struct wl_listener request_set_cursor_shape = { .notify =
+                                                           input_handle_request_cursor_shape };
 static struct wl_listener ring_bell = { .notify = client_handle_ring_bell };
-static struct wl_listener request_start_drag = {
-    .notify = input_handle_request_start_drag
-};
+static struct wl_listener request_start_drag = { .notify = input_handle_request_start_drag };
 static struct wl_listener start_drag = { .notify = input_handle_start_drag };
 static struct wl_listener new_session_lock = { .notify = lock_handle_new_lock };
 #ifdef XWAYLAND
-static struct wl_listener new_xwayland_surface = {
-    .notify = xwayland_handle_new_surface
-};
+static struct wl_listener new_xwayland_surface = { .notify = xwayland_handle_new_surface };
 static struct wl_listener xwayland_ready = { .notify = xwayland_handle_ready };
 #endif
+/* listeners end */
+
 pid_t* autostart_pids;
 size_t autostart_len;
 void* exclusive_focus;
@@ -306,29 +245,34 @@ Watcher tray_watcher = { .running = 0 };
 #ifdef XWAYLAND
 struct wlr_xwayland* xwayland;
 #endif
+
 /* The renderer can't be destroyed from inside its own lost signal: wlroots
  * asserts the listener list is empty, and the emission still holds markers
  * in it. Recreate once the loop is idle instead. */
 static struct wl_event_source* gpu_reset_idle;
 
 /* function implementations */
+
+/* Tell the idle notifier whether some client is inhibiting idle (screen off,
+ * lock, screensaver). An inhibitor only counts while its surface is mapped
+ * and visible, unless bypass_surface_visibility is set. */
 void check_idle_inhibitor(struct wlr_surface* exclude)
 {
-    int inhibited = 0, unused_lx, unused_ly;
+    int inhibited = 0;
+    int unused_lx;
+    int unused_ly;
     struct wlr_idle_inhibitor_v1* inhibitor;
-    wl_list_for_each(inhibitor, &idle_inhibit_manager->inhibitors, link)
-    {
-        struct wlr_surface* surface =
-            wlr_surface_get_root_surface(inhibitor->surface);
+    wl_list_for_each(inhibitor, &idle_inhibit_manager->inhibitors, link) {
+        struct wlr_surface* surface = wlr_surface_get_root_surface(inhibitor->surface);
         struct wlr_scene_tree* tree = surface->data;
+
         /* An unmapped surface owns no scene tree (client_handle_unmap() clears
          * surface->data), so it cannot be visible and must not keep the
          * session awake. */
         if (exclude != surface &&
             (bypass_surface_visibility ||
              (surface->mapped &&
-              (!tree ||
-               wlr_scene_node_coords(&tree->node, &unused_lx, &unused_ly))))) {
+              (!tree || wlr_scene_node_coords(&tree->node, &unused_lx, &unused_ly))))) {
             inhibited = 1;
             break;
         }
@@ -364,11 +308,14 @@ void cleanup(void)
     traypopup_cleanup();
     if (tray_watcher.running)
         watcher_stop(&tray_watcher);
+
     bar_notification_finish();
     bar_finish();
+
     privacy_finish();
     if (notifications_enabled)
         notify_stop();
+
     if (bus_connection) {
         bus_stop(bus_connection, bus_source);
         dbus_connection_unref(bus_connection);
@@ -455,14 +402,12 @@ static void cleanup_listeners(void)
 static void handle_new_idle_inhibitor(struct wl_listener*, void* data)
 {
     struct wlr_idle_inhibitor_v1* idle_inhibitor = data;
-    LISTEN_STATIC(&idle_inhibitor->events.destroy,
-                  handle_idle_inhibitor_destroy);
+    LISTEN_STATIC(&idle_inhibitor->events.destroy, handle_idle_inhibitor_destroy);
 
     check_idle_inhibitor(nullptr);
 }
 
-static void handle_idle_inhibitor_destroy(struct wl_listener* listener,
-                                          void* data)
+static void handle_idle_inhibitor_destroy(struct wl_listener* listener, void* data)
 {
     /* `data` is the wlr_surface of the idle inhibitor being destroyed,
      * at this point the idle inhibitor is still in the list of the manager */
@@ -471,9 +416,10 @@ static void handle_idle_inhibitor_destroy(struct wl_listener* listener,
     free(listener);
 }
 
-static bool filter_global(const struct wl_client* client,
-                          const struct wl_global* global,
-                          void*)
+/* Hide privileged protocols (screen capture, virtual input, session lock...)
+ * from sandboxed clients, i.e. those connected through a security context
+ * (Regular clients see everything) */
+static bool filter_global(const struct wl_client* client, const struct wl_global* global, void*)
 {
     static const char* const privileged[] = {
         "ext_data_control_manager_v1",
@@ -498,40 +444,43 @@ static bool filter_global(const struct wl_client* client,
     };
     const char* name = wl_global_get_interface(global)->name;
 
-    if (!wlr_security_context_manager_v1_lookup_client(security_context_manager,
-                                                       client))
+    /* if not sandboxed, return */
+    if (!wlr_security_context_manager_v1_lookup_client(security_context_manager, client))
         return true;
+
     for (size_t i = 0; i < LENGTH(privileged); i++)
         if (!strcmp(name, privileged[i]))
             return false;
+
     return true;
 }
 
 static void handle_gpu_reset(struct wl_listener*, void*)
 {
     if (!gpu_reset_idle)
-        gpu_reset_idle =
-            wl_event_loop_add_idle(event_loop, recreate_renderer, nullptr);
+        gpu_reset_idle = wl_event_loop_add_idle(event_loop, recreate_renderer, nullptr);
 }
 
 /* Scene buffers cache the texture made from our own (shm) buffers, and it dies
  * with the old renderer. Re-handing the same buffer drops it, so the next
  * frame re-uploads. Client buffers carry their texture themselves. */
-static void drop_texture(struct wlr_scene_buffer* sb, int, int, void*)
+static void drop_texture(struct wlr_scene_buffer* scene_buffer, int, int, void*)
 {
-    struct wlr_buffer* b = sb->buffer;
-    if (!b || wlr_client_buffer_get(b))
+    struct wlr_buffer* buffer = scene_buffer->buffer;
+    if (!buffer || wlr_client_buffer_get(buffer))
         return;
-    wlr_buffer_lock(b);
-    wlr_scene_buffer_set_buffer(sb, b);
-    wlr_buffer_unlock(b);
+
+    wlr_buffer_lock(buffer);
+    wlr_scene_buffer_set_buffer(scene_buffer, buffer);
+    wlr_buffer_unlock(buffer);
 }
 
+/* GPU reset recovery: replace the lost renderer and allocator, and rebind
+ * them to the compositor and the outputs */
 static void recreate_renderer(void*)
 {
     struct wlr_renderer* old_drw = renderer;
     struct wlr_allocator* old_alloc = allocator;
-    struct Monitor* m;
     gpu_reset_idle = nullptr;
     if (!(renderer = wlr_renderer_autocreate(backend)))
         util_die("couldn't recreate renderer");
@@ -544,13 +493,14 @@ static void recreate_renderer(void*)
 
     wlr_compositor_set_renderer(compositor, renderer);
 
-    wl_list_for_each(m, &monitors, link)
-    {
-        wlr_output_init_render(m->wlr_output, allocator, renderer);
+    struct Monitor* monitor;
+    wl_list_for_each(monitor, &monitors, link) {
+        wlr_output_init_render(monitor->wlr_output, allocator, renderer);
     }
 
     /* before the old renderer goes, so the textures are freed while it lives */
-    wlr_scene_node_for_each_buffer(&scene->tree.node, drop_texture, nullptr);
+    wlr_scene_node_for_each_buffer(&scene->tree.node, drop_texture, nullptr)
+        ;
 
     wlr_allocator_destroy(old_alloc);
     wlr_renderer_destroy(old_drw);
@@ -558,14 +508,12 @@ static void recreate_renderer(void*)
 
 void setup(void)
 {
-    int drm_fd, sig[] = { SIGCHLD, SIGINT, SIGTERM, SIGPIPE };
-    struct sigaction sa = { .sa_flags = SA_RESTART,
-                            .sa_handler = handle_signal };
-    char cursor_size_str[8];
-    sigemptyset(&sa.sa_mask);
+    struct sigaction signal_action = { .sa_flags = SA_RESTART, .sa_handler = handle_unix_signal };
+    sigemptyset(&signal_action.sa_mask);
 
-    for (int i = 0; i < (int)LENGTH(sig); i++)
-        sigaction(sig[i], &sa, nullptr);
+    const int handled_signals[] = { SIGCHLD, SIGINT, SIGTERM, SIGPIPE };
+    for (size_t i = 0; i < LENGTH(handled_signals); i++)
+        sigaction(handled_signals[i], &signal_action, nullptr);
 
     wlr_log_init(log_level, nullptr);
 
@@ -584,8 +532,8 @@ void setup(void)
     /* Initialize the scene graph used to lay out windows */
     scene = wlr_scene_create();
     root_background = wlr_scene_rect_create(&scene->tree, 0, 0, root_color);
-    for (int i = 0; i < NUM_LAYERS; i++)
-        layers[i] = wlr_scene_tree_create(&scene->tree);
+    for (int layer = 0; layer < NUM_LAYERS; layer++)
+        layers[layer] = wlr_scene_tree_create(&scene->tree);
     drag_icon = wlr_scene_tree_create(&scene->tree);
     wlr_scene_node_place_below(&drag_icon->node, &layers[LyrBlock]->node);
 
@@ -607,12 +555,11 @@ void setup(void)
     if (wlr_renderer_get_texture_formats(renderer, WLR_BUFFER_CAP_DMABUF)) {
         wlr_drm_create(display, renderer);
         wlr_scene_set_linux_dmabuf_v1(
-            scene,
-            wlr_linux_dmabuf_v1_create_with_renderer(display, 5, renderer));
+            scene, wlr_linux_dmabuf_v1_create_with_renderer(display, 5, renderer));
     }
 
-    if ((drm_fd = wlr_renderer_get_drm_fd(renderer)) >= 0 &&
-        renderer->features.timeline && backend->features.timeline)
+    const int drm_fd = wlr_renderer_get_drm_fd(renderer);
+    if (drm_fd >= 0 && renderer->features.timeline && backend->features.timeline)
         wlr_linux_drm_syncobj_manager_v1_create(display, 1, drm_fd);
 
     /* Autocreates an allocator for us.
@@ -633,8 +580,7 @@ void setup(void)
     wlr_data_device_manager_create(display);
     wlr_export_dmabuf_manager_v1_create(display);
     screencopy_manager = wlr_screencopy_manager_v1_create(display);
-    wl_signal_add(&wlr_ext_image_copy_capture_manager_v1_create(display, 1)
-                       ->events.new_session,
+    wl_signal_add(&wlr_ext_image_copy_capture_manager_v1_create(display, 1)->events.new_session,
                   &new_capture_session);
     wlr_ext_output_image_capture_source_manager_v1_create(display, 1);
     wlr_data_control_manager_v1_create(display);
@@ -654,8 +600,7 @@ void setup(void)
     activation = wlr_xdg_activation_v1_create(display);
     wl_signal_add(&activation->events.request_activate, &request_activate);
 
-    wl_signal_add(&wlr_xdg_system_bell_v1_create(display, 1)->events.ring,
-                  &ring_bell);
+    wl_signal_add(&wlr_xdg_system_bell_v1_create(display, 1)->events.ring, &ring_bell);
 
     foreign_registry = wlr_xdg_foreign_registry_create(display);
     wlr_xdg_foreign_v1_create(display, foreign_registry);
@@ -664,18 +609,14 @@ void setup(void)
 
     foreign_toplevel_manager = wlr_foreign_toplevel_manager_v1_create(display);
     ext_toplevel_list = wlr_ext_foreign_toplevel_list_v1_create(display, 1);
-    wl_signal_add(
-        &wlr_ext_foreign_toplevel_image_capture_source_manager_v1_create(
-             display, 1)
-             ->events.new_request,
-        &new_capture_request);
+    wl_signal_add(&wlr_ext_foreign_toplevel_image_capture_source_manager_v1_create(display, 1)
+                       ->events.new_request,
+                  &new_capture_request);
 
-    wlr_scene_set_gamma_control_manager_v1(
-        scene, wlr_gamma_control_manager_v1_create(display));
+    wlr_scene_set_gamma_control_manager_v1(scene, wlr_gamma_control_manager_v1_create(display));
 
     output_power_manager = wlr_output_power_manager_v1_create(display);
-    wl_signal_add(&output_power_manager->events.set_mode,
-                  &output_power_set_mode);
+    wl_signal_add(&output_power_manager->events.set_mode, &output_power_set_mode);
 
     /* Creates an output layout, which is a wlroots utility for working with an
      * arrangement of screens in a physical layout. */
@@ -708,36 +649,28 @@ void setup(void)
     idle_notifier = wlr_idle_notifier_v1_create(display);
 
     idle_inhibit_manager = wlr_idle_inhibit_v1_create(display);
-    wl_signal_add(&idle_inhibit_manager->events.new_inhibitor,
-                  &new_idle_inhibitor);
+    wl_signal_add(&idle_inhibit_manager->events.new_inhibitor, &new_idle_inhibitor);
 
     session_lock_manager = wlr_session_lock_manager_v1_create(display);
     wl_signal_add(&session_lock_manager->events.new_lock, &new_session_lock);
     locked_background =
-        wlr_scene_rect_create(layers[LyrBlock],
-                              screen_geometry.width,
-                              screen_geometry.height,
+        wlr_scene_rect_create(layers[LyrBlock], screen_geometry.width, screen_geometry.height,
                               (float[4]){ 0.1f, 0.1f, 0.1f, 1.0f });
-    wlr_scene_node_set_enabled(&locked_background->node, 0);
+    wlr_scene_node_set_enabled(&locked_background->node, false);
 
     /* Use decoration protocols to negotiate server-side decorations */
-    wlr_server_decoration_manager_set_default_mode(
-        wlr_server_decoration_manager_create(display),
-        WLR_SERVER_DECORATION_MANAGER_MODE_SERVER);
+    wlr_server_decoration_manager_set_default_mode(wlr_server_decoration_manager_create(display),
+                                                   WLR_SERVER_DECORATION_MANAGER_MODE_SERVER);
     xdg_decoration_manager = wlr_xdg_decoration_manager_v1_create(display);
-    wl_signal_add(&xdg_decoration_manager->events.new_toplevel_decoration,
-                  &new_xdg_decoration);
+    wl_signal_add(&xdg_decoration_manager->events.new_toplevel_decoration, &new_xdg_decoration);
 
     pointer_constraints = wlr_pointer_constraints_v1_create(display);
-    wl_signal_add(&pointer_constraints->events.new_constraint,
-                  &new_pointer_constraint);
+    wl_signal_add(&pointer_constraints->events.new_constraint, &new_pointer_constraint);
 
     relative_pointer_manager = wlr_relative_pointer_manager_v1_create(display);
 
-    keyboard_inhibit_manager =
-        wlr_keyboard_shortcuts_inhibit_v1_create(display);
-    wl_signal_add(&keyboard_inhibit_manager->events.new_inhibitor,
-                  &new_keyboard_inhibitor);
+    keyboard_inhibit_manager = wlr_keyboard_shortcuts_inhibit_v1_create(display);
+    wl_signal_add(&keyboard_inhibit_manager->events.new_inhibitor, &new_keyboard_inhibitor);
 
     /*
      * Creates a cursor, which is a wlroots utility for tracking the cursor
@@ -758,9 +691,10 @@ void setup(void)
      * called "default", which many systems don't ship; wlroots then falls back
      * to a fixed-size built-in cursor that ignores cursor_size entirely. Naming
      * a theme explicitly in config.h avoids that. */
-    snprintf(cursor_size_str, sizeof(cursor_size_str), "%d", cursor_size);
+    char cursor_size_env[8];
+    snprintf(cursor_size_env, sizeof(cursor_size_env), "%d", cursor_size);
     cursor_manager = wlr_xcursor_manager_create(cursor_theme, cursor_size);
-    setenv("XCURSOR_SIZE", cursor_size_str, 1);
+    setenv("XCURSOR_SIZE", cursor_size_env, 1);
     if (cursor_theme)
         setenv("XCURSOR_THEME", cursor_theme, 1);
 
@@ -778,8 +712,7 @@ void setup(void)
     wl_signal_add(&cursor->events.motion_absolute, &cursor_motion_absolute);
     wl_signal_add(&cursor->events.tablet_tool_axis, &cursor_tablet_axis);
     wl_signal_add(&cursor->events.tablet_tool_button, &cursor_tablet_button);
-    wl_signal_add(&cursor->events.tablet_tool_proximity,
-                  &cursor_tablet_proximity);
+    wl_signal_add(&cursor->events.tablet_tool_proximity, &cursor_tablet_proximity);
     wl_signal_add(&cursor->events.tablet_tool_tip, &cursor_tablet_tip);
     wl_signal_add(&cursor->events.touch_cancel, &cursor_touch_cancel);
     wl_signal_add(&cursor->events.touch_down, &cursor_touch_down);
@@ -802,8 +735,7 @@ void setup(void)
 
     cursor_shape_manager = wlr_cursor_shape_manager_v1_create(display, 1);
     tablet_manager = wlr_tablet_v2_create(display);
-    wl_signal_add(&cursor_shape_manager->events.request_set_shape,
-                  &request_set_cursor_shape);
+    wl_signal_add(&cursor_shape_manager->events.request_set_shape, &request_set_cursor_shape);
 
     /*
      * Configures a seat, which is a single "seat" at which a user sits and
@@ -813,33 +745,26 @@ void setup(void)
      */
     wl_signal_add(&backend->events.new_input, &new_input_device);
     virtual_keyboard_manager = wlr_virtual_keyboard_manager_v1_create(display);
-    wl_signal_add(&virtual_keyboard_manager->events.new_virtual_keyboard,
-                  &new_virtual_keyboard);
+    wl_signal_add(&virtual_keyboard_manager->events.new_virtual_keyboard, &new_virtual_keyboard);
     virtual_pointer_manager = wlr_virtual_pointer_manager_v1_create(display);
-    wl_signal_add(&virtual_pointer_manager->events.new_virtual_pointer,
-                  &new_virtual_pointer);
+    wl_signal_add(&virtual_pointer_manager->events.new_virtual_pointer, &new_virtual_pointer);
 
     seat = wlr_seat_create(display, "seat0");
     wl_signal_add(&seat->events.request_set_cursor, &request_cursor);
     wl_signal_add(&seat->events.request_set_selection, &request_set_selection);
-    wl_signal_add(&seat->events.request_set_primary_selection,
-                  &request_set_primary_selection);
+    wl_signal_add(&seat->events.request_set_primary_selection, &request_set_primary_selection);
     wl_signal_add(&seat->events.request_start_drag, &request_start_drag);
     wl_signal_add(&seat->events.start_drag, &start_drag);
-    wl_signal_add(&seat->keyboard_state.events.focus_change,
-                  &keyboard_focus_change);
-    wl_signal_add(&seat->keyboard_state.events.focus_change,
-                  &text_input_focus_change);
+    wl_signal_add(&seat->keyboard_state.events.focus_change, &keyboard_focus_change);
+    wl_signal_add(&seat->keyboard_state.events.focus_change, &text_input_focus_change);
 
     keyboard_group = input_create_keyboard_group();
     wl_list_init(&keyboard_group->destroy.link);
 
-    wl_signal_add(
-        &wlr_text_input_manager_v3_create(display)->events.new_text_input,
-        &new_text_input);
-    wl_signal_add(
-        &wlr_input_method_manager_v2_create(display)->events.new_input_method,
-        &new_input_method);
+    wl_signal_add(&wlr_text_input_manager_v3_create(display)->events.new_text_input,
+                  &new_text_input);
+    wl_signal_add(&wlr_input_method_manager_v2_create(display)->events.new_input_method,
+                  &new_input_method);
 
     output_manager = wlr_output_manager_v1_create(display);
     wl_signal_add(&output_manager->events.apply, &output_manager_apply);
@@ -847,12 +772,8 @@ void setup(void)
 
     drwl_init();
 
-    status_event_source =
-        wl_event_loop_add_fd(wl_display_get_event_loop(display),
-                             STDIN_FILENO,
-                             WL_EVENT_READABLE,
-                             bar_handle_status_input,
-                             nullptr);
+    status_event_source = wl_event_loop_add_fd(event_loop, STDIN_FILENO, WL_EVENT_READABLE,
+                                               bar_handle_status_input, nullptr);
 
     /* Missing the session bus is not fatal: g0wm comes up without a tray
      * and/or bar notifications. */
@@ -862,15 +783,11 @@ void setup(void)
             if (systray_enabled)
                 watcher_start(&tray_watcher, bus_connection, event_loop);
             if (notifications_enabled)
-                notify_start(bus_connection,
-                             event_loop,
-                             notification_timeout,
-                             bar_draw_all,
+                notify_start(bus_connection, event_loop, notification_timeout, bar_draw_all,
                              activation_token_new);
         } else
-            fprintf(stderr,
-                    "Couldn't connect to the session bus, "
-                    "systray/notifications not available\n");
+            fprintf(stderr, "Couldn't connect to the session bus, "
+                            "systray/notifications not available\n");
     }
 
     /* Make sure XWayland clients don't connect to the parent X server,
@@ -888,8 +805,7 @@ void setup(void)
 
         setenv("DISPLAY", xwayland->display_name, 1);
     } else {
-        fprintf(stderr,
-                "failed to setup XWayland X server, continuing without it\n");
+        fprintf(stderr, "failed to setup XWayland X server, continuing without it\n");
     }
 #endif
 }

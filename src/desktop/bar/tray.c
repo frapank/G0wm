@@ -22,18 +22,18 @@ void bar_tray_notify(void* data)
 
 void bar_tray_activate(const Arg* arg)
 {
-    Monitor* m = bar_monitor(); /* the tray belongs to the bar clicked */
+    Monitor* monitor = bar_monitor(); /* the tray belongs to the bar clicked */
 
-    if (!m)
+    if (!monitor)
         return;
-    tray_left_clicked(m->tray, arg->ui);
+    tray_left_clicked(monitor->tray, arg->ui);
 }
 
 void bar_tray_menu(const Arg* arg)
 {
-    Monitor* m = bar_monitor();
+    Monitor* monitor = bar_monitor();
 
-    if (!m)
+    if (!monitor)
         return;
-    tray_right_clicked(m->tray, arg->ui, traypopup_present);
+    tray_right_clicked(monitor->tray, arg->ui, traypopup_present);
 }

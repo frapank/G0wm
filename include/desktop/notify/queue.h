@@ -26,7 +26,7 @@ void notify_invoke(void);
 void notify_action(size_t i);
 /* While held (the user is picking an action) the timer stops and new
  * notifications queue up instead of taking the box. */
-void notify_hold(int on);
+void notify_hold(int hold);
 int notify_held(unsigned int* left_ms);
 
 #endif

@@ -22,9 +22,9 @@ typedef struct {
 } Buffer;
 
 [[nodiscard]] Buffer* buffer_get(Buffer** pool,
-                                 size_t poollen,
+                                 size_t pool_length,
                                  int width,
                                  int height);
-void buffer_pool_drop(Buffer** pool, size_t poollen);
+void buffer_pool_drop(Buffer** pool, size_t pool_length);
 
 #endif

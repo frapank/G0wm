@@ -16,8 +16,7 @@ static char activation_token_tag; /* marks the tokens handed out below */
  * the focus request it sends back can be told apart from the others */
 const char* activation_token_new(void)
 {
-    struct wlr_xdg_activation_token_v1* token =
-        wlr_xdg_activation_token_v1_create(activation);
+    struct wlr_xdg_activation_token_v1* token = wlr_xdg_activation_token_v1_create(activation);
 
     if (!token)
         return nullptr;

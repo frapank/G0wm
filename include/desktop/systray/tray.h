@@ -33,15 +33,15 @@ typedef struct {
 } Tray;
 
 [[nodiscard]] Tray* tray_create(void* monitor,
-                                int height,
-                                int iconsize,
-                                int spacing,
-                                int padding,
-                                uint32_t* colorscheme,
-                                const char** fonts,
-                                const char* fontattrs,
-                                TrayNotifyCb cb,
-                                Watcher* watcher);
+                  int height,
+                  int iconsize,
+                  int spacing,
+                  int padding,
+                  uint32_t* colorscheme,
+                  const char** fonts,
+                  const char* fontattrs,
+                  TrayNotifyCb notify_callback,
+                  Watcher* watcher);
 void tray_destroy(Tray* tray);
 
 int tray_get_width(const Tray* tray);

@@ -10,8 +10,8 @@
 #include <wayland-server-core.h>
 
 #ifdef XWAYLAND
-void xwayland_handle_new_surface(struct wl_listener* listener, void* data);
-void xwayland_handle_ready(struct wl_listener* listener, void* data);
+void xwayland_handle_new_surface(struct wl_listener*, void* data);
+void xwayland_handle_ready(struct wl_listener*, void*);
 #endif
 
 #endif

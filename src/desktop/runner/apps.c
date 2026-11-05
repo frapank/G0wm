@@ -27,26 +27,27 @@ char* runner_search_path(void)
 {
     const char* path = getenv("PATH");
     const char* home = getenv("HOME");
-    const char* e = runner_paths;
+    const char* entry = runner_paths;
     char* out = nullptr;
-    size_t n = 0, len;
+    size_t length = 0;
 
-    runner_append(&out, &n, path ? path : "", path ? strlen(path) : 0);
-    while (e && *e) {
-        len = strcspn(e, ":");
-        if (len) {
-            if (n)
-                runner_append(&out, &n, ":", 1);
-            if (e[0] == '~' && (len == 1 || e[1] == '/') && home) {
-                runner_append(&out, &n, home, strlen(home));
-                e++;
-                len--;
+    runner_append(&out, &length, path ? path : "", path ? strlen(path) : 0);
+    size_t entry_length;
+    while (entry && *entry) {
+        entry_length = strcspn(entry, ":");
+        if (entry_length) {
+            if (length)
+                runner_append(&out, &length, ":", 1);
+            if (entry[0] == '~' && (entry_length == 1 || entry[1] == '/') && home) {
+                runner_append(&out, &length, home, strlen(home));
+                entry++;
+                entry_length--;
             }
-            runner_append(&out, &n, e, len);
+            runner_append(&out, &length, entry, entry_length);
         }
-        e += len;
-        if (*e == ':')
-            e++;
+        entry += entry_length;
+        if (*entry == ':')
+            entry++;
     }
     return out;
 }
@@ -55,54 +56,50 @@ void runner_build_cache(void)
 {
     /* Same idea as dmenu_path: list every executable name under $PATH once,
      * so each keystroke only has to filter an already-built array. */
-    char *p = runner_search_path(), *dir, *saveptr;
-    char full[1024];
-    struct stat st;
-    DIR* d;
-    struct dirent* e;
-    int w = 0;
-    size_t cap = 0;
+    char* paths = runner_search_path();
+    size_t capacity = 0;
 
-    for (dir = strtok_r(p, ":", &saveptr); dir;
-         dir = strtok_r(nullptr, ":", &saveptr)) {
-        if (!(d = opendir(dir)))
+    char* saveptr;
+    char full[1024];
+    struct stat file_info;
+    for (char* dir = strtok_r(paths, ":", &saveptr); dir; dir = strtok_r(nullptr, ":", &saveptr)) {
+        DIR* directory = opendir(dir);
+        if (!directory)
             continue;
-        while ((e = readdir(d))) {
-            if (e->d_name[0] == '.')
+        for (struct dirent* entry; (entry = readdir(directory));) {
+            if (entry->d_name[0] == '.')
                 continue;
-            if (snprintf(full, sizeof full, "%s/%s", dir, e->d_name) >=
-                (int)sizeof full)
+            if (snprintf(full, sizeof full, "%s/%s", dir, entry->d_name) >= (int)sizeof full)
                 continue;
             /* Regular files only: +x on a directory just means it can be
              * traversed, so access() alone would list the subdirectories a
              * PATH entry happens to carry as if they were commands. */
-            if (stat(full, &st) != 0 || !S_ISREG(st.st_mode) ||
+            if (stat(full, &file_info) != 0 || !S_ISREG(file_info.st_mode) ||
                 access(full, X_OK) != 0)
                 continue;
-            if ((size_t)runner_command_count == cap) {
-                cap = cap ? cap * 2 : 256;
-                if (!(runner_commands =
-                          realloc(runner_commands, cap * sizeof(char*))))
+            if ((size_t)runner_command_count == capacity) {
+                capacity = capacity ? capacity * 2 : 256;
+                if (!(runner_commands = realloc(runner_commands, capacity * sizeof(char*))))
                     util_die("realloc:");
             }
-            if (!(runner_commands[runner_command_count++] = strdup(e->d_name)))
+            if (!(runner_commands[runner_command_count++] = strdup(entry->d_name)))
                 util_die("strdup:");
         }
-        closedir(d);
+        closedir(directory);
     }
-    free(p);
+    free(paths);
 
     qsort(runner_commands, runner_command_count, sizeof(char*), runner_compare);
+    int unique_count = 0;
     for (int i = 0; i < runner_command_count; i++) {
-        if (w && !strcmp(runner_commands[w - 1], runner_commands[i]))
+        if (unique_count && !strcmp(runner_commands[unique_count - 1], runner_commands[i]))
             free(runner_commands[i]);
         else
-            runner_commands[w++] = runner_commands[i];
+            runner_commands[unique_count++] = runner_commands[i];
     }
-    runner_command_count = w;
+    runner_command_count = unique_count;
 
-    if (!(runner_use =
-              realloc(runner_use, MAX(runner_command_count, 1) * sizeof(int))))
+    if (!(runner_use = realloc(runner_use, MAX(runner_command_count, 1) * sizeof(int))))
         util_die("realloc:");
 }
 
@@ -122,54 +119,53 @@ char* runner_app_dirs(void)
     const char* home = getenv("HOME");
     const char* datahome = getenv("XDG_DATA_HOME");
     const char* datadirs = getenv("XDG_DATA_DIRS");
-    char *dirs, *dir, *saveptr, *out = nullptr;
-    size_t n = 0;
+    char* out = nullptr;
+    size_t length = 0;
 
     if (datahome && *datahome) {
-        runner_append(&out, &n, datahome, strlen(datahome));
+        runner_append(&out, &length, datahome, strlen(datahome));
     } else if (home && *home) {
-        runner_append(&out, &n, home, strlen(home));
-        runner_append(&out, &n, "/.local/share", 13);
+        runner_append(&out, &length, home, strlen(home));
+        runner_append(&out, &length, "/.local/share", 13);
     }
-    if (n)
-        runner_append(&out, &n, "/applications", 13);
-    if (!(dirs = strdup(datadirs && *datadirs ? datadirs
-                                              : "/usr/local/share:/usr/share")))
+    if (length)
+        runner_append(&out, &length, "/applications", 13);
+    char* dirs;
+    if (!(dirs = strdup(datadirs && *datadirs ? datadirs : "/usr/local/share:/usr/share")))
         util_die("strdup:");
-    for (dir = strtok_r(dirs, ":", &saveptr); dir;
-         dir = strtok_r(nullptr, ":", &saveptr)) {
-        if (n)
-            runner_append(&out, &n, ":", 1);
-        runner_append(&out, &n, dir, strlen(dir));
-        runner_append(&out, &n, "/applications", 13);
+    char* dir;
+    char* saveptr;
+    for (dir = strtok_r(dirs, ":", &saveptr); dir; dir = strtok_r(nullptr, ":", &saveptr)) {
+        if (length)
+            runner_append(&out, &length, ":", 1);
+        runner_append(&out, &length, dir, strlen(dir));
+        runner_append(&out, &length, "/applications", 13);
     }
     free(dirs);
     if (!out)
-        runner_append(&out, &n, "", 0);
+        runner_append(&out, &length, "", 0);
     return out;
 }
 
-static char* runner_trim(char* s)
+static char* runner_trim(char* text)
 {
-    char* e;
 
-    while (*s == ' ' || *s == '\t')
-        s++;
-    e = s + strlen(s);
-    while (e > s && (e[-1] == ' ' || e[-1] == '\t'))
-        *--e = '\0';
-    return s;
+    while (*text == ' ' || *text == '\t')
+        text++;
+    char* end = text + strlen(text);
+    while (end > text && (end[-1] == ' ' || end[-1] == '\t'))
+        *--end = '\0';
+    return text;
 }
 
 /* how well a Name key fits the locale, 0 when it doesn't */
-static int runner_name_rank(const char* k)
+static int runner_name_rank(const char* key)
 {
     const char* lang = getenv("LC_ALL");
-    size_t n;
 
-    if (!strcmp(k, "Name"))
+    if (!strcmp(key, "Name"))
         return 1;
-    if (strncmp(k, "Name[", 5) || !*(k + 5))
+    if (strncmp(key, "Name[", 5) || !*(key + 5))
         return 0;
     if (!lang || !*lang)
         lang = getenv("LC_MESSAGES");
@@ -177,155 +173,154 @@ static int runner_name_rank(const char* k)
         lang = getenv("LANG");
     if (!lang)
         return 0;
-    k += 5;
-    n = strcspn(lang, ".@");
-    if (strlen(k) == n + 1 && !strncmp(k, lang, n))
+    key += 5;
+    size_t length = strcspn(lang, ".@");
+    if (strlen(key) == length + 1 && !strncmp(key, lang, length))
         return 3;
-    n = strcspn(lang, "_.@");
-    if (strlen(k) == n + 1 && !strncmp(k, lang, n))
+    length = strcspn(lang, "_.@");
+    if (strlen(key) == length + 1 && !strncmp(key, lang, length))
         return 2;
     return 0;
 }
 
 static void runner_read_app(const char* path, const char* id, int order)
 {
-    char line[4096], *k, *v, *eq;
-    int group = 0, app = 0, rank = 0, r;
-    RunnerApp a = {};
-    FILE* f;
-
-    if (!(f = fopen(path, "r")))
+    FILE* file = fopen(path, "r");
+    if (!file)
         return;
-    while (fgets(line, sizeof line, f)) {
+    int group = 0;
+    int is_application = 0;
+    int rank = 0;
+    RunnerApp app = {};
+    char line[4096];
+    while (fgets(line, sizeof line, file)) {
         line[strcspn(line, "\r\n")] = '\0';
         if (*line == '[') {
             group = !strcmp(line, "[Desktop Entry]");
             continue;
         }
-        if (!group || *line == '#' || !(eq = strchr(line, '=')))
+        char* equals = strchr(line, '=');
+        if (!group || *line == '#' || !equals)
             continue;
-        *eq = '\0';
-        k = runner_trim(line);
-        v = runner_trim(eq + 1);
-        if (!strcmp(k, "Type")) {
-            app = !strcmp(v, "Application");
-        } else if (!strcmp(k, "Exec") && !a.exec) {
-            a.exec = strdup(v);
-        } else if (!strcmp(k, "Icon") && !a.icon) {
-            a.icon = strdup(v);
-        } else if (!strcmp(k, "Terminal")) {
-            a.term = !strcmp(v, "true");
-        } else if (!strcmp(k, "NoDisplay") || !strcmp(k, "Hidden")) {
-            a.hide |= !strcmp(v, "true");
-        } else if ((r = runner_name_rank(k)) > rank) {
-            free(a.name);
-            a.name = strdup(v);
-            rank = r;
+        *equals = '\0';
+        const char* key = runner_trim(line);
+        const char* value = runner_trim(equals + 1);
+        if (!strcmp(key, "Type")) {
+            is_application = !strcmp(value, "Application");
+        } else if (!strcmp(key, "Exec") && !app.exec) {
+            app.exec = strdup(value);
+        } else if (!strcmp(key, "Icon") && !app.icon) {
+            app.icon = strdup(value);
+        } else if (!strcmp(key, "Terminal")) {
+            app.term = !strcmp(value, "true");
+        } else if (!strcmp(key, "NoDisplay") || !strcmp(key, "Hidden")) {
+            app.hide |= !strcmp(value, "true");
+        } else {
+            const int name_rank = runner_name_rank(key);
+            if (name_rank > rank) {
+                free(app.name);
+                app.name = strdup(value);
+                rank = name_rank;
+            }
         }
-        if (!strcmp(k, "Name") && !a.gname)
-            a.gname = strdup(v);
+        if (!strcmp(key, "Name") && !app.gname)
+            app.gname = strdup(value);
     }
-    fclose(f);
-    if (a.gname && a.name && !strcmp(a.gname, a.name)) {
-        free(a.gname);
-        a.gname = nullptr;
+    fclose(file);
+    if (app.gname && app.name && !strcmp(app.gname, app.name)) {
+        free(app.gname);
+        app.gname = nullptr;
     }
 
     /* kept even when hidden, it still hides the same id further down */
-    a.hide |= !app || !a.name || !a.exec || !*a.exec;
-    if (!(a.id = strdup(id)))
+    app.hide |= !is_application || !app.name || !app.exec || !*app.exec;
+    if (!(app.id = strdup(id)))
         util_die("strdup:");
-    a.order = order;
-    if (!(runner_apps =
-              realloc(runner_apps, (runner_app_count + 1) * sizeof(RunnerApp))))
+    app.order = order;
+    if (!(runner_apps = realloc(runner_apps, (runner_app_count + 1) * sizeof(RunnerApp))))
         util_die("realloc:");
-    runner_apps[runner_app_count++] = a;
+    runner_apps[runner_app_count++] = app;
 }
 
 /* desktop file ids take the path below applications/ with / turned to - */
 static void runner_scan_apps(const char* dir, const char* prefix, int* order)
 {
     char path[PATH_MAX], id[PATH_MAX];
-    struct dirent* e;
-    struct stat st;
-    size_t n;
-    DIR* d;
 
-    if (!(d = opendir(dir)))
+    DIR* directory = opendir(dir);
+    if (!directory)
         return;
-    while ((e = readdir(d))) {
-        if (e->d_name[0] == '.')
+    struct stat file_info;
+    for (struct dirent* entry; (entry = readdir(directory));) {
+        if (entry->d_name[0] == '.')
             continue;
-        if (snprintf(path, sizeof path, "%s/%s", dir, e->d_name) >=
-                (int)sizeof path ||
-            snprintf(id, sizeof id, "%s%s", prefix, e->d_name) >=
-                (int)sizeof id ||
-            stat(path, &st) != 0)
+        if (snprintf(path, sizeof path, "%s/%s", dir, entry->d_name) >= (int)sizeof path ||
+            snprintf(id, sizeof id, "%s%s", prefix, entry->d_name) >= (int)sizeof id ||
+            stat(path, &file_info) != 0)
             continue;
-        n = strlen(id);
-        if (S_ISDIR(st.st_mode) && n + 1 < sizeof id) {
+        const size_t id_length = strlen(id);
+        if (S_ISDIR(file_info.st_mode) && id_length + 1 < sizeof id) {
             strcat(id, "-");
             runner_scan_apps(path, id, order);
-        } else if (n > 8 && !strcmp(id + n - 8, ".desktop")) {
+        } else if (id_length > 8 && !strcmp(id + id_length - 8, ".desktop")) {
             runner_read_app(path, id, (*order)++);
         }
     }
-    closedir(d);
+    closedir(directory);
 }
 
-static int runner_by_id(const void* a, const void* b)
+static int runner_by_id(const void* first, const void* second)
 {
-    const RunnerApp *x = a, *y = b;
-    int c = strcmp(x->id, y->id);
+    const RunnerApp* left = first;
+    const RunnerApp* right = second;
+    const int order = strcmp(left->id, right->id);
 
-    return c ? c : x->order - y->order;
+    return order ? order : left->order - right->order;
 }
 
-static int runner_by_name(const void* a, const void* b)
+static int runner_by_name(const void* first, const void* second)
 {
-    return strcmp(((const RunnerApp*)a)->name, ((const RunnerApp*)b)->name);
+    return strcmp(((const RunnerApp*)first)->name, ((const RunnerApp*)second)->name);
 }
 
-static void runner_free_app(RunnerApp* a)
+static void runner_free_app(RunnerApp* app)
 {
-    free(a->id);
-    free(a->name);
-    free(a->gname);
-    free(a->exec);
-    free(a->icon);
-    if (a->img)
-        icon_destroy(a->img);
+    free(app->id);
+    free(app->name);
+    free(app->gname);
+    free(app->exec);
+    free(app->icon);
+    if (app->img)
+        icon_destroy(app->img);
 }
 
 void runner_build_apps(void)
 {
-    char *p = runner_app_dirs(), *dir, *saveptr;
-    int w = 0, order = 0;
+    char* dirs = runner_app_dirs();
+    int order = 0;
 
-    for (dir = strtok_r(p, ":", &saveptr); dir;
-         dir = strtok_r(nullptr, ":", &saveptr))
+    char* saveptr;
+    for (char* dir = strtok_r(dirs, ":", &saveptr); dir; dir = strtok_r(nullptr, ":", &saveptr))
         runner_scan_apps(dir, "", &order);
-    free(p);
+    free(dirs);
 
     /* the first of an id wins, then the hidden ones go */
     qsort(runner_apps, runner_app_count, sizeof(RunnerApp), runner_by_id);
+    int kept_count = 0;
     for (int i = 0; i < runner_app_count; i++) {
-        if ((w && !strcmp(runner_apps[w - 1].id, runner_apps[i].id)) ||
+        if ((kept_count && !strcmp(runner_apps[kept_count - 1].id, runner_apps[i].id)) ||
             runner_apps[i].hide)
             runner_free_app(&runner_apps[i]);
         else
-            runner_apps[w++] = runner_apps[i];
+            runner_apps[kept_count++] = runner_apps[i];
     }
-    runner_app_count = w;
+    runner_app_count = kept_count;
     qsort(runner_apps, runner_app_count, sizeof(RunnerApp), runner_by_name);
 
-    if (!(runner_app_names = realloc(
-              runner_app_names, MAX(runner_app_count, 1) * sizeof(char*))) ||
+    if (!(runner_app_names = realloc(runner_app_names, MAX(runner_app_count, 1) * sizeof(char*))) ||
         !(runner_app_generic_names =
-              realloc(runner_app_generic_names,
-                      MAX(runner_app_count, 1) * sizeof(char*))) ||
-        !(runner_app_use =
-              realloc(runner_app_use, MAX(runner_app_count, 1) * sizeof(int))))
+              realloc(runner_app_generic_names, MAX(runner_app_count, 1) * sizeof(char*))) ||
+        !(runner_app_use = realloc(runner_app_use, MAX(runner_app_count, 1) * sizeof(int))))
         util_die("realloc:");
     for (int i = 0; i < runner_app_count; i++) {
         runner_app_names[i] = runner_apps[i].name;
@@ -352,10 +347,7 @@ char* runner_app_exec(const char* exec)
     for (; *exec; exec++) {
         if (*exec == '\\' && exec[1]) {
             exec++;
-            *p++ = *exec == 's'   ? ' '
-                   : *exec == 'n' ? '\n'
-                   : *exec == 't' ? '\t'
-                                  : *exec;
+            *p++ = *exec == 's' ? ' ' : *exec == 'n' ? '\n' : *exec == 't' ? '\t' : *exec;
         } else if (*exec == '%' && exec[1]) {
             if (*++exec == '%')
                 *p++ = '%';
@@ -366,35 +358,33 @@ char* runner_app_exec(const char* exec)
     return out;
 }
 
-int runner_stale(char* p, char** cache, struct timespec* stamp)
+int runner_stale(char* paths, char** cache, struct timespec* stamp)
 {
     /* A directory's mtime moves whenever an entry is added or removed, so
      * stat()ing the PATH entries - a syscall each, no readdir - answers
      * whether a rescan would turn anything up. That keeps the cost of
      * noticing a newly installed program off every prompt but the one that
      * follows the install. */
-    char *dir, *saveptr;
-    struct stat st;
     struct timespec newest = { 0, 0 };
-    int moved = !*cache || strcmp(p, *cache);
+    int moved = !*cache || strcmp(paths, *cache);
 
     if (moved) {
         free(*cache);
-        if (!(*cache = strdup(p)))
+        if (!(*cache = strdup(paths)))
             util_die("strdup:");
     }
-    for (dir = strtok_r(p, ":", &saveptr); dir;
-         dir = strtok_r(nullptr, ":", &saveptr))
+    char* saveptr;
+    struct stat file_info;
+    for (char* dir = strtok_r(paths, ":", &saveptr); dir; dir = strtok_r(nullptr, ":", &saveptr))
         /* to the nanosecond: at second granularity an install and the removal
          * that follows it within the same second cancel out */
-        if (stat(dir, &st) == 0 && (st.st_mtim.tv_sec > newest.tv_sec ||
-                                    (st.st_mtim.tv_sec == newest.tv_sec &&
-                                     st.st_mtim.tv_nsec > newest.tv_nsec)))
-            newest = st.st_mtim;
-    free(p);
+        if (stat(dir, &file_info) == 0 && (file_info.st_mtim.tv_sec > newest.tv_sec ||
+                                           (file_info.st_mtim.tv_sec == newest.tv_sec &&
+                                            file_info.st_mtim.tv_nsec > newest.tv_nsec)))
+            newest = file_info.st_mtim;
+    free(paths);
 
-    if (!moved && newest.tv_sec == stamp->tv_sec &&
-        newest.tv_nsec == stamp->tv_nsec)
+    if (!moved && newest.tv_sec == stamp->tv_sec && newest.tv_nsec == stamp->tv_nsec)
         return 0;
     *stamp = newest;
     return 1;

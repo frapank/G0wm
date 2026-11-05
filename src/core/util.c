@@ -14,11 +14,11 @@
 
 void util_die(const char* fmt, ...)
 {
-    va_list ap;
 
-    va_start(ap, fmt);
-    vfprintf(stderr, fmt, ap);
-    va_end(ap);
+    va_list args;
+    va_start(args, fmt);
+    vfprintf(stderr, fmt, args);
+    va_end(args);
 
     if (fmt[0] && fmt[strlen(fmt) - 1] == ':') {
         fputc(' ', stderr);
@@ -30,13 +30,13 @@ void util_die(const char* fmt, ...)
     exit(1);
 }
 
-void* util_calloc(size_t nmemb, size_t size)
+void* util_calloc(size_t count, size_t size)
 {
-    void* p;
+    void* memory = calloc(count, size);
 
-    if (!(p = calloc(nmemb, size)))
+    if (!memory)
         util_die("calloc:");
-    return p;
+    return memory;
 }
 
 int util_set_nonblock(int fd)
@@ -54,28 +54,28 @@ int util_set_nonblock(int fd)
     return 0;
 }
 
-/* UTF-8 encodes cp into dst, 0 if it doesn't fit or isn't valid */
-size_t util_put_codepoint(char* dst, size_t room, unsigned long cp)
+/* UTF-8 encodes codepoint into out, 0 if it doesn't fit or isn't valid */
+size_t util_put_codepoint(char* out, size_t capacity, unsigned long codepoint)
 {
-    if (!cp || (cp >= 0xD800 && cp <= 0xDFFF) || cp > 0x10FFFF)
+    if (!codepoint || (codepoint >= 0xD800 && codepoint <= 0xDFFF) || codepoint > 0x10FFFF)
         return 0;
-    if (cp < 0x80 && room > 1) {
-        dst[0] = (char)cp;
+    if (codepoint < 0x80 && capacity > 1) {
+        out[0] = (char)codepoint;
         return 1;
-    } else if (cp < 0x800 && room > 2) {
-        dst[0] = (char)(0xC0 | cp >> 6);
-        dst[1] = (char)(0x80 | (cp & 0x3F));
+    } else if (codepoint < 0x800 && capacity > 2) {
+        out[0] = (char)(0xC0 | codepoint >> 6);
+        out[1] = (char)(0x80 | (codepoint & 0x3F));
         return 2;
-    } else if (cp < 0x10000 && room > 3) {
-        dst[0] = (char)(0xE0 | cp >> 12);
-        dst[1] = (char)(0x80 | (cp >> 6 & 0x3F));
-        dst[2] = (char)(0x80 | (cp & 0x3F));
+    } else if (codepoint < 0x10000 && capacity > 3) {
+        out[0] = (char)(0xE0 | codepoint >> 12);
+        out[1] = (char)(0x80 | (codepoint >> 6 & 0x3F));
+        out[2] = (char)(0x80 | (codepoint & 0x3F));
         return 3;
-    } else if (cp >= 0x10000 && room > 4) {
-        dst[0] = (char)(0xF0 | cp >> 18);
-        dst[1] = (char)(0x80 | (cp >> 12 & 0x3F));
-        dst[2] = (char)(0x80 | (cp >> 6 & 0x3F));
-        dst[3] = (char)(0x80 | (cp & 0x3F));
+    } else if (codepoint >= 0x10000 && capacity > 4) {
+        out[0] = (char)(0xF0 | codepoint >> 18);
+        out[1] = (char)(0x80 | (codepoint >> 12 & 0x3F));
+        out[2] = (char)(0x80 | (codepoint >> 6 & 0x3F));
+        out[3] = (char)(0x80 | (codepoint & 0x3F));
         return 4;
     }
     return 0;
