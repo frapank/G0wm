@@ -15,3 +15,12 @@ e4ac3677173d14663f05d5448adf5140cb028123
 
 # Split the sources into one directory per area
 2975a217e82100d710bd981c8d5061a0eabf46e7
+
+# Declare loop counters inside the for statement
+f87a18286d5a796a022d7238fb6861352e2d4c91
+
+# Use descriptive names and declare variables where they are used
+f0bb6ba20d77983750b1ec0efd7d4c06c08c256a
+
+# Reformat the tree with clang-format
+1b314a2ea4e2816239a6a94eef8b2a041dfa3e50
