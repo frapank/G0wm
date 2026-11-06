@@ -15,3 +15,12 @@ da54fa3e604701c5daeb53aed4c1a22e5f61ede3
 
 # Reorganize sources into subdirectories
 b0dd0ea94b09dcaf81c02167012743a7dbc4a445
+
+# Declare loop counters in for
+e99b7f17d28a1be40bfd7ac2368a91f642462abe
+
+# Rename variables and move declarations closer to use
+b296089b11000a5a383322a6681970c43d5b893d
+
+# Run clang-format
+dd02148602582a30744ca43cf109eb2c28ca048d
