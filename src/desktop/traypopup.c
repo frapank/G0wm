@@ -25,7 +25,7 @@ constexpr int TRAYPOPUP_ITEMS_MAX = 64;
 
 /* function declarations */
 static void traypopup_draw(void);
-static int traypopup_row(double lx, double ly);
+static int traypopup_row(double layout_x, double layout_y);
 
 /* variables */
 static struct {
@@ -46,9 +46,7 @@ static int traypopup_corner(void)
 {
     if (!corner_radius)
         return 0;
-    return MAX(
-        0,
-        MIN((int)corner_radius, MIN(traypopup_state.w, traypopup_state.h) / 2));
+    return MAX(0, MIN((int)corner_radius, MIN(traypopup_state.w, traypopup_state.h) / 2));
 }
 
 int traypopup_active(void)
@@ -79,46 +77,42 @@ void traypopup_dismiss(void)
 }
 
 /* Lays a level out at the cursor. A new menu cancels the one it replaces. */
-void traypopup_present(const char* const* labels, int n, Menu* menu)
+void traypopup_present(const char* const* labels, int label_count, Menu* menu)
 {
-    Monitor* m;
-    int i, tw, maxw = 0;
+    int max_width = 0;
 
     if (traypopup_state.menu && traypopup_state.menu != menu)
         traypopup_dismiss();
 
-    m = monitor_at(cursor->x, cursor->y);
-    if (!m || !m->drw || n < 1) {
+    Monitor* monitor = monitor_at(cursor->x, cursor->y);
+    if (!monitor || !monitor->drw || label_count < 1) {
         menu_pick(menu, -1);
         return;
     }
 
-    if (n > TRAYPOPUP_ITEMS_MAX)
-        n = TRAYPOPUP_ITEMS_MAX;
-    for (i = 0; i < n; i++) {
-        snprintf(traypopup_state.labels[i],
-                 sizeof(traypopup_state.labels[i]),
-                 "%s",
-                 labels[i]);
-        tw = (int)drwl_font_getwidth(m->drw, traypopup_state.labels[i]) +
-             m->lrpad;
-        if (tw > maxw)
-            maxw = tw;
+    if (label_count > TRAYPOPUP_ITEMS_MAX)
+        label_count = TRAYPOPUP_ITEMS_MAX;
+    for (int i = 0; i < label_count; i++) {
+        snprintf(traypopup_state.labels[i], sizeof(traypopup_state.labels[i]), "%s", labels[i]);
+        const int label_width =
+            (int)drwl_font_getwidth(monitor->drw, traypopup_state.labels[i]) + monitor->lrpad;
+        if (label_width > max_width)
+            max_width = label_width;
     }
 
     traypopup_state.menu = menu;
-    traypopup_state.n = n;
+    traypopup_state.n = label_count;
     traypopup_state.sel = -1;
     /* a decoration like any other, so border_width and corner_radius rule it
      * too */
     traypopup_state.bd = (int)corner_border_width();
 
     /* bar height rows, plus the border, which is drawn inside the box */
-    traypopup_state.w = MIN((int)((float)maxw / m->wlr_output->scale) + 1 +
-                                2 * traypopup_state.bd,
-                            m->m.width);
+    traypopup_state.w =
+        MIN((int)((float)max_width / monitor->wlr_output->scale) + 1 + 2 * traypopup_state.bd,
+            monitor->m.width);
     traypopup_state.h =
-        MIN(m->b.real_height * n + 2 * traypopup_state.bd, m->m.height);
+        MIN(monitor->b.real_height * label_count + 2 * traypopup_state.bd, monitor->m.height);
 
     if (traypopup_state.w <= 2 * traypopup_state.bd ||
         traypopup_state.h <= 2 * traypopup_state.bd) {
@@ -128,114 +122,99 @@ void traypopup_present(const char* const* labels, int n, Menu* menu)
     }
 
     /* dropped from the cursor, then pushed back inside the output */
-    traypopup_state.x =
-        MIN((int)cursor->x, m->m.x + m->m.width - traypopup_state.w);
-    traypopup_state.y =
-        MIN((int)cursor->y, m->m.y + m->m.height - traypopup_state.h);
-    traypopup_state.x = MAX(traypopup_state.x, m->m.x);
-    traypopup_state.y = MAX(traypopup_state.y, m->m.y);
+    traypopup_state.x = MIN((int)cursor->x, monitor->m.x + monitor->m.width - traypopup_state.w);
+    traypopup_state.y = MIN((int)cursor->y, monitor->m.y + monitor->m.height - traypopup_state.h);
+    traypopup_state.x = MAX(traypopup_state.x, monitor->m.x);
+    traypopup_state.y = MAX(traypopup_state.y, monitor->m.y);
 
     traypopup_draw();
 }
 
 static void traypopup_draw(void)
 {
-    Monitor* m;
-    Buffer* buf;
-    uint32_t border[3];
-    int i, rowh, rowsh, bw, bh, bd, r;
-
-    if (!traypopup_state.n ||
-        !(m = monitor_at(traypopup_state.x + traypopup_state.w / 2,
-                         traypopup_state.y)) ||
-        !m->drw)
+    if (!traypopup_state.n)
+        return;
+    Monitor* monitor = monitor_at(traypopup_state.x + traypopup_state.w / 2, traypopup_state.y);
+    if (!monitor || !monitor->drw)
         return;
 
-    bw = MAX(1, (int)((float)traypopup_state.w * m->wlr_output->scale));
-    bh = MAX(1, (int)((float)traypopup_state.h * m->wlr_output->scale));
+    int buffer_width = MAX(1, (int)((float)traypopup_state.w * monitor->wlr_output->scale));
+    int buffer_height = MAX(1, (int)((float)traypopup_state.h * monitor->wlr_output->scale));
     /* the border has to leave at least a pixel of row behind it */
-    bd = MIN((int)roundf((float)traypopup_state.bd * m->wlr_output->scale),
-             MIN(bw - 1, bh - traypopup_state.n) / 2);
-    bd = MAX(bd, 0);
-    rowsh = bh - 2 * bd;
-    rowh = MAX(1, rowsh / traypopup_state.n);
-    r = (int)roundf((float)traypopup_corner() * m->wlr_output->scale);
+    int border_inset = MIN((int)roundf((float)traypopup_state.bd * monitor->wlr_output->scale),
+                           MIN(buffer_width - 1, buffer_height - traypopup_state.n) / 2);
+    border_inset = MAX(border_inset, 0);
+    int rowsh = buffer_height - 2 * border_inset;
+    int rowh = MAX(1, rowsh / traypopup_state.n);
+    int rounding = (int)roundf((float)traypopup_corner() * monitor->wlr_output->scale);
 
     /* buffer_get() ignores the size asked for, so a resize empties the pool */
-    if (bw != traypopup_state.bufw || bh != traypopup_state.bufh) {
+    if (buffer_width != traypopup_state.bufw || buffer_height != traypopup_state.bufh) {
         buffer_pool_drop(traypopup_state.pool, LENGTH(traypopup_state.pool));
-        traypopup_state.bufw = bw;
-        traypopup_state.bufh = bh;
+        traypopup_state.bufw = buffer_width;
+        traypopup_state.bufh = buffer_height;
     }
-    if (!(buf = buffer_get(
-              traypopup_state.pool, LENGTH(traypopup_state.pool), bw, bh)))
+    Buffer* buffer =
+        buffer_get(traypopup_state.pool, LENGTH(traypopup_state.pool), buffer_width, buffer_height);
+    if (!buffer)
         return;
 
     if (!traypopup_state.scene &&
-        !(traypopup_state.scene =
-              wlr_scene_buffer_create(layers[LyrOverlay], nullptr))) {
-        wlr_buffer_unlock(&buf->base);
+        !(traypopup_state.scene = wlr_scene_buffer_create(layers[LyrOverlay], nullptr))) {
+        wlr_buffer_unlock(&buffer->base);
         return;
     }
 
-    drwl_setimage(m->drw, buf->image);
+    drwl_setimage(monitor->drw, buffer->image);
 
     /* the whole buffer in the border colour, rows laid over it inset */
-    border[ColFg] = border[ColBg] = border[ColBorder] =
+    uint32_t border_scheme[3];
+    border_scheme[ColFg] = border_scheme[ColBg] = border_scheme[ColBorder] =
         colors[SchemeNorm][ColBorder];
-    drwl_setscheme(m->drw, border);
-    drwl_rect(m->drw, 0, 0, (unsigned int)bw, (unsigned int)bh, 1, 1);
+    drwl_setscheme(monitor->drw, border_scheme);
+    drwl_rect(monitor->drw, 0, 0, (unsigned int)buffer_width, (unsigned int)buffer_height, 1, 1);
 
-    for (i = 0; i < traypopup_state.n; i++) {
-        drwl_setscheme(
-            m->drw, colors[i == traypopup_state.sel ? SchemeSel : SchemeNorm]);
-        drwl_text(m->drw,
-                  bd,
-                  bd + i * rowh,
-                  (unsigned int)(bw - 2 * bd),
+    for (int i = 0; i < traypopup_state.n; i++) {
+        drwl_setscheme(monitor->drw, colors[i == traypopup_state.sel ? SchemeSel : SchemeNorm]);
+        drwl_text(monitor->drw, border_inset, border_inset + i * rowh,
+                  (unsigned int)(buffer_width - 2 * border_inset),
                   /* the last row takes the rounding slack */
-                  (unsigned int)(i == traypopup_state.n - 1 ? rowsh - i * rowh
-                                                            : rowh),
-                  m->lrpad / 2,
-                  traypopup_state.labels[i],
-                  0);
+                  (unsigned int)(i == traypopup_state.n - 1 ? rowsh - i * rowh : rowh),
+                  monitor->lrpad / 2, traypopup_state.labels[i], 0);
     }
 
-    corner_cut(buf->data, bw, bh, r);
+    corner_cut(buffer->data, buffer_width, buffer_height, rounding);
 
-    wlr_scene_buffer_set_opacity(traypopup_state.scene,
-                                 opacity_decorations_current());
-    wlr_scene_buffer_set_dest_size(
-        traypopup_state.scene, traypopup_state.w, traypopup_state.h);
-    wlr_scene_node_set_position(
-        &traypopup_state.scene->node, traypopup_state.x, traypopup_state.y);
-    wlr_scene_buffer_set_buffer(traypopup_state.scene, &buf->base);
+    wlr_scene_buffer_set_opacity(traypopup_state.scene, opacity_decorations_current());
+    wlr_scene_buffer_set_dest_size(traypopup_state.scene, traypopup_state.w, traypopup_state.h);
+    wlr_scene_node_set_position(&traypopup_state.scene->node, traypopup_state.x, traypopup_state.y);
+    wlr_scene_buffer_set_buffer(traypopup_state.scene, &buffer->base);
     wlr_scene_node_raise_to_top(&traypopup_state.scene->node);
     wlr_scene_node_set_enabled(&traypopup_state.scene->node, 1);
-    wlr_buffer_unlock(&buf->base);
+    wlr_buffer_unlock(&buffer->base);
 }
 
 /* Which row the cursor is over, negative when it is outside the popup. */
-static int traypopup_row(double lx, double ly)
+static int traypopup_row(double layout_x, double layout_y)
 {
-    int rows = traypopup_state.h - 2 * traypopup_state.bd;
-    int row;
+    const int rows = traypopup_state.h - 2 * traypopup_state.bd;
 
-    if (!traypopup_state.n || lx < traypopup_state.x ||
-        lx >= traypopup_state.x + traypopup_state.w || ly < traypopup_state.y ||
-        ly >= traypopup_state.y + traypopup_state.h)
+    if (!traypopup_state.n || layout_x < traypopup_state.x ||
+        layout_x >= traypopup_state.x + traypopup_state.w || layout_y < traypopup_state.y ||
+        layout_y >= traypopup_state.y + traypopup_state.h)
         return -1;
 
     /* same inset as the drawing, so the border belongs to its own row */
-    row = rows > 0 ? (int)((ly - traypopup_state.y - traypopup_state.bd) *
-                           traypopup_state.n / rows)
-                   : 0;
+    const int row =
+        rows > 0
+            ? (int)((layout_y - traypopup_state.y - traypopup_state.bd) * traypopup_state.n / rows)
+            : 0;
     return MIN(MAX(row, 0), traypopup_state.n - 1);
 }
 
-void traypopup_motion(double lx, double ly)
+void traypopup_motion(double layout_x, double layout_y)
 {
-    int row = traypopup_row(lx, ly);
+    int row = traypopup_row(layout_x, layout_y);
 
     if (row == traypopup_state.sel)
         return;
@@ -244,10 +223,10 @@ void traypopup_motion(double lx, double ly)
 }
 
 /* A click on a row takes it, anywhere else puts the menu away. */
-void traypopup_click(double lx, double ly)
+void traypopup_click(double layout_x, double layout_y)
 {
     Menu* menu = traypopup_state.menu;
-    int row = traypopup_row(lx, ly);
+    int row = traypopup_row(layout_x, layout_y);
 
     if (!menu)
         return;

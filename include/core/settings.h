@@ -17,10 +17,8 @@
 #include "window/layout.h"
 
 /* 0xRRGGBBAA -> the float[4] wlroots wants (dwl issue #466) */
-#define COLOR(hex)                                                             \
-    { ((hex >> 24) & 0xFF) / 255.0f,                                           \
-      ((hex >> 16) & 0xFF) / 255.0f,                                           \
-      ((hex >> 8) & 0xFF) / 255.0f,                                            \
+#define COLOR(hex)                                                                                 \
+    { ((hex >> 24) & 0xFF) / 255.0f, ((hex >> 16) & 0xFF) / 255.0f, ((hex >> 8) & 0xFF) / 255.0f,  \
       (hex & 0xFF) / 255.0f }
 #define TAGMASK ((1u << tag_count) - 1)
 
@@ -40,16 +38,9 @@ enum {
     SchemeRunnerIcon,
     NumSchemes
 }; /* color schemes */
-enum { CornerNormal, CornerSquircle }; /* corner curve */
-enum { OpacityNormal, OpacityBlur };   /* opacity_type */
-enum {
-    SwipeLeft,
-    SwipeRight,
-    SwipeUp,
-    SwipeDown,
-    PinchIn,
-    PinchOut
-}; /* gesture motions */
+enum { CornerNormal, CornerSquircle };                                 /* corner curve */
+enum { OpacityNormal, OpacityBlur };                                   /* opacity_type */
+enum { SwipeLeft, SwipeRight, SwipeUp, SwipeDown, PinchIn, PinchOut }; /* gesture motions */
 enum { RunnerIconsNone, RunnerIconsSelected, RunnerIconsAll };
 enum { BarStatusFocus, BarStatusAll, BarStatusMain };
 enum : unsigned int {
@@ -62,10 +53,7 @@ enum : unsigned int {
     ClkTray,
     ClkWinTitle /* a window's title bar, only for the wheel */
 }; /* clicks */
-enum : unsigned int {
-    WheelUp = 0x10000,
-    WheelDown
-}; /* Button.button for a wheel notch */
+enum : unsigned int { WheelUp = 0x10000, WheelDown }; /* Button.button for a wheel notch */
 
 typedef struct {
     unsigned int click;

@@ -39,8 +39,7 @@
 
 /* function declarations */
 static void input_create_pointer(struct wlr_pointer* pointer);
-static void input_handle_drag_icon_destroy(struct wl_listener* listener,
-                                           void* data);
+static void input_handle_drag_icon_destroy(struct wl_listener* listener, void*);
 
 /* function implementations */
 static void input_create_pointer(struct wlr_pointer* pointer)
@@ -61,37 +60,31 @@ static void input_create_pointer(struct wlr_pointer* pointer)
 
         if (libinput_device_config_scroll_has_natural_scroll(device))
             libinput_device_config_scroll_set_natural_scroll_enabled(
-                device,
-                touchpad ? touchpad_natural_scrolling : natural_scrolling);
+                device, touchpad ? touchpad_natural_scrolling : natural_scrolling);
 
         if (libinput_device_config_dwt_is_available(device))
-            libinput_device_config_dwt_set_enabled(device,
-                                                   disable_while_typing);
+            libinput_device_config_dwt_set_enabled(device, disable_while_typing);
 
         if (libinput_device_config_left_handed_is_available(device))
             libinput_device_config_left_handed_set(device, left_handed);
 
         if (libinput_device_config_middle_emulation_is_available(device))
-            libinput_device_config_middle_emulation_set_enabled(
-                device, middle_button_emulation);
+            libinput_device_config_middle_emulation_set_enabled(device, middle_button_emulation);
 
-        if (libinput_device_config_scroll_get_methods(device) !=
-            LIBINPUT_CONFIG_SCROLL_NO_SCROLL)
+        if (libinput_device_config_scroll_get_methods(device) != LIBINPUT_CONFIG_SCROLL_NO_SCROLL)
             libinput_device_config_scroll_set_method(device, scroll_method);
 
-        if (libinput_device_config_click_get_methods(device) !=
-            LIBINPUT_CONFIG_CLICK_METHOD_NONE)
+        if (libinput_device_config_click_get_methods(device) != LIBINPUT_CONFIG_CLICK_METHOD_NONE)
             libinput_device_config_click_set_method(device, click_method);
 
         if (libinput_device_config_send_events_get_modes(device))
-            libinput_device_config_send_events_set_mode(device,
-                                                        send_events_mode);
+            libinput_device_config_send_events_set_mode(device, send_events_mode);
 
         if (libinput_device_config_accel_is_available(device)) {
-            libinput_device_config_accel_set_profile(
-                device, touchpad ? touchpad_accel_profile : accel_profile);
-            libinput_device_config_accel_set_speed(
-                device, touchpad ? touchpad_accel_speed : accel_speed);
+            libinput_device_config_accel_set_profile(device, touchpad ? touchpad_accel_profile
+                                                                      : accel_profile);
+            libinput_device_config_accel_set_speed(device,
+                                                   touchpad ? touchpad_accel_speed : accel_speed);
         }
     }
 
@@ -157,11 +150,9 @@ void input_handle_request_start_drag(struct wl_listener*, void* data)
     struct wlr_seat_request_start_drag_event* event = data;
     struct wlr_touch_point* point;
 
-    if (wlr_seat_validate_pointer_grab_serial(
-            seat, event->origin, event->serial))
+    if (wlr_seat_validate_pointer_grab_serial(seat, event->origin, event->serial))
         wlr_seat_start_pointer_drag(seat, event->drag, event->serial);
-    else if (wlr_seat_validate_touch_grab_serial(
-                 seat, event->origin, event->serial, &point))
+    else if (wlr_seat_validate_touch_grab_serial(seat, event->origin, event->serial, &point))
         wlr_seat_start_touch_drag(seat, event->drag, event->serial, point);
     else
         wlr_data_source_destroy(event->drag->source);

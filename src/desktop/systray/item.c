@@ -49,9 +49,10 @@ static const uint8_t* item_extract_image(DBusMessageIter* iter,
                                          dbus_int32_t* height,
                                          int* size)
 {
-    DBusMessageIter vals, bytes;
-    const uint8_t* buf;
-    int n;
+    DBusMessageIter vals;
+    DBusMessageIter bytes;
+    const uint8_t* pixels;
+    int expected_size;
 
     dbus_message_iter_recurse(iter, &vals);
     if (dbus_message_iter_get_arg_type(&vals) != DBUS_TYPE_INT32)
@@ -69,12 +70,12 @@ static const uint8_t* item_extract_image(DBusMessageIter* iter,
     dbus_message_iter_recurse(&vals, &bytes);
     if (dbus_message_iter_get_arg_type(&bytes) != DBUS_TYPE_BYTE)
         goto fail;
-    dbus_message_iter_get_fixed_array(&bytes, &buf, size);
-    if (*size == 0 || *width <= 0 || *height <= 0 ||
-        ckd_mul(&n, *width, *height) || ckd_mul(&n, n, 4) || n != *size)
+    dbus_message_iter_get_fixed_array(&bytes, &pixels, size);
+    if (*size == 0 || *width <= 0 || *height <= 0 || ckd_mul(&expected_size, *width, *height) ||
+        ckd_mul(&expected_size, expected_size, 4) || expected_size != *size)
         goto fail;
 
-    return buf;
+    return pixels;
 
 fail:
     return nullptr;
@@ -82,10 +83,10 @@ fail:
 
 static int item_select_image(DBusMessageIter* iter, int target_width)
 {
-    DBusMessageIter vals;
-    dbus_int32_t cur_width;
     int i = 0;
 
+    DBusMessageIter vals;
+    dbus_int32_t cur_width;
     do {
         dbus_message_iter_recurse(iter, &vals);
         if (dbus_message_iter_get_arg_type(&vals) != DBUS_TYPE_INT32)
@@ -105,12 +106,12 @@ static int item_select_image(DBusMessageIter* iter, int target_width)
  * Copy of the string a property Get replied with, NULL if it has none. The
  * reply is consumed either way. `what` names it in the error, NULL is quiet.
  */
-static char* item_take_string_property(DBusPendingCall* pending,
-                                       const char* what)
+static char* item_take_string_property(DBusPendingCall* pending, const char* what)
 {
     DBusError err = DBUS_ERROR_INIT;
     DBusMessage* reply = nullptr;
-    DBusMessageIter iter, val;
+    DBusMessageIter iter;
+    DBusMessageIter val;
     char* dup = nullptr;
     const char* str;
     int type;
@@ -121,11 +122,7 @@ static char* item_take_string_property(DBusPendingCall* pending,
 
     if (dbus_set_error_from_message(&err, reply)) {
         if (what)
-            fprintf(stderr,
-                    "DBus Error: %s - %s: Couldn't get %s\n",
-                    err.name,
-                    err.message,
-                    what);
+            fprintf(stderr, "DBus Error: %s - %s: Couldn't get %s\n", err.name, err.message, what);
         goto out;
     }
 
@@ -162,16 +159,12 @@ static void item_handle_icon_name_ready(DBusPendingCall* pending, void* data)
 {
     Item* item = data;
 
-    Icon* icon;
-    char* name;
-
-    name = item_take_string_property(pending, nullptr);
+    char* name = item_take_string_property(pending, nullptr);
     if (!name)
         return;
 
-    icon = icon_create_from_name(name,
-                                 item->icon_themepath,
-                                 watcher_get_icon_size(item_get_watcher(item)));
+    Icon* icon = icon_create_from_name(name, item->icon_themepath,
+                                       watcher_get_icon_size(item_get_watcher(item)));
     free(name);
     if (!icon)
         return;
@@ -190,13 +183,8 @@ static void item_handle_theme_path_ready(DBusPendingCall* pending, void* data)
     free(item->icon_themepath);
     item->icon_themepath = item_take_string_property(pending, nullptr);
 
-    helpers_request_property(item_get_connection(item),
-                             item->busname,
-                             item->busobj,
-                             "IconName",
-                             SNI_IFACE,
-                             item_handle_icon_name_ready,
-                             item);
+    helpers_request_property(item_get_connection(item), item->busname, item->busobj, "IconName",
+                             SNI_IFACE, item_handle_icon_name_ready, item);
 }
 
 /*
@@ -208,9 +196,7 @@ static void item_handle_id_ready(DBusPendingCall* pending, void* data)
 {
     Item* item = data;
 
-    char* id;
-
-    id = item_take_string_property(pending, "appid");
+    char* id = item_take_string_property(pending, "appid");
     if (!id)
         return;
 
@@ -227,11 +213,16 @@ static void item_handle_pixmap_ready(DBusPendingCall* pending, void* data)
     Item* item = data;
 
     DBusMessage* reply = nullptr;
-    DBusMessageIter iter, array, select, strct;
+    DBusMessageIter iter;
+    DBusMessageIter array;
+    DBusMessageIter select;
+    DBusMessageIter strct;
     Icon* icon = nullptr;
     Watcher* watcher;
-    dbus_int32_t width, height;
-    int selected_index, size;
+    dbus_int32_t width;
+    dbus_int32_t height;
+    int selected_index;
+    int size;
     const uint8_t* buf;
 
     watcher = item_get_watcher(item);
@@ -269,9 +260,7 @@ static void item_handle_pixmap_ready(DBusPendingCall* pending, void* data)
         item->icon = icon;
         watcher_update_trays(watcher);
 
-    } else if (memcmp(item->icon->buf_orig,
-                      buf,
-                      MIN(item->icon->size_orig, (size_t)size)) != 0) {
+    } else if (memcmp(item->icon->buf_orig, buf, MIN(item->icon->size_orig, (size_t)size)) != 0) {
         /* New icon */
         icon_destroy(item->icon);
         item->icon = nullptr;
@@ -298,29 +287,19 @@ fail:
         dbus_pending_call_unref(pending);
 
     /* no pixmap, but the item may still name a themed icon like Steam does */
-    helpers_request_property(item_get_connection(item),
-                             item->busname,
-                             item->busobj,
-                             "IconThemePath",
-                             SNI_IFACE,
-                             item_handle_theme_path_ready,
-                             item);
+    helpers_request_property(item_get_connection(item), item->busname, item->busobj,
+                             "IconThemePath", SNI_IFACE, item_handle_theme_path_ready, item);
 }
 
 static DBusHandlerResult item_handle_new_icon(Item* item,
-                                              DBusConnection* conn,
-                                              DBusMessage* msg)
+                                              DBusConnection* connection,
+                                              DBusMessage* message)
 {
-    const char* sender = dbus_message_get_sender(msg);
+    const char* sender = dbus_message_get_sender(message);
 
     if (sender && strcmp(sender, item->busname) == 0) {
-        helpers_request_property(conn,
-                                 item->busname,
-                                 item->busobj,
-                                 "IconPixmap",
-                                 SNI_IFACE,
-                                 item_handle_pixmap_ready,
-                                 item);
+        helpers_request_property(connection, item->busname, item->busobj, "IconPixmap", SNI_IFACE,
+                                 item_handle_pixmap_ready, item);
 
         return DBUS_HANDLER_RESULT_HANDLED;
 
@@ -329,28 +308,27 @@ static DBusHandlerResult item_handle_new_icon(Item* item,
     }
 }
 
-static DBusHandlerResult item_filter_bus(DBusConnection* conn,
-                                         DBusMessage* msg,
+static DBusHandlerResult item_filter_bus(DBusConnection* connection,
+                                         DBusMessage* message,
                                          void* data)
 {
     Item* item = data;
 
-    if (dbus_message_is_signal(msg, SNI_IFACE, "NewIcon"))
-        return item_handle_new_icon(item, conn, msg);
+    if (dbus_message_is_signal(message, SNI_IFACE, "NewIcon"))
+        return item_handle_new_icon(item, connection, message);
     else
         return DBUS_HANDLER_RESULT_NOT_YET_HANDLED;
 }
 
 Item* item_create(const char* busname, const char* busobj, Watcher* watcher)
 {
-    DBusConnection* conn;
+    DBusConnection* connection;
     Item* item;
     char* busname_dup = nullptr;
     char* busobj_dup = nullptr;
     char match_rule[RULEBSIZE];
 
-    if (snprintf(match_rule, sizeof(match_rule), item_match_string, busname) >=
-        RULEBSIZE)
+    if (snprintf(match_rule, sizeof(match_rule), item_match_string, busname) >= RULEBSIZE)
         return nullptr;
 
     item = calloc(1, sizeof(Item));
@@ -359,33 +337,23 @@ Item* item_create(const char* busname, const char* busobj, Watcher* watcher)
     if (!item || !busname_dup || !busobj_dup)
         goto fail;
 
-    conn = watcher->conn;
+    connection = watcher->conn;
     item->busname = busname_dup;
     item->busobj = busobj_dup;
     item->watcher = watcher;
 
-    if (!dbus_connection_add_filter(conn, item_filter_bus, item, nullptr))
+    if (!dbus_connection_add_filter(connection, item_filter_bus, item, nullptr))
         goto fail;
-    dbus_bus_add_match(conn, match_rule, nullptr);
+    dbus_bus_add_match(connection, match_rule, nullptr);
 
-    helpers_request_property(conn,
-                             busname,
-                             busobj,
-                             "IconPixmap",
-                             SNI_IFACE,
-                             item_handle_pixmap_ready,
+    helpers_request_property(connection, busname, busobj, "IconPixmap", SNI_IFACE,
+                             item_handle_pixmap_ready, item);
+
+    helpers_request_property(connection, busname, busobj, "Id", SNI_IFACE, item_handle_id_ready,
                              item);
 
-    helpers_request_property(
-        conn, busname, busobj, "Id", SNI_IFACE, item_handle_id_ready, item);
-
-    helpers_request_property(conn,
-                             busname,
-                             busobj,
-                             "Menu",
-                             SNI_IFACE,
-                             item_handle_menu_path_ready,
-                             item);
+    helpers_request_property(connection, busname, busobj, "Menu", SNI_IFACE,
+                             item_handle_menu_path_ready, item);
 
     return item;
 
@@ -398,16 +366,13 @@ fail:
 
 void item_destroy(Item* item)
 {
-    DBusConnection* conn;
+
+    DBusConnection* connection = item_get_connection(item);
+
     char match_rule[RULEBSIZE];
-
-    conn = item_get_connection(item);
-
-    if (snprintf(
-            match_rule, sizeof(match_rule), item_match_string, item->busname) <
-        RULEBSIZE) {
-        dbus_bus_remove_match(conn, match_rule, nullptr);
-        dbus_connection_remove_filter(conn, item_filter_bus, item);
+    if (snprintf(match_rule, sizeof(match_rule), item_match_string, item->busname) < RULEBSIZE) {
+        dbus_bus_remove_match(connection, match_rule, nullptr);
+        dbus_connection_remove_filter(connection, item_filter_bus, item);
     }
     if (item->icon)
         icon_destroy(item->icon);
@@ -421,24 +386,25 @@ void item_destroy(Item* item)
 
 void item_activate(Item* item)
 {
-    DBusConnection* conn;
-    DBusMessage* msg = nullptr;
-    dbus_int32_t x = 0, y = 0;
+    DBusConnection* connection;
+    DBusMessage* message = nullptr;
+    dbus_int32_t x = 0;
+    dbus_int32_t y = 0;
 
-    conn = item_get_connection(item);
+    connection = item_get_connection(item);
 
-    if (!(msg = dbus_message_new_method_call(
-              item->busname, item->busobj, SNI_IFACE, "Activate")) ||
-        !dbus_message_append_args(
-            msg, DBUS_TYPE_INT32, &x, DBUS_TYPE_INT32, &y, DBUS_TYPE_INVALID) ||
-        !dbus_connection_send_with_reply(conn, msg, nullptr, -1)) {
+    if (!(message =
+              dbus_message_new_method_call(item->busname, item->busobj, SNI_IFACE, "Activate")) ||
+        !dbus_message_append_args(message, DBUS_TYPE_INT32, &x, DBUS_TYPE_INT32, &y,
+                                  DBUS_TYPE_INVALID) ||
+        !dbus_connection_send_with_reply(connection, message, nullptr, -1)) {
         goto fail;
     }
 
-    dbus_message_unref(msg);
+    dbus_message_unref(message);
     return;
 
 fail:
-    if (msg)
-        dbus_message_unref(msg);
+    if (message)
+        dbus_message_unref(message);
 }

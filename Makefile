@@ -45,7 +45,7 @@ export MESS RESET RED GREEN YELLOW MAGENTA CYAN
 G0WMCPPFLAGS = -I$(INCDIR) -isystem $(EXTDIR) -I$(GENDIR) \
 	-DWLR_USE_UNSTABLE -D_POSIX_C_SOURCE=200809L \
 	-DVERSION=\"$(VERSION)\" $(XWAYLAND) $(BACKGROUND) -MMD -MP
-G0WMDEVCFLAGS = -g -Wpedantic -Wall -Wextra -Wdeclaration-after-statement \
+G0WMDEVCFLAGS = -g -Wpedantic -Wall -Wextra \
 	-Wshadow -Wunused-macros -Werror=strict-prototypes \
 	-Werror=implicit -Werror=return-type -Werror=incompatible-pointer-types \
 	-Wfloat-conversion

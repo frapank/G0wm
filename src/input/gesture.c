@@ -49,24 +49,19 @@ static struct {
 /* function implementations */
 static int input_gesture_bound(int pinch, uint32_t fingers)
 {
-    const Gesture* g;
-
     if (lock_active)
         return 0;
-    for (g = gestures; g < gestures + gesture_count; g++)
-        if ((g->motion >= PinchIn) == pinch && g->fingers == fingers)
+    for (const Gesture* gesture = gestures; gesture < gestures + gesture_count; gesture++)
+        if ((gesture->motion >= PinchIn) == pinch && gesture->fingers == fingers)
             return 1;
     return 0;
 }
 
 static void input_gesture_run(unsigned int motion)
 {
-    const Gesture* g;
-
-    for (g = gestures; g < gestures + gesture_count; g++)
-        if (g->motion == motion && g->fingers == input_gesture.fingers &&
-            g->func)
-            g->func(&g->arg);
+    for (const Gesture* gesture = gestures; gesture < gestures + gesture_count; gesture++)
+        if (gesture->motion == motion && gesture->fingers == input_gesture.fingers && gesture->func)
+            gesture->func(&gesture->arg);
 }
 
 void input_handle_swipe_begin(struct wl_listener*, void* data)
@@ -79,8 +74,8 @@ void input_handle_swipe_begin(struct wl_listener*, void* data)
         input_gesture.dx = input_gesture.dy = 0;
         return;
     }
-    wlr_pointer_gestures_v1_send_swipe_begin(
-        pointer_gestures, seat, event->time_msec, event->fingers);
+    wlr_pointer_gestures_v1_send_swipe_begin(pointer_gestures, seat, event->time_msec,
+                                             event->fingers);
 }
 
 void input_handle_swipe_update(struct wl_listener*, void* data)
@@ -93,8 +88,8 @@ void input_handle_swipe_update(struct wl_listener*, void* data)
         input_gesture.dy += event->dy;
         return;
     }
-    wlr_pointer_gestures_v1_send_swipe_update(
-        pointer_gestures, seat, event->time_msec, event->dx, event->dy);
+    wlr_pointer_gestures_v1_send_swipe_update(pointer_gestures, seat, event->time_msec, event->dx,
+                                              event->dy);
 }
 
 void input_handle_swipe_end(struct wl_listener*, void* data)
@@ -102,8 +97,8 @@ void input_handle_swipe_end(struct wl_listener*, void* data)
     struct wlr_pointer_swipe_end_event* event = data;
 
     if (!input_gesture.ours) {
-        wlr_pointer_gestures_v1_send_swipe_end(
-            pointer_gestures, seat, event->time_msec, event->cancelled);
+        wlr_pointer_gestures_v1_send_swipe_end(pointer_gestures, seat, event->time_msec,
+                                               event->cancelled);
         return;
     }
     input_gesture.ours = 0;
@@ -121,13 +116,12 @@ void input_handle_pinch_begin(struct wl_listener*, void* data)
     struct wlr_pointer_pinch_begin_event* event = data;
     struct wlr_keyboard* keyboard = wlr_seat_get_keyboard(seat);
     uint32_t mods = keyboard ? wlr_keyboard_get_modifiers(keyboard) : 0;
-    Monitor* m;
 
     wlr_idle_notifier_v1_notify_activity(idle_notifier, seat);
-    if (!lock_active && pinch_zoom_modifier &&
-        CLEANMASK(mods) == CLEANMASK(pinch_zoom_modifier) &&
-        (m = monitor_at(cursor->x, cursor->y))) {
-        input_gesture.zoom = m->zoom;
+    Monitor* monitor;
+    if (!lock_active && pinch_zoom_modifier && CLEANMASK(mods) == CLEANMASK(pinch_zoom_modifier) &&
+        (monitor = monitor_at(cursor->x, cursor->y))) {
+        input_gesture.zoom = monitor->zoom;
         return;
     }
     if ((input_gesture.ours = input_gesture_bound(1, event->fingers))) {
@@ -135,33 +129,28 @@ void input_handle_pinch_begin(struct wl_listener*, void* data)
         input_gesture.scale = 1.0;
         return;
     }
-    wlr_pointer_gestures_v1_send_pinch_begin(
-        pointer_gestures, seat, event->time_msec, event->fingers);
+    wlr_pointer_gestures_v1_send_pinch_begin(pointer_gestures, seat, event->time_msec,
+                                             event->fingers);
 }
 
 void input_handle_pinch_update(struct wl_listener*, void* data)
 {
     struct wlr_pointer_pinch_update_event* event = data;
-    Monitor* m;
 
     wlr_idle_notifier_v1_notify_activity(idle_notifier, seat);
+    Monitor* monitor;
     if (input_gesture.zoom) {
         /* the zoom follows the fingers */
-        if ((m = monitor_at(cursor->x, cursor->y)))
-            magnifier_zoom(m, input_gesture.zoom * (float)event->scale);
+        if ((monitor = monitor_at(cursor->x, cursor->y)))
+            magnifier_zoom(monitor, input_gesture.zoom * (float)event->scale);
         return;
     }
     if (input_gesture.ours) {
         input_gesture.scale = event->scale;
         return;
     }
-    wlr_pointer_gestures_v1_send_pinch_update(pointer_gestures,
-                                              seat,
-                                              event->time_msec,
-                                              event->dx,
-                                              event->dy,
-                                              event->scale,
-                                              event->rotation);
+    wlr_pointer_gestures_v1_send_pinch_update(pointer_gestures, seat, event->time_msec, event->dx,
+                                              event->dy, event->scale, event->rotation);
 }
 
 void input_handle_pinch_end(struct wl_listener*, void* data)
@@ -173,8 +162,8 @@ void input_handle_pinch_end(struct wl_listener*, void* data)
         return;
     }
     if (!input_gesture.ours) {
-        wlr_pointer_gestures_v1_send_pinch_end(
-            pointer_gestures, seat, event->time_msec, event->cancelled);
+        wlr_pointer_gestures_v1_send_pinch_end(pointer_gestures, seat, event->time_msec,
+                                               event->cancelled);
         return;
     }
     input_gesture.ours = 0;
@@ -191,14 +180,14 @@ void input_handle_hold_begin(struct wl_listener*, void* data)
     struct wlr_pointer_hold_begin_event* event = data;
 
     wlr_idle_notifier_v1_notify_activity(idle_notifier, seat);
-    wlr_pointer_gestures_v1_send_hold_begin(
-        pointer_gestures, seat, event->time_msec, event->fingers);
+    wlr_pointer_gestures_v1_send_hold_begin(pointer_gestures, seat, event->time_msec,
+                                            event->fingers);
 }
 
 void input_handle_hold_end(struct wl_listener*, void* data)
 {
     struct wlr_pointer_hold_end_event* event = data;
 
-    wlr_pointer_gestures_v1_send_hold_end(
-        pointer_gestures, seat, event->time_msec, event->cancelled);
+    wlr_pointer_gestures_v1_send_hold_end(pointer_gestures, seat, event->time_msec,
+                                          event->cancelled);
 }

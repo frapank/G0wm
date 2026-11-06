@@ -9,11 +9,11 @@
 
 #include "core/g0wm.h"
 
-int bar_on_title_bar(Client* c, double x, double y);
-void bar_place_title_bar(Client* c);
-int bar_title_click(Client* c, double x, double y);
-int bar_title_height(Client* c);
-void bar_title_hover(Client* c, double x, double y);
-void bar_toggle_title_bars(const Arg* arg);
+int bar_on_title_bar(Client* client, double pointer_x, double pointer_y);
+void bar_place_title_bar(Client* client);
+int bar_title_click(Client* client, double pointer_x, double pointer_y);
+int bar_title_height(Client* client);
+void bar_title_hover(Client* client, double pointer_x, double pointer_y);
+void bar_toggle_title_bars(const Arg*);
 
 #endif
