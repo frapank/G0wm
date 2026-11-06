@@ -10,9 +10,9 @@
 
 int traypopup_active(void);
 void traypopup_cleanup(void);
-void traypopup_click(double lx, double ly);
+void traypopup_click(double layout_x, double layout_y);
 void traypopup_dismiss(void);
-void traypopup_motion(double lx, double ly);
-void traypopup_present(const char* const* labels, int n, Menu* menu);
+void traypopup_motion(double layout_x, double layout_y);
+void traypopup_present(const char* const* labels, int label_count, Menu* menu);
 
 #endif

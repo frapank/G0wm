@@ -20,192 +20,193 @@
  * reach a shell or a file, so a malformed expression can only fail to
  * parse, never do anything. */
 struct RunnerCalcState {
-    const char* s;
+    const char* cursor;
     int depth;
     int failed;
 };
 
 /* function declarations */
-static double runner_calc_expr(struct RunnerCalcState* c);
+static double runner_calc_expr(struct RunnerCalcState* state);
 
 /* function implementations */
 /* Every recursive call goes through here first, so one depth check bounds
  * atom, term and expr together; runner_buffer is 256 bytes, so even fully
  * parenthesized input like "(((((1)))))" cannot come close to this limit. */
-static int runner_calc_enter(struct RunnerCalcState* c)
+static int runner_calc_enter(struct RunnerCalcState* state)
 {
-    if (++c->depth > 64) {
-        c->failed = 1;
+    if (++state->depth > 64) {
+        state->failed = 1;
         return 0;
     }
     return 1;
 }
 
-static double runner_calc_number(struct RunnerCalcState* c)
+static double runner_calc_number(struct RunnerCalcState* state)
 {
-    double v = 0, frac = 0.1;
-    int any = 0;
+    double value = 0;
+    double frac = 0.1;
+    int has_digits = 0;
 
-    while (*c->s >= '0' && *c->s <= '9') {
-        v = v * 10 + (*c->s - '0');
-        c->s++;
-        any = 1;
+    while (*state->cursor >= '0' && *state->cursor <= '9') {
+        value = value * 10 + (*state->cursor - '0');
+        state->cursor++;
+        has_digits = 1;
     }
-    if (*c->s == '.') {
-        c->s++;
-        while (*c->s >= '0' && *c->s <= '9') {
-            v += (*c->s - '0') * frac;
+    if (*state->cursor == '.') {
+        state->cursor++;
+        while (*state->cursor >= '0' && *state->cursor <= '9') {
+            value += (*state->cursor - '0') * frac;
             frac *= 0.1;
-            c->s++;
-            any = 1;
+            state->cursor++;
+            has_digits = 1;
         }
     }
-    if (!any)
-        c->failed = 1;
-    return v;
+    if (!has_digits)
+        state->failed = 1;
+    return value;
 }
 
-static double runner_calc_atom(struct RunnerCalcState* c)
+static double runner_calc_atom(struct RunnerCalcState* state)
 {
-    double v;
-
-    if (!runner_calc_enter(c))
+    if (!runner_calc_enter(state))
         return 0;
-    while (*c->s == ' ' || *c->s == '\t')
-        c->s++;
-    if (*c->s == '-') {
-        c->s++;
-        v = -runner_calc_atom(c);
-    } else if (*c->s == '+') {
-        c->s++;
-        v = runner_calc_atom(c);
-    } else if (*c->s == '(') {
-        c->s++;
-        v = runner_calc_expr(c);
-        while (*c->s == ' ' || *c->s == '\t')
-            c->s++;
-        if (*c->s != ')')
-            c->failed = 1;
+    while (*state->cursor == ' ' || *state->cursor == '\t')
+        state->cursor++;
+    double value;
+    if (*state->cursor == '-') {
+        state->cursor++;
+        value = -runner_calc_atom(state);
+    } else if (*state->cursor == '+') {
+        state->cursor++;
+        value = runner_calc_atom(state);
+    } else if (*state->cursor == '(') {
+        state->cursor++;
+        value = runner_calc_expr(state);
+        while (*state->cursor == ' ' || *state->cursor == '\t')
+            state->cursor++;
+        if (*state->cursor != ')')
+            state->failed = 1;
         else
-            c->s++;
+            state->cursor++;
     } else {
-        v = runner_calc_number(c);
+        value = runner_calc_number(state);
     }
-    c->depth--;
-    return v;
+    state->depth--;
+    return value;
 }
 
-static double runner_calc_term(struct RunnerCalcState* c)
+static double runner_calc_term(struct RunnerCalcState* state)
 {
-    double v = runner_calc_atom(c), rhs;
+    double value = runner_calc_atom(state);
 
     for (;;) {
-        while (*c->s == ' ' || *c->s == '\t')
-            c->s++;
-        if (*c->s == '*') {
-            c->s++;
-            v *= runner_calc_atom(c);
-        } else if (*c->s == '/') {
-            c->s++;
-            rhs = runner_calc_atom(c);
+        while (*state->cursor == ' ' || *state->cursor == '\t')
+            state->cursor++;
+        if (*state->cursor == '*') {
+            state->cursor++;
+            value *= runner_calc_atom(state);
+        } else if (*state->cursor == '/') {
+            state->cursor++;
+            const double rhs = runner_calc_atom(state);
             if (rhs == 0.0) {
-                c->failed = 1;
+                state->failed = 1;
                 return 0;
             }
-            v /= rhs;
-        } else if (*c->s == '%') {
-            c->s++;
-            rhs = runner_calc_atom(c);
+            value /= rhs;
+        } else if (*state->cursor == '%') {
+            state->cursor++;
+            const double rhs = runner_calc_atom(state);
             if (rhs == 0.0) {
-                c->failed = 1;
+                state->failed = 1;
                 return 0;
             }
-            v = fmod(v, rhs);
+            value = fmod(value, rhs);
         } else {
             break;
         }
     }
-    return v;
+    return value;
 }
 
-static double runner_calc_expr(struct RunnerCalcState* c)
+static double runner_calc_expr(struct RunnerCalcState* state)
 {
-    double v = runner_calc_term(c);
+    double value = runner_calc_term(state);
 
     for (;;) {
-        while (*c->s == ' ' || *c->s == '\t')
-            c->s++;
-        if (*c->s == '+') {
-            c->s++;
-            v += runner_calc_term(c);
-        } else if (*c->s == '-') {
-            c->s++;
-            v -= runner_calc_term(c);
+        while (*state->cursor == ' ' || *state->cursor == '\t')
+            state->cursor++;
+        if (*state->cursor == '+') {
+            state->cursor++;
+            value += runner_calc_term(state);
+        } else if (*state->cursor == '-') {
+            state->cursor++;
+            value -= runner_calc_term(state);
         } else {
             break;
         }
     }
-    return v;
+    return value;
 }
 
 /* Only digits, operators, parens and blanks are worth parsing. Outside the
  * calculator mode it also takes an operator, so a bare number is left
  * alone. */
-static int runner_is_expr(const char* s, int needop)
+static int runner_is_expr(const char* text, int need_operator)
 {
-    int digit = 0, op = !needop;
-    char ch;
+    int digit = 0;
+    int has_operator = !need_operator;
 
-    for (; *s; s++) {
-        ch = *s;
-        if (ch >= '0' && ch <= '9')
+    for (; *text; text++) {
+        const char character = *text;
+        if (character >= '0' && character <= '9')
             digit = 1;
-        else if (ch == '+' || ch == '-' || ch == '*' || ch == '/' || ch == '%')
-            op = 1;
-        else if (ch != '(' && ch != ')' && ch != '.' && ch != ' ' && ch != '\t')
+        else if (character == '+' || character == '-' || character == '*' || character == '/' ||
+                 character == '%')
+            has_operator = 1;
+        else if (character != '(' && character != ')' && character != '.' && character != ' ' &&
+                 character != '\t')
             return 0;
     }
-    return digit && op;
+    return digit && has_operator;
 }
 
 /* a double has no more than 17 significant digits */
-void runner_calc_format(char* out, size_t n, double v)
+void runner_calc_format(char* out, size_t size, double value)
 {
-    snprintf(out, n, "%.*g", (int)MIN(MAX(runner_calc_precision, 1), 17), v);
+    snprintf(out, size, "%.*g", (int)MIN(MAX(runner_calc_precision, 1), 17), value);
 }
 
 int runner_calc(double* out)
 {
-    int off, mode = runner_mode(runner_buffer, &off);
-    struct RunnerCalcState c = { runner_buffer + off, 0, 0 };
-    double v;
+    int offset;
+    const int mode = runner_mode(runner_buffer, &offset);
+    struct RunnerCalcState state = { runner_buffer + offset, 0, 0 };
 
-    if ((mode != ModeApp && mode != ModeCalc) ||
-        !runner_is_expr(c.s, mode == ModeApp))
+    if ((mode != ModeApp && mode != ModeCalc) || !runner_is_expr(state.cursor, mode == ModeApp))
         return 0;
-    v = runner_calc_expr(&c);
-    while (*c.s == ' ' || *c.s == '\t')
-        c.s++;
-    if (c.failed || *c.s != '\0' || !isfinite(v))
+    double value = runner_calc_expr(&state);
+    while (*state.cursor == ' ' || *state.cursor == '\t')
+        state.cursor++;
+    if (state.failed || *state.cursor != '\0' || !isfinite(value))
         return 0;
-    *out = v;
+    *out = value;
     return 1;
 }
 
 /* puts the result in place of the expression, after the prefix if any */
 int runner_calc_fill(void)
 {
-    char res[48];
-    double v;
-    int off;
+    double value;
 
-    if (!runner_calc(&v))
+    if (!runner_calc(&value))
         return 0;
-    runner_mode(runner_buffer, &off);
-    runner_calc_format(res, sizeof res, v);
-    if (off + strlen(res) >= sizeof runner_buffer)
+    int offset;
+    runner_mode(runner_buffer, &offset);
+    char res[48];
+    runner_calc_format(res, sizeof res, value);
+    if (offset + strlen(res) >= sizeof runner_buffer)
         return 0;
-    memcpy(runner_buffer + off, res, strlen(res) + 1);
+    memcpy(runner_buffer + offset, res, strlen(res) + 1);
     runner_length = (int)strlen(runner_buffer);
     runner_cursor = runner_length;
     return 1;

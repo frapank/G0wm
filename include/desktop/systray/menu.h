@@ -18,7 +18,7 @@ typedef struct Menu Menu;
 typedef void (*MenuPresentFn)(const char* const* labels, int n, Menu* menu);
 
 /* The menu is built on demand and not kept around */
-void menu_show(DBusConnection* conn,
+void menu_show(DBusConnection* connection,
                const char* busname,
                const char* busobj,
                MenuPresentFn present);

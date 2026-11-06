@@ -7,6 +7,7 @@
 #ifndef G0WM_DESKTOP_BAR_INTERNAL_H
 #define G0WM_DESKTOP_BAR_INTERNAL_H
 
+#include <stdbool.h>
 #include <stdint.h>
 
 #include "core/g0wm.h"
@@ -16,30 +17,30 @@
 
 Monitor* bar_main_monitor(void);
 Monitor* bar_monitor(void);
-void bar_draw_pill(Monitor* m,
+void bar_draw_pill(Monitor* monitor,
                    int x,
                    int y,
-                   int w,
-                   int h,
-                   double r,
-                   int hollow,
+                   int width,
+                   int height,
+                   double radius,
+                   bool hollow,
                    uint32_t rgba);
 uint32_t bar_fade(uint32_t rgba);
-int bar_private_dot(Client* c, uint32_t* rgba);
-double bar_private_radius(int d);
+bool bar_private_dot(const Client* client, uint32_t* rgba);
+double bar_private_radius(int diameter);
 uint32_t* bar_opaque_scheme(int scheme);
-Buffer* bar_share_buffer(Buffer** pool, int w, int h);
-void bar_draw_title_bar(Client* c);
-void bar_draw_notification(Monitor* m,
+Buffer* bar_share_buffer(Buffer** pool, int width, int height);
+void bar_draw_title_bar(Client* client);
+void bar_draw_notification(Monitor* monitor,
                            int x,
-                           int w,
-                           const Notification* n,
+                           int width,
+                           const Notification* notification,
                            long hist);
 const Notification* bar_notification_shown(long* hist);
-void bar_draw_icon(Monitor* m, Icon* icon, int x, int size);
-void bar_draw_icon_holder(Monitor* m, int x, int size);
-int bar_runner_icon_size(Monitor* m);
-void bar_draw_candidates(Monitor* m, int x, int end);
+void bar_draw_icon(Monitor* monitor, Icon* icon, int start_x, int size);
+void bar_draw_icon_holder(Monitor* monitor, int start_x, int size);
+int bar_runner_icon_size(Monitor* monitor);
+void bar_draw_candidates(Monitor* monitor, int start_x, int end_x);
 void bar_tray_notify(void* data);
 
 #endif

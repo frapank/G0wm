@@ -40,7 +40,7 @@ typedef struct {
                                 uint32_t* colorscheme,
                                 const char** fonts,
                                 const char* fontattrs,
-                                TrayNotifyCb cb,
+                                TrayNotifyCb notify_callback,
                                 Watcher* watcher);
 void tray_destroy(Tray* tray);
 

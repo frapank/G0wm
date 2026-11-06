@@ -48,11 +48,11 @@
 #endif
 #define LENGTH(X) (sizeof X / sizeof X[0])
 #define LISTEN(E, L, H) wl_signal_add((E), ((L)->notify = (H), (L)))
-#define LISTEN_STATIC(E, H)                                                    \
-    do {                                                                       \
-        struct wl_listener* _l = util_calloc(1, sizeof(*_l));                  \
-        _l->notify = (H);                                                      \
-        wl_signal_add((E), _l);                                                \
+#define LISTEN_STATIC(E, H)                                                                        \
+    do {                                                                                           \
+        struct wl_listener* _l = util_calloc(1, sizeof(*_l));                                      \
+        _l->notify = (H);                                                                          \
+        wl_signal_add((E), _l);                                                                    \
     } while (0)
 
 enum {
@@ -80,9 +80,8 @@ typedef struct LayerSurface LayerSurface;
 typedef struct Monitor Monitor;
 
 void check_idle_inhibitor(struct wlr_surface* exclude);
-void change_vt(const Arg* arg);
-int activation_token_ours(const struct wlr_xdg_activation_token_v1* token);
-void quit(const Arg* arg);
+void change_virtual_console(const Arg* arg);
+void quit(const Arg*);
 void spawn(const Arg* arg);
 
 extern void* exclusive_focus;
@@ -100,8 +99,7 @@ extern struct wlr_ext_foreign_toplevel_list_v1* ext_toplevel_list;
 extern struct wlr_foreign_toplevel_manager_v1* foreign_toplevel_manager;
 extern struct wlr_screencopy_manager_v1* screencopy_manager;
 extern struct wlr_idle_notifier_v1* idle_notifier;
-extern struct wlr_keyboard_shortcuts_inhibit_manager_v1*
-    keyboard_inhibit_manager;
+extern struct wlr_keyboard_shortcuts_inhibit_manager_v1* keyboard_inhibit_manager;
 extern struct wlr_output_manager_v1* output_manager;
 extern struct wlr_pointer_constraints_v1* pointer_constraints;
 extern struct wlr_pointer_gestures_v1* pointer_gestures;

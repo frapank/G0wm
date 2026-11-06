@@ -9,6 +9,6 @@
 #include <stddef.h>
 
 int runner_calc(double* out);
-void runner_calc_format(char* out, size_t n, double v);
+void runner_calc_format(char* out, size_t size, double value);
 
 #endif

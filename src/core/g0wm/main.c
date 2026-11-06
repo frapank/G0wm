@@ -28,86 +28,65 @@
 #include "internal.h"
 #include "output/monitor.h"
 
-/* function declarations */
-static void run_autostart(void);
-static void run(void);
-
-/* variables */
 Monitor* selected_monitor;
-static char activation_token_tag; /* marks the tokens handed out below */
 
-/* function implementations */
+/* autostart is a list of NULL terminated argv arrays, ended by an empty one */
 static void run_autostart(void)
 {
-    const char* const* p;
-    size_t i = 0;
-
-    /* count entries */
-    for (p = autostart; *p; autostart_len++, p++)
-        while (*++p)
-            ;
+    for (const char* const* argv = autostart; *argv; argv++) {
+        autostart_len++;
+        while (*++argv) {}
+    }
 
     autostart_pids = calloc(autostart_len, sizeof(pid_t));
-    for (p = autostart; *p; i++, p++) {
-        if ((autostart_pids[i] = fork()) == 0) {
+
+    size_t index = 0;
+    for (const char* const* argv = autostart; *argv; index++, argv++) {
+        autostart_pids[index] = fork();
+        if (autostart_pids[index] == 0) {
             setsid();
-            execvp(*p, (char* const*)p);
-            fprintf(stderr, "g0wm: execvp %s: ", *p);
+            execvp(*argv, (char* const*)argv);
+            fprintf(stderr, "g0wm: execvp %s: ", *argv);
             perror(nullptr);
             _exit(1);
         }
-        /* skip arguments */
-        while (*++p)
-            ;
+        while (*++argv) {}
     }
 }
 
-void change_vt(const Arg* arg)
+void change_virtual_console(const Arg* arg)
 {
     wlr_session_change_vt(session, arg->ui);
 }
 
-void handle_signal(int signo)
+/* stop the Wayland event loop, which makes run() return */
+void quit(const Arg*)
+{
+    wl_display_terminate(display);
+}
+
+/* forget a reaped autostart child so cleanup() does not signal its pid */
+static void autostart_forget_child(pid_t pid)
+{
+    for (size_t i = 0; i < autostart_len; i++) {
+        if (autostart_pids[i] == pid) {
+            autostart_pids[i] = -1;
+            return;
+        }
+    }
+}
+
+void handle_unix_signal(int signo)
 {
     if (signo == SIGCHLD) {
-        pid_t pid, *p, *lim;
+        pid_t pid;
         while ((pid = waitpid(-1, nullptr, WNOHANG)) > 0) {
-            if (!(p = autostart_pids))
-                continue;
-            lim = &p[autostart_len];
-
-            for (; p < lim; p++) {
-                if (*p == pid) {
-                    *p = -1;
-                    break;
-                }
-            }
+            if (autostart_pids)
+                autostart_forget_child(pid);
         }
     } else if (signo == SIGINT || signo == SIGTERM) {
         quit(nullptr);
     }
-}
-
-const char* activation_token_new(void)
-{
-    struct wlr_xdg_activation_token_v1* token =
-        wlr_xdg_activation_token_v1_create(activation);
-
-    if (!token)
-        return nullptr;
-    token->data = &activation_token_tag;
-    return wlr_xdg_activation_token_v1_get_name(token);
-}
-
-/* a window activating with one of these was asked for by the user */
-int activation_token_ours(const struct wlr_xdg_activation_token_v1* token)
-{
-    return token && token->data == &activation_token_tag;
-}
-
-void quit(const Arg*)
-{
-    wl_display_terminate(display);
 }
 
 static void run(void)
@@ -147,6 +126,7 @@ static void run(void)
     wl_display_run(display);
 }
 
+/* run arg->v (a NULL terminated argv) detached from the compositor */
 void spawn(const Arg* arg)
 {
     if (fork() == 0) {
@@ -154,28 +134,33 @@ void spawn(const Arg* arg)
         open("/dev/null", O_RDWR);
         dup2(STDERR_FILENO, STDOUT_FILENO);
         setsid();
-        execvp(((char**)arg->v)[0], (char**)arg->v);
-        fprintf(stderr, "g0wm: execvp %s failed: ", ((char**)arg->v)[0]);
+        char** argv = (char**)arg->v;
+        execvp(argv[0], argv);
+
+        /* only reached if execvp fails */
+        fprintf(stderr, "g0wm: execvp %s failed: ", argv[0]);
         perror(nullptr);
+
         _exit(1);
     }
 }
 
 int main(int argc, char* argv[])
 {
-    int debug = 0;
-    int c;
+    bool debug = false;
 
-    while ((c = getopt(argc, argv, "hdvc")) != -1) {
-        if (c == 'd')
-            debug = 1;
-        else if (c == 'v')
+    int option;
+    while ((option = getopt(argc, argv, "hdvc")) != -1) {
+        if (option == 'd')
+            debug = true;
+        else if (option == 'v')
             util_die("g0wm " VERSION);
-        else if (c == 'c')
+        else if (option == 'c')
             return settings_write();
         else
             goto usage;
     }
+
     if (optind < argc)
         goto usage;
 
@@ -183,11 +168,15 @@ int main(int argc, char* argv[])
      */
     if (!getenv("XDG_RUNTIME_DIR"))
         util_die("XDG_RUNTIME_DIR must be set");
+
     settings_load();
+
     if (debug)
-        log_level = WLR_DEBUG;
+        log_level = WLR_DEBUG; /* Should be set after settings_load() */
+
     setup();
     run();
+
     cleanup();
     return EXIT_SUCCESS;
 

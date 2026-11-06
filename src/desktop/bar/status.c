@@ -25,188 +25,203 @@
 #include "output/monitor.h"
 
 /* function declarations */
-static int bar_status_escape(const char* p, uint32_t* scm);
+static int bar_status_escape(const char* text, uint32_t* scheme);
 static void bar_status_stop(void);
 
 /* function implementations */
 /* whether the bar on m shows the status text */
-int bar_status_shown(Monitor* m)
+int bar_status_shown(Monitor* monitor)
 {
     if (bar_status == BarStatusMain)
-        return m == bar_main_monitor();
+        return monitor == bar_main_monitor();
     if (bar_status == BarStatusFocus)
-        return bar_single_monitor || m == selected_monitor;
+        return bar_single_monitor || monitor == selected_monitor;
     return 1;
 }
 
-/* One escape at p: ^c#RRGGBB^ and ^b#RRGGBB^ set the foreground and the
+/* One escape at text: ^c#RRGGBB^ and ^b#RRGGBB^ set the foreground and the
  * background of what follows (an eight digit form carries alpha too), ^d^
  * goes back to SchemeNorm, ^sN!cmd^ opens a clickable area for button N
  * (1 left, 2 right, 3 middle, 4/5 wheel up/down; ^s!^ is 1) and ^e^ closes
- * it. Returns the bytes it takes, and applies a colour to scm when that is
- * given; zero means p does not start one. */
-static int bar_status_escape(const char* p, uint32_t* scm)
+ * it. Returns the bytes it takes, and applies a colour to scheme when that is
+ * given; zero means text does not start one. */
+static int bar_status_escape(const char* text, uint32_t* scheme)
 {
-    static constexpr char hex[] = "0123456789abcdef";
-    const char* d;
-    uint32_t clr = 0;
-    int i;
-
-    if (p[0] != '^')
+    if (text[0] != '^')
         return 0;
-    if (p[1] == 's') {
-        i = p[2] >= '1' && p[2] <= '0' + STATUS_BUTTONS ? 3 : 2;
-        if (p[i++] != '!' || !p[i] || p[i] == '^')
+
+    /* start cliccable area */
+    if (text[1] == 's') {
+        int bang_index = text[2] >= '1' && text[2] <= '0' + STATUS_BUTTONS ? 3 : 2;
+        int cmd_end = bang_index + 1;
+
+        if (text[bang_index] != '!' || !text[cmd_end] || text[cmd_end] == '^')
             return 0;
-        for (; p[i] && p[i] != '^'; i++)
-            ;
-        return p[i] == '^' ? i + 1 : 0;
+        while (text[cmd_end] && text[cmd_end] != '^')
+            cmd_end++;
+        return text[cmd_end] == '^' ? cmd_end + 1 : 0;
     }
-    if (p[1] == 'e' && p[2] == '^')
+
+    /* cmd_end cliccable area */
+    if (text[1] == 'e' && text[2] == '^')
         return 3;
-    if (p[1] == 'e' && p[2] == '!' && p[3] == '^')
+    if (text[1] == 'e' && text[2] == '!' && text[3] == '^')
         return 4;
-    if (p[1] == 'd' && p[2] == '^') {
-        if (scm) {
-            scm[ColFg] = colors[SchemeStatus][ColFg];
-            scm[ColBg] = colors[SchemeStatus][ColBg];
+
+    /* retrun to default colors */
+    if (text[1] == 'd' && text[2] == '^') {
+        if (scheme) {
+            scheme[ColFg] = colors[SchemeStatus][ColFg];
+            scheme[ColBg] = colors[SchemeStatus][ColBg];
         }
         return 3;
     }
-    if ((p[1] != 'c' && p[1] != 'b') || p[2] != '#')
+
+    if ((text[1] != 'c' && text[1] != 'b') || text[2] != '#')
         return 0;
+
+    static constexpr char hex_digits[] = "0123456789abcdef";
+    const char* digits_start = text + 3;
+    uint32_t color = 0;
+    int digit_count = 0;
 
     /* | 0x20 lowercases a letter and leaves a digit alone */
-    for (i = 0; i < 8 && p[3 + i] && (d = strchr(hex, p[3 + i] | 0x20)); i++)
-        clr = clr << 4 | (uint32_t)(d - hex);
-    if ((i != 6 && i != 8) || p[3 + i] != '^')
+    for (const char* digit_pos; digit_count < 8 && digits_start[digit_count] &&
+                                (digit_pos = strchr(hex_digits, digits_start[digit_count] | 0x20));
+         digit_count++)
+        color = color << 4 | (uint32_t)(digit_pos - hex_digits);
+    if ((digit_count != 6 && digit_count != 8) || digits_start[digit_count] != '^')
         return 0;
-    if (i == 6)
-        clr = clr << 8 | 0xff; /* the short form is opaque */
+    if (digit_count == 6)
+        color = color << 8 | 0xff; /* the short form is opaque */
 
-    if (scm)
-        scm[p[1] == 'c' ? ColFg : ColBg] = clr;
-    return i + 4;
+    if (scheme)
+        scheme[text[1] == 'c' ? ColFg : ColBg] = color;
+    return digit_count + 4;
 }
 
 /* Draws the status text one colour run at a time, and returns its width
  * without the escapes. With render off it only measures, which is what
  * places the box before there is anything to draw in it. */
-int bar_draw_status(Monitor* m, const char* text, int x, int w, int render)
+int bar_draw_status(Monitor* monitor, const char* text, int x, int width, int render)
 {
-    uint32_t scm[3];
-    char seg[sizeof(bar_status_text)];
-    const char* p = text;
-    int total = 0, sw, len, xend = x + w;
-    size_t n;
-
-    if (!m || !text)
+    if (!monitor || !text)
         return 0;
-    memcpy(scm, colors[SchemeStatus], sizeof(scm));
+
+    uint32_t scheme[3];
+    memcpy(scheme, colors[SchemeStatus], sizeof(scheme));
 
     /* the runs cover the glyphs only, so the padding around them would keep
      * whatever the buffer held */
     if (render) {
-        drwl_setscheme(m->drw, colors[SchemeStatus]);
-        drwl_rect(m->drw, x, 0, w, m->b.height, 1, 1);
+        drwl_setscheme(monitor->drw, colors[SchemeStatus]);
+        drwl_rect(monitor->drw, x, 0, width, monitor->b.height, 1, 1);
     }
 
-    while (*p) {
-        for (n = 0; *p && n + 1 < sizeof(seg);) {
-            if (*p == '^') {
-                if (p[1] == '^') {
-                    seg[n++] = *p;
-                    p += 2;
+    const int x_end = x + width;
+    const char* text_pos = text;
+    int total_width = 0;
+
+    char segment[sizeof(bar_status_text)];
+    while (*text_pos) {
+        size_t segment_len = 0;
+
+        while (*text_pos && segment_len + 1 < sizeof(segment)) {
+            if (*text_pos == '^') {
+                if (text_pos[1] == '^') {
+                    segment[segment_len++] = *text_pos;
+                    text_pos += 2;
                     continue;
                 }
-                if (bar_status_escape(p, nullptr))
+                if (bar_status_escape(text_pos, nullptr))
                     break;
             }
-            seg[n++] = *p++;
+            segment[segment_len++] = *text_pos++;
         }
-        seg[n] = '\0';
+        segment[segment_len] = '\0';
 
-        sw = (int)drwl_font_getwidth(m->drw, seg);
-        total += sw;
-        if (render && sw > 0 && x < xend) {
-            if (x + sw > xend) /* drwl_text() ellipsizes what it cannot fit */
-                sw = xend - x;
-            drwl_setscheme(m->drw, scm);
-            drwl_text(m->drw, x, 0, sw, m->b.height, 0, seg, 0);
-            x += sw;
+        int segment_width = (int)drwl_font_getwidth(monitor->drw, segment);
+        total_width += segment_width;
+        if (render && segment_width > 0 && x < x_end) {
+            /* drwl_text() ellipsizes what it cannot fit */
+            if (x + segment_width > x_end)
+                segment_width = x_end - x;
+            drwl_setscheme(monitor->drw, scheme);
+            drwl_text(monitor->drw, x, 0, segment_width, monitor->b.height, 0, segment, 0);
+            x += segment_width;
         }
 
-        if ((len = bar_status_escape(p, scm)))
-            p += len;
+        text_pos += bar_status_escape(text_pos, scheme);
     }
 
-    return total;
+    return total_width;
 }
 
-/* Copies into cmd the command for button at x pixels into the status text.
- * Must walk the text the same way bar_draw_status() does. */
-static int bar_status_area(Monitor* m,
+/* Copies into cmd the command for button at pointer_x pixels into the status
+ * text. Must walk the text the same way bar_draw_status() does. */
+static int bar_status_area(Monitor* monitor,
                            const char* text,
-                           int x,
+                           int pointer_x,
                            int button,
                            char* cmd,
-                           size_t sz)
+                           size_t cmd_size)
 {
-    char seg[sizeof(bar_status_text)];
-    const char* p = text;
-    const char* area[STATUS_BUTTONS] = {};
-    int sx = 0, len;
-    size_t n;
+    const char* text_pos = text;
+    const char* button_cmds[STATUS_BUTTONS] = {};
+    int segment_end_x = 0;
 
-    while (*p) {
-        for (n = 0; *p && n + 1 < sizeof(seg);) {
-            if (*p == '^') {
-                if (p[1] == '^') {
-                    seg[n++] = *p;
-                    p += 2;
+    char segment[sizeof(bar_status_text)];
+    while (*text_pos) {
+        size_t segment_len = 0;
+
+        while (*text_pos && segment_len + 1 < sizeof(segment)) {
+            if (*text_pos == '^') {
+                if (text_pos[1] == '^') {
+                    segment[segment_len++] = *text_pos;
+                    text_pos += 2;
                     continue;
                 }
-                if (bar_status_escape(p, nullptr))
+                if (bar_status_escape(text_pos, nullptr))
                     break;
             }
-            seg[n++] = *p++;
+            segment[segment_len++] = *text_pos++;
         }
-        seg[n] = '\0';
+        segment[segment_len] = '\0';
 
-        sx += (int)drwl_font_getwidth(m->drw, seg);
-        if (x < sx) {
-            if (!area[button - 1])
+        segment_end_x += (int)drwl_font_getwidth(monitor->drw, segment);
+        if (pointer_x < segment_end_x) {
+            if (!button_cmds[button - 1])
                 return 0;
-            n = strcspn(area[button - 1], "^");
-            if (n >= sz)
-                n = sz - 1;
-            memcpy(cmd, area[button - 1], n);
-            cmd[n] = '\0';
+            size_t cmd_len = strcspn(button_cmds[button - 1], "^");
+            if (cmd_len >= cmd_size)
+                cmd_len = cmd_size - 1;
+            memcpy(cmd, button_cmds[button - 1], cmd_len);
+            cmd[cmd_len] = '\0';
             return 1;
         }
 
-        if ((len = bar_status_escape(p, nullptr))) {
-            if (p[1] == 's' && p[2] == '!')
-                area[0] = p + 3;
-            else if (p[1] == 's')
-                area[p[2] - '1'] = p + 4;
-            else if (p[1] == 'e')
-                memset(area, 0, sizeof(area));
-            p += len;
+        const int escape_len = bar_status_escape(text_pos, nullptr);
+        if (escape_len) {
+            if (text_pos[1] == 's' && text_pos[2] == '!')
+                button_cmds[0] = text_pos + 3;
+            else if (text_pos[1] == 's')
+                button_cmds[text_pos[2] - '1'] = text_pos + 4;
+            else if (text_pos[1] == 'e')
+                memset(button_cmds, 0, sizeof(button_cmds));
+            text_pos += escape_len;
         }
     }
     return 0;
 }
 
-static int bar_status_command(Monitor* pm,
-                              int x,
+static int bar_status_command(Monitor* monitor,
+                              int pointer_x,
                               int button,
                               char* cmd,
-                              size_t sz)
+                              size_t cmd_size)
 {
-    return pm && bar_status_shown(pm) && button >= 1 &&
-           button <= STATUS_BUTTONS &&
-           bar_status_area(pm, bar_status_text, x, button, cmd, sz);
+    return monitor && bar_status_shown(monitor) && button >= 1 && button <= STATUS_BUTTONS &&
+           bar_status_area(monitor, bar_status_text, pointer_x, button, cmd, cmd_size);
 }
 
 static void bar_status_run(char* cmd)
@@ -216,52 +231,53 @@ static void bar_status_run(char* cmd)
     spawn(&(Arg){ .v = argv });
 }
 
-int bar_status_click(Monitor* pm, int x, int button)
+int bar_status_click(Monitor* monitor, int pointer_x, int button)
 {
     char cmd[sizeof(bar_status_text)];
 
-    if (!bar_status_command(pm, x, button, cmd, sizeof(cmd)))
+    if (!bar_status_command(monitor, pointer_x, button, cmd, sizeof(cmd)))
         return 0;
     bar_status_run(cmd);
     return 1;
 }
 
-int bar_status_scroll(Monitor* pm, int x, double delta)
+int bar_status_scroll(Monitor* monitor, int pointer_x, double scroll_delta)
 {
     /* a mouse notch is 15; touchpads send it in slices */
     constexpr double notch = 15;
-    static double acc;
+    static double scroll_accumulated;
     char cmd[sizeof(bar_status_text)];
 
-    if (delta == 0 ||
-        !bar_status_command(pm, x, delta < 0 ? 4 : 5, cmd, sizeof(cmd)))
+    if (scroll_delta == 0 ||
+        !bar_status_command(monitor, pointer_x, scroll_delta < 0 ? 4 : 5, cmd, sizeof(cmd)))
         return 0;
-    if ((acc < 0) != (delta < 0))
-        acc = 0;
-    for (acc += delta; acc >= notch; acc -= notch)
+    if ((scroll_accumulated < 0) != (scroll_delta < 0))
+        scroll_accumulated = 0;
+    for (scroll_accumulated += scroll_delta; scroll_accumulated >= notch;
+         scroll_accumulated -= notch)
         bar_status_run(cmd);
-    for (; acc <= -notch; acc += notch)
+    for (; scroll_accumulated <= -notch; scroll_accumulated += notch)
         bar_status_run(cmd);
     return 1;
 }
 
-int bar_handle_status_input(int fd, unsigned int mask, void*)
+int bar_handle_status_input(int fd, unsigned int event_mask, void*)
 {
-    static char buf[STATUS_MAX];
-    static size_t len;
-    static int skip; /* in a line too long for buf, up to its newline */
-    char *p, *nl, *line = nullptr;
-    ssize_t n;
+    static char input_buffer[STATUS_MAX];
+    static size_t input_len;
+    /* in a line too long for input_buffer, up to its newline */
+    static int skipping_long_line;
 
-    if (mask & WL_EVENT_ERROR)
+    if (event_mask & WL_EVENT_ERROR)
         util_die("status in event error");
-    if (mask & WL_EVENT_HANGUP) {
+    if (event_mask & WL_EVENT_HANGUP) {
         bar_status_stop();
         return 0;
     }
 
-    n = read(fd, buf + len, sizeof(buf) - 1 - len);
-    if (n < 0) {
+    const ssize_t bytes_read =
+        read(fd, input_buffer + input_len, sizeof(input_buffer) - 1 - input_len);
+    if (bytes_read < 0) {
         if (errno == EWOULDBLOCK || errno == EAGAIN || errno == EINTR)
             return 0;
         util_die("read:");
@@ -269,31 +285,34 @@ int bar_handle_status_input(int fd, unsigned int mask, void*)
     /* EOF: the status process is gone. The fd stays readable forever, so
      * keeping the source alive would spin the event loop at full speed and
      * starve rendering and input. */
-    if (n == 0) {
+    if (bytes_read == 0) {
         bar_status_stop();
         return 0;
     }
 
-    len += (size_t)n;
-    buf[len] = '\0';
-    for (p = buf; (nl = strchr(p, '\n')); p = nl + 1) {
-        *nl = '\0';
-        if (skip)
-            skip = 0;
+    input_len += (size_t)bytes_read;
+    input_buffer[input_len] = '\0';
+
+    char* line_start = input_buffer;
+    char* latest_line = nullptr;
+    for (char* line_end; (line_end = strchr(line_start, '\n')); line_start = line_end + 1) {
+        *line_end = '\0';
+        if (skipping_long_line)
+            skipping_long_line = 0;
         else
-            line = p;
+            latest_line = line_start;
     }
-    if (line) {
-        snprintf(bar_status_text, sizeof(bar_status_text), "%s", line);
+    if (latest_line) {
+        snprintf(bar_status_text, sizeof(bar_status_text), "%s", latest_line);
         bar_draw_all();
     }
 
     /* keep the start of the next line */
-    len = strlen(p);
-    memmove(buf, p, len + 1);
-    if (len == sizeof(buf) - 1) {
-        len = 0;
-        skip = 1;
+    input_len = strlen(line_start);
+    memmove(input_buffer, line_start, input_len + 1);
+    if (input_len == sizeof(input_buffer) - 1) {
+        input_len = 0;
+        skipping_long_line = 1;
     }
 
     return 0;

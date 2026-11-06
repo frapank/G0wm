@@ -54,7 +54,7 @@ typedef struct {
 
 /* token hands out an xdg-activation token, sent to the client before an
  * action so it can raise its own window; may be NULL */
-void notify_start(DBusConnection* conn,
+void notify_start(DBusConnection* connection,
                   struct wl_event_loop* loop,
                   unsigned int timeout_secs,
                   void (*redraw)(void),

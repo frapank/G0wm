@@ -10,8 +10,8 @@
 #include <dbus/dbus.h>
 #include <wayland-server-core.h>
 
-[[nodiscard]] struct wl_event_source* bus_start(DBusConnection* conn,
+[[nodiscard]] struct wl_event_source* bus_start(DBusConnection* connection,
                                                 struct wl_event_loop* loop);
-void bus_stop(DBusConnection* conn, struct wl_event_source* bus_source);
+void bus_stop(DBusConnection* connection, struct wl_event_source* bus_source);
 
 #endif

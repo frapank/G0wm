@@ -48,11 +48,10 @@ struct Monitor {
     struct wlr_scene_buffer* scene_buffer; /* bar buffer */
 #ifdef INTEGRATED_BACKGROUND
     struct wlr_scene_buffer* wallpaper; /* wallpaper buffer */
-    struct wlr_buffer* wallpaperbuf; /* what wallpaper's node was last handed */
-    struct wlr_scene_buffer* barblur; /* the bar's own frosted backdrop */
+    struct wlr_buffer* wallpaperbuf;    /* what wallpaper's node was last handed */
+    struct wlr_scene_buffer* barblur;   /* the bar's own frosted backdrop */
 #endif
-    struct wlr_scene_rect*
-        fullscreen_bg; /* See monitor_handle_new_output() for info */
+    struct wlr_scene_rect* fullscreen_bg; /* See monitor_handle_new_output() for info */
     struct wl_listener frame;
     struct wl_listener destroy;
     struct wl_listener request_state;
@@ -62,8 +61,8 @@ struct Monitor {
     struct {
         int width, height;
         int real_width, real_height; /* non-scaled */
-        int titlew; /* free box shared by the window title and the
-                     * notification, 0 when it doesn't fit */
+        int titlew;                  /* free box shared by the window title and the
+                                      * notification, 0 when it doesn't fit */
         float scale;
     } b; /* bar area */
     struct {
@@ -85,8 +84,8 @@ struct Monitor {
     int nmaster;
     char ltsymbol[16];
     int asleep;
-    int autovrr; /* 1 turned on by monitor_game_mode(), -1 refused */
-    float zoom;  /* magnifier level, 1 is off */
+    int autovrr;                     /* 1 turned on by monitor_game_mode(), -1 refused */
+    float zoom;                      /* magnifier level, 1 is off */
     struct wlr_swapchain* zoomchain; /* the frames, rendered unzoomed */
     struct wlr_buffer* zoombuf;      /* the latest of them */
     struct wlr_texture* zoomtex;     /* zoombuf, to draw from */
@@ -105,16 +104,16 @@ struct Monitor {
     int lrpad;
 };
 
-void monitor_arrange_layers(Monitor* m);
-void monitor_handle_new_layer_surface(struct wl_listener* listener, void* data);
-void monitor_handle_new_output(struct wl_listener* listener, void* data);
+void monitor_arrange_layers(Monitor* monitor);
+void monitor_handle_new_layer_surface(struct wl_listener*, void* data);
+void monitor_handle_new_output(struct wl_listener*, void* data);
 void monitor_focus(const Arg* arg);
-void monitor_handle_config_apply(struct wl_listener* listener, void* data);
-void monitor_handle_config_test(struct wl_listener* listener, void* data);
-void monitor_handle_power_set_mode(struct wl_listener* listener, void* data);
+void monitor_handle_config_apply(struct wl_listener*, void* data);
+void monitor_handle_config_test(struct wl_listener*, void* data);
+void monitor_handle_power_set_mode(struct wl_listener*, void* data);
 void monitor_reload_rules(void);
 void monitor_send_client(const Arg* arg);
-void monitor_update_layout(struct wl_listener* listener, void* data);
+void monitor_update_layout(struct wl_listener*, void*);
 Monitor* monitor_at(double x, double y);
 
 #endif

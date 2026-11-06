@@ -30,9 +30,9 @@ typedef struct {
 
 /* function declarations */
 static void lock_handle_new_surface(struct wl_listener* listener, void* data);
-static void lock_destroy(SessionLock* lock, int unlocked);
-static void lock_handle_destroy(struct wl_listener* listener, void* data);
-static void lock_handle_unlock(struct wl_listener* listener, void* data);
+static void lock_destroy(SessionLock* lock, bool unlocked);
+static void lock_handle_destroy(struct wl_listener* listener, void*);
+static void lock_handle_unlock(struct wl_listener* listener, void*);
 
 /* variables */
 int lock_active;
@@ -43,27 +43,25 @@ static void lock_handle_new_surface(struct wl_listener* listener, void* data)
 {
     SessionLock* lock = wl_container_of(listener, lock, new_surface);
     struct wlr_session_lock_surface_v1* lock_surface = data;
-    Monitor* m = lock_surface->output->data;
+    Monitor* monitor = lock_surface->output->data;
     struct wlr_scene_tree* scene_tree = lock_surface->surface->data =
         wlr_scene_subsurface_tree_create(lock->scene, lock_surface->surface);
-    m->lock_surface = lock_surface;
+    monitor->lock_surface = lock_surface;
 
-    wlr_scene_node_set_position(&scene_tree->node, m->m.x, m->m.y);
-    wlr_session_lock_surface_v1_configure(
-        lock_surface, m->m.width, m->m.height);
+    wlr_scene_node_set_position(&scene_tree->node, monitor->m.x, monitor->m.y);
+    wlr_session_lock_surface_v1_configure(lock_surface, monitor->m.width, monitor->m.height);
 
-    LISTEN(&lock_surface->events.destroy,
-           &m->destroy_lock_surface,
+    LISTEN(&lock_surface->events.destroy, &monitor->destroy_lock_surface,
            lock_handle_surface_destroy);
 
-    if (m == selected_monitor)
+    if (monitor == selected_monitor)
         client_notify_enter(lock_surface->surface, wlr_seat_get_keyboard(seat));
 }
 
-static void lock_destroy(SessionLock* lock, int unlock)
+static void lock_destroy(SessionLock* lock, bool unlocked)
 {
     wlr_seat_keyboard_notify_clear_focus(seat);
-    if ((lock_active = !unlock))
+    if ((lock_active = !unlocked))
         goto destroy;
 
     wlr_scene_node_set_enabled(&locked_background->node, 0);
@@ -83,20 +81,19 @@ destroy:
 
 void lock_handle_surface_destroy(struct wl_listener* listener, void*)
 {
-    Monitor* m = wl_container_of(listener, m, destroy_lock_surface);
-    struct wlr_session_lock_surface_v1 *surface,
-        *lock_surface = m->lock_surface;
+    Monitor* monitor = wl_container_of(listener, monitor, destroy_lock_surface);
+    struct wlr_session_lock_surface_v1* lock_surface = monitor->lock_surface;
 
-    m->lock_surface = nullptr;
-    wl_list_remove(&m->destroy_lock_surface.link);
+    monitor->lock_surface = nullptr;
+    wl_list_remove(&monitor->destroy_lock_surface.link);
 
     if (lock_surface->surface != seat->keyboard_state.focused_surface)
         return;
 
-    if (lock_active && lock_current &&
-        !wl_list_empty(&lock_current->surfaces)) {
-        surface = wl_container_of(lock_current->surfaces.next, surface, link);
-        client_notify_enter(surface->surface, wlr_seat_get_keyboard(seat));
+    if (lock_active && lock_current && !wl_list_empty(&lock_current->surfaces)) {
+        struct wlr_session_lock_surface_v1* focus_candidate =
+            wl_container_of(lock_current->surfaces.next, focus_candidate, link);
+        client_notify_enter(focus_candidate->surface, wlr_seat_get_keyboard(seat));
     } else if (!lock_active) {
         client_focus(client_top(selected_monitor), 1);
     } else {
@@ -107,19 +104,18 @@ void lock_handle_surface_destroy(struct wl_listener* listener, void*)
 static void lock_handle_destroy(struct wl_listener* listener, void*)
 {
     SessionLock* lock = wl_container_of(listener, lock, destroy);
-    lock_destroy(lock, 0);
+    lock_destroy(lock, false);
 }
 
 void lock_handle_new_lock(struct wl_listener*, void* data)
 {
     struct wlr_session_lock_v1* session_lock = data;
-    SessionLock* lock;
     wlr_scene_node_set_enabled(&locked_background->node, 1);
     if (lock_current) {
         wlr_session_lock_v1_destroy(session_lock);
         return;
     }
-    lock = session_lock->data = util_calloc(1, sizeof(*lock));
+    SessionLock* lock = session_lock->data = util_calloc(1, sizeof(*lock));
     client_focus(nullptr, 0);
     /* an open menu would keep taking clicks under the lock surface */
     traypopup_dismiss();
@@ -128,9 +124,7 @@ void lock_handle_new_lock(struct wl_listener*, void* data)
     lock_current = lock->lock = session_lock;
     lock_active = 1;
 
-    LISTEN(&session_lock->events.new_surface,
-           &lock->new_surface,
-           lock_handle_new_surface);
+    LISTEN(&session_lock->events.new_surface, &lock->new_surface, lock_handle_new_surface);
     LISTEN(&session_lock->events.destroy, &lock->destroy, lock_handle_destroy);
     LISTEN(&session_lock->events.unlock, &lock->unlock, lock_handle_unlock);
 
@@ -140,5 +134,5 @@ void lock_handle_new_lock(struct wl_listener*, void* data)
 static void lock_handle_unlock(struct wl_listener* listener, void*)
 {
     SessionLock* lock = wl_container_of(listener, lock, unlock);
-    lock_destroy(lock, 1);
+    lock_destroy(lock, true);
 }

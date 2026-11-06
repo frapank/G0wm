@@ -54,13 +54,13 @@ extern const size_t settings_action_count;
 extern const char* const settings_scheme_names[];
 extern const struct scfg_block* settings_builtin;
 
-uint32_t settings_pack_rgba(const float c[static 4]);
+uint32_t settings_pack_rgba(const float color[static 4]);
 void settings_load_builtin(void);
-void settings_apply(const struct scfg_block* b);
-void settings_check(const struct scfg_block* want,
-                    const struct scfg_block* got,
-                    const char* path,
-                    int* bad);
+void settings_apply(const struct scfg_block* block);
+void settings_validate(const struct scfg_block* want,
+                       const struct scfg_block* got,
+                       const char* path,
+                       int* problems);
 char* settings_rendered_defaults(void);
 
 #endif

@@ -46,7 +46,7 @@
 #include "window/toplevel.h"
 
 /* function declarations */
-static void settings_reload(const Arg* arg);
+static void settings_reload(const Arg*);
 
 /* the only file that includes it: these are the definitions */
 #include "config.h"
@@ -54,30 +54,20 @@ static void settings_reload(const Arg* arg);
 /* variables */
 /* tables end on { 0, nullptr }; a real zero value is listed before it */
 /* in combo order: logo+shift+q */
-const Enum settings_modifier_names[] = { { WLR_MODIFIER_LOGO, "logo" },
-                                         { WLR_MODIFIER_CTRL, "ctrl" },
-                                         { WLR_MODIFIER_ALT, "alt" },
-                                         { WLR_MODIFIER_SHIFT, "shift" },
-                                         { WLR_MODIFIER_CAPS, "caps" },
-                                         { WLR_MODIFIER_MOD2, "mod2" },
-                                         { WLR_MODIFIER_MOD3, "mod3" },
-                                         { WLR_MODIFIER_MOD5, "mod5" },
-                                         { 0, nullptr } };
-const Enum settings_drag_modes[] = { { CurMove, "move" },
-                                     { CurResize, "resize" },
-                                     { 0, nullptr } };
+const Enum settings_modifier_names[] = {
+    { WLR_MODIFIER_LOGO, "logo" },   { WLR_MODIFIER_CTRL, "ctrl" }, { WLR_MODIFIER_ALT, "alt" },
+    { WLR_MODIFIER_SHIFT, "shift" }, { WLR_MODIFIER_CAPS, "caps" }, { WLR_MODIFIER_MOD2, "mod2" },
+    { WLR_MODIFIER_MOD3, "mod3" },   { WLR_MODIFIER_MOD5, "mod5" }, { 0, nullptr }
+};
+const Enum settings_drag_modes[] = { { CurMove, "move" }, { CurResize, "resize" }, { 0, nullptr } };
 const Enum settings_click_areas[] = {
-    { ClkTagBar, "tagbar" }, { ClkLtSymbol, "ltsymbol" },
-    { ClkStatus, "status" }, { ClkTitle, "title" },
-    { ClkClient, "client" }, { ClkRoot, "root" },
-    { ClkTray, "tray" },     { ClkWinTitle, "wintitle" },
-    { 0, nullptr },
+    { ClkTagBar, "tagbar" }, { ClkLtSymbol, "ltsymbol" }, { ClkStatus, "status" },
+    { ClkTitle, "title" },   { ClkClient, "client" },     { ClkRoot, "root" },
+    { ClkTray, "tray" },     { ClkWinTitle, "wintitle" }, { 0, nullptr },
 };
-const Enum settings_mouse_buttons[] = {
-    { BTN_LEFT, "left" },        { BTN_MIDDLE, "middle" },
-    { BTN_RIGHT, "right" },      { WheelUp, "wheel-up" },
-    { WheelDown, "wheel-down" }, { 0, nullptr }
-};
+const Enum settings_mouse_buttons[] = { { BTN_LEFT, "left" },        { BTN_MIDDLE, "middle" },
+                                        { BTN_RIGHT, "right" },      { WheelUp, "wheel-up" },
+                                        { WheelDown, "wheel-down" }, { 0, nullptr } };
 const Enum settings_gesture_motions[] = { { SwipeLeft, "swipe-left" },
                                           { SwipeRight, "swipe-right" },
                                           { SwipeUp, "swipe-up" },
@@ -101,43 +91,35 @@ const Enum settings_opacity_kinds[] = { { OpacityNormal, "normal" },
                                         { OpacityBlur, "blur" },
                                         { 0, nullptr } };
 #endif
-const Enum settings_transforms[] = {
-    { WL_OUTPUT_TRANSFORM_NORMAL, "normal" },
-    { WL_OUTPUT_TRANSFORM_90, "90" },
-    { WL_OUTPUT_TRANSFORM_180, "180" },
-    { WL_OUTPUT_TRANSFORM_270, "270" },
-    { WL_OUTPUT_TRANSFORM_FLIPPED, "flipped" },
-    { WL_OUTPUT_TRANSFORM_FLIPPED_90, "flipped-90" },
-    { WL_OUTPUT_TRANSFORM_FLIPPED_180, "flipped-180" },
-    { WL_OUTPUT_TRANSFORM_FLIPPED_270, "flipped-270" },
-    { 0, nullptr }
-};
-const Enum settings_scroll_methods[] = {
-    { LIBINPUT_CONFIG_SCROLL_NO_SCROLL, "none" },
-    { LIBINPUT_CONFIG_SCROLL_2FG, "2fg" },
-    { LIBINPUT_CONFIG_SCROLL_EDGE, "edge" },
-    { LIBINPUT_CONFIG_SCROLL_ON_BUTTON_DOWN, "on-button-down" },
-    { 0, nullptr }
-};
-const Enum settings_click_methods[] = {
-    { LIBINPUT_CONFIG_CLICK_METHOD_NONE, "none" },
-    { LIBINPUT_CONFIG_CLICK_METHOD_BUTTON_AREAS, "button-areas" },
-    { LIBINPUT_CONFIG_CLICK_METHOD_CLICKFINGER, "clickfinger" },
-    { 0, nullptr }
-};
-const Enum settings_send_events[] = {
-    { LIBINPUT_CONFIG_SEND_EVENTS_ENABLED, "enabled" },
-    { LIBINPUT_CONFIG_SEND_EVENTS_DISABLED, "disabled" },
-    { LIBINPUT_CONFIG_SEND_EVENTS_DISABLED_ON_EXTERNAL_MOUSE,
-      "disabled-on-external-mouse" },
-    { 0, nullptr }
-};
-const Enum settings_accel_profiles[] = {
-    { LIBINPUT_CONFIG_ACCEL_PROFILE_NONE, "none" },
-    { LIBINPUT_CONFIG_ACCEL_PROFILE_FLAT, "flat" },
-    { LIBINPUT_CONFIG_ACCEL_PROFILE_ADAPTIVE, "adaptive" },
-    { 0, nullptr }
-};
+const Enum settings_transforms[] = { { WL_OUTPUT_TRANSFORM_NORMAL, "normal" },
+                                     { WL_OUTPUT_TRANSFORM_90, "90" },
+                                     { WL_OUTPUT_TRANSFORM_180, "180" },
+                                     { WL_OUTPUT_TRANSFORM_270, "270" },
+                                     { WL_OUTPUT_TRANSFORM_FLIPPED, "flipped" },
+                                     { WL_OUTPUT_TRANSFORM_FLIPPED_90, "flipped-90" },
+                                     { WL_OUTPUT_TRANSFORM_FLIPPED_180, "flipped-180" },
+                                     { WL_OUTPUT_TRANSFORM_FLIPPED_270, "flipped-270" },
+                                     { 0, nullptr } };
+const Enum settings_scroll_methods[] = { { LIBINPUT_CONFIG_SCROLL_NO_SCROLL, "none" },
+                                         { LIBINPUT_CONFIG_SCROLL_2FG, "2fg" },
+                                         { LIBINPUT_CONFIG_SCROLL_EDGE, "edge" },
+                                         { LIBINPUT_CONFIG_SCROLL_ON_BUTTON_DOWN,
+                                           "on-button-down" },
+                                         { 0, nullptr } };
+const Enum settings_click_methods[] = { { LIBINPUT_CONFIG_CLICK_METHOD_NONE, "none" },
+                                        { LIBINPUT_CONFIG_CLICK_METHOD_BUTTON_AREAS,
+                                          "button-areas" },
+                                        { LIBINPUT_CONFIG_CLICK_METHOD_CLICKFINGER, "clickfinger" },
+                                        { 0, nullptr } };
+const Enum settings_send_events[] = { { LIBINPUT_CONFIG_SEND_EVENTS_ENABLED, "enabled" },
+                                      { LIBINPUT_CONFIG_SEND_EVENTS_DISABLED, "disabled" },
+                                      { LIBINPUT_CONFIG_SEND_EVENTS_DISABLED_ON_EXTERNAL_MOUSE,
+                                        "disabled-on-external-mouse" },
+                                      { 0, nullptr } };
+const Enum settings_accel_profiles[] = { { LIBINPUT_CONFIG_ACCEL_PROFILE_NONE, "none" },
+                                         { LIBINPUT_CONFIG_ACCEL_PROFILE_FLAT, "flat" },
+                                         { LIBINPUT_CONFIG_ACCEL_PROFILE_ADAPTIVE, "adaptive" },
+                                         { 0, nullptr } };
 const Enum settings_button_maps[] = { { LIBINPUT_CONFIG_TAP_MAP_LRM, "lrm" },
                                       { LIBINPUT_CONFIG_TAP_MAP_LMR, "lmr" },
                                       { 0, nullptr } };
@@ -146,11 +128,10 @@ const Enum settings_log_levels[] = { { WLR_SILENT, "silent" },
                                      { WLR_INFO, "info" },
                                      { WLR_DEBUG, "debug" },
                                      { 0, nullptr } };
-const Arrange settings_arranges[] = { { "tile", layout_tile },
-                                      { "tabbed", layout_tabbed } };
+const Arrange settings_arranges[] = { { "tile", layout_tile }, { "tabbed", layout_tabbed } };
 const size_t settings_arrange_count = LENGTH(settings_arranges);
 const Action settings_actions[] = {
-    { change_vt, "chvt", 'u' },
+    { change_virtual_console, "chvt", 'u' },
     { monitor_focus, "focusmon", 'i' },
     { layout_focus_stack, "focusstack", 'i' },
     { layout_inc_master, "incnmaster", 'i' },
@@ -218,11 +199,10 @@ static_assert(LENGTH(settings_scheme_names) == NumSchemes);
 const struct scfg_block* settings_builtin;
 
 /* function implementations */
-uint32_t settings_pack_rgba(const float c[static 4])
+uint32_t settings_pack_rgba(const float color[static 4])
 {
-    return ((uint32_t)(c[0] * 255 + 0.5f) << 24) |
-           ((uint32_t)(c[1] * 255 + 0.5f) << 16) |
-           ((uint32_t)(c[2] * 255 + 0.5f) << 8) | (uint32_t)(c[3] * 255 + 0.5f);
+    return ((uint32_t)(color[0] * 255 + 0.5f) << 24) | ((uint32_t)(color[1] * 255 + 0.5f) << 16) |
+           ((uint32_t)(color[2] * 255 + 0.5f) << 8) | (uint32_t)(color[3] * 255 + 0.5f);
 }
 
 static const char* settings_path(void)
@@ -243,15 +223,13 @@ static const char* settings_path(void)
 /* mkdir -p, on a copy the caller owns */
 int settings_make_dirs(char* path)
 {
-    char* p;
-
-    for (p = path + 1; *p; p++) {
-        if (*p != '/')
+    for (char* separator = path + 1; *separator; separator++) {
+        if (*separator != '/')
             continue;
-        *p = '\0';
+        *separator = '\0';
         if (mkdir(path, 0755) < 0 && errno != EEXIST)
             return -1;
-        *p = '/';
+        *separator = '/';
     }
     return mkdir(path, 0755) < 0 && errno != EEXIST ? -1 : 0;
 }
@@ -262,10 +240,6 @@ int settings_make_dirs(char* path)
 int settings_write(void)
 {
     const char* path = settings_path();
-    char dir[PATH_MAX];
-    char* slash;
-    char* text;
-    FILE* f;
 
     if (!path) {
         fprintf(stderr, "g0wm: neither XDG_CONFIG_HOME nor HOME is set\n");
@@ -276,57 +250,55 @@ int settings_write(void)
     if (!access(path, F_OK)) {
         fprintf(stderr, "g0wm: reading the config in %s\n", path);
     } else {
+        char dir[PATH_MAX];
         snprintf(dir, sizeof dir, "%s", path);
-        if ((slash = strrchr(dir, '/')))
-            *slash = '\0';
+        char* last_slash = strrchr(dir, '/');
+        if (last_slash)
+            *last_slash = '\0';
         if (settings_make_dirs(dir) < 0) {
-            fprintf(
-                stderr, "g0wm: cannot create %s: %s\n", dir, strerror(errno));
+            fprintf(stderr, "g0wm: cannot create %s: %s\n", dir, strerror(errno));
             return 1;
         }
-        if (!(text = settings_rendered_defaults()))
+        char* defaults = settings_rendered_defaults();
+        if (!defaults)
             return 1;
-        if (!(f = fopen(path, "w"))) {
-            fprintf(
-                stderr, "g0wm: cannot write %s: %s\n", path, strerror(errno));
-            free(text);
+        FILE* file = fopen(path, "w");
+        if (!file) {
+            fprintf(stderr, "g0wm: cannot write %s: %s\n", path, strerror(errno));
+            free(defaults);
             return 1;
         }
-        fputs(text, f);
-        free(text);
-        if (fclose(f) != 0) {
-            fprintf(
-                stderr, "g0wm: cannot write %s: %s\n", path, strerror(errno));
+        fputs(defaults, file);
+        free(defaults);
+        if (fclose(file) != 0) {
+            fprintf(stderr, "g0wm: cannot write %s: %s\n", path, strerror(errno));
             return 1;
         }
         fprintf(stderr, "g0wm: wrote %s\n", path);
     }
 
     settings_load();
-    if (!(text = settings_rendered_defaults()))
+    char* effective = settings_rendered_defaults();
+    if (!effective)
         return 1;
-    fputs(text, stdout);
-    free(text);
+    fputs(effective, stdout);
+    free(effective);
     return 0;
 }
 
 void settings_load(void)
 {
     const char* path = settings_path();
-    struct scfg_block* tree;
-    int bad = 0;
 
     if (!path) {
         fprintf(stderr, "g0wm: neither XDG_CONFIG_HOME nor HOME is set\n");
         return;
     }
     if (access(path, F_OK) < 0) {
-        fprintf(stderr,
-                "g0wm: no settings in %s, run 'g0wm -c' to write them\n",
-                path);
+        fprintf(stderr, "g0wm: no settings in %s, run 'g0wm -c' to write them\n", path);
         return;
     }
-    tree = util_calloc(1, sizeof *tree);
+    struct scfg_block* tree = util_calloc(1, sizeof *tree);
     if (scfg_load_file(tree, path) < 0) {
         fprintf(stderr, "g0wm: cannot read %s\n", path);
         scfg_block_finish(tree);
@@ -335,70 +307,62 @@ void settings_load(void)
     }
 
     settings_load_builtin();
+    int problems = 0;
     if (settings_builtin)
-        settings_check(settings_builtin, tree, "", &bad);
+        settings_validate(settings_builtin, tree, "", &problems);
     /* never freed: the settings point into its strings */
     settings_apply(tree);
-    if (bad)
-        fprintf(stderr,
-                "g0wm: %s has %d problem%s\n",
-                path,
-                bad,
-                bad == 1 ? "" : "s");
+    if (problems)
+        fprintf(stderr, "g0wm: %s has %d problem%s\n", path, problems, problems == 1 ? "" : "s");
 }
 
 /* the keymap and the repeat rate are otherwise only set when a keyboard
  * shows up; the trackpad settings are per device and still need a restart */
 static void settings_reload_keyboard(void)
 {
-    struct xkb_context* context;
-    struct xkb_keymap* keymap;
-
     if (!keyboard_group)
         return;
-    if ((context = xkb_context_new(XKB_CONTEXT_NO_FLAGS))) {
-        if ((keymap = xkb_keymap_new_from_names(
-                 context, &xkb_rules, XKB_KEYMAP_COMPILE_NO_FLAGS))) {
-            wlr_keyboard_set_keymap(&keyboard_group->wlr_group->keyboard,
-                                    keymap);
+    struct xkb_context* context = xkb_context_new(XKB_CONTEXT_NO_FLAGS);
+    if (context) {
+        struct xkb_keymap* keymap =
+            xkb_keymap_new_from_names(context, &xkb_rules, XKB_KEYMAP_COMPILE_NO_FLAGS);
+        if (keymap) {
+            wlr_keyboard_set_keymap(&keyboard_group->wlr_group->keyboard, keymap);
             xkb_keymap_unref(keymap);
         }
         xkb_context_unref(context);
     }
-    wlr_keyboard_set_repeat_info(
-        &keyboard_group->wlr_group->keyboard, repeat_rate, repeat_delay);
+    wlr_keyboard_set_repeat_info(&keyboard_group->wlr_group->keyboard, repeat_rate, repeat_delay);
 }
 
 static void settings_reload(const Arg*)
 {
-    Monitor* m;
-    Client* c;
-    int wasprivate = always_private;
+    const int was_private = always_private;
 
     settings_load();
 
     /* fewer tags than before would leave windows on bits nothing shows */
-    wl_list_for_each(m, &monitors, link)
-    {
-        if (!(m->tagset[m->seltags] & TAGMASK))
-            m->tagset[m->seltags] = 1;
-        wlr_scene_rect_set_color(m->fullscreen_bg, fullscreen_color);
+    Monitor* monitor;
+    wl_list_for_each(monitor, &monitors, link) {
+        if (!(monitor->tagset[monitor->seltags] & TAGMASK))
+            monitor->tagset[monitor->seltags] = 1;
+        wlr_scene_rect_set_color(monitor->fullscreen_bg, fullscreen_color);
     }
     /* what a client copied out of the settings when it was mapped: its
      * border, its own opacity and the title shown when private */
-    wl_list_for_each(c, &clients, link)
-    {
-        if (!(c->tags & TAGMASK))
-            c->tags = 1;
-        c->opacity = c->opacity_unfocus = opacity_unfocus;
-        c->opacity_focus = opacity_focus;
-        if (!c->isfullscreen)
-            c->bw = client_is_unmanaged(c) ? 0 : corner_border_width();
-        if (always_private != wasprivate)
-            c->isprivate = always_private;
-        toplevel_update(c);
+    Client* client;
+    wl_list_for_each(client, &clients, link) {
+        if (!(client->tags & TAGMASK))
+            client->tags = 1;
+        client->opacity = client->opacity_unfocus = opacity_unfocus;
+        client->opacity_focus = opacity_focus;
+        if (!client->isfullscreen)
+            client->bw = client_is_unmanaged(client) ? 0 : corner_border_width();
+        if (always_private != was_private)
+            client->isprivate = always_private;
+        toplevel_update(client);
     }
-    if (always_private != wasprivate)
+    if (always_private != was_private)
         privacy_damage();
     wlr_scene_rect_set_color(root_background, root_color);
 
@@ -409,10 +373,9 @@ static void settings_reload(const Arg*)
 
     /* a floating client keeps its own geometry, so a new border or title bar
      * only reaches it through client_resize() */
-    wl_list_for_each(c, &clients, link)
-    {
-        if (c->mon && c->isfloating && !c->isfullscreen)
-            client_resize(c, c->geom, 1);
+    wl_list_for_each(client, &clients, link) {
+        if (client->mon && client->isfloating && !client->isfullscreen)
+            client_resize(client, client->geom, 1);
     }
 
     opacity_reload();

@@ -32,9 +32,7 @@ typedef struct {
     int running;
 } Watcher;
 
-void watcher_start(Watcher* watcher,
-                   DBusConnection* conn,
-                   struct wl_event_loop* loop);
+void watcher_start(Watcher* watcher, DBusConnection* connection, struct wl_event_loop* loop);
 void watcher_stop(Watcher* watcher);
 
 int watcher_get_item_count(const Watcher* watcher);

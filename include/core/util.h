@@ -10,10 +10,8 @@
 #include <stddef.h>
 
 [[noreturn, gnu::format(printf, 1, 2)]] void util_die(const char* fmt, ...);
-[[nodiscard]] void* util_calloc(size_t nmemb, size_t size);
+[[nodiscard]] void* util_calloc(size_t count, size_t size);
 [[nodiscard]] int util_set_nonblock(int fd);
-[[nodiscard]] size_t util_put_codepoint(char* dst,
-                                        size_t room,
-                                        unsigned long cp);
+[[nodiscard]] size_t util_put_codepoint(char* out, size_t capacity, unsigned long codepoint);
 
 #endif
