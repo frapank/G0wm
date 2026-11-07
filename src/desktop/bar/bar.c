@@ -465,10 +465,19 @@ void bar_draw(Monitor* monitor)
             const Notification* notification = notifications_enabled && is_selected
                                                    ? bar_notification_shown(&history_index)
                                                    : nullptr;
+            Buffer* share_buf;
             if (notification) {
-                bar_draw_notification(monitor, cur_x, free_w, notification, history_index);
+                bar_draw_notification(monitor, cur_x, free_w, notification, history_index, false);
+                if (bar_notification_private() &&
+                    (share_buf = bar_share_buffer(monitor->sharepool, free_w, monitor->b.height))) {
+                    drwl_setimage(monitor->drw, share_buf->image);
+                    bar_draw_notification(monitor, 0, free_w, notification, history_index, true);
+                    drwl_setimage(monitor->drw, buffer->image);
+                    wlr_buffer_unlock(&share_buf->base);
+                    monitor->sharex = cur_x;
+                    monitor->sharew = free_w;
+                }
             } else if (bar_window_title && focused) {
-                Buffer* share_buf;
                 bar_draw_window_title(monitor, focused, cur_x, free_w, is_selected, false);
                 if (focused->isprivate &&
                     (share_buf = bar_share_buffer(monitor->sharepool, free_w, monitor->b.height))) {

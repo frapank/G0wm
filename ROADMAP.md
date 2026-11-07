@@ -137,10 +137,10 @@ A message with personal text can show up in the middle of a call or a share.
 Notifications are hidden by default, like a private window, and a key shows
 them.
 
-- [ ] Hide the notifications by default: the bar shows a short placeholder
-  instead of the summary and body, on the real screen too. History is hidden
-  the same way.
-- [ ] Add a key and an action (`toggleprivatenotify`, next to `toggleprivate`)
+- [x] Hide the notifications by default: like a private window, screen
+  sharing gets a short placeholder instead of the summary and body, while the
+  real screen keeps them. History is hidden the same way.
+- [x] Add a key and an action (`toggleprivatenotify`, next to `toggleprivate`)
   that switches between hidden and shown.
 - [ ] Add a `privatenotify` option, on by default. Set to 0, notifications are
   shown by default and the key hides them.

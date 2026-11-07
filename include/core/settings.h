@@ -160,6 +160,7 @@ extern unsigned int notification_timeout;
 extern unsigned int notification_line_width;
 extern unsigned int notification_line_radius;
 extern const char* notification_action_sign;
+extern const char* notification_private_text;
 extern const char* runner_placeholder;
 extern unsigned int runner_max_candidates;
 extern unsigned int runner_pill_height;

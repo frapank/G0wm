@@ -167,6 +167,7 @@ const Action settings_actions[] = {
     { input_toggle_inhibit, "toggleinhibit", 0 },
     { opacity_toggle, "toggleopacity", 0 },
     { privacy_toggle, "toggleprivate", 0 },
+    { bar_notification_toggle_private, "toggleprivatenotify", 0 },
     { layout_toggle_tabbed, "toggletabbed", 'l' },
     { layout_toggle_tag, "toggletag", 'u' },
     { bar_toggle_title_bars, "toggletitlebar", 0 },

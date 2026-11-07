@@ -305,6 +305,8 @@ static void settings_write_bar(void)
     settings_write_int("notification_linewidth", notification_line_width);
     settings_write_int("notification_lineradius", notification_line_radius);
     settings_write_string("notification_actionsign", notification_action_sign);
+    settings_put_note("notification_privatetext", "{app} for application name");
+    settings_write_string("notification_privatetext", notification_private_text);
     settings_put_note("runner_placeholder", "shown while nothing is typed");
     settings_write_string("runner_placeholder", runner_placeholder);
     settings_put_note("runner_max_candidates", "0 for none");
