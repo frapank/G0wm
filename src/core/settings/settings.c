@@ -339,6 +339,7 @@ static void settings_reload_keyboard(void)
 static void settings_reload(const Arg*)
 {
     const int was_private = always_private;
+    const int was_private_notify = private_notifications;
 
     settings_load();
 
@@ -365,6 +366,8 @@ static void settings_reload(const Arg*)
     }
     if (always_private != was_private)
         privacy_damage();
+    if (private_notifications != was_private_notify)
+        bar_notification_reset_private();
     wlr_scene_rect_set_color(root_background, root_color);
 
     settings_reload_keyboard();

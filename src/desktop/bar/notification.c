@@ -82,7 +82,8 @@ static struct wl_event_source* bar_notification_timer;
 static long bar_notification_pick_selected = -1;
 static dbus_uint32_t bar_notification_pick_id;
 static int bar_notification_box_x; /* last drawn x, for hit testing */
-static bool bar_notification_hidden = true;
+/* -1 follows private_notifications, until toggleprivatenotify */
+static int bar_notification_hide = -1;
 
 /* function implementations */
 /* Background and text. drwl_text() paints its own background, so a progress
@@ -403,7 +404,7 @@ const Notification* bar_notification_shown(long* hist)
 
 bool bar_notification_private(void)
 {
-    return bar_notification_hidden;
+    return bar_notification_hide < 0 ? private_notifications : bar_notification_hide;
 }
 
 /* Reset the scroll offset for another notification, or when this one got
@@ -775,7 +776,13 @@ void bar_notification_toggle_private(const Arg*)
 {
     if (!notifications_enabled)
         return;
-    bar_notification_hidden = !bar_notification_hidden;
+    bar_notification_hide = !bar_notification_private();
     privacy_damage();
     bar_draw_all();
+}
+
+/* back to private_notifications, once it changes */
+void bar_notification_reset_private(void)
+{
+    bar_notification_hide = -1;
 }

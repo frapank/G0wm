@@ -392,6 +392,7 @@ static void settings_apply_bar(const struct scfg_block* block)
     systray_padding = settings_get_uint(block, "systraypadding", systray_padding);
     systray_icon_size = settings_get_uint(block, "systrayiconsize", systray_icon_size);
     notifications_enabled = settings_get_bool(block, "shownotifications", notifications_enabled);
+    private_notifications = settings_get_bool(block, "privatenotify", private_notifications);
     notification_timeout = settings_get_uint(block, "notification_timeout", notification_timeout);
     notification_line_width =
         settings_get_uint(block, "notification_linewidth", notification_line_width);
