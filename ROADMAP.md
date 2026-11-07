@@ -142,7 +142,7 @@ them.
   real screen keeps them. History is hidden the same way.
 - [x] Add a key and an action (`toggleprivatenotify`, next to `toggleprivate`)
   that switches between hidden and shown.
-- [ ] Add a `privatenotify` option, on by default. Set to 0, notifications are
+- [x] Add a `privatenotify` option, on by default. Set to 0, notifications are
   shown by default and the key hides them.
 - [ ] Draw a dot in the bar for the state that differs from the default,
   the same way the dot of private windows works: when hidden is the default

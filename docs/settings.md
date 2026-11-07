@@ -199,11 +199,13 @@ them, see the notification [actions](#actions).
 They are private by default, like a private window: your screen shows them as
 they are, while screen sharing gets `notification_privatetext` instead of the
 summary and the body, and no icon. The history is hidden the same way.
-`toggleprivatenotify` shows them to screen sharing, and hides them again.
+`toggleprivatenotify` shows them to screen sharing, and hides them again. With
+`privatenotify` off they are shown, and the same action hides them.
 
 | Setting | Default | Description |
 | --- | --- | --- |
 | `shownotifications` | `true` | Show the notifications. |
+| `privatenotify` | `true` | Hide the notifications from screen sharing until `toggleprivatenotify` shows them. With `false` they are shown until it hides them. Changing it on reload undoes the toggle. |
 | `notification_timeout` | `5` | Seconds a notification stays on screen. |
 | `notification_linewidth` | `4` | Width of the urgency line, in pixels. |
 | `notification_lineradius` | `2` | Corner radius of the urgency line. |
@@ -600,7 +602,7 @@ doubling each time) and you add them up to pick more than one.
 | `notifyprev` | | Previous notification, from the history. |
 | `notifydismiss` | | Dismiss the notification, or remove it from the history. |
 | `notifydismissall` | | Dismiss all the notifications. |
-| `toggleprivatenotify` | | Show the notifications to screen sharing, or hide them again. |
+| `toggleprivatenotify` | | Show the notifications to screen sharing, or hide them again. The default is set by `privatenotify`. |
 
 ---
 

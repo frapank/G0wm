@@ -300,6 +300,8 @@ static void settings_write_bar(void)
     settings_put_note("systrayiconsize", "0 fills the bar");
     settings_write_int("systrayiconsize", systray_icon_size);
     settings_write_bool("shownotifications", notifications_enabled);
+    settings_put_note("privatenotify", "hidden from screen sharing until toggleprivatenotify");
+    settings_write_bool("privatenotify", private_notifications);
     settings_put_note("notification_timeout", "seconds");
     settings_write_int("notification_timeout", notification_timeout);
     settings_write_int("notification_linewidth", notification_line_width);

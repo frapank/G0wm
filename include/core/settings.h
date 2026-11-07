@@ -156,6 +156,7 @@ extern unsigned int systray_spacing;
 extern unsigned int systray_padding;
 extern unsigned int systray_icon_size;
 extern int notifications_enabled;
+extern int private_notifications;
 extern unsigned int notification_timeout;
 extern unsigned int notification_line_width;
 extern unsigned int notification_line_radius;

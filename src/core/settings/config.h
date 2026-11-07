@@ -139,6 +139,7 @@ unsigned int systray_padding = 2;
 unsigned int systray_icon_size = 16; // 0 fills the bar
 
 int notifications_enabled = 1;
+int private_notifications = 1;
 unsigned int notification_timeout = 5; // seconds
 
 unsigned int notification_line_width = 4;
