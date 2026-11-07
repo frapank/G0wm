@@ -399,6 +399,8 @@ static void settings_apply_bar(const struct scfg_block* block)
         settings_get_uint(block, "notification_lineradius", notification_line_radius);
     notification_action_sign =
         settings_get_string(block, "notification_actionsign", notification_action_sign);
+    notification_private_text =
+        settings_get_string(block, "notification_privatetext", notification_private_text);
     runner_placeholder = settings_get_string(block, "runner_placeholder", runner_placeholder);
     runner_max_candidates =
         settings_get_uint(block, "runner_max_candidates", runner_max_candidates);

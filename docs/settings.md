@@ -196,6 +196,11 @@ Borders, gaps and title bars.
 Notifications show up in the empty part of the bar. To open, browse or dismiss
 them, see the notification [actions](#actions).
 
+They are private by default, like a private window: your screen shows them as
+they are, while screen sharing gets `notification_privatetext` instead of the
+summary and the body, and no icon. The history is hidden the same way.
+`toggleprivatenotify` shows them to screen sharing, and hides them again.
+
 | Setting | Default | Description |
 | --- | --- | --- |
 | `shownotifications` | `true` | Show the notifications. |
@@ -203,6 +208,7 @@ them, see the notification [actions](#actions).
 | `notification_linewidth` | `4` | Width of the urgency line, in pixels. |
 | `notification_lineradius` | `2` | Corner radius of the urgency line. |
 | `notification_actionsign` | `[r]` | Text shown on a notification that has actions. |
+| `notification_privatetext` | `G0wm is hiding this notification` | Shown to screen sharing instead of a hidden notification. Your screen keeps the real text. `{app}` is replaced by the name of the app that sent it. |
 
 ### Runner
 
@@ -594,6 +600,7 @@ doubling each time) and you add them up to pick more than one.
 | `notifyprev` | | Previous notification, from the history. |
 | `notifydismiss` | | Dismiss the notification, or remove it from the history. |
 | `notifydismissall` | | Dismiss all the notifications. |
+| `toggleprivatenotify` | | Show the notifications to screen sharing, or hide them again. |
 
 ---
 
@@ -645,6 +652,7 @@ In the config file, <kbd>Super</kbd> is called `logo`.
 | <kbd>Super</kbd> <kbd>Ctrl</kbd> <kbd>N</kbd> / <kbd>Super</kbd> <kbd>Alt</kbd> <kbd>N</kbd> | Next, previous notification |
 | <kbd>Super</kbd> <kbd>Ctrl</kbd> <kbd>Shift</kbd> <kbd>N</kbd> | Dismiss all the notifications |
 | <kbd>Super</kbd> <kbd>A</kbd> | Notification actions |
+| <kbd>Super</kbd> <kbd>Ctrl</kbd> <kbd>P</kbd> | Show or hide the notifications |
 | <kbd>Super</kbd> <kbd>Shift</kbd> <kbd>R</kbd> | Reload the settings |
 | <kbd>Super</kbd> <kbd>Esc</kbd> | Shortcuts to the application, and back |
 | <kbd>Super</kbd> <kbd>Shift</kbd> <kbd>Esc</kbd> | Quit |
