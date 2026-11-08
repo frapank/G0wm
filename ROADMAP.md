@@ -144,7 +144,7 @@ them.
   that switches between hidden and shown.
 - [x] Add a `privatenotify` option, on by default. Set to 0, notifications are
   shown by default and the key hides them.
-- [ ] Draw a dot in the bar for the state that differs from the default,
+- [x] Draw a dot in the bar for the state that differs from the default,
   the same way the dot of private windows works: when hidden is the default
   and notifications are shown, it uses `publiccolor` (light blue). When shown
   is the default and they are hidden, it uses `privatecolor` (purple).

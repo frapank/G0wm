@@ -407,6 +407,15 @@ bool bar_notification_private(void)
     return bar_notification_hide < 0 ? private_notifications : bar_notification_hide;
 }
 
+/* the dot marks the notifications when they differ from private_notifications */
+bool bar_notification_private_dot(uint32_t* rgba)
+{
+    if (!bar_notification_private() == !private_notifications)
+        return false;
+    *rgba = bar_notification_private() ? private_color : public_color;
+    return true;
+}
+
 /* Reset the scroll offset for another notification, or when this one got
  * shorter than where we'd scrolled to. */
 static void bar_notification_sync(const Notification* notification, long hist)

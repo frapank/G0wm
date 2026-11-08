@@ -202,6 +202,11 @@ summary and the body, and no icon. The history is hidden the same way.
 `toggleprivatenotify` shows them to screen sharing, and hides them again. With
 `privatenotify` off they are shown, and the same action hides them.
 
+While they differ from `privatenotify`, a dot at the end of the free part of the
+bar says so: in `publiccolor` when they are shown, in `privatecolor` when they
+are hidden. It is sized like the tag dots and rounded like the dot of a private
+window (`privateround`).
+
 | Setting | Default | Description |
 | --- | --- | --- |
 | `shownotifications` | `true` | Show the notifications. |

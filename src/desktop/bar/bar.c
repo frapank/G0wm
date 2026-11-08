@@ -212,6 +212,12 @@ void bar_finish(void)
     bar_pulse_timer = nullptr;
 }
 
+static int bar_dot_size(const Monitor* monitor)
+{
+    return bar_tag_dot_size ? MAX((int)round(bar_tag_dot_size * monitor->wlr_output->scale), 1)
+                            : MAX(monitor->drw->font->height * 2 / 5, 4);
+}
+
 /* the dot of tag, a pill when selected; returns its cell's width */
 static int bar_tag_dot(const Monitor* monitor,
                        const Monitor* target,
@@ -222,14 +228,30 @@ static int bar_tag_dot(const Monitor* monitor,
 {
     const double scale = monitor->wlr_output->scale;
 
-    *dot_size = bar_tag_dot_size ? MAX((int)round(bar_tag_dot_size * scale), 1)
-                                 : MAX(monitor->drw->font->height * 2 / 5, 4);
+    *dot_size = bar_dot_size(monitor);
     const int gap = bar_tag_dot_gap ? (int)round(bar_tag_dot_gap * scale) : *dot_size * 3 / 2;
     *dot_width = target->tagset[target->seltags] & 1 << tag
                      ? (int)round(*dot_size * bar_tag_dot_width)
                      : *dot_size;
     *dot_lead = tag ? gap / 2 : monitor->lrpad / 2;
     return *dot_lead + *dot_width + (tag == tag_count - 1 ? monitor->lrpad / 2 : gap - gap / 2);
+}
+
+/* at the end of the free box; returns the width it takes from it */
+static int bar_draw_notification_dot(Monitor* monitor, int x, int free_width)
+{
+    const int dot_size = bar_dot_size(monitor);
+    const int width = dot_size + monitor->lrpad;
+    uint32_t dot_color;
+
+    if (!notifications_enabled || free_width < width || !bar_notification_private_dot(&dot_color))
+        return 0;
+    x += free_width - width;
+    drwl_setscheme(monitor->drw, colors[SchemeNorm]);
+    drwl_rect(monitor->drw, x, 0, width, monitor->b.height, 1, 1);
+    bar_draw_pill(monitor, x + monitor->lrpad / 2, (monitor->b.height - dot_size) / 2, dot_size,
+                  dot_size, bar_private_radius(dot_size), false, dot_color);
+    return width;
 }
 
 /* title of client in the bar */
@@ -387,6 +409,8 @@ void bar_draw(Monitor* monitor)
      * notification share it, so its geometry must be measured in exactly one
      * place. */
     int free_w = monitor->b.width - (status_w + cur_x + tray_w);
+    if (is_selected)
+        free_w -= bar_draw_notification_dot(monitor, cur_x, free_w);
     monitor->b.titlew = free_w > monitor->b.height ? free_w : 0;
 
     if (monitor->b.titlew) {
