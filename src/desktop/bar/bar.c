@@ -237,7 +237,7 @@ static int bar_tag_dot(const Monitor* monitor,
     return *dot_lead + *dot_width + (tag == tag_count - 1 ? monitor->lrpad / 2 : gap - gap / 2);
 }
 
-/* at the end of the free box; returns the width it takes from it */
+/* at the notification_dot end of the free box; returns the width it takes */
 static int bar_draw_notification_dot(Monitor* monitor, int x, int free_width)
 {
     const int dot_size = bar_dot_size(monitor);
@@ -246,7 +246,8 @@ static int bar_draw_notification_dot(Monitor* monitor, int x, int free_width)
 
     if (!notifications_enabled || free_width < width || !bar_notification_private_dot(&dot_color))
         return 0;
-    x += free_width - width;
+    if (notification_dot == NotifyDotRight)
+        x += free_width - width;
     drwl_setscheme(monitor->drw, colors[SchemeNorm]);
     drwl_rect(monitor->drw, x, 0, width, monitor->b.height, 1, 1);
     bar_draw_pill(monitor, x + monitor->lrpad / 2, (monitor->b.height - dot_size) / 2, dot_size,
@@ -409,8 +410,12 @@ void bar_draw(Monitor* monitor)
      * notification share it, so its geometry must be measured in exactly one
      * place. */
     int free_w = monitor->b.width - (status_w + cur_x + tray_w);
-    if (is_selected)
-        free_w -= bar_draw_notification_dot(monitor, cur_x, free_w);
+    if (is_selected) {
+        const int dot_w = bar_draw_notification_dot(monitor, cur_x, free_w);
+        if (notification_dot == NotifyDotLeft)
+            cur_x += dot_w;
+        free_w -= dot_w;
+    }
     monitor->b.titlew = free_w > monitor->b.height ? free_w : 0;
 
     if (monitor->b.titlew) {

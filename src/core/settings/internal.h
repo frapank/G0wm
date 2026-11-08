@@ -36,6 +36,7 @@ extern const Enum settings_mouse_buttons[];
 extern const Enum settings_gesture_motions[];
 extern const Enum settings_runner_icons[];
 extern const Enum settings_bar_statuses[];
+extern const Enum settings_notification_dots[];
 extern const Enum settings_corner_styles[];
 #ifdef INTEGRATED_BACKGROUND
 extern const Enum settings_opacity_kinds[];

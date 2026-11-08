@@ -43,6 +43,7 @@ enum { OpacityNormal, OpacityBlur };                                   /* opacit
 enum { SwipeLeft, SwipeRight, SwipeUp, SwipeDown, PinchIn, PinchOut }; /* gesture motions */
 enum { RunnerIconsNone, RunnerIconsSelected, RunnerIconsAll };
 enum { BarStatusFocus, BarStatusAll, BarStatusMain };
+enum { NotifyDotLeft, NotifyDotRight }; /* ends of the free box */
 enum : unsigned int {
     ClkTagBar,
     ClkLtSymbol,
@@ -162,6 +163,9 @@ extern unsigned int notification_line_width;
 extern unsigned int notification_line_radius;
 extern const char* notification_action_sign;
 extern const char* notification_private_text;
+extern int notification_dot;
+extern uint32_t notification_private_color;
+extern uint32_t notification_public_color;
 extern const char* runner_placeholder;
 extern unsigned int runner_max_candidates;
 extern unsigned int runner_pill_height;
