@@ -163,6 +163,7 @@ extern unsigned int notification_line_width;
 extern unsigned int notification_line_radius;
 extern const char* notification_action_sign;
 extern const char* notification_private_text;
+extern int notification_private_hide;
 extern int notification_dot;
 extern uint32_t notification_private_color;
 extern uint32_t notification_public_color;

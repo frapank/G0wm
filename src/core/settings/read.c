@@ -402,6 +402,8 @@ static void settings_apply_bar(const struct scfg_block* block)
         settings_get_string(block, "notification_actionsign", notification_action_sign);
     notification_private_text =
         settings_get_string(block, "notification_privatetext", notification_private_text);
+    notification_private_hide =
+        settings_get_bool(block, "notification_privatehide", notification_private_hide);
     notification_dot = settings_get_enum(block, "notification_dot", settings_notification_dots,
                                          notification_dot, "notification dot setting");
     notification_private_color =

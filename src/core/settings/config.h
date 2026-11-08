@@ -148,6 +148,7 @@ unsigned int notification_line_radius = 2;
 const char* notification_action_sign = "[r]";
 /* {app} for application name */
 const char* notification_private_text = "G0wm is hiding this notification";
+int notification_private_hide = 0;       /* left out of screen sharing, no placeholder */
 int notification_dot = NotifyDotRight;   /* or NotifyDotLeft */
 uint32_t notification_private_color = 0; /* 0 follows private_color */
 uint32_t notification_public_color = 0;  /* 0 follows public_color */

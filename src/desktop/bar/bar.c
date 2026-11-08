@@ -281,6 +281,25 @@ static void bar_draw_window_title(Monitor* monitor,
                       box_y, box_size, box_size, bar_private_radius(box_size), false, dot_color);
 }
 
+/* What screen sharing gets in place of a private notification: a placeholder,
+ * or with notification_private_hide what the box holds without it. */
+static void bar_draw_shared_notification(Monitor* monitor,
+                                         Client* focused,
+                                         const Notification* notification,
+                                         long history_index,
+                                         int width,
+                                         bool selected)
+{
+    if (!notification_private_hide) {
+        bar_draw_notification(monitor, 0, width, notification, history_index, true);
+    } else if (bar_window_title && focused) {
+        bar_draw_window_title(monitor, focused, 0, width, selected, true);
+    } else {
+        drwl_setscheme(monitor->drw, bar_opaque_scheme(SchemeNorm));
+        drwl_rect(monitor->drw, 0, 0, width, monitor->b.height, 1, 1);
+    }
+}
+
 /* shared with input_bar_click() */
 int bar_tag_width(Monitor* monitor, Monitor* target, uint32_t tag)
 {
@@ -500,7 +519,8 @@ void bar_draw(Monitor* monitor)
                 if (bar_notification_private() &&
                     (share_buf = bar_share_buffer(monitor->sharepool, free_w, monitor->b.height))) {
                     drwl_setimage(monitor->drw, share_buf->image);
-                    bar_draw_notification(monitor, 0, free_w, notification, history_index, true);
+                    bar_draw_shared_notification(monitor, focused, notification, history_index,
+                                                 free_w, is_selected);
                     drwl_setimage(monitor->drw, buffer->image);
                     wlr_buffer_unlock(&share_buf->base);
                     monitor->sharex = cur_x;

@@ -309,6 +309,8 @@ static void settings_write_bar(void)
     settings_write_string("notification_actionsign", notification_action_sign);
     settings_put_note("notification_privatetext", "{app} for application name");
     settings_write_string("notification_privatetext", notification_private_text);
+    settings_put_note("notification_privatehide", "screen sharing shows no notification at all");
+    settings_write_bool("notification_privatehide", notification_private_hide);
     settings_put_note("notification_dot", "left or right of the free part of the bar");
     settings_write_string("notification_dot",
                           settings_enum_name(settings_notification_dots, notification_dot));
