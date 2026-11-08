@@ -202,10 +202,10 @@ summary and the body, and no icon. The history is hidden the same way.
 `toggleprivatenotify` shows them to screen sharing, and hides them again. With
 `privatenotify` off they are shown, and the same action hides them.
 
-While they differ from `privatenotify`, a dot at the end of the free part of the
-bar says so: in `publiccolor` when they are shown, in `privatecolor` when they
-are hidden. It is sized like the tag dots and rounded like the dot of a private
-window (`privateround`).
+While they differ from `privatenotify`, a dot on one side of the free part of
+the bar says so: in `notification_publiccolor` when they are shown, in
+`notification_privatecolor` when they are hidden. It is sized like the tag dots
+and rounded like the dot of a private window (`privateround`).
 
 | Setting | Default | Description |
 | --- | --- | --- |
@@ -216,6 +216,9 @@ window (`privateround`).
 | `notification_lineradius` | `2` | Corner radius of the urgency line. |
 | `notification_actionsign` | `[r]` | Text shown on a notification that has actions. |
 | `notification_privatetext` | `G0wm is hiding this notification` | Shown to screen sharing instead of a hidden notification. Your screen keeps the real text. `{app}` is replaced by the name of the app that sent it. |
+| `notification_dot` | `right` | Side of the free part of the bar where the dot goes: `left` or `right`. |
+| `notification_privatecolor` | `#00000000` | Color of the dot while the notifications are hidden, with `privatenotify` off. `#00000000` follows `privatecolor`. |
+| `notification_publiccolor` | `#00000000` | Color of the dot while the notifications are shown, with `privatenotify` on. `#00000000` follows `publiccolor`. |
 
 ### Runner
 

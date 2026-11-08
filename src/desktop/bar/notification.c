@@ -412,7 +412,10 @@ bool bar_notification_private_dot(uint32_t* rgba)
 {
     if (!bar_notification_private() == !private_notifications)
         return false;
-    *rgba = bar_notification_private() ? private_color : public_color;
+    if (bar_notification_private())
+        *rgba = notification_private_color ? notification_private_color : private_color;
+    else
+        *rgba = notification_public_color ? notification_public_color : public_color;
     return true;
 }
 

@@ -148,7 +148,7 @@ them.
   the same way the dot of private windows works: when hidden is the default
   and notifications are shown, it uses `publiccolor` (light blue). When shown
   is the default and they are hidden, it uses `privatecolor` (purple).
-- [ ] Make the position and the two colors of the dot settable in the config,
+- [x] Make the position and the two colors of the dot settable in the config,
   with `publiccolor` and `privatecolor` as defaults.
 
 ## Quality and security

@@ -402,6 +402,12 @@ static void settings_apply_bar(const struct scfg_block* block)
         settings_get_string(block, "notification_actionsign", notification_action_sign);
     notification_private_text =
         settings_get_string(block, "notification_privatetext", notification_private_text);
+    notification_dot = settings_get_enum(block, "notification_dot", settings_notification_dots,
+                                         notification_dot, "notification dot setting");
+    notification_private_color =
+        settings_get_hex(block, "notification_privatecolor", notification_private_color);
+    notification_public_color =
+        settings_get_hex(block, "notification_publiccolor", notification_public_color);
     runner_placeholder = settings_get_string(block, "runner_placeholder", runner_placeholder);
     runner_max_candidates =
         settings_get_uint(block, "runner_max_candidates", runner_max_candidates);

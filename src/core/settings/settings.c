@@ -83,6 +83,9 @@ const Enum settings_bar_statuses[] = { { BarStatusFocus, "focus" },
                                        { BarStatusAll, "all" },
                                        { BarStatusMain, "main" },
                                        { 0, nullptr } };
+const Enum settings_notification_dots[] = { { NotifyDotLeft, "left" },
+                                            { NotifyDotRight, "right" },
+                                            { 0, nullptr } };
 const Enum settings_corner_styles[] = { { CornerNormal, "normal" },
                                         { CornerSquircle, "squircle" },
                                         { 0, nullptr } };
