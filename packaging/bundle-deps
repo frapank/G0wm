@@ -43,10 +43,18 @@ build() { # name, then the meson options
 	meson install -C "$top/build/$name"
 }
 
+licenses() {
+	local name
+	for name in wlroots libscfg; do
+		install -Dm644 "$top/src/$name/LICENSE" "$top/prefix/share/licenses/$name/LICENSE"
+	done
+}
+
 stamp=$top/prefix/.stamp
 # the .pc files hold absolute paths
 want="wlroots $WLROOTS_COMMIT scfg $SCFG_COMMIT cc $($CC --version | head -n 1) xwayland $xwayland in $top"
 if [ "$(cat "$stamp" 2>/dev/null)" = "$want" ]; then
+	licenses
 	echo "wlroots $WLROOTS_TAG and libscfg $SCFG_TAG are up to date"
 	exit 0
 fi
@@ -61,4 +69,5 @@ build wlroots -Dexamples=false -Dxwayland="$xwl" \
 	-Dbackends=drm,libinput -Drenderers=gles2,vulkan \
 	-Dallocators=gbm,udmabuf -Dsession=enabled -Dcolor-management=enabled \
 	-Dlibliftoff=disabled -Dxcb-errors=disabled
+licenses
 printf '%s\n' "$want" >"$stamp"

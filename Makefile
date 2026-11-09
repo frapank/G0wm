@@ -207,6 +207,7 @@ uninstall remove:
 PKGVER  := $(subst -,+,$(patsubst v%,%,$(VERSION)))
 PKGDIR   = $(BUILDDIR)/pkg
 PKGROOT  = $(PKGDIR)/root
+LICDIR   = $(PKGROOT)/usr/share/licenses/g0wm
 DEBDIR   = $(PKGDIR)/debian
 DEBROOT  = $(DEBDIR)/g0wm
 MACHINE := $(shell uname -m)
@@ -220,6 +221,12 @@ stage: g0wm
 	rm -rf $(PKGROOT)
 	$(MAKE) install DESTDIR=$(abspath $(PKGROOT)) PREFIX=/usr
 	strip $(PKGROOT)/usr/bin/g0wm
+	install -Dm644 -t $(LICDIR) packaging/copyright LICENSES/*.txt
+ifeq ($(BUNDLE_DEPS),yes)
+	for lib in wlroots libscfg; do \
+		install -Dm644 subprojects/prefix/share/licenses/$$lib/LICENSE $(LICDIR)/$$lib/LICENSE; \
+	done
+endif
 	@# a strict umask must not leak into the directories the packages ship
 	find $(PKGROOT) -type d -exec chmod 755 {} +
 
@@ -233,6 +240,7 @@ deb: stage
 	rm -rf $(DEBDIR)
 	mkdir -p $(DEBDIR)
 	cp -a $(PKGROOT) $(DEBROOT)
+	install -Dm644 packaging/copyright $(DEBROOT)/usr/share/doc/g0wm/copyright
 	install -d -m755 $(DEBROOT)/DEBIAN
 	@# dpkg-shlibdeps needs a debian/control, even an empty one
 	touch $(DEBDIR)/control
