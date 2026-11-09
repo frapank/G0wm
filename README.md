@@ -12,6 +12,7 @@
 [![License](https://img.shields.io/badge/license-GPL--3.0-blue?style=flat-square)](LICENSE)
 
 **[<kbd> <br> Features <br> </kbd>][Features]** 
+**[<kbd> <br> Install <br> </kbd>][Install]** 
 **[<kbd> <br> Build <br> </kbd>][Build]** 
 **[<kbd> <br> Configure <br> </kbd>][Configure]** 
 **[<kbd> <br> Release <br> </kbd>][Release]**
@@ -31,6 +32,26 @@ when hovered.
   <img src=".github/assets/windows.png" alt="g0wm in the tiling layout" width="49%">
   <img src=".github/assets/tabbed.png" alt="g0wm in the tabbed layout" width="49%">
 </p>
+
+## Install
+
+Each [release][Release] has x86_64 packages with wlroots and libscfg built in:
+
+| System | File | Install it with |
+| --- | --- | --- |
+| Ubuntu 26.04 and newer, Debian testing | `g0wm_<version>_amd64.deb` | `sudo apt install ./g0wm_*_amd64.deb` |
+| Fedora 44 and newer | `g0wm-<version>-1.x86_64.rpm` | `sudo dnf install ./g0wm-*.x86_64.rpm` |
+| openSUSE Tumbleweed | `g0wm-<version>-1.x86_64.rpm` | `sudo zypper install --allow-unsigned-rpm ./g0wm-*.x86_64.rpm` |
+| Other recent distributions | `g0wm-<version>-linux-x86_64.tar.gz` | `sudo tar -xzf g0wm-*.tar.gz -C /` |
+
+The tarball does not check dependencies. Debian 13, Ubuntu 24.04 and Fedora 43
+are too old for wlroots 0.20. Elsewhere, build from source.
+
+To check the download:
+
+```sh
+sha256sum -c --ignore-missing SHA256SUMS
+```
 
 ## Build
 
@@ -67,7 +88,7 @@ See `./configure --help` for the other options (toolchain, `--debug`, `--native`
 
 - **Config:** `~/.config/g0wm/config`, written by `make install` and read at startup. `g0wm -c` writes it if missing.
 - **Status text:** read from standard input, one line at a time. No status script ships with g0wm.
-- **Session:** `make install` puts `g0wm.desktop` in `~/.local/share/wayland-sessions/`. Most display managers only look in `/usr/share/wayland-sessions/`, so copy `share/g0wm.desktop` there, or just run `g0wm` from a VT.
+- **Session:** the packages put `g0wm.desktop` in `/usr/share/wayland-sessions/`, where display managers look. `make install` puts it in `~/.local/share/wayland-sessions/`, which most of them ignore: copy `share/g0wm.desktop` to `/usr/share/wayland-sessions/`, or just run `g0wm` from a VT.
 
 ## License
 
@@ -79,6 +100,7 @@ each part comes from, and the thanks owed to the patch authors, is in
 [docs/credits.md](docs/credits.md).
 
 [Features]: docs/features.md
+[Install]: #install
 [Build]: #build
 [Configure]: docs/settings.md
 [Release]: https://github.com/frapank/G0wm/releases/latest
