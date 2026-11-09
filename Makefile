@@ -51,8 +51,9 @@ G0WMDEVCFLAGS = -g -Wpedantic -Wall -Wextra \
 	-Wfloat-conversion
 
 # CFLAGS / LDFLAGS
+# --bundle-deps puts libscfg in WLR_LIBS
 PKGS      = wayland-server xkbcommon libinput pixman-1 fcft dbus-1 gdk-pixbuf-2.0 \
-	scfg $(XLIBS)
+	$(if $(filter yes,$(BUNDLE_DEPS)),,scfg) $(XLIBS)
 PKG_CFLAGS := $(shell $(PKG_CONFIG) --cflags $(PKGS))
 PKG_LIBS   := $(shell $(PKG_CONFIG) --libs $(PKGS))
 G0WMCFLAGS = -std=gnu23 $(PKG_CFLAGS) $(WLR_INCS) $(G0WMCPPFLAGS) $(G0WMDEVCFLAGS) $(CFLAGS)
@@ -84,7 +85,7 @@ vpath %.xml protocols \
 	$(WAYLAND_PROTOCOLS)/staging/ext-image-copy-capture \
 	$(WAYLAND_PROTOCOLS)/unstable/pointer-constraints
 
-.PHONY: all clean dist install uninstall remove format format-check test FORCE \
+.PHONY: all clean distclean dist install uninstall remove format format-check test FORCE \
 	stage tarball deb rpm packages
 
 all: g0wm
@@ -92,6 +93,11 @@ all: g0wm
 g0wm: $(OBJ)
 	@$(MESS) '[$(GREEN)LINKER$(RESET)] %s\n' 'Linking $@'
 	$(Q)$(CC) $(CFLAGS) $(LDFLAGS) $(OBJ) $(LDLIBS) -o $@
+ifeq ($(BUNDLE_DEPS),yes)
+	$(Q)if readelf -d $@ | grep -E 'NEEDED.*lib(wlroots|scfg)|R(UN)?PATH'; then \
+		echo '$@: linked to the libraries above, not bundled' >&2; rm -f $@; exit 1; \
+	fi
+endif
 
 # header deps come from the .d files, the generated headers just need to exist
 $(BUILDDIR)/%.o: $(SRCDIR)/%.c config.mk | $(GENHDR)
@@ -173,6 +179,9 @@ clean:
 	@$(MESS) '[$(RED)CLEANER$(RESET)] %s\n' 'Cleaning...'
 	rm -rf g0wm $(BUILDDIR)
 	@$(MESS) '[$(RED)CLEANER$(RESET)] %s\n' 'Done!'
+
+distclean: clean
+	rm -rf subprojects config.mk
 
 # the committed tree, not the working copy
 dist:

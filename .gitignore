@@ -4,3 +4,4 @@ build/
 config.mk
 src/core/settings/config.h.*.bak
 compile_commands.json
+/subprojects/
