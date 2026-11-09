@@ -15,7 +15,7 @@ jobs:
     steps:
       - name: Install git for the checkout and gh for the upload
         run: apt-get update && apt-get install -y --no-install-recommends git ca-certificates gh
-      - uses: actions/checkout@v5
+      - uses: actions/checkout@v7
         with:
           fetch-depth: 0
       - name: Let git read the checkout
