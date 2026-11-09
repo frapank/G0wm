@@ -115,6 +115,53 @@ jobs:
           path: build/pkg/g0wm*
           if-no-files-found: error
 
+  install-packages:
+    name: install (${{ matrix.name }})
+    needs: packages
+    runs-on: ubuntu-latest
+    container: ${{ matrix.image }}
+    env:
+      DEBIAN_FRONTEND: noninteractive
+    strategy:
+      fail-fast: false
+      matrix:
+        include:
+          - name: Ubuntu 26.04 .deb
+            image: ubuntu:26.04
+            install: apt-get update && apt-get install -y --no-install-recommends ./g0wm_*.deb
+          - name: Debian testing .deb
+            image: debian:testing
+            install: apt-get update && apt-get install -y --no-install-recommends ./g0wm_*.deb
+          - name: Fedora 44 .rpm
+            image: fedora:44
+            install: dnf install -y --setopt=install_weak_deps=False ./g0wm-*.rpm
+          - name: openSUSE Tumbleweed .rpm
+            image: opensuse/tumbleweed
+            install: >-
+              zypper --non-interactive install --no-recommends --allow-unsigned-rpm
+              ./g0wm-*.rpm
+          # the libraries the bundled wlroots needs
+          - name: Arch tarball
+            image: archlinux:base
+            install: >-
+              pacman -Syu --noconfirm wlroots0.20 fcft gdk-pixbuf2 &&
+              tar -xzf g0wm-*.tar.gz -C /
+    steps:
+      - uses: actions/download-artifact@v4
+        with:
+          name: g0wm-packages
+      - name: Install
+        run: ${{ matrix.install }}
+      - name: Run it
+        run: |
+          out=$(g0wm -v 2>&1) || true
+          printf '%s\n' "$out"
+          case $out in
+          g0wm\ *) ;;
+          *) ldd /usr/bin/g0wm | grep 'not found' >&2
+             echo "g0wm -v did not run" >&2; exit 1 ;;
+          esac
+
   format:
     name: clang-format
     runs-on: ubuntu-latest
