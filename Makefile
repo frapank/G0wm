@@ -207,13 +207,13 @@ uninstall remove:
 PKGVER  := $(subst -,+,$(patsubst v%,%,$(VERSION)))
 PKGDIR   = $(BUILDDIR)/pkg
 PKGROOT  = $(PKGDIR)/root
+DEBDIR   = $(PKGDIR)/debian
+DEBROOT  = $(DEBDIR)/g0wm
 MACHINE := $(shell uname -m)
 DEB_ARCH ?= $(shell dpkg --print-architecture 2>/dev/null || echo amd64)
 MAINTAINER ?= $(shell git config user.name) <$(shell git config user.email)>
-# Debian library names, check them against the release you build for
-DEB_DEPENDS ?= libwlroots-0.20, libwayland-server0, libxkbcommon0, libinput10, \
-	libpixman-1-0, libfcft4, libdbus-1-3, libgdk-pixbuf-2.0-0, libscfg0, \
-	libxcb1, libxcb-icccm4
+# empty: from dpkg-shlibdeps, on Debian and Ubuntu only
+DEB_DEPENDS ?=
 
 stage: g0wm
 	@$(MESS) '[$(CYAN)PACKAGE$(RESET)] %s\n' 'Staging $(PKGVER)'
@@ -230,16 +230,22 @@ tarball: stage
 	@$(MESS) '[$(CYAN)PACKAGE$(RESET)] %s\n' '$(PKGDIR)/g0wm-$(PKGVER)-linux-$(MACHINE).tar.gz'
 
 deb: stage
-	rm -rf $(PKGDIR)/deb
-	cp -a $(PKGROOT) $(PKGDIR)/deb
-	install -d -m755 $(PKGDIR)/deb/DEBIAN
+	rm -rf $(DEBDIR)
+	mkdir -p $(DEBDIR)
+	cp -a $(PKGROOT) $(DEBROOT)
+	install -d -m755 $(DEBROOT)/DEBIAN
+	@# dpkg-shlibdeps needs a debian/control, even an empty one
+	touch $(DEBDIR)/control
+	deps='$(DEB_DEPENDS)'; \
+	[ -n "$$deps" ] || deps=`cd $(PKGDIR) && dpkg-shlibdeps -O debian/g0wm/usr/bin/g0wm | \
+		sed -n 's/^shlibs:Depends=//p'`; \
+	[ -n "$$deps" ] || { echo 'deb: dpkg-shlibdeps found no dependencies' >&2; exit 1; }; \
 	sed -e 's|@VERSION@|$(PKGVER)|' -e 's|@ARCH@|$(DEB_ARCH)|' \
-		-e 's|@MAINTAINER@|$(MAINTAINER)|' -e 's|@DEPENDS@|$(DEB_DEPENDS)|' \
-		-e "s|@SIZE@|`du -sk $(PKGROOT)/usr | cut -f1`|" \
-		packaging/deb/control.in >$(PKGDIR)/deb/DEBIAN/control
-	dpkg-deb --root-owner-group -b $(PKGDIR)/deb \
-		$(PKGDIR)/g0wm_$(PKGVER)_$(DEB_ARCH).deb
-	rm -rf $(PKGDIR)/deb
+		-e 's|@MAINTAINER@|$(MAINTAINER)|' -e "s#@DEPENDS@#$$deps#" \
+		-e "s|@SIZE@|`du -sk $(DEBROOT)/usr | cut -f1`|" \
+		packaging/deb/control.in >$(DEBROOT)/DEBIAN/control
+	dpkg-deb --root-owner-group -b $(DEBROOT) $(PKGDIR)/g0wm_$(PKGVER)_$(DEB_ARCH).deb
+	rm -rf $(DEBDIR)
 
 rpm: stage
 	mkdir -p $(PKGDIR)/rpm
