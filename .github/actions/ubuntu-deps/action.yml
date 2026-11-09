@@ -1,0 +1,24 @@
+name: Ubuntu build dependencies
+description: >
+  Installs the toolchain, the libraries and the packaging tools for the
+  release build. Ubuntu 26.04 is the oldest release the packages support.
+
+runs:
+  using: composite
+  steps:
+    - shell: bash
+      env:
+        DEBIAN_FRONTEND: noninteractive
+      run: |
+        apt-get update
+        apt-get install -y --no-install-recommends \
+          build-essential pkgconf meson ninja-build \
+          libwayland-dev wayland-protocols libxkbcommon-dev libinput-dev \
+          libpixman-1-dev libfcft-dev libdbus-1-dev libgdk-pixbuf-2.0-dev \
+          libxcb1-dev libxcb-icccm4-dev \
+          libdrm-dev libegl-dev libgles-dev libgbm-dev libvulkan-dev \
+          glslang-tools liblcms2-dev libudev-dev libseat-dev \
+          libdisplay-info-dev hwdata xwayland libffi-dev \
+          libxcb-composite0-dev libxcb-ewmh-dev libxcb-render0-dev \
+          libxcb-res0-dev libxcb-xfixes0-dev \
+          dpkg-dev rpm

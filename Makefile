@@ -51,8 +51,9 @@ G0WMDEVCFLAGS = -g -Wpedantic -Wall -Wextra \
 	-Wfloat-conversion
 
 # CFLAGS / LDFLAGS
+# --bundle-deps puts libscfg in WLR_LIBS
 PKGS      = wayland-server xkbcommon libinput pixman-1 fcft dbus-1 gdk-pixbuf-2.0 \
-	scfg $(XLIBS)
+	$(if $(filter yes,$(BUNDLE_DEPS)),,scfg) $(XLIBS)
 PKG_CFLAGS := $(shell $(PKG_CONFIG) --cflags $(PKGS))
 PKG_LIBS   := $(shell $(PKG_CONFIG) --libs $(PKGS))
 G0WMCFLAGS = -std=gnu23 $(PKG_CFLAGS) $(WLR_INCS) $(G0WMCPPFLAGS) $(G0WMDEVCFLAGS) $(CFLAGS)
@@ -84,7 +85,7 @@ vpath %.xml protocols \
 	$(WAYLAND_PROTOCOLS)/staging/ext-image-copy-capture \
 	$(WAYLAND_PROTOCOLS)/unstable/pointer-constraints
 
-.PHONY: all clean dist install uninstall remove format format-check test FORCE \
+.PHONY: all clean distclean dist install uninstall remove format format-check test FORCE \
 	stage tarball deb rpm packages
 
 all: g0wm
@@ -92,6 +93,11 @@ all: g0wm
 g0wm: $(OBJ)
 	@$(MESS) '[$(GREEN)LINKER$(RESET)] %s\n' 'Linking $@'
 	$(Q)$(CC) $(CFLAGS) $(LDFLAGS) $(OBJ) $(LDLIBS) -o $@
+ifeq ($(BUNDLE_DEPS),yes)
+	$(Q)if readelf -d $@ | grep -E 'NEEDED.*lib(wlroots|scfg)|R(UN)?PATH'; then \
+		echo '$@: linked to the libraries above, not bundled' >&2; rm -f $@; exit 1; \
+	fi
+endif
 
 # header deps come from the .d files, the generated headers just need to exist
 $(BUILDDIR)/%.o: $(SRCDIR)/%.c config.mk | $(GENHDR)
@@ -174,6 +180,9 @@ clean:
 	rm -rf g0wm $(BUILDDIR)
 	@$(MESS) '[$(RED)CLEANER$(RESET)] %s\n' 'Done!'
 
+distclean: clean
+	rm -rf subprojects config.mk
+
 # the committed tree, not the working copy
 dist:
 	git archive --prefix=g0wm-$(VERSION)/ -o g0wm-$(VERSION).tar.gz HEAD
@@ -198,19 +207,26 @@ uninstall remove:
 PKGVER  := $(subst -,+,$(patsubst v%,%,$(VERSION)))
 PKGDIR   = $(BUILDDIR)/pkg
 PKGROOT  = $(PKGDIR)/root
+LICDIR   = $(PKGROOT)/usr/share/licenses/g0wm
+DEBDIR   = $(PKGDIR)/debian
+DEBROOT  = $(DEBDIR)/g0wm
 MACHINE := $(shell uname -m)
 DEB_ARCH ?= $(shell dpkg --print-architecture 2>/dev/null || echo amd64)
 MAINTAINER ?= $(shell git config user.name) <$(shell git config user.email)>
-# Debian library names, check them against the release you build for
-DEB_DEPENDS ?= libwlroots-0.20, libwayland-server0, libxkbcommon0, libinput10, \
-	libpixman-1-0, libfcft4, libdbus-1-3, libgdk-pixbuf-2.0-0, libscfg0, \
-	libxcb1, libxcb-icccm4
+# empty: from dpkg-shlibdeps, on Debian and Ubuntu only
+DEB_DEPENDS ?=
 
 stage: g0wm
 	@$(MESS) '[$(CYAN)PACKAGE$(RESET)] %s\n' 'Staging $(PKGVER)'
 	rm -rf $(PKGROOT)
 	$(MAKE) install DESTDIR=$(abspath $(PKGROOT)) PREFIX=/usr
 	strip $(PKGROOT)/usr/bin/g0wm
+	install -Dm644 -t $(LICDIR) packaging/copyright LICENSES/*.txt
+ifeq ($(BUNDLE_DEPS),yes)
+	for lib in wlroots libscfg; do \
+		install -Dm644 subprojects/prefix/share/licenses/$$lib/LICENSE $(LICDIR)/$$lib/LICENSE; \
+	done
+endif
 	@# a strict umask must not leak into the directories the packages ship
 	find $(PKGROOT) -type d -exec chmod 755 {} +
 
@@ -221,16 +237,23 @@ tarball: stage
 	@$(MESS) '[$(CYAN)PACKAGE$(RESET)] %s\n' '$(PKGDIR)/g0wm-$(PKGVER)-linux-$(MACHINE).tar.gz'
 
 deb: stage
-	rm -rf $(PKGDIR)/deb
-	cp -a $(PKGROOT) $(PKGDIR)/deb
-	install -d -m755 $(PKGDIR)/deb/DEBIAN
+	rm -rf $(DEBDIR)
+	mkdir -p $(DEBDIR)
+	cp -a $(PKGROOT) $(DEBROOT)
+	install -Dm644 packaging/copyright $(DEBROOT)/usr/share/doc/g0wm/copyright
+	install -d -m755 $(DEBROOT)/DEBIAN
+	@# dpkg-shlibdeps needs a debian/control, even an empty one
+	touch $(DEBDIR)/control
+	deps='$(DEB_DEPENDS)'; \
+	[ -n "$$deps" ] || deps=`cd $(PKGDIR) && dpkg-shlibdeps -O debian/g0wm/usr/bin/g0wm | \
+		sed -n 's/^shlibs:Depends=//p'`; \
+	[ -n "$$deps" ] || { echo 'deb: dpkg-shlibdeps found no dependencies' >&2; exit 1; }; \
 	sed -e 's|@VERSION@|$(PKGVER)|' -e 's|@ARCH@|$(DEB_ARCH)|' \
-		-e 's|@MAINTAINER@|$(MAINTAINER)|' -e 's|@DEPENDS@|$(DEB_DEPENDS)|' \
-		-e "s|@SIZE@|`du -sk $(PKGROOT)/usr | cut -f1`|" \
-		packaging/deb/control.in >$(PKGDIR)/deb/DEBIAN/control
-	dpkg-deb --root-owner-group -b $(PKGDIR)/deb \
-		$(PKGDIR)/g0wm_$(PKGVER)_$(DEB_ARCH).deb
-	rm -rf $(PKGDIR)/deb
+		-e 's|@MAINTAINER@|$(MAINTAINER)|' -e "s#@DEPENDS@#$$deps#" \
+		-e "s|@SIZE@|`du -sk $(DEBROOT)/usr | cut -f1`|" \
+		packaging/deb/control.in >$(DEBROOT)/DEBIAN/control
+	dpkg-deb --root-owner-group -b $(DEBROOT) $(PKGDIR)/g0wm_$(PKGVER)_$(DEB_ARCH).deb
+	rm -rf $(DEBDIR)
 
 rpm: stage
 	mkdir -p $(PKGDIR)/rpm

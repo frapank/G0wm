@@ -1,0 +1,56 @@
+g0wm
+https://github.com/frapank/G0wm
+
+g0wm is free software under the GNU General Public License, version 3 or
+later. It is a fork of dwl and carries code from other projects, under their
+own licenses, whose texts are in /usr/share/licenses/g0wm/. In the source
+tree, REUSE.toml and the file headers say which file is under which license,
+and docs/credits.md where each part comes from.
+
+g0wm and dwl
+  Copyright 2020 dwl team
+  Copyright 2026 frapank
+  Copyright dwl-patches contributors, janetski, Ben Collerson, unixchad,
+            Nikita Ivanov, Hansvon
+  License: GPL-3.0-or-later
+
+The parts of dwl that came from dwm, sway and tinywl
+  Copyright 2006-2019 Anselm R Garbe <anselm@garbe.ca>
+  Copyright 2006-2009 Jukka Salmi <jukka at salmi dot ch>
+  Copyright 2006-2007 Sander van Dijk <a dot h dot vandijk at gmail dot com>
+  Copyright 2007-2011 Peter Hartlich <sgkkr at hartlich dot com>
+  Copyright 2007-2009 Szabolcs Nagy <nszabolcs at gmail dot com>
+  Copyright 2007-2009 Christof Musik <christof at sendfax dot de>
+  Copyright 2007-2009 Premysl Hruby <dfenze at gmail dot com>
+  Copyright 2007-2008 Enno Gottox Boland <gottox at s01 dot de>
+  Copyright 2008 Martin Hurton <martin dot hurton at gmail dot com>
+  Copyright 2008 Neale Pickett <neale dot woozle dot org>
+  Copyright 2009 Mate Nagy <mnagy at port70 dot net>
+  Copyright 2010-2016 Hiltjo Posthuma <hiltjo@codemadness.org>
+  Copyright 2010-2012 Connor Lane Smith <cls@lubutu.com>
+  Copyright 2011 Christoph Lohmann <20h@r-36.net>
+  Copyright 2015-2016 Quentin Rameau <quinq@fifth.space>
+  Copyright 2015-2016 Eric Pruitt <eric.pruitt@gmail.com>
+  Copyright 2016-2017 Markus Teich <markus.teich@stusta.mhn.de>
+  Copyright 2016-2017 Drew DeVault
+  License: MIT, and CC0-1.0 for tinywl
+
+drwl (external/drwl.h)
+  Copyright 2023-2025 sewn <sewn@disroot.org>
+  Copyright 2024 notchoc <notchoc@disroot.org>
+  Copyright 2008-2010 Bjoern Hoehrmann <bjoern@hoehrmann.de>
+  License: MIT
+
+wlr-layer-shell-unstable-v1 protocol
+  Copyright 2017 Drew DeVault
+  License: HPND-sell-variant
+
+wlr-output-power-management-unstable-v1 protocol
+  Copyright 2019 Purism SPC
+  License: MIT
+
+wlroots and libscfg
+  A g0wm built with ./configure --bundle-deps has them inside the binary.
+  Their copyright notices and licenses are then in
+  /usr/share/licenses/g0wm/wlroots/LICENSE and
+  /usr/share/licenses/g0wm/libscfg/LICENSE.

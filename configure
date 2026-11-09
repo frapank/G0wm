@@ -26,6 +26,10 @@ Toolchain:
 Features:
   --wlroots=VERSION       wlroots pkg-config series [$wlroots]
   --wlroots-prefix=DIR    use a wlroots installed outside the system paths
+  --bundle-deps           download wlroots and libscfg, build them as static
+                          libraries in subprojects/ and link them into the
+                          binary, with no rpath. Needs git, meson and ninja.
+                          For a binary that runs where they are not packaged.
   --enable-xwayland       build X11 support (default)
   --disable-xwayland      build without X11 support
   --no-integrated-background
@@ -63,6 +67,7 @@ defaults() {
 	datadir='$(PREFIX)/share'
 	wlroots=0.20
 	wlroots_prefix=
+	bundle=no
 	xwayland=yes
 	integrated_background=yes
 	opt_cflags='-O2'
@@ -106,6 +111,7 @@ options() { # "$@" -> every setting above, overridden from the command line
 		PREFIX) prefix=$val ;;
 		--wlroots) wlroots=$val ;;
 		--wlroots-prefix) wlroots_prefix=$val ;;
+		--bundle-deps) bundle=yes ;;
 		--enable-xwayland) xwayland=yes ;;
 		--disable-xwayland) xwayland=no ;;
 		--no-integrated-background) integrated_background=no ;;
@@ -149,6 +155,28 @@ configure_flags() { # package list and compiler/linker flags from the options
 		esac
 	}
 	[ -n "$linker" ] && extra_ldflags="$extra_ldflags -fuse-ld=$linker"
+	[ "$bundle" = yes ] && extra_ldflags="$extra_ldflags -Wl,--as-needed"
+}
+
+bundle_deps() {
+	[ "$bundle" = yes ] || return 0
+	[ -z "$wlroots_prefix" ] || die '--bundle-deps and --wlroots-prefix exclude each other'
+	script=$srcdir/packaging/bundle-deps
+	tag=$(sed -n 's/^WLROOTS_TAG=//p' "$script")
+	[ "${tag%.*}" = "$wlroots" ] ||
+		die "--bundle-deps builds wlroots $tag, not the $wlroots series"
+	for tool in git meson ninja; do
+		command -v "$tool" >/dev/null || die "--bundle-deps needs $tool"
+	done
+
+	deps=$srcdir/subprojects
+	mkdir -p "$deps" || die "cannot create $deps"
+	say "building wlroots $tag and libscfg in subprojects/, log in subprojects/build.log"
+	if ! CC=$cc PKG_CONFIG=$pkg_config "$script" "$deps" "$xwayland" >"$deps/build.log" 2>&1; then
+		tail -n 25 "$deps/build.log" >&2
+		die "building the bundled libraries failed, see subprojects/build.log"
+	fi
+	wlroots_prefix=$deps/prefix
 }
 
 # wlroots outside the system paths: resolve it here, pass the search path to
@@ -182,7 +210,8 @@ missing_hint() {
 If they are installed, pkg-config just cannot see them: pass the prefix of
 wlroots and libscfg with --wlroots-prefix=DIR (it also pins an rpath, so
 g0wm finds the libraries at run time), or add their pkgconfig directory to
-PKG_CONFIG_PATH. Otherwise install them, see "Build" in the README.
+PKG_CONFIG_PATH. Otherwise install them, see "Build" in the README, or for
+wlroots and libscfg only, build them into g0wm with --bundle-deps.
 EOF
 }
 
@@ -204,7 +233,16 @@ run_checks() {
 }
 
 resolve_wlroots_flags() {
-	if [ -n "$wlroots_prefix" ]; then
+	if [ "$bundle" = yes ]; then
+		# by path, -l could pick a shared copy from another -L directory
+		lib=$wlroots_prefix/lib
+		wlr_incs=$($pkg_config --cflags "$wlr_pkg" scfg) || die "cannot query $wlr_pkg"
+		static=$($pkg_config --static --libs "$wlr_pkg") || die "cannot query $wlr_pkg"
+		wlr_libs="$lib/lib$wlr_pkg.a $lib/libscfg.a"
+		for w in $static; do
+			case $w in -L"$lib" | -l"$wlr_pkg") ;; *) wlr_libs="$wlr_libs $w" ;; esac
+		done
+	elif [ -n "$wlroots_prefix" ]; then
 		wlr_incs=$($pkg_config --cflags "$wlr_pkg") || die "cannot query $wlr_pkg"
 		wlr_libs=$($pkg_config --libs "$wlr_pkg") || die "cannot query $wlr_pkg"
 		wlr_libdir=$($pkg_config --variable=libdir "$wlr_pkg")
@@ -246,12 +284,14 @@ XLIBS = $([ "$xwayland" = yes ] && echo xcb xcb-icccm)
 
 BACKGROUND = $([ "$integrated_background" = yes ] && echo -DINTEGRATED_BACKGROUND)
 
+BUNDLE_DEPS = $bundle
+
 CFLAGS = $(trim "$opt_cflags$extra_cflags")
 LDFLAGS = $(trim "$extra_ldflags")
 LIBS = $(trim "$extra_libs")
 EOF
 
-	say "wrote config.mk: $cc, $wlr_pkg, xwayland $xwayland, integrated background $integrated_background, native $native, install to $bindir"
+	say "wrote config.mk: $cc, $wlr_pkg, xwayland $xwayland, bundled deps $bundle, integrated background $integrated_background, native $native, install to $bindir"
 	say "run 'make' to build"
 }
 
@@ -264,6 +304,7 @@ main() {
 	options "$@"
 
 	configure_flags
+	bundle_deps
 	resolve_wlroots_prefix
 	run_checks
 	resolve_wlroots_flags
