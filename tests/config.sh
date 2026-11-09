@@ -17,17 +17,20 @@ fail() {
     exit 1
 }
 
-"$binary" -c >"$output" 2>/dev/null
+"$binary" -c >"$output" 2>"$workdir/errors" || {
+    cat "$workdir/errors" >&2
+    fail 'generating config failed'
+}
 cmp -s "$output" "$config" || fail 'generated config differs from command output'
 
-log=$("$binary" -c 2>&1 >/dev/null)
+log=$("$binary" -c 2>&1 >/dev/null) || fail "reading config failed: $log"
 case $log in
     *"config:"*) fail "fresh config failed validation: $log" ;;
 esac
 
 sed 's/borderpx [0-9]*/borderpx 7/; s/showbar/shobwar/' "$config" >"$workdir/edited"
 mv "$workdir/edited" "$config"
-log=$("$binary" -c 2>&1 >"$output")
+log=$("$binary" -c 2>&1 >"$output") || fail "reading edited config failed: $log"
 case $log in
     *"bar.shobwar is not a setting"*) ;;
     *) fail "invalid setting was not reported: $log" ;;

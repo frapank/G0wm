@@ -317,12 +317,17 @@ static void settings_apply_colors(const struct scfg_block* block)
 
 static void settings_apply_look(const struct scfg_block* block)
 {
+    static const char** owned_fonts;
+    static const char** owned_tags;
+
     if (!block)
         return;
     const char** font_list =
         settings_collect_params(settings_find_directive(block, "fonts"), 0, &font_count);
-    if (font_list)
-        fonts = font_list;
+    if (font_list) {
+        free(owned_fonts);
+        fonts = owned_fonts = font_list;
+    }
     settings_apply_colors(settings_find_section(block, "colors"));
     settings_get_rgba(root_color, block, "rootcolor");
     settings_get_rgba(fullscreen_color, block, "fullscreen_bg");
@@ -332,6 +337,8 @@ static void settings_apply_look(const struct scfg_block* block)
     const char** tag_list =
         settings_collect_params(settings_find_directive(block, "tags"), 0, &tag_count);
     if (tag_list) {
+        free(owned_tags);
+        owned_tags = tag_list;
         tags = (char**)tag_list;
         if (tag_count > 31) { /* TAGMASK has to fit in a uint32_t */
             settings_warn("only the first 31 tags are used");

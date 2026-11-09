@@ -202,6 +202,22 @@ static_assert(LENGTH(settings_scheme_names) == NumSchemes);
  * fills in for what it leaves out */
 const struct scfg_block* settings_builtin;
 
+/* Settings borrow strings from every loaded tree, including across reloads. */
+static struct SettingsTree {
+    struct scfg_block block;
+    struct SettingsTree* next;
+}* settings_trees;
+
+static void settings_free_trees(void)
+{
+    while (settings_trees) {
+        struct SettingsTree* tree = settings_trees;
+        settings_trees = tree->next;
+        scfg_block_finish(&tree->block);
+        free(tree);
+    }
+}
+
 /* function implementations */
 uint32_t settings_pack_rgba(const float color[static 4])
 {
@@ -302,19 +318,25 @@ void settings_load(void)
         fprintf(stderr, "g0wm: no settings in %s, run 'g0wm -c' to write them\n", path);
         return;
     }
-    struct scfg_block* tree = util_calloc(1, sizeof *tree);
+    struct SettingsTree* owner = util_calloc(1, sizeof *owner);
+    struct scfg_block* tree = &owner->block;
     if (scfg_load_file(tree, path) < 0) {
         fprintf(stderr, "g0wm: cannot read %s\n", path);
         scfg_block_finish(tree);
-        free(tree);
+        free(owner);
         return;
     }
+
+    if (!settings_trees && atexit(settings_free_trees))
+        util_die("config: cannot register settings cleanup");
+    owner->next = settings_trees;
+    settings_trees = owner;
 
     settings_load_builtin();
     int problems = 0;
     if (settings_builtin)
         settings_validate(settings_builtin, tree, "", &problems);
-    /* never freed: the settings point into its strings */
+    /* Keep the tree alive until exit: settings point into its strings. */
     settings_apply(tree);
     if (problems)
         fprintf(stderr, "g0wm: %s has %d problem%s\n", path, problems, problems == 1 ? "" : "s");
