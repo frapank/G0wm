@@ -150,7 +150,7 @@ jobs:
               pacman -Syu --noconfirm wlroots0.20 fcft gdk-pixbuf2 &&
               tar -xzf g0wm-*.tar.gz -C /
     steps:
-      - uses: actions/download-artifact@v4
+      - uses: actions/download-artifact@v8
         with:
           name: g0wm-packages
       - name: Install
