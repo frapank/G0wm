@@ -8,23 +8,37 @@ permissions:
   contents: write
 
 jobs:
-  tarball:
-    name: binary tarball
+  packages:
+    name: tarball, .deb and .rpm
     runs-on: ubuntu-latest
-    container: archlinux:base-devel
+    container: ubuntu:26.04
     steps:
-      - name: Install git for the checkout
-        run: pacman -Syu --noconfirm --needed git github-cli
+      - name: Install git for the checkout and gh for the upload
+        run: apt-get update && apt-get install -y --no-install-recommends git ca-certificates gh
       - uses: actions/checkout@v5
         with:
           fetch-depth: 0
       - name: Let git read the checkout, or the version falls back to _VERSION
         run: git config --global --add safe.directory "$GITHUB_WORKSPACE"
-      - uses: ./.github/actions/arch-deps
+      - uses: ./.github/actions/ubuntu-deps
+      - name: Build with wlroots and libscfg inside the binary
+        run: ./configure --bundle-deps
       - run: make -j"$(nproc)"
-      - run: make tarball
-      - name: Attach the tarball to the release
+      - name: Smoke test the binary
+        run: |
+          out=$(./g0wm -v 2>&1) || true
+          printf '%s\n' "$out"
+          case $out in g0wm\ *) ;; *) echo "g0wm -v did not run" >&2; exit 1 ;; esac
+      - name: Build the tarball, .deb and .rpm
+        run: make packages MAINTAINER="g0wm <noreply@github.com>"
+      - name: Write the checksums
+        working-directory: build/pkg
+        run: sha256sum g0wm-*.tar.gz g0wm_*.deb g0wm-*.rpm | tee SHA256SUMS
+      - name: Attach the files to the release
         env:
           GH_TOKEN: ${{ github.token }}
           TAG: ${{ github.event.release.tag_name }}
-        run: gh release upload "$TAG" build/pkg/g0wm-*-linux-*.tar.gz --repo "$GITHUB_REPOSITORY" --clobber
+        working-directory: build/pkg
+        run: |
+          gh release upload "$TAG" g0wm-*.tar.gz g0wm_*.deb g0wm-*.rpm SHA256SUMS \
+            --repo "$GITHUB_REPOSITORY" --clobber
