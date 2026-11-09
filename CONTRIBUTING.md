@@ -39,10 +39,19 @@ ask anyone else to.
 - `./configure --debug && make` builds with no new warnings.
 - `make format` changes nothing. CI runs `make format-check` and fails on a
   wrong format.
-- `make test` passes.
+- `make check` passes (config tests, formatting and ShellCheck).
 - `reuse lint` passes, if you added a file.
 - The optional parts still build when turned off, with `--disable-xwayland`
   and `--no-integrated-background`. CI tries both.
+
+## Building
+
+Run `./configure` before `make`, and rerun it if you change the options or
+update the script. Use `make V=1` to see the commands and `make help` for the
+targets. `make check` needs clang-format and ShellCheck.
+
+Package rules are in `packaging/packages.mk`. For a release, update `VERSION`
+and `CHANGELOG.md`. The binary and packages read their version from `VERSION`.
 
 ## Writing commits
 

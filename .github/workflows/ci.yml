@@ -26,6 +26,7 @@ jobs:
           - { name: clang,           cc: clang, flags: "" }
           - { name: gcc sanitizers,  cc: gcc,   flags: "--debug --enable-sanitizers" }
           - { name: gcc LTO,         cc: gcc,   flags: "--enable-lto" }
+          - { name: gcc hardening,   cc: gcc,   flags: "--enable-hardening" }
     steps:
       - name: Install git for the checkout
         run: pacman -Syu --noconfirm --needed git
@@ -35,6 +36,7 @@ jobs:
       - uses: ./.github/actions/arch-deps
       - run: ./configure --compiler=${{ matrix.cc }} ${{ matrix.flags }}
       - run: make -j"$(nproc)"
+      - run: make test
       - name: Smoke test the binary
         run: |
           out=$(./g0wm -v 2>&1) || true
@@ -74,7 +76,7 @@ jobs:
         with:
           fetch-depth: 0
       - uses: ./.github/actions/arch-deps
-      - run: make -j"$(nproc)"
+      - run: ./configure && make -j"$(nproc)"
       - name: Install to a throwaway prefix
         run: |
           make install BINDIR="$PWD/_install"
@@ -90,7 +92,7 @@ jobs:
       - uses: actions/checkout@v5
         with:
           fetch-depth: 0
-      - name: Let git read the checkout, or the version falls back to _VERSION
+      - name: Let git read the checkout
         run: git config --global --add safe.directory "$GITHUB_WORKSPACE"
       - uses: ./.github/actions/ubuntu-deps
       - run: ./configure --bundle-deps
@@ -98,6 +100,7 @@ jobs:
         if: failure()
         run: cat subprojects/build.log
       - run: make -j"$(nproc)"
+      - run: make test
       - name: Smoke test the binary
         run: |
           out=$(./g0wm -v 2>&1) || true
@@ -179,7 +182,7 @@ jobs:
     steps:
       - uses: actions/checkout@v5
       - run: |
-          shellcheck -S warning configure packaging/bundle-deps
+          make shellcheck
 
   manpage:
     name: man page

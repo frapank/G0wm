@@ -72,6 +72,14 @@ If wlroots or libscfg aren't packaged on your distro:
 ./configure --bundle-deps                       # or fetch and link them statically (needs git, meson, ninja)
 ```
 
+Rerun `./configure` when you change build options or update the script.
+`make V=1` shows the commands; `make help` lists the targets. `make check`
+runs the config tests, clang-format and ShellCheck (the last two must be installed).
+
+`--native` adds `-O3`, CPU tuning and LTO. Hardening is a separate option,
+`--enable-hardening`; use both for the old `--native` behavior. Debug builds
+skip `_FORTIFY_SOURCE`.
+
 Other options: `./configure --help`.
 
 ## Configure & Run

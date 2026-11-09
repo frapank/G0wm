@@ -82,7 +82,7 @@ SPDX-License-Identifier = "MIT"
 
 [[annotations]]
 path = [
-    ".gitignore", "Makefile", "config.def.mk", "docs/g0wm.1",
+    ".gitignore", "Makefile", "VERSION", "docs/g0wm.1",
     "share/g0wm.desktop",
 ]
 SPDX-FileCopyrightText = ["2020 dwl team", "2026 frapank"]

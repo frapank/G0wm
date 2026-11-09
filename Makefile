@@ -1,47 +1,35 @@
-# Pattern rules and $(@D) are GNU make extensions; the upstream .POSIX: Makefile
-# was dropped when the tree moved to src/ include/ external/.
 .SUFFIXES:
 .DELETE_ON_ERROR:
+.DEFAULT_GOAL := all
 
-include config.mk
+# Build targets need config.mk; maintenance targets do not.
+NEEDS_CONFIG := $(filter-out clean distclean dist format format-check shellcheck help,$(or $(MAKECMDGOALS),all))
+ifneq ($(NEEDS_CONFIG),)
+ifeq ($(wildcard config.mk),)
+$(error Run ./configure before building)
+endif
 
-# expand once, not once per command
-VERSION  := $(VERSION)
+config.mk: configure
+	@echo 'config.mk is outdated: re-run ./configure (options are at its top)' >&2
+	@exit 1
+endif
+-include config.mk
+
+VERSION := $(strip $(file <VERSION))
+
+# Avoid running pkg-config for every object.
 WLR_INCS := $(WLR_INCS)
 WLR_LIBS := $(WLR_LIBS)
 
-# make V=1 shows the full commands
+# V=1 shows the commands.
 Q = $(if $(V),,@)
 
-# Layout
 SRCDIR   = src
 INCDIR   = include
 EXTDIR   = external
 BUILDDIR = build
 GENDIR   = $(BUILDDIR)/protocols
 
-# MSG ( Messages )
-MESS			:= printf
-RESET       	:= \033[0m
-RED         	:= \033[31m
-GREEN       	:= \033[32m
-YELLOW      	:= \033[33m
-MAGENTA     	:= \033[35m
-CYAN        	:= \033[36m
-
-ifneq ($(filter-out dumb,$(TERM)),)
-  ifneq (, $(shell command -v tput 2>/dev/null))
-    RESET  := $(shell tput sgr0)
-    RED    := $(shell tput setaf 1)
-    GREEN  := $(shell tput setaf 2)
-    YELLOW := $(shell tput setaf 3)
-    MAGENTA:= $(shell tput setaf 5)
-    CYAN   := $(shell tput setaf 6)
-  endif
-endif
-export MESS RESET RED GREEN YELLOW MAGENTA CYAN
-
-# flags for compiling
 G0WMCPPFLAGS = -I$(INCDIR) -isystem $(EXTDIR) -I$(GENDIR) \
 	-DWLR_USE_UNSTABLE -D_POSIX_C_SOURCE=200809L \
 	-DVERSION=\"$(VERSION)\" $(XWAYLAND) $(BACKGROUND) -MMD -MP
@@ -50,221 +38,146 @@ G0WMDEVCFLAGS = -g -Wpedantic -Wall -Wextra \
 	-Werror=implicit -Werror=return-type -Werror=incompatible-pointer-types \
 	-Wfloat-conversion
 
-# CFLAGS / LDFLAGS
-# --bundle-deps puts libscfg in WLR_LIBS
-PKGS      = wayland-server xkbcommon libinput pixman-1 fcft dbus-1 gdk-pixbuf-2.0 \
-	$(if $(filter yes,$(BUNDLE_DEPS)),,scfg) $(XLIBS)
+# The bundled build gets libscfg from WLR_LIBS.
+PKGS = wayland-server xkbcommon libinput pixman-1 fcft dbus-1 gdk-pixbuf-2.0 $(XLIBS)
+ifneq ($(BUNDLE_DEPS),yes)
+PKGS += scfg
+endif
+ifneq ($(wildcard config.mk),)
 PKG_CFLAGS := $(shell $(PKG_CONFIG) --cflags $(PKGS))
 PKG_LIBS   := $(shell $(PKG_CONFIG) --libs $(PKGS))
+endif
 G0WMCFLAGS = -std=gnu23 $(PKG_CFLAGS) $(WLR_INCS) $(G0WMCPPFLAGS) $(G0WMDEVCFLAGS) $(CFLAGS)
 LDLIBS    = $(PKG_LIBS) $(WLR_LIBS) -lm $(LIBS)
 
-# Sources, one directory per area. The systray and its dbus glue come from
-# the bar-systray patch.
-SRC = $(wildcard $(SRCDIR)/*/*.c $(SRCDIR)/*/*/*.c)
+SOURCES = $(wildcard $(SRCDIR)/*/*.c $(SRCDIR)/*/*/*.c)
 ifeq ($(XWAYLAND),)
-SRC := $(filter-out $(SRCDIR)/window/xwayland.c,$(SRC))
+SOURCES := $(filter-out $(SRCDIR)/window/xwayland.c,$(SOURCES))
 endif
-OBJ = $(SRC:$(SRCDIR)/%.c=$(BUILDDIR)/%.o)
+OBJECTS = $(SOURCES:$(SRCDIR)/%.c=$(BUILDDIR)/%.o)
 
-# wayland-scanner is a tool which generates C headers and rigging for Wayland
-# protocols, which are specified in XML. wlroots requires you to rig these up
-# to your build system yourself and provide them in the include path.
+ifneq ($(wildcard config.mk),)
 WAYLAND_SCANNER   := $(shell $(PKG_CONFIG) --variable=wayland_scanner wayland-scanner)
 WAYLAND_PROTOCOLS := $(shell $(PKG_CONFIG) --variable=pkgdatadir wayland-protocols)
+endif
 
-ENUMHDR = cursor-shape-v1 ext-image-copy-capture-v1 \
+ENUM_PROTOCOLS = cursor-shape-v1 ext-image-copy-capture-v1 \
 	pointer-constraints-unstable-v1 wlr-layer-shell-unstable-v1
-SERVERHDR = wlr-output-power-management-unstable-v1 xdg-shell
-GENHDR = $(patsubst %,$(GENDIR)/%-protocol.h,$(ENUMHDR) $(SERVERHDR))
+SERVER_PROTOCOLS = wlr-output-power-management-unstable-v1 xdg-shell
+PROTOCOL_HEADERS = $(patsubst %,$(GENDIR)/%-protocol.h,$(ENUM_PROTOCOLS) $(SERVER_PROTOCOLS))
 
-# local protocols/ first
+# Look in protocols/ first.
 vpath %.xml protocols \
 	$(WAYLAND_PROTOCOLS)/stable/xdg-shell \
 	$(WAYLAND_PROTOCOLS)/staging/cursor-shape \
 	$(WAYLAND_PROTOCOLS)/staging/ext-image-copy-capture \
 	$(WAYLAND_PROTOCOLS)/unstable/pointer-constraints
 
-.PHONY: all clean distclean dist install uninstall remove format format-check test FORCE \
-	stage tarball deb rpm packages
+.PHONY: all clean distclean dist install uninstall remove format format-check \
+	shellcheck test check help FORCE
 
 all: g0wm
 
-g0wm: $(OBJ)
-	@$(MESS) '[$(GREEN)LINKER$(RESET)] %s\n' 'Linking $@'
-	$(Q)$(CC) $(CFLAGS) $(LDFLAGS) $(OBJ) $(LDLIBS) -o $@
+g0wm: $(OBJECTS)
+	@printf '  LD      %s\n' '$@'
+	$(Q)$(CC) $(CFLAGS) $(LDFLAGS) $(OBJECTS) $(LDLIBS) -o $@
 ifeq ($(BUNDLE_DEPS),yes)
 	$(Q)if readelf -d $@ | grep -E 'NEEDED.*lib(wlroots|scfg)|R(UN)?PATH'; then \
 		echo '$@: linked to the libraries above, not bundled' >&2; rm -f $@; exit 1; \
 	fi
 endif
 
-# header deps come from the .d files, the generated headers just need to exist
-$(BUILDDIR)/%.o: $(SRCDIR)/%.c config.mk | $(GENHDR)
-	@$(MESS) '[$(GREEN)COMPILER$(RESET)] %s\n' 'Compiling $@'
+# Header dependencies come from .d files once the objects exist.
+$(BUILDDIR)/%.o: $(SRCDIR)/%.c config.mk | $(PROTOCOL_HEADERS)
+	@printf '  CC      %s\n' '$@'
 	@mkdir -p $(@D)
 	$(Q)$(CC) $(CPPFLAGS) $(G0WMCFLAGS) -c $< -o $@
 
--include $(OBJ:.o=.d)
+-include $(OBJECTS:.o=.d)
 
-# rewritten only when the version changes
+# Leave the timestamp alone if the version is unchanged.
 $(BUILDDIR)/version: FORCE
 	@mkdir -p $(@D)
 	@echo '$(VERSION)' | cmp -s - $@ || echo '$(VERSION)' >$@
 
 $(BUILDDIR)/core/g0wm/main.o $(BUILDDIR)/output/monitor.o: $(BUILDDIR)/version
 
-$(ENUMHDR:%=$(GENDIR)/%-protocol.h): SCANMODE = enum-header
-$(SERVERHDR:%=$(GENDIR)/%-protocol.h): SCANMODE = server-header
+$(ENUM_PROTOCOLS:%=$(GENDIR)/%-protocol.h): SCAN_MODE = enum-header
+$(SERVER_PROTOCOLS:%=$(GENDIR)/%-protocol.h): SCAN_MODE = server-header
 
 $(GENDIR)/%-protocol.h: %.xml
-	@$(MESS) '[$(GREEN)SCANNER$(RESET)] %s\n' 'Generating $@'
+	@printf '  SCAN    %s\n' '$@'
 	@mkdir -p $(@D)
-	$(Q)$(WAYLAND_SCANNER) $(SCANMODE) $< $@
+	$(Q)$(WAYLAND_SCANNER) $(SCAN_MODE) $< $@
 
-# ./configure writes this file; without it the defaults are used as-is.
-# A copy is refreshed when they change, a ./configure one is only flagged.
-config.mk: config.def.mk configure
-	@if head -n 1 $@ 2>/dev/null | grep -q '^# Generated by ./configure'; then \
-		echo "config.mk is older than $?: re-run the ./configure line at its top" >&2; \
-	else \
-		echo "config.mk: copied from config.def.mk" >&2; \
-		cp config.def.mk $@; \
-	fi
-
-# Formatting, per .clang-format. external/ is vendored and config*.h are
-# alignment-sensitive tables, so neither is reformatted.
-FMT_SRC = $(filter-out $(SRCDIR)/core/settings/config.h, \
+# Keep external/ and the hand-aligned config.h out of clang-format.
+FORMAT_FILES = $(filter-out $(SRCDIR)/core/settings/config.h, \
 	$(wildcard $(SRCDIR)/*/*.c $(SRCDIR)/*/*/*.c $(SRCDIR)/*/*/*.h \
 	$(INCDIR)/*/*.h $(INCDIR)/*/*/*.h))
 
 format:
-	@$(MESS) '[$(CYAN)FORMAT$(RESET)] %s\n' 'Formatting...'
-	clang-format -i $(FMT_SRC)
-	@$(MESS) '[$(CYAN)FORMAT$(RESET)] %s\n' 'Done!'
+	@printf '  FORMAT  sources\n'
+	$(Q)clang-format -i $(FORMAT_FILES)
 
 format-check:
-	@for f in $(FMT_SRC); do \
+	@printf '  CHECK   source formatting\n'
+	$(Q)for f in $(FORMAT_FILES); do \
 		clang-format "$$f" | diff -u - "$$f" || \
 			{ echo "Wrong format in $$f, run 'make format'" >&2; exit 1; }; \
 	done
 
-# what -c writes must pass the check startup makes, a damaged file must not
-TESTCFG = $(BUILDDIR)/test-config
-
 test: g0wm
-	@rm -rf $(TESTCFG)
-	@XDG_CONFIG_HOME=$(TESTCFG) ./g0wm -c >$(TESTCFG).out 2>/dev/null
-	@cmp -s $(TESTCFG).out $(TESTCFG)/g0wm/config || \
-		{ echo 'what -c wrote is not what it reads back' >&2; exit 1; }
-	@out=`XDG_CONFIG_HOME=$(TESTCFG) ./g0wm -c 2>&1 >/dev/null`; \
-	case $$out in *"config:"*) \
-		printf '%s\n' "$$out" >&2; \
-		echo 'a fresh config did not pass its own check' >&2; exit 1 ;; \
-	esac
-	@sed 's/borderpx [0-9]*/borderpx 7/; s/showbar/shobwar/' \
-		$(TESTCFG)/g0wm/config >$(TESTCFG)/t \
-		&& mv $(TESTCFG)/t $(TESTCFG)/g0wm/config
-	@out=`XDG_CONFIG_HOME=$(TESTCFG) ./g0wm -c 2>&1 >$(TESTCFG).out`; \
-	case $$out in \
-	*"bar.shobwar is not a setting"*) ;; \
-	*) printf '%s\n' "$$out" >&2; \
-		echo 'a damaged config went unreported' >&2; exit 1 ;; \
-	esac
-	@grep -q 'borderpx 7' $(TESTCFG).out || \
-		{ echo 'a setting read from the file was not applied' >&2; exit 1; }
-	@$(MESS) '[$(GREEN)TEST$(RESET)] %s\n' 'config round trip ok'
+	$(Q)sh tests/config.sh ./g0wm $(BUILDDIR)
+	@printf '  TEST    config round trip ok\n'
+
+shellcheck:
+	@printf '  CHECK   shell scripts\n'
+	$(Q)shellcheck -S warning configure packaging/bundle-deps tests/config.sh
+
+check: test format-check shellcheck
+
+help:
+	@printf '%s\n' \
+		'Run ./configure before building.' \
+		'' \
+		'  make                Build g0wm' \
+		'  make install        Install g0wm, manual and session file' \
+		'  make uninstall      Remove installed files' \
+		'  make test           Test configuration handling' \
+		'  make check          Run tests, format check and ShellCheck' \
+		'  make format         Format project sources' \
+		'  make clean          Remove build output' \
+		'  make distclean      Also remove configuration and bundled dependencies' \
+		'  make dist           Archive committed sources' \
+		'  make packages       Build available binary package formats' \
+		'' \
+		'Use V=1 to show full commands; ./configure --help lists build options.'
 
 clean:
-	@$(MESS) '[$(RED)CLEANER$(RESET)] %s\n' 'Cleaning...'
-	rm -rf g0wm $(BUILDDIR)
-	@$(MESS) '[$(RED)CLEANER$(RESET)] %s\n' 'Done!'
+	@printf '  CLEAN   %s\n' 'clean'
+	$(Q)rm -rf g0wm $(BUILDDIR)
 
 distclean: clean
-	rm -rf subprojects config.mk
+	@printf '  CLEAN   %s\n' 'distclean'
+	$(Q)rm -rf subprojects config.mk
 
-# the committed tree, not the working copy
+# Archive HEAD, not the working tree.
 dist:
-	git archive --prefix=g0wm-$(VERSION)/ -o g0wm-$(VERSION).tar.gz HEAD
+	@printf '  DIST    %s\n' 'g0wm-$(VERSION).tar.gz'
+	$(Q)git archive --prefix=g0wm-$(VERSION)/ -o g0wm-$(VERSION).tar.gz HEAD
 
-# g0wm -c writes the config: only the binary knows which features it has.
-# not for a staged install or root, it would land in the wrong home
+# Do not write settings into root's home or the package staging directory.
 install: g0wm
-	@$(MESS) '[$(YELLOW)INSTALL$(RESET)] %s\n' 'Starting...'
-	install -Dm755 g0wm $(DESTDIR)$(BINDIR)/g0wm
-	install -Dm644 docs/g0wm.1 $(DESTDIR)$(MANDIR)/man1/g0wm.1
-	install -Dm644 share/g0wm.desktop \
+	@printf '  INSTALL %s\n' 'g0wm'
+	$(Q)install -Dm755 g0wm $(DESTDIR)$(BINDIR)/g0wm
+	$(Q)install -Dm644 docs/g0wm.1 $(DESTDIR)$(MANDIR)/man1/g0wm.1
+	$(Q)install -Dm644 share/g0wm.desktop \
 		$(DESTDIR)$(DATADIR)/wayland-sessions/g0wm.desktop
 	@[ -n "$(DESTDIR)" ] || [ "`id -u`" = 0 ] || ./g0wm -c >/dev/null
-	@$(MESS) '[$(YELLOW)INSTALL$(RESET)] %s\n' 'Done!'
 
 uninstall remove:
-	@$(MESS) '[$(RED)UNINSTALL$(RESET)] %s\n' 'Removing G0wm'
-	rm -f $(DESTDIR)$(BINDIR)/g0wm $(DESTDIR)$(MANDIR)/man1/g0wm.1 \
+	@printf '  REMOVE  %s\n' 'g0wm'
+	$(Q)rm -f $(DESTDIR)$(BINDIR)/g0wm $(DESTDIR)$(MANDIR)/man1/g0wm.1 \
 		$(DESTDIR)$(DATADIR)/wayland-sessions/g0wm.desktop
-	@$(MESS) '[$(RED)UNINSTALL$(RESET)] %s\n' 'Done!'
 
-PKGVER  := $(subst -,+,$(patsubst v%,%,$(VERSION)))
-PKGDIR   = $(BUILDDIR)/pkg
-PKGROOT  = $(PKGDIR)/root
-LICDIR   = $(PKGROOT)/usr/share/licenses/g0wm
-DEBDIR   = $(PKGDIR)/debian
-DEBROOT  = $(DEBDIR)/g0wm
-MACHINE := $(shell uname -m)
-DEB_ARCH ?= $(shell dpkg --print-architecture 2>/dev/null || echo amd64)
-MAINTAINER ?= $(shell git config user.name) <$(shell git config user.email)>
-# empty: from dpkg-shlibdeps, on Debian and Ubuntu only
-DEB_DEPENDS ?=
-
-stage: g0wm
-	@$(MESS) '[$(CYAN)PACKAGE$(RESET)] %s\n' 'Staging $(PKGVER)'
-	rm -rf $(PKGROOT)
-	$(MAKE) install DESTDIR=$(abspath $(PKGROOT)) PREFIX=/usr
-	strip $(PKGROOT)/usr/bin/g0wm
-	install -Dm644 -t $(LICDIR) packaging/copyright LICENSES/*.txt
-ifeq ($(BUNDLE_DEPS),yes)
-	for lib in wlroots libscfg; do \
-		install -Dm644 subprojects/prefix/share/licenses/$$lib/LICENSE $(LICDIR)/$$lib/LICENSE; \
-	done
-endif
-	@# a strict umask must not leak into the directories the packages ship
-	find $(PKGROOT) -type d -exec chmod 755 {} +
-
-# generic binary: unpack over / (or any prefix), the libraries must be there
-tarball: stage
-	tar --owner=0 --group=0 --numeric-owner -C $(PKGROOT) \
-		-czf $(PKGDIR)/g0wm-$(PKGVER)-linux-$(MACHINE).tar.gz usr
-	@$(MESS) '[$(CYAN)PACKAGE$(RESET)] %s\n' '$(PKGDIR)/g0wm-$(PKGVER)-linux-$(MACHINE).tar.gz'
-
-deb: stage
-	rm -rf $(DEBDIR)
-	mkdir -p $(DEBDIR)
-	cp -a $(PKGROOT) $(DEBROOT)
-	install -Dm644 packaging/copyright $(DEBROOT)/usr/share/doc/g0wm/copyright
-	install -d -m755 $(DEBROOT)/DEBIAN
-	@# dpkg-shlibdeps needs a debian/control, even an empty one
-	touch $(DEBDIR)/control
-	deps='$(DEB_DEPENDS)'; \
-	[ -n "$$deps" ] || deps=`cd $(PKGDIR) && dpkg-shlibdeps -O debian/g0wm/usr/bin/g0wm | \
-		sed -n 's/^shlibs:Depends=//p'`; \
-	[ -n "$$deps" ] || { echo 'deb: dpkg-shlibdeps found no dependencies' >&2; exit 1; }; \
-	sed -e 's|@VERSION@|$(PKGVER)|' -e 's|@ARCH@|$(DEB_ARCH)|' \
-		-e 's|@MAINTAINER@|$(MAINTAINER)|' -e "s#@DEPENDS@#$$deps#" \
-		-e "s|@SIZE@|`du -sk $(DEBROOT)/usr | cut -f1`|" \
-		packaging/deb/control.in >$(DEBROOT)/DEBIAN/control
-	dpkg-deb --root-owner-group -b $(DEBROOT) $(PKGDIR)/g0wm_$(PKGVER)_$(DEB_ARCH).deb
-	rm -rf $(DEBDIR)
-
-rpm: stage
-	mkdir -p $(PKGDIR)/rpm
-	sed -e 's|@VERSION@|$(PKGVER)|' -e 's|@ARCH@|$(MACHINE)|' \
-		-e 's|@STAGE@|$(abspath $(PKGROOT))|' \
-		packaging/rpm/g0wm.spec.in >$(PKGDIR)/rpm/g0wm.spec
-	rpmbuild -bb --define '_topdir $(abspath $(PKGDIR))/rpm' \
-		$(PKGDIR)/rpm/g0wm.spec
-	cp $(PKGDIR)/rpm/RPMS/*/g0wm-*.rpm $(PKGDIR)/
-
-# the formats this machine has the tools for
-packages: tarball
-	@if command -v dpkg-deb >/dev/null; then $(MAKE) deb; fi
-	@if command -v rpmbuild >/dev/null; then $(MAKE) rpm; fi
+include packaging/packages.mk
