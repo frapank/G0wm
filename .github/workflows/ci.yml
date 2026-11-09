@@ -83,21 +83,32 @@ jobs:
   packages:
     name: packages
     runs-on: ubuntu-latest
-    container: archlinux:base-devel
+    container: ubuntu:26.04
     steps:
       - name: Install git for the checkout
-        run: pacman -Syu --noconfirm --needed git
+        run: apt-get update && apt-get install -y --no-install-recommends git ca-certificates
       - uses: actions/checkout@v5
         with:
           fetch-depth: 0
       - name: Let git read the checkout, or the version falls back to _VERSION
         run: git config --global --add safe.directory "$GITHUB_WORKSPACE"
-      - uses: ./.github/actions/arch-deps
-      - name: Install the packaging tools
-        run: pacman -S --noconfirm --needed dpkg rpm-tools
+      - uses: ./.github/actions/ubuntu-deps
+      - run: ./configure --bundle-deps
+      - name: Show how wlroots and libscfg were built
+        if: failure()
+        run: cat subprojects/build.log
       - run: make -j"$(nproc)"
+      - name: Smoke test the binary
+        run: |
+          out=$(./g0wm -v 2>&1) || true
+          printf '%s\n' "$out"
+          case $out in g0wm\ *) ;; *) echo "g0wm -v did not run" >&2; exit 1 ;; esac
       - name: Build the tarball, .deb and .rpm
         run: make packages MAINTAINER="g0wm <noreply@github.com>"
+      - name: Show what the packages depend on
+        run: |
+          dpkg-deb -f build/pkg/g0wm_*.deb Depends
+          rpm -qpR build/pkg/g0wm-*.rpm
       - uses: actions/upload-artifact@v4
         with:
           name: g0wm-packages
