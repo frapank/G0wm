@@ -5,11 +5,12 @@
 
 **The Wayland compositor that wants to be a desktop environment**
 
-**[<kbd> <br> Features <br> </kbd>][Features]** 
-**[<kbd> <br> Install <br> </kbd>][Install]** 
-**[<kbd> <br> Build <br> </kbd>][Build]** 
-**[<kbd> <br> Configure <br> </kbd>][Configure]** 
-**[<kbd> <br> Release <br> </kbd>][Release]**
+[<kbd>Features</kbd>][Features] ·
+[<kbd>Install</kbd>][Install] ·
+[<kbd>Building</kbd>][Build] ·
+[<kbd>Troubleshooting</kbd>][Troubleshooting] ·
+[<kbd>Configure</kbd>][Configure] ·
+[<kbd>Release</kbd>][Release]
 
 </div>
 
@@ -51,36 +52,19 @@ sudo zypper install --allow-unsigned-rpm ./g0wm-*.x86_64.rpm   # openSUSE Tumble
 sudo tar -xzf g0wm-*.tar.gz -C /                               # others, no dependency check
 ```
 
-Older distros (Debian 13, Ubuntu 24.04, Fedora 43) lack wlroots 0.20, so build from source.
+If your distro is too old for the packages, see [Building][Build].
 To check the download: `sha256sum -c --ignore-missing SHA256SUMS`.
 
 ## Build
 
-Needs wlroots 0.20 (libinput backend), wayland, wayland-protocols, libinput,
-xkbcommon, pixman, fcft, libdbus, gdk-pixbuf, [libscfg](https://git.sr.ht/~emersion/scfg),
-pkg-config and GCC 14+ or Clang 18+. For X11 apps also libxcb, xcb-icccm and Xwayland.
+Needs a C23 compiler and wlroots 0.20. With the dependencies installed:
 
 ```sh
 ./configure && make
 make install                                    # installs to ~/.local/bin
 ```
 
-If wlroots or libscfg aren't packaged on your distro:
-
-```sh
-./configure --wlroots-prefix=/path/to/prefix    # use your own build (rpath is set)
-./configure --bundle-deps                       # or fetch and link them statically (needs git, meson, ninja)
-```
-
-Rerun `./configure` when you change build options or update the script.
-`make V=1` shows the commands; `make help` lists the targets. `make check`
-runs the config tests, clang-format and ShellCheck (the last two must be installed).
-
-`--native` adds `-O3`, CPU tuning and LTO. Hardening is a separate option,
-`--enable-hardening`; use both for the old `--native` behavior. Debug builds
-skip `_FORTIFY_SOURCE`.
-
-Other options: `./configure --help`.
+More on dependencies and build options in [Building][Build].
 
 ## Configure & Run
 
@@ -93,9 +77,8 @@ Start g0wm from your display manager or a TTY. The status text is read from stdi
 your-status-script | g0wm
 ```
 
-With `make install`, the session file goes to `~/.local/share/wayland-sessions/`,
-which most display managers ignore. Copy `share/g0wm.desktop` to
-`/usr/share/wayland-sessions/` if g0wm doesn't show up.
+If the session doesn't show up or something won't start, see
+[Troubleshooting][Troubleshooting].
 
 ## Screenshots
 
@@ -115,6 +98,7 @@ Credits and patch authors are in [docs/credits.md](docs/credits.md).
 
 [Features]: docs/features.md
 [Install]: #install
-[Build]: #build
+[Build]: docs/building.md
+[Troubleshooting]: docs/troubleshooting.md
 [Configure]: docs/settings.md
 [Release]: https://github.com/frapank/G0wm/releases/latest

@@ -1,129 +1,146 @@
-.Dd November 4, 2026
+.Dd November 9, 2026
 .Dt G0WM 1
 .Os
 .Sh NAME
 .Nm g0wm
-.Nd a personal Wayland desktop environment
+.Nd a Wayland compositor with a built-in desktop
 .Sh SYNOPSIS
 .Nm
-.Op Fl v
 .Op Fl d
-.Op Fl c
+.Nm
+.Fl c
+.Nm
+.Fl v
 .Sh DESCRIPTION
 .Nm
-is a Wayland compositor based on wlroots.
-It is intended to fill the same space in the Wayland world that
-.Nm dwm
-does for X11.
+is a Wayland compositor built on wlroots.
+It has a bar, a runner, notifications and a system tray built in,
+along with tiling, floating and tabbed layouts.
+It started as a fork of dwl.
 .Pp
-When given the
-.Fl v
-option,
-.Nm
-writes its name and version to standard error and exits unsuccessfully.
-.Pp
-When given the
-.Fl d
-option,
-.Nm
-enables full wlroots logging, including debug information.
-.Pp
-When given the
-.Fl c
-option,
-.Nm
-writes the default settings to
-.Pa ~/.config/g0wm/config
-and exits.
-An existing file is kept and checked instead: anything that is not a setting
-this build has, or is set twice, is reported.
-A setting left out keeps its built-in value, and so do the bindings, rules
-or monitors when the file has none of that kind.
-The same check runs at startup.
-.Pp
-Users are encouraged to customize
-.Nm
-by editing
-.Pa ~/.config/g0wm/config ,
-an scfg file whose built-in values come from
-.Pa src/core/settings/config.h
-in the sources.
-The key and mouse bindings live there too, one per
-.Em key
-and
-.Em button
-line, and those of a drawing tablet's pad on
-.Em padbutton
-lines, such as:
+Start it from a TTY or select it in your display manager.
+The status text comes from standard input, so you can pipe a status script
+into it:
 .Bd -literal -offset indent
+your-status-script | g0wm
+.Ed
+.Sh OPTIONS
+.Bl -tag -width Ds
+.It Fl d
+Turn on debug logging, including wlroots messages.
+Logs go to standard error.
+.It Fl c
+Create a config file with the defaults if there isn't one yet.
+An existing file is kept and read instead.
+Print the resulting settings to standard output and report problems on
+standard error, without starting a graphical session.
+.Pp
+Problems are reported with line numbers.
+Read the messages even if the command exits successfully.
+.It Fl v
+Print the name and version to standard error and exit with a nonzero status.
+.El
+.Sh CONFIGURATION
+Settings live in
+.Pa ~/.config/g0wm/config ,
+or
+.Pa $XDG_CONFIG_HOME/g0wm/config
+when
+.Ev XDG_CONFIG_HOME
+is set to a nonempty value.
+Run
+.Nm Fl c
+to create the file.
+.Pp
+The format is scfg: each line has a setting and its value, braces group
+settings into blocks, and a hash starts a comment.
+For example:
+.Bd -literal -offset indent
+windows {
+    borderpx 2
+    gappx 6
+}
+
 key logo+q spawn foot
 button client logo+left moveresize move
 .Ed
+.Pp
+Settings you leave out keep their defaults.
+Bindings, rules and monitors keep theirs if you don't write any entries of
+that kind.
+Super+Shift+R reloads the file; some input changes need a restart.
+.Pp
+The default terminal is
+.Xr foot 1 .
+The default quit binding is Super+Shift+Escape.
 .Sh STATUS TEXT
-Every line
-.Nm
-reads from standard input replaces the status text in the bar.
+Each line read from standard input replaces the text in the bar.
+There is no status script included.
+.Pp
 .Em ^c#RRGGBB^
-and
+sets the foreground colour and
 .Em ^b#RRGGBB^
-set the foreground and background of what follows,
+sets the background colour for the text that follows.
 .Em ^d^
 restores the default colours and
 .Em ^^
 draws a caret.
 .Sh ENVIRONMENT
-These environment variables are used by
-.Nm :
-.Bl -tag -width XDG_RUNTIME_DIR
+.Bl -tag -width XDG_CONFIG_HOME
+.It Ev XDG_CONFIG_HOME
+Directory containing the
+.Pa g0wm/config
+file.
+If unset or empty,
+.Nm
+uses
+.Pa $HOME/.config .
 .It Ev XDG_RUNTIME_DIR
-A directory where temporary user files, such as the Wayland socket,
-are stored.
-.It Ev XDG_CONFIG_DIR
-A directory containing configuration of various programs and
-libraries, including libxkbcommon.
-.It Ev DISPLAY , WAYLAND_DISPLAY , WAYLAND_SOCKET
-Tell how to connect to an underlying X11 or Wayland server.
-.It Ev WLR_*
-Various variables specific to wlroots.
-.It Ev XKB_* , XLOCALEDIR , XCOMPOSEFILE
-Various variables specific to libxkbcommon.
-.It Ev XCURSOR_PATH
-List of directories to search for XCursor themes in.
+The login session's runtime directory, used for the Wayland socket.
+Must be set when starting the compositor.
 .It Ev HOME
-A directory where there are always dear files there for you.
-Waiting for you to clean them up.
+Used to find the config when
+.Ev XDG_CONFIG_HOME
+is unset or empty.
+.It Ev WLR_*
+Backend, renderer and other wlroots options.
+.It Ev XKB_* , XLOCALEDIR , XCOMPOSEFILE
+Keyboard layout and compose settings used by libxkbcommon.
+.It Ev XCURSOR_PATH
+Directories to search for cursor themes.
 .El
 .Pp
-These are set by
-.Nm :
-.Bl -tag -width WAYLAND_DISPLAY
-.It Ev WAYLAND_DISPLAY
-Tell how to connect to
-.Nm .
-.It Ev DISPLAY
-If using
-.Nm Xwayland ,
-tell how to connect to the
-.Nm Xwayland
-server.
-.El
-.Sh FILES
-.Bl -tag -width "~/.config/g0wm/config"
-.It Pa ~/.config/g0wm/config
-Every setting
 .Nm
-reads at startup.
-Written by
-.Fl c ,
-and by
-.Cm make install
-when it is not there yet; the values it starts out with come from
-.Pa src/core/settings/config.h .
-It holds only the sections this build was configured with, so a build without
-the integrated background has no wallpaper or blur settings in it.
+sets
+.Ev WAYLAND_DISPLAY
+for programs it starts.
+When built with X11 support, it also sets
+.Ev DISPLAY
+for Xwayland clients.
+.Sh FILES
+.Bl -tag -width ~/.config/g0wm/config
+.It Pa ~/.config/g0wm/config
+User settings, read at startup and on reload.
+A normal user install also creates this file if it is missing;
+root and staged installs do not.
+.It Pa /usr/share/wayland-sessions/g0wm.desktop
+Display manager session entry for the system packages.
+A default source install puts it in
+.Pa ~/.local/share/wayland-sessions/ ,
+which most display managers don't read.
 .El
 .Sh SEE ALSO
-.Xr dwm 1 ,
+.Xr foot 1 ,
 .Xr xkeyboard-config 7
+.Pp
+The source tree has the full settings reference in
+.Pa docs/settings.md ,
+build instructions in
+.Pa docs/building.md
+and help with common problems in
+.Pa docs/troubleshooting.md .
 .Sh BUGS
-All of them.
+Report bugs at
+.Lk https://github.com/frapank/G0wm/issues .
+Include the version, distro, GPU, wlroots version, how to repeat it and
+a debug log.
