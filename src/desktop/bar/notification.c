@@ -26,6 +26,7 @@
 #include "desktop/notify/queue.h"
 #include "internal.h"
 #include "output/monitor.h"
+#include "output/privacy.h"
 #include "window/client.h"
 #include "window/layout.h"
 
@@ -57,10 +58,12 @@ static void bar_notification_box(Monitor* monitor,
                                  long hist,
                                  int x,
                                  int width,
+                                 bool shared,
                                  NotifyBox* box);
 static void bar_notification_browse(dbus_uint32_t id);
 static void bar_notification_pick_close(void);
 static void bar_notification_pick_run(size_t i);
+static const char* bar_notification_share_text(const Notification* notification);
 static void bar_notification_sync(const Notification* notification, long hist);
 static int bar_notification_tick(void*);
 
@@ -79,6 +82,8 @@ static struct wl_event_source* bar_notification_timer;
 static long bar_notification_pick_selected = -1;
 static dbus_uint32_t bar_notification_pick_id;
 static int bar_notification_box_x; /* last drawn x, for hit testing */
+/* -1 follows private_notifications, until toggleprivatenotify */
+static int bar_notification_hide = -1;
 
 /* function implementations */
 /* Background and text. drwl_text() paints its own background, so a progress
@@ -129,31 +134,38 @@ static void bar_draw_notification_text(Monitor* monitor,
                   box->count_text, 0);
 }
 
-/* hist is its history index, -1 for the live one */
+/* hist is its history index, -1 for the live one. shared draws what screen
+ * sharing gets instead, and leaves the scroll, the hit testing and the timer
+ * to the drawing on screen. */
 void bar_draw_notification(Monitor* monitor,
                            int x,
                            int width,
                            const Notification* notification,
-                           long hist)
+                           long hist,
+                           bool shared)
 {
     int color_scheme = notification->urgency == UrgencyLow        ? SchemeNotifyLow
                        : notification->urgency == UrgencyCritical ? SchemeNotifyCrit
                                                                   : SchemeNotify;
+    uint32_t* scheme = shared ? bar_opaque_scheme(color_scheme) : colors[color_scheme];
     uint32_t line_color = colors[color_scheme][ColBorder];
 
-    bar_notification_sync(notification, hist);
-    bar_notification_picking();
-    bar_notification_box_x = x;
+    if (!shared) {
+        bar_notification_sync(notification, hist);
+        bar_notification_picking();
+        bar_notification_box_x = x;
+    }
     NotifyBox box;
-    bar_notification_box(monitor, notification, hist, x, width, &box);
+    bar_notification_box(monitor, notification, hist, x, width, shared, &box);
 
     const char* visible_text =
-        notification->text +
-        (bar_notification_offset < strlen(notification->text) ? bar_notification_offset : 0);
+        shared ? bar_notification_share_text(notification)
+               : notification->text + (bar_notification_offset < strlen(notification->text)
+                                           ? bar_notification_offset
+                                           : 0);
 
     if (notification->value < 0) {
-        bar_draw_notification_text(monitor, &box, x, width, notification, visible_text,
-                                   colors[color_scheme]);
+        bar_draw_notification_text(monitor, &box, x, width, notification, visible_text, scheme);
     } else {
         /* the fill's background is premixed: a tint drawn over would dye the
          * text too */
@@ -167,6 +179,8 @@ void bar_draw_notification(Monitor* monitor,
                 (background >> shift & 0xff) * (255 - alpha) + (line_color >> shift & 0xff) * alpha;
             filled_colors[ColBg] |= (mixed_channel / 255) << shift;
         }
+        if (shared)
+            filled_colors[ColBg] |= 0xff;
 
         int filled_width = width * notification->value / 100;
         pixman_region32_t clip_region;
@@ -181,8 +195,7 @@ void bar_draw_notification(Monitor* monitor,
                                   (unsigned int)(width - filled_width), monitor->b.height);
         pixman_image_set_clip_region32(monitor->drw->image, &clip_region);
         pixman_region32_fini(&clip_region);
-        bar_draw_notification_text(monitor, &box, x, width, notification, visible_text,
-                                   colors[color_scheme]);
+        bar_draw_notification_text(monitor, &box, x, width, notification, visible_text, scheme);
 
         pixman_region32_init_rect(&clip_region, 0, 0, monitor->b.width, monitor->b.height);
         pixman_image_set_clip_region32(monitor->drw->image, &clip_region);
@@ -231,6 +244,8 @@ void bar_draw_notification(Monitor* monitor,
         pixman_image_set_transform(icon_image, nullptr);
     }
 
+    if (shared)
+        return;
     if (bar_notification_view_id) {
         uint64_t end_ms = bar_notification_view_ms + notification_timeout * 1000;
         uint64_t left_ms = end_ms > now_ms ? end_ms - now_ms : 1;
@@ -275,6 +290,7 @@ static void bar_notification_box(Monitor* monitor,
                                  long hist,
                                  int x,
                                  int width,
+                                 bool shared,
                                  NotifyBox* box)
 {
     const int pad = monitor->lrpad / 2;
@@ -288,7 +304,8 @@ static void bar_notification_box(Monitor* monitor,
         box->line_width = box->line_width > 0 ? box->line_width : 1;
         cursor_x += box->line_width + pad;
     }
-    if (notification->icon && size > 0) {
+    /* an app icon can be the sender's picture */
+    if (notification->icon && size > 0 && !shared) {
         const int icon_source_width = pixman_image_get_width(notification->icon->img);
         const int icon_source_height = pixman_image_get_height(notification->icon->img);
         if (icon_source_width > 0 && icon_source_height > 0) {
@@ -385,6 +402,23 @@ const Notification* bar_notification_shown(long* hist)
     return current;
 }
 
+bool bar_notification_private(void)
+{
+    return bar_notification_hide < 0 ? private_notifications : bar_notification_hide;
+}
+
+/* the dot marks the notifications when they differ from private_notifications */
+bool bar_notification_private_dot(uint32_t* rgba)
+{
+    if (!bar_notification_private() == !private_notifications)
+        return false;
+    if (bar_notification_private())
+        *rgba = notification_private_color ? notification_private_color : private_color;
+    else
+        *rgba = notification_public_color ? notification_public_color : public_color;
+    return true;
+}
+
 /* Reset the scroll offset for another notification, or when this one got
  * shorter than where we'd scrolled to. */
 static void bar_notification_sync(const Notification* notification, long hist)
@@ -396,6 +430,15 @@ static void bar_notification_sync(const Notification* notification, long hist)
         bar_notification_shown_history = hist >= 0;
         bar_notification_offset = 0;
     }
+}
+
+static const char* bar_notification_share_text(const Notification* notification)
+{
+    static char placeholder[NOTIFY_TEXTMAX];
+
+    privacy_placeholder(placeholder, sizeof(placeholder), notification_private_text,
+                        notification->app);
+    return placeholder;
 }
 
 static int bar_notification_tick(void*)
@@ -514,7 +557,7 @@ void bar_notification_scroll(const Arg*)
     if (hist >= 0)
         bar_notification_view_ms = notify_now();
     NotifyBox box;
-    bar_notification_box(monitor, notification, hist, 0, monitor->b.titlew, &box);
+    bar_notification_box(monitor, notification, hist, 0, monitor->b.titlew, false, &box);
 
     const char* text = notification->text;
     size_t length = strlen(text);
@@ -626,7 +669,7 @@ void bar_notification_open(const Arg* arg)
     NotifyBox box;
     if (pointer_x >= 0 && monitor && hist < 0) {
         bar_notification_box(monitor, notification, hist, bar_notification_box_x, monitor->b.titlew,
-                             &box);
+                             false, &box);
         if (bar_notification_picking()) {
             for (size_t i = box.chip_first; i < box.chip_first + box.chip_count; i++)
                 if (pointer_x >= box.chip_x[i] && pointer_x < box.chip_x[i] + box.chip_width[i]) {
@@ -720,7 +763,7 @@ int bar_notification_wheel(Monitor* pointer_monitor, double delta, int horizonta
         bar_notification_view_ms = notify_now();
 
     NotifyBox box;
-    bar_notification_box(bar_mon, notification, history_index, 0, bar_mon->b.titlew, &box);
+    bar_notification_box(bar_mon, notification, history_index, 0, bar_mon->b.titlew, false, &box);
     const char* text = notification->text;
 
     /* Scroll the text right one character per step, but only while the rest
@@ -739,4 +782,19 @@ int bar_notification_wheel(Monitor* pointer_monitor, double delta, int horizonta
 
     bar_draw_all();
     return 1;
+}
+
+void bar_notification_toggle_private(const Arg*)
+{
+    if (!notifications_enabled)
+        return;
+    bar_notification_hide = !bar_notification_private();
+    privacy_damage();
+    bar_draw_all();
+}
+
+/* back to private_notifications, once it changes */
+void bar_notification_reset_private(void)
+{
+    bar_notification_hide = -1;
 }

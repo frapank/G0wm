@@ -139,12 +139,19 @@ unsigned int systray_padding = 2;
 unsigned int systray_icon_size = 16; // 0 fills the bar
 
 int notifications_enabled = 1;
+int private_notifications = 1;
 unsigned int notification_timeout = 5; // seconds
 
 unsigned int notification_line_width = 4;
 unsigned int notification_line_radius = 2;
 
 const char* notification_action_sign = "[r]";
+/* {app} for application name */
+const char* notification_private_text = "G0wm is hiding this notification";
+int notification_private_hide = 0;       /* left out of screen sharing, no placeholder */
+int notification_dot = NotifyDotRight;   /* or NotifyDotLeft */
+uint32_t notification_private_color = 0; /* 0 follows private_color */
+uint32_t notification_public_color = 0;  /* 0 follows public_color */
 
 const char* runner_placeholder = "Run..."; // shown while nothing is typed
 unsigned int runner_max_candidates = 5;
@@ -266,6 +273,7 @@ static Key default_keys[] = {
     { MODKEY, XKB_KEY_c, client_kill, {} },
     { MODKEY | WLR_MODIFIER_SHIFT, XKB_KEY_v, client_toggle_floating, {} },
     { MODKEY | WLR_MODIFIER_SHIFT, XKB_KEY_p, privacy_toggle, {} },
+    { MODKEY | WLR_MODIFIER_CTRL, XKB_KEY_p, bar_notification_toggle_private, {} },
     { MODKEY | WLR_MODIFIER_SHIFT, XKB_KEY_g, layout_toggle_gaps, {} },
     { MODKEY | WLR_MODIFIER_SHIFT, XKB_KEY_b, bar_toggle, {} },
     { MODKEY | WLR_MODIFIER_SHIFT, XKB_KEY_t, bar_toggle_title_bars, {} },

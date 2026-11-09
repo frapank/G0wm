@@ -300,11 +300,24 @@ static void settings_write_bar(void)
     settings_put_note("systrayiconsize", "0 fills the bar");
     settings_write_int("systrayiconsize", systray_icon_size);
     settings_write_bool("shownotifications", notifications_enabled);
+    settings_put_note("privatenotify", "hidden from screen sharing until toggleprivatenotify");
+    settings_write_bool("privatenotify", private_notifications);
     settings_put_note("notification_timeout", "seconds");
     settings_write_int("notification_timeout", notification_timeout);
     settings_write_int("notification_linewidth", notification_line_width);
     settings_write_int("notification_lineradius", notification_line_radius);
     settings_write_string("notification_actionsign", notification_action_sign);
+    settings_put_note("notification_privatetext", "{app} for application name");
+    settings_write_string("notification_privatetext", notification_private_text);
+    settings_put_note("notification_privatehide", "screen sharing shows no notification at all");
+    settings_write_bool("notification_privatehide", notification_private_hide);
+    settings_put_note("notification_dot", "left or right of the free part of the bar");
+    settings_write_string("notification_dot",
+                          settings_enum_name(settings_notification_dots, notification_dot));
+    settings_put_note("notification_privatecolor", "#00000000 follows privatecolor");
+    settings_write_hex("notification_privatecolor", notification_private_color);
+    settings_put_note("notification_publiccolor", "#00000000 follows publiccolor");
+    settings_write_hex("notification_publiccolor", notification_public_color);
     settings_put_note("runner_placeholder", "shown while nothing is typed");
     settings_write_string("runner_placeholder", runner_placeholder);
     settings_put_note("runner_max_candidates", "0 for none");

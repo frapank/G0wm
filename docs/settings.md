@@ -196,13 +196,32 @@ Borders, gaps and title bars.
 Notifications show up in the empty part of the bar. To open, browse or dismiss
 them, see the notification [actions](#actions).
 
+They are private by default, like a private window: your screen shows them as
+they are, while screen sharing gets `notification_privatetext` instead of the
+summary and the body, and no icon. With `notification_privatehide` it gets no
+placeholder either, as if there were no notification. The history is hidden
+the same way. `toggleprivatenotify` shows them to screen sharing, and hides
+them again. With `privatenotify` off they are shown, and the same action hides
+them.
+
+While they differ from `privatenotify`, a dot on one side of the free part of
+the bar says so: in `notification_publiccolor` when they are shown, in
+`notification_privatecolor` when they are hidden. It is sized like the tag dots
+and rounded like the dot of a private window (`privateround`).
+
 | Setting | Default | Description |
 | --- | --- | --- |
 | `shownotifications` | `true` | Show the notifications. |
+| `privatenotify` | `true` | Hide the notifications from screen sharing until `toggleprivatenotify` shows them. With `false` they are shown until it hides them. Changing it on reload undoes the toggle. |
 | `notification_timeout` | `5` | Seconds a notification stays on screen. |
 | `notification_linewidth` | `4` | Width of the urgency line, in pixels. |
 | `notification_lineradius` | `2` | Corner radius of the urgency line. |
 | `notification_actionsign` | `[r]` | Text shown on a notification that has actions. |
+| `notification_privatetext` | `G0wm is hiding this notification` | Shown to screen sharing instead of a hidden notification. Your screen keeps the real text. `{app}` is replaced by the name of the app that sent it. |
+| `notification_privatehide` | `false` | Leave a hidden notification out of screen sharing altogether, with no placeholder: it gets the bar as if there were no notification. |
+| `notification_dot` | `right` | Side of the free part of the bar where the dot goes: `left` or `right`. |
+| `notification_privatecolor` | `#00000000` | Color of the dot while the notifications are hidden, with `privatenotify` off. `#00000000` follows `privatecolor`. |
+| `notification_publiccolor` | `#00000000` | Color of the dot while the notifications are shown, with `privatenotify` on. `#00000000` follows `publiccolor`. |
 
 ### Runner
 
@@ -594,6 +613,7 @@ doubling each time) and you add them up to pick more than one.
 | `notifyprev` | | Previous notification, from the history. |
 | `notifydismiss` | | Dismiss the notification, or remove it from the history. |
 | `notifydismissall` | | Dismiss all the notifications. |
+| `toggleprivatenotify` | | Show the notifications to screen sharing, or hide them again. The default is set by `privatenotify`. |
 
 ---
 
@@ -645,6 +665,7 @@ In the config file, <kbd>Super</kbd> is called `logo`.
 | <kbd>Super</kbd> <kbd>Ctrl</kbd> <kbd>N</kbd> / <kbd>Super</kbd> <kbd>Alt</kbd> <kbd>N</kbd> | Next, previous notification |
 | <kbd>Super</kbd> <kbd>Ctrl</kbd> <kbd>Shift</kbd> <kbd>N</kbd> | Dismiss all the notifications |
 | <kbd>Super</kbd> <kbd>A</kbd> | Notification actions |
+| <kbd>Super</kbd> <kbd>Ctrl</kbd> <kbd>P</kbd> | Show or hide the notifications |
 | <kbd>Super</kbd> <kbd>Shift</kbd> <kbd>R</kbd> | Reload the settings |
 | <kbd>Super</kbd> <kbd>Esc</kbd> | Shortcuts to the application, and back |
 | <kbd>Super</kbd> <kbd>Shift</kbd> <kbd>Esc</kbd> | Quit |

@@ -20,7 +20,9 @@ void bar_notification_open(const Arg* arg);
 int bar_notification_picking(void);
 void bar_notification_pick_key(xkb_keysym_t sym);
 void bar_notification_prev(const Arg*);
+void bar_notification_reset_private(void);
 void bar_notification_scroll(const Arg*);
+void bar_notification_toggle_private(const Arg*);
 int bar_notification_wheel(Monitor* pointer_monitor, double delta, int horizontal);
 
 #endif

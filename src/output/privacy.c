@@ -296,6 +296,23 @@ void privacy_finish(void)
     wl_array_release(&privacy_copies);
 }
 
+/* template with {app} replaced, an unset one gives an empty text */
+void privacy_placeholder(char* buf, size_t size, const char* template, const char* app)
+{
+    size_t length = 0;
+
+    for (; template && *template && length < size - 1; template ++) {
+        if (!strncmp(template, "{app}", 5)) {
+            length += snprintf(buf + length, size - length, "%s", app);
+            length = MIN(length, size - 1);
+            template += 4;
+        } else {
+            buf[length++] = *template;
+        }
+    }
+    buf[length] = '\0';
+}
+
 /* areas of m hidden from screen sharing, in buffer pixels */
 static int privacy_private_boxes(Monitor* monitor, Patch* out)
 {
@@ -409,20 +426,10 @@ static void privacy_handle_shield_destroy(struct wl_listener* listener, void*)
 const char* privacy_share_title(Client* client)
 {
     static char buf[256];
-    size_t length = 0;
 
     if (!client->isprivate)
         return client_get_title(client);
-    for (const char* template = private_title; *template && length < sizeof(buf) - 1; template ++) {
-        if (!strncmp(template, "{app}", 5)) {
-            length += snprintf(buf + length, sizeof(buf) - length, "%s", client_get_app_id(client));
-            length = MIN(length, sizeof(buf) - 1);
-            template += 4;
-        } else {
-            buf[length++] = *template;
-        }
-    }
-    buf[length] = '\0';
+    privacy_placeholder(buf, sizeof(buf), private_title, client_get_app_id(client));
     return buf;
 }
 

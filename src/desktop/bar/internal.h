@@ -35,7 +35,10 @@ void bar_draw_notification(Monitor* monitor,
                            int x,
                            int width,
                            const Notification* notification,
-                           long hist);
+                           long hist,
+                           bool shared);
+bool bar_notification_private(void);
+bool bar_notification_private_dot(uint32_t* rgba);
 const Notification* bar_notification_shown(long* hist);
 void bar_draw_icon(Monitor* monitor, Icon* icon, int start_x, int size);
 void bar_draw_icon_holder(Monitor* monitor, int start_x, int size);
