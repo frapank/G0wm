@@ -4,7 +4,7 @@ Name:           g0wm
 Version:        @VERSION@
 Release:        1
 Summary:        A personal Wayland desktop environment
-License:        GPL-3.0-or-later
+License:        GPL-3.0-or-later AND MIT AND CC0-1.0 AND HPND-sell-variant
 BuildArch:      @ARCH@
 
 %description
@@ -18,3 +18,4 @@ cp -a @STAGE@/. %{buildroot}/
 /usr/bin/g0wm
 /usr/share/man/man1/g0wm.1*
 /usr/share/wayland-sessions/g0wm.desktop
+%license /usr/share/licenses/g0wm
