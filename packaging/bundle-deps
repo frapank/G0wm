@@ -1,0 +1,64 @@
+#!/usr/bin/env bash
+# packaging/bundle-deps DIR XWAYLAND: wlroots and libscfg as static libraries
+# in DIR/prefix, for ./configure --bundle-deps
+set -eu
+
+WLROOTS_URL=https://gitlab.freedesktop.org/wlroots/wlroots.git
+WLROOTS_TAG=0.20.2
+WLROOTS_COMMIT=d783533489e1f75d6886c2ab5c5960090ef268f8
+SCFG_URL=https://codeberg.org/emersion/libscfg.git
+SCFG_TAG=v0.2.0
+SCFG_COMMIT=f7d74ce6c81e55976d85b824ba73c03f6c0f157a
+
+die() { printf 'bundle-deps: %s\n' "$*" >&2; exit 1; }
+
+[ $# -eq 2 ] || die "usage: $0 DIR XWAYLAND"
+top=$1
+xwayland=$2
+case $xwayland in
+yes) xwl=enabled ;;
+no) xwl=disabled ;;
+*) die "XWAYLAND is yes or no, not '$xwayland'" ;;
+esac
+CC=${CC:-cc}
+export CC
+
+fetch() { # name, url, tag, commit
+	local dir=$top/src/$1
+	[ "$(git -C "$dir" rev-parse HEAD 2>/dev/null)" = "$4" ] && return
+	rm -rf "$dir"
+	git -c advice.detachedHead=false clone -q --depth 1 --branch "$3" "$2" "$dir"
+	local got
+	got=$(git -C "$dir" rev-parse HEAD)
+	[ "$got" = "$4" ] || die "$1 $3 is commit $got, expected $4"
+}
+
+build() { # name, then the meson options
+	local name=$1
+	shift
+	# nofallback: fail on a missing dependency instead of downloading it
+	meson setup "$top/build/$name" "$top/src/$name" \
+		--prefix="$top/prefix" --libdir=lib --buildtype=release \
+		--wrap-mode=nofallback -Ddefault_library=static -Dwerror=false "$@"
+	meson install -C "$top/build/$name"
+}
+
+stamp=$top/prefix/.stamp
+# the .pc files hold absolute paths
+want="wlroots $WLROOTS_COMMIT scfg $SCFG_COMMIT cc $($CC --version | head -n 1) xwayland $xwayland in $top"
+if [ "$(cat "$stamp" 2>/dev/null)" = "$want" ]; then
+	echo "wlroots $WLROOTS_TAG and libscfg $SCFG_TAG are up to date"
+	exit 0
+fi
+
+fetch wlroots "$WLROOTS_URL" "$WLROOTS_TAG" "$WLROOTS_COMMIT"
+fetch libscfg "$SCFG_URL" "$SCFG_TAG" "$SCFG_COMMIT"
+
+rm -rf "$top/build" "$top/prefix"
+build libscfg
+# the X11 backend, libliftoff and xcb-errors would only add libraries
+build wlroots -Dexamples=false -Dxwayland="$xwl" \
+	-Dbackends=drm,libinput -Drenderers=gles2,vulkan \
+	-Dallocators=gbm,udmabuf -Dsession=enabled -Dcolor-management=enabled \
+	-Dlibliftoff=disabled -Dxcb-errors=disabled
+printf '%s\n' "$want" >"$stamp"

@@ -121,7 +121,7 @@ jobs:
     steps:
       - uses: actions/checkout@v5
       - run: |
-          shellcheck -S warning configure
+          shellcheck -S warning configure packaging/bundle-deps
 
   manpage:
     name: man page

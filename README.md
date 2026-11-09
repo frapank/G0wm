@@ -54,6 +54,13 @@ prefix, point `./configure` there. It also records an rpath, so no
 ./configure --wlroots-prefix=/path/to/prefix
 ```
 
+Or let `./configure` download them, build them as static libraries and link
+them into the binary, with no rpath. It needs git, meson and ninja:
+
+```sh
+./configure --bundle-deps
+```
+
 See `./configure --help` for the other options (toolchain, `--debug`, `--native`).
 
 ## Configure & Run
