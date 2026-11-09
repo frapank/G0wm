@@ -212,6 +212,12 @@ void bar_finish(void)
     bar_pulse_timer = nullptr;
 }
 
+static int bar_dot_size(const Monitor* monitor)
+{
+    return bar_tag_dot_size ? MAX((int)round(bar_tag_dot_size * monitor->wlr_output->scale), 1)
+                            : MAX(monitor->drw->font->height * 2 / 5, 4);
+}
+
 /* the dot of tag, a pill when selected; returns its cell's width */
 static int bar_tag_dot(const Monitor* monitor,
                        const Monitor* target,
@@ -222,14 +228,31 @@ static int bar_tag_dot(const Monitor* monitor,
 {
     const double scale = monitor->wlr_output->scale;
 
-    *dot_size = bar_tag_dot_size ? MAX((int)round(bar_tag_dot_size * scale), 1)
-                                 : MAX(monitor->drw->font->height * 2 / 5, 4);
+    *dot_size = bar_dot_size(monitor);
     const int gap = bar_tag_dot_gap ? (int)round(bar_tag_dot_gap * scale) : *dot_size * 3 / 2;
     *dot_width = target->tagset[target->seltags] & 1 << tag
                      ? (int)round(*dot_size * bar_tag_dot_width)
                      : *dot_size;
     *dot_lead = tag ? gap / 2 : monitor->lrpad / 2;
     return *dot_lead + *dot_width + (tag == tag_count - 1 ? monitor->lrpad / 2 : gap - gap / 2);
+}
+
+/* at the notification_dot end of the free box; returns the width it takes */
+static int bar_draw_notification_dot(Monitor* monitor, int x, int free_width)
+{
+    const int dot_size = bar_dot_size(monitor);
+    const int width = dot_size + monitor->lrpad;
+    uint32_t dot_color;
+
+    if (!notifications_enabled || free_width < width || !bar_notification_private_dot(&dot_color))
+        return 0;
+    if (notification_dot == NotifyDotRight)
+        x += free_width - width;
+    drwl_setscheme(monitor->drw, colors[SchemeNorm]);
+    drwl_rect(monitor->drw, x, 0, width, monitor->b.height, 1, 1);
+    bar_draw_pill(monitor, x + monitor->lrpad / 2, (monitor->b.height - dot_size) / 2, dot_size,
+                  dot_size, bar_private_radius(dot_size), false, dot_color);
+    return width;
 }
 
 /* title of client in the bar */
@@ -256,6 +279,25 @@ static void bar_draw_window_title(Monitor* monitor,
     if (bar_private_dot(client, &dot_color))
         bar_draw_pill(monitor, x + box_inset + (client->isfloating ? box_size + box_inset : 0),
                       box_y, box_size, box_size, bar_private_radius(box_size), false, dot_color);
+}
+
+/* What screen sharing gets in place of a private notification: a placeholder,
+ * or with notification_private_hide what the box holds without it. */
+static void bar_draw_shared_notification(Monitor* monitor,
+                                         Client* focused,
+                                         const Notification* notification,
+                                         long history_index,
+                                         int width,
+                                         bool selected)
+{
+    if (!notification_private_hide) {
+        bar_draw_notification(monitor, 0, width, notification, history_index, true);
+    } else if (bar_window_title && focused) {
+        bar_draw_window_title(monitor, focused, 0, width, selected, true);
+    } else {
+        drwl_setscheme(monitor->drw, bar_opaque_scheme(SchemeNorm));
+        drwl_rect(monitor->drw, 0, 0, width, monitor->b.height, 1, 1);
+    }
 }
 
 /* shared with input_bar_click() */
@@ -387,6 +429,12 @@ void bar_draw(Monitor* monitor)
      * notification share it, so its geometry must be measured in exactly one
      * place. */
     int free_w = monitor->b.width - (status_w + cur_x + tray_w);
+    if (is_selected) {
+        const int dot_w = bar_draw_notification_dot(monitor, cur_x, free_w);
+        if (notification_dot == NotifyDotLeft)
+            cur_x += dot_w;
+        free_w -= dot_w;
+    }
     monitor->b.titlew = free_w > monitor->b.height ? free_w : 0;
 
     if (monitor->b.titlew) {
@@ -465,10 +513,20 @@ void bar_draw(Monitor* monitor)
             const Notification* notification = notifications_enabled && is_selected
                                                    ? bar_notification_shown(&history_index)
                                                    : nullptr;
+            Buffer* share_buf;
             if (notification) {
-                bar_draw_notification(monitor, cur_x, free_w, notification, history_index);
+                bar_draw_notification(monitor, cur_x, free_w, notification, history_index, false);
+                if (bar_notification_private() &&
+                    (share_buf = bar_share_buffer(monitor->sharepool, free_w, monitor->b.height))) {
+                    drwl_setimage(monitor->drw, share_buf->image);
+                    bar_draw_shared_notification(monitor, focused, notification, history_index,
+                                                 free_w, is_selected);
+                    drwl_setimage(monitor->drw, buffer->image);
+                    wlr_buffer_unlock(&share_buf->base);
+                    monitor->sharex = cur_x;
+                    monitor->sharew = free_w;
+                }
             } else if (bar_window_title && focused) {
-                Buffer* share_buf;
                 bar_draw_window_title(monitor, focused, cur_x, free_w, is_selected, false);
                 if (focused->isprivate &&
                     (share_buf = bar_share_buffer(monitor->sharepool, free_w, monitor->b.height))) {

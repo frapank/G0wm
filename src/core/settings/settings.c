@@ -83,6 +83,9 @@ const Enum settings_bar_statuses[] = { { BarStatusFocus, "focus" },
                                        { BarStatusAll, "all" },
                                        { BarStatusMain, "main" },
                                        { 0, nullptr } };
+const Enum settings_notification_dots[] = { { NotifyDotLeft, "left" },
+                                            { NotifyDotRight, "right" },
+                                            { 0, nullptr } };
 const Enum settings_corner_styles[] = { { CornerNormal, "normal" },
                                         { CornerSquircle, "squircle" },
                                         { 0, nullptr } };
@@ -167,6 +170,7 @@ const Action settings_actions[] = {
     { input_toggle_inhibit, "toggleinhibit", 0 },
     { opacity_toggle, "toggleopacity", 0 },
     { privacy_toggle, "toggleprivate", 0 },
+    { bar_notification_toggle_private, "toggleprivatenotify", 0 },
     { layout_toggle_tabbed, "toggletabbed", 'l' },
     { layout_toggle_tag, "toggletag", 'u' },
     { bar_toggle_title_bars, "toggletitlebar", 0 },
@@ -338,6 +342,7 @@ static void settings_reload_keyboard(void)
 static void settings_reload(const Arg*)
 {
     const int was_private = always_private;
+    const int was_private_notify = private_notifications;
 
     settings_load();
 
@@ -364,6 +369,8 @@ static void settings_reload(const Arg*)
     }
     if (always_private != was_private)
         privacy_damage();
+    if (private_notifications != was_private_notify)
+        bar_notification_reset_private();
     wlr_scene_rect_set_color(root_background, root_color);
 
     settings_reload_keyboard();
