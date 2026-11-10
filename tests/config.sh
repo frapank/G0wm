@@ -42,6 +42,8 @@ mv "$workdir/base" "$config"
 cat >>"$config" <<'CONFIG'
 private {
     text "Hidden {app} {title}"
+    image "/tmp/private image.png"
+    imagesize 80
     color "#12345600"
     textcolor "#abcdef00"
 }
@@ -57,7 +59,7 @@ log=$("$binary" -c 2>&1 >"$output") || fail "reading privacy settings failed: $l
 case $log in
     *"private."*|*"rule.private"*) fail "privacy settings failed validation: $log" ;;
 esac
-for value in 'Hidden {app} {title}' '#12345600' '#abcdef00' 'privatetext ""' '#654321ff' '#fedcbaff'; do
+for value in '/tmp/private image.png' 'imagesize 80' 'Hidden {app} {title}' '#12345600' '#abcdef00' 'privatetext ""' '#654321ff' '#fedcbaff'; do
     grep -Fq "$value" "$output" || fail "privacy setting was not preserved: $value"
 done
 "$binary" -c 2>/dev/null >"$workdir/repeated"

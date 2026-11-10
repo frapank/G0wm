@@ -272,6 +272,9 @@ static void settings_write_private(void)
     settings_write_open("private");
     settings_put_note("text", "screen capture placeholder, only {app} is expanded");
     settings_write_string("text", private_text);
+    settings_put_note("image", "optional image above the text, transparency is kept");
+    settings_write_string("image", private_image);
+    settings_write_int("imagesize", private_image_size);
     settings_write_hex("color", private_background);
     settings_write_hex("textcolor", private_foreground);
     settings_write_close();

@@ -137,6 +137,8 @@ extern int always_private;
 extern uint32_t public_color;
 extern const char* private_title;
 extern const char* private_text;
+extern const char* private_image;
+extern unsigned int private_image_size;
 extern uint32_t private_background;
 extern uint32_t private_foreground;
 extern Layout* layouts;

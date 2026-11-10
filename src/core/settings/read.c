@@ -377,6 +377,8 @@ static void settings_apply_private(const struct scfg_block* block)
     if (!block)
         return;
     private_text = settings_get_string(block, "text", private_text);
+    private_image = settings_get_string(block, "image", private_image);
+    private_image_size = settings_get_uint(block, "imagesize", private_image_size);
     private_background = settings_get_hex(block, "color", private_background);
     private_foreground = settings_get_hex(block, "textcolor", private_foreground);
 }
