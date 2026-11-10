@@ -34,6 +34,7 @@
 #include "core/util.h"
 #include "desktop/bar/bar.h"
 #include "desktop/bar/title.h"
+#include "desktop/systray/icon.h"
 #include "output/monitor.h"
 #include "output/privacy.h"
 #include "render/buffer.h"
@@ -83,6 +84,8 @@ static void privacy_wipe(struct wlr_buffer* buf);
 static struct wl_array privacy_copies;
 static Patch privacy_masks[MAXBOXES];
 static int privacy_mask_count;
+static Icon* privacy_icon;
+static int privacy_icon_size = -1;
 
 /* function implementations */
 
@@ -298,6 +301,16 @@ void privacy_damage(void)
 void privacy_finish(void)
 {
     wl_array_release(&privacy_copies);
+    privacy_reload();
+}
+
+/* also forget a failed load, so replacing the file and reloading retries it */
+void privacy_reload(void)
+{
+    if (privacy_icon)
+        icon_destroy(privacy_icon);
+    privacy_icon = nullptr;
+    privacy_icon_size = -1;
 }
 
 /* template with {app} replaced, an unset one gives an empty text */
@@ -343,9 +356,28 @@ static Buffer* privacy_draw_placeholder(Client* client, int width, int height, i
     drwl_setimage(&drw, buffer->image);
     drwl_setscheme(&drw, scheme);
     drwl_rect(&drw, 0, 0, width, height, 1, 1);
-    const int text_height = MIN(height, (int)drw.font->height);
-    const int padding = MAX(0, (width - (int)drwl_font_getwidth(&drw, text)) / 2);
-    drwl_text(&drw, 0, (height - text_height) / 2, width, text_height, padding, text, 0);
+    const int text_height = *text ? MIN(height, (int)drw.font->height) : 0;
+    int gap = text_height ? text_height / 2 : 0;
+    const int image_size = (int)fmin((double)private_image_size * monitor->wlr_output->scale,
+                                     MIN(width, MAX(0, height - text_height - gap)));
+    if (image_size != privacy_icon_size) {
+        privacy_reload();
+        privacy_icon_size = image_size;
+        if (private_image && *private_image && image_size > 0)
+            privacy_icon = icon_create_from_name(private_image, nullptr, image_size);
+    }
+    const int image_width = privacy_icon ? pixman_image_get_width(privacy_icon->img) : 0;
+    const int image_height = privacy_icon ? pixman_image_get_height(privacy_icon->img) : 0;
+    if (!image_height)
+        gap = 0;
+    const int top = (height - image_height - gap - text_height) / 2;
+    if (privacy_icon)
+        pixman_image_composite32(PIXMAN_OP_OVER, privacy_icon->img, nullptr, buffer->image, 0, 0, 0,
+                                 0, (width - image_width) / 2, top, image_width, image_height);
+    if (text_height) {
+        const int padding = MAX(0, (width - (int)drwl_font_getwidth(&drw, text)) / 2);
+        drwl_text(&drw, 0, top + image_height + gap, width, text_height, padding, text, 0);
+    }
     corner_cut(buffer->data, width, height, MIN(radius, MIN(width, height) / 2));
     wlr_buffer_unlock(&buffer->base);
     return buffer;

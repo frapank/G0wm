@@ -389,8 +389,8 @@ static void settings_reload(const Arg*)
             client->isprivate = always_private;
         toplevel_update(client);
     }
-    if (always_private != was_private)
-        privacy_damage();
+    privacy_reload();
+    privacy_damage();
     if (private_notifications != was_private_notify)
         bar_notification_reset_private();
     wlr_scene_rect_set_color(root_background, root_color);
