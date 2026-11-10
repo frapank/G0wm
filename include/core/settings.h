@@ -22,97 +22,110 @@
       (hex & 0xFF) / 255.0f }
 #define TAGMASK ((1u << tag_count) - 1)
 
-enum {
-    SchemeNorm,
-    SchemeSel,
-    SchemeUrg,
-    SchemeTitle,
-    SchemeTitleSel,
-    SchemeStatus,
-    SchemeNotify,
-    SchemeNotifyLow,
-    SchemeNotifyCrit,
-    SchemeRunner,
-    SchemeRunnerSuggest,
-    SchemeRunnerSel,
-    SchemeRunnerIcon,
-    NumSchemes
+enum ColorScheme {
+    COLOR_SCHEME_NORMAL,
+    COLOR_SCHEME_SELECTED,
+    COLOR_SCHEME_URGENT,
+    COLOR_SCHEME_TITLE,
+    COLOR_SCHEME_TITLE_SELECTED,
+    COLOR_SCHEME_STATUS,
+    COLOR_SCHEME_NOTIFICATION,
+    COLOR_SCHEME_NOTIFICATION_LOW,
+    COLOR_SCHEME_NOTIFICATION_CRITICAL,
+    COLOR_SCHEME_RUNNER,
+    COLOR_SCHEME_RUNNER_SUGGESTION,
+    COLOR_SCHEME_RUNNER_SELECTED,
+    COLOR_SCHEME_RUNNER_ICON,
+    COLOR_SCHEME_COUNT
 }; /* color schemes */
-enum { CornerNormal, CornerSquircle };                                 /* corner curve */
-enum { OpacityNormal, OpacityBlur };                                   /* opacity_type */
-enum { SwipeLeft, SwipeRight, SwipeUp, SwipeDown, PinchIn, PinchOut }; /* gesture motions */
-enum { RunnerIconsNone, RunnerIconsSelected, RunnerIconsAll };
-enum { BarStatusFocus, BarStatusAll, BarStatusMain };
-enum { NotifyDotLeft, NotifyDotRight }; /* ends of the free box */
-enum : unsigned int {
-    ClkTagBar,
-    ClkLtSymbol,
-    ClkStatus,
-    ClkTitle,
-    ClkClient,
-    ClkRoot,
-    ClkTray,
-    ClkWinTitle /* a window's title bar, only for the wheel */
+enum CornerStyle { CORNER_STYLE_NORMAL, CORNER_STYLE_SQUIRCLE }; /* corner curve */
+enum OpacityMode { OPACITY_MODE_NORMAL, OPACITY_MODE_BLUR };     /* opacity_type */
+enum GestureDirection {
+    GESTURE_SWIPE_LEFT,
+    GESTURE_SWIPE_RIGHT,
+    GESTURE_SWIPE_UP,
+    GESTURE_SWIPE_DOWN,
+    GESTURE_PINCH_IN,
+    GESTURE_PINCH_OUT
+}; /* gesture motions */
+enum RunnerIconMode { RUNNER_ICONS_NONE, RUNNER_ICONS_SELECTED, RUNNER_ICONS_ALL };
+enum BarStatusMode { BAR_STATUS_FOCUSED, BAR_STATUS_ALL, BAR_STATUS_MAIN };
+enum NotificationDotPosition {
+    NOTIFICATION_DOT_LEFT,
+    NOTIFICATION_DOT_RIGHT
+}; /* ends of the free box */
+enum ClickArea : unsigned int {
+    CLICK_AREA_TAGS,
+    CLICK_AREA_LAYOUT_SYMBOL,
+    CLICK_AREA_STATUS,
+    CLICK_AREA_BAR_TITLE,
+    CLICK_AREA_CLIENT,
+    CLICK_AREA_ROOT,
+    CLICK_AREA_TRAY,
+    CLICK_AREA_WINDOW_TITLE /* a window's title bar, only for the wheel */
 }; /* clicks */
-enum : unsigned int { WheelUp = 0x10000, WheelDown }; /* Button.button for a wheel notch */
+enum MouseWheelButton : unsigned int {
+    MOUSE_WHEEL_UP = 0x10000,
+    MOUSE_WHEEL_DOWN
+}; /* MouseBinding.button for a wheel notch */
 
 typedef struct {
-    unsigned int click;
-    unsigned int mod;
+    unsigned int click_area;
+    unsigned int modifiers;
     unsigned int button;
-    void (*func)(const Arg*);
-    Arg arg;
-} Button;
+    void (*callback)(const ActionArg*);
+    ActionArg argument;
+} MouseBinding;
 
 typedef struct {
-    unsigned int motion;
-    unsigned int fingers;
-    void (*func)(const Arg*);
-    Arg arg;
-} Gesture;
+    unsigned int direction;
+    unsigned int finger_count;
+    void (*callback)(const ActionArg*);
+    ActionArg argument;
+} GestureBinding;
 
 typedef struct {
     unsigned int button; /* counted from 0, as libinput does */
-    void (*func)(const Arg*);
-    Arg arg;
-} PadButton;
+    void (*callback)(const ActionArg*);
+    ActionArg argument;
+} TabletPadBinding;
 
 typedef struct {
-    uint32_t mod;
+    uint32_t modifiers;
     xkb_keysym_t keysym;
-    void (*func)(const Arg*);
-    Arg arg;
-} Key;
+    void (*callback)(const ActionArg*);
+    ActionArg argument;
+} KeyBinding;
 
 typedef struct {
     const char* name;
-    float mfact;
-    int nmaster;
+    float master_factor;
+    int master_count;
     float scale;
-    const Layout* lt;
-    enum wl_output_transform rr;
+    const WindowLayout* layout;
+    enum wl_output_transform transform;
     int x, y;
     int width, height; /* 0,0 means use the preferred mode */
-    int refresh;       /* Hz, ignored when width/height are 0 */
+    int refresh_hz;    /* Hz, ignored when width/height are 0 */
 } MonitorRule;
 
 typedef struct {
-    const char* id;
+    const char* app_id;
     const char* title;
     uint32_t tags;
-    int isfloating;
-    int isprivate;
+    int is_floating;
+    int is_private;
     const char* private_text;
     uint32_t private_background;
     uint32_t private_foreground;
-    float opacity_focus;   /* 0 keeps the default from config.h */
-    float opacity_unfocus; /* 0 keeps the default from config.h */
-    int monitor;
-} Rule;
+    float focused_opacity;   /* 0 keeps the default from config.h */
+    float unfocused_opacity; /* 0 keeps the default from config.h */
+    int monitor_index;
+} ClientRule;
 
 extern const char** fonts;
 extern size_t font_count;
-extern uint32_t colors[NumSchemes][3];
+extern uint32_t colors[COLOR_SCHEME_COUNT][3];
 extern float root_color[4];
 extern float fullscreen_color[4];
 #ifdef INTEGRATED_BACKGROUND
@@ -142,10 +155,10 @@ extern unsigned int private_image_size;
 extern float private_text_scale;
 extern uint32_t private_background;
 extern uint32_t private_foreground;
-extern Layout* layouts;
+extern WindowLayout* layouts;
 extern size_t layout_count;
-extern Rule* rules;
-extern size_t rule_count;
+extern ClientRule* client_rules;
+extern size_t client_rule_count;
 extern int bar_enabled;
 extern int bar_top;
 extern int bar_window_title;
@@ -241,15 +254,15 @@ extern const char* tablet_output;
 extern int tablet_left_handed;
 extern const char* touch_output;
 extern const char** autostart;
-extern Key* keys;
-extern size_t key_count;
-extern Button* buttons;
-extern size_t button_count;
-extern Gesture* gestures;
+extern KeyBinding* key_bindings;
+extern size_t key_binding_count;
+extern MouseBinding* mouse_bindings;
+extern size_t mouse_binding_count;
+extern GestureBinding* gesture_bindings;
 extern unsigned int pinch_zoom_modifier;
-extern size_t gesture_count;
-extern PadButton* pad_buttons;
-extern size_t pad_button_count;
+extern size_t gesture_binding_count;
+extern TabletPadBinding* tablet_pad_bindings;
+extern size_t tablet_pad_binding_count;
 extern int log_level;
 extern int bypass_surface_visibility;
 extern int allow_tearing;

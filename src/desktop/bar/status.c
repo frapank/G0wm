@@ -32,9 +32,9 @@ static void bar_status_stop(void);
 /* whether the bar on m shows the status text */
 int bar_status_shown(Monitor* monitor)
 {
-    if (bar_status == BarStatusMain)
+    if (bar_status == BAR_STATUS_MAIN)
         return monitor == bar_main_monitor();
-    if (bar_status == BarStatusFocus)
+    if (bar_status == BAR_STATUS_FOCUSED)
         return bar_single_monitor || monitor == selected_monitor;
     return 1;
 }
@@ -71,8 +71,8 @@ static int bar_status_escape(const char* text, uint32_t* scheme)
     /* retrun to default colors */
     if (text[1] == 'd' && text[2] == '^') {
         if (scheme) {
-            scheme[ColFg] = colors[SchemeStatus][ColFg];
-            scheme[ColBg] = colors[SchemeStatus][ColBg];
+            scheme[ColFg] = colors[COLOR_SCHEME_STATUS][ColFg];
+            scheme[ColBg] = colors[COLOR_SCHEME_STATUS][ColBg];
         }
         return 3;
     }
@@ -109,13 +109,13 @@ int bar_draw_status(Monitor* monitor, const char* text, int x, int width, int re
         return 0;
 
     uint32_t scheme[3];
-    memcpy(scheme, colors[SchemeStatus], sizeof(scheme));
+    memcpy(scheme, colors[COLOR_SCHEME_STATUS], sizeof(scheme));
 
     /* the runs cover the glyphs only, so the padding around them would keep
      * whatever the buffer held */
     if (render) {
-        drwl_setscheme(monitor->drw, colors[SchemeStatus]);
-        drwl_rect(monitor->drw, x, 0, width, monitor->b.height, 1, 1);
+        drwl_setscheme(monitor->draw_context, colors[COLOR_SCHEME_STATUS]);
+        drwl_rect(monitor->draw_context, x, 0, width, monitor->bar_metrics.height_px, 1, 1);
     }
 
     const int x_end = x + width;
@@ -140,14 +140,15 @@ int bar_draw_status(Monitor* monitor, const char* text, int x, int width, int re
         }
         segment[segment_len] = '\0';
 
-        int segment_width = (int)drwl_font_getwidth(monitor->drw, segment);
+        int segment_width = (int)drwl_font_getwidth(monitor->draw_context, segment);
         total_width += segment_width;
         if (render && segment_width > 0 && x < x_end) {
             /* drwl_text() ellipsizes what it cannot fit */
             if (x + segment_width > x_end)
                 segment_width = x_end - x;
-            drwl_setscheme(monitor->drw, scheme);
-            drwl_text(monitor->drw, x, 0, segment_width, monitor->b.height, 0, segment, 0);
+            drwl_setscheme(monitor->draw_context, scheme);
+            drwl_text(monitor->draw_context, x, 0, segment_width, monitor->bar_metrics.height_px, 0,
+                      segment, 0);
             x += segment_width;
         }
 
@@ -188,7 +189,7 @@ static int bar_status_area(Monitor* monitor,
         }
         segment[segment_len] = '\0';
 
-        segment_end_x += (int)drwl_font_getwidth(monitor->drw, segment);
+        segment_end_x += (int)drwl_font_getwidth(monitor->draw_context, segment);
         if (pointer_x < segment_end_x) {
             if (!button_cmds[button - 1])
                 return 0;
@@ -228,7 +229,7 @@ static void bar_status_run(char* cmd)
 {
     char* argv[] = { "/bin/sh", "-c", cmd, nullptr };
 
-    spawn(&(Arg){ .v = argv });
+    spawn(&(ActionArg){ .pointer = argv });
 }
 
 int bar_status_click(Monitor* monitor, int pointer_x, int button)

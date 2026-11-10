@@ -28,7 +28,7 @@ static const char* item_match_string = "type='signal',"
                                        "interface='" SNI_NAME "',"
                                        "member='NewIcon'";
 
-static Watcher* item_get_watcher(const Item* item)
+static TrayWatcher* item_get_watcher(const TrayItem* item)
 {
     if (!item)
         return nullptr;
@@ -36,12 +36,12 @@ static Watcher* item_get_watcher(const Item* item)
     return item->watcher;
 }
 
-static DBusConnection* item_get_connection(const Item* item)
+static DBusConnection* item_get_connection(const TrayItem* item)
 {
     if (!item || !item->watcher)
         return nullptr;
 
-    return item->watcher->conn;
+    return item->watcher->connection;
 }
 
 static const uint8_t* item_extract_image(DBusMessageIter* iter,
@@ -148,23 +148,23 @@ out:
 
 static void item_handle_menu_path_ready(DBusPendingCall* pending, void* data)
 {
-    Item* item = data;
+    TrayItem* item = data;
 
-    free(item->menu_busobj);
-    item->menu_busobj = item_take_string_property(pending, "menupath");
+    free(item->menu_object_path);
+    item->menu_object_path = item_take_string_property(pending, "menupath");
 }
 
 /* Second half of the fallback, where the name becomes a file. */
 static void item_handle_icon_name_ready(DBusPendingCall* pending, void* data)
 {
-    Item* item = data;
+    TrayItem* item = data;
 
     char* name = item_take_string_property(pending, nullptr);
     if (!name)
         return;
 
-    Icon* icon = icon_create_from_name(name, item->icon_themepath,
-                                       watcher_get_icon_size(item_get_watcher(item)));
+    RasterIcon* icon = icon_create_from_name(name, item->icon_theme_path,
+                                             watcher_get_icon_size(item_get_watcher(item)));
     free(name);
     if (!icon)
         return;
@@ -178,13 +178,13 @@ static void item_handle_icon_name_ready(DBusPendingCall* pending, void* data)
 /* IconThemePath has to be in before IconName resolves, so they chain. */
 static void item_handle_theme_path_ready(DBusPendingCall* pending, void* data)
 {
-    Item* item = data;
+    TrayItem* item = data;
 
-    free(item->icon_themepath);
-    item->icon_themepath = item_take_string_property(pending, nullptr);
+    free(item->icon_theme_path);
+    item->icon_theme_path = item_take_string_property(pending, nullptr);
 
-    helpers_request_property(item_get_connection(item), item->busname, item->busobj, "IconName",
-                             SNI_IFACE, item_handle_icon_name_ready, item);
+    helpers_request_property(item_get_connection(item), item->bus_name, item->object_path,
+                             "IconName", SNI_IFACE, item_handle_icon_name_ready, item);
 }
 
 /*
@@ -194,14 +194,14 @@ static void item_handle_theme_path_ready(DBusPendingCall* pending, void* data)
  */
 static void item_handle_id_ready(DBusPendingCall* pending, void* data)
 {
-    Item* item = data;
+    TrayItem* item = data;
 
     char* id = item_take_string_property(pending, "appid");
     if (!id)
         return;
 
-    free(item->appid);
-    item->appid = id;
+    free(item->app_id);
+    item->app_id = id;
 
     /* Don't trigger update if this item already has a real icon */
     if (!item->icon)
@@ -210,15 +210,15 @@ static void item_handle_id_ready(DBusPendingCall* pending, void* data)
 
 static void item_handle_pixmap_ready(DBusPendingCall* pending, void* data)
 {
-    Item* item = data;
+    TrayItem* item = data;
 
     DBusMessage* reply = nullptr;
     DBusMessageIter iter;
     DBusMessageIter array;
     DBusMessageIter select;
     DBusMessageIter strct;
-    Icon* icon = nullptr;
-    Watcher* watcher;
+    RasterIcon* icon = nullptr;
+    TrayWatcher* watcher;
     dbus_int32_t width;
     dbus_int32_t height;
     int selected_index;
@@ -260,7 +260,8 @@ static void item_handle_pixmap_ready(DBusPendingCall* pending, void* data)
         item->icon = icon;
         watcher_update_trays(watcher);
 
-    } else if (memcmp(item->icon->buf_orig, buf, MIN(item->icon->size_orig, (size_t)size)) != 0) {
+    } else if (memcmp(item->icon->original_pixels, buf,
+                      MIN(item->icon->original_size_bytes, (size_t)size)) != 0) {
         /* New icon */
         icon_destroy(item->icon);
         item->icon = nullptr;
@@ -287,19 +288,19 @@ fail:
         dbus_pending_call_unref(pending);
 
     /* no pixmap, but the item may still name a themed icon like Steam does */
-    helpers_request_property(item_get_connection(item), item->busname, item->busobj,
+    helpers_request_property(item_get_connection(item), item->bus_name, item->object_path,
                              "IconThemePath", SNI_IFACE, item_handle_theme_path_ready, item);
 }
 
-static DBusHandlerResult item_handle_new_icon(Item* item,
+static DBusHandlerResult item_handle_new_icon(TrayItem* item,
                                               DBusConnection* connection,
                                               DBusMessage* message)
 {
     const char* sender = dbus_message_get_sender(message);
 
-    if (sender && strcmp(sender, item->busname) == 0) {
-        helpers_request_property(connection, item->busname, item->busobj, "IconPixmap", SNI_IFACE,
-                                 item_handle_pixmap_ready, item);
+    if (sender && strcmp(sender, item->bus_name) == 0) {
+        helpers_request_property(connection, item->bus_name, item->object_path, "IconPixmap",
+                                 SNI_IFACE, item_handle_pixmap_ready, item);
 
         return DBUS_HANDLER_RESULT_HANDLED;
 
@@ -312,7 +313,7 @@ static DBusHandlerResult item_filter_bus(DBusConnection* connection,
                                          DBusMessage* message,
                                          void* data)
 {
-    Item* item = data;
+    TrayItem* item = data;
 
     if (dbus_message_is_signal(message, SNI_IFACE, "NewIcon"))
         return item_handle_new_icon(item, connection, message);
@@ -320,71 +321,71 @@ static DBusHandlerResult item_filter_bus(DBusConnection* connection,
         return DBUS_HANDLER_RESULT_NOT_YET_HANDLED;
 }
 
-Item* item_create(const char* busname, const char* busobj, Watcher* watcher)
+TrayItem* item_create(const char* bus_name, const char* object_path, TrayWatcher* watcher)
 {
     DBusConnection* connection;
-    Item* item;
-    char* busname_dup = nullptr;
-    char* busobj_dup = nullptr;
+    TrayItem* item;
+    char* bus_name_copy = nullptr;
+    char* object_path_copy = nullptr;
     char match_rule[RULEBSIZE];
 
-    if (snprintf(match_rule, sizeof(match_rule), item_match_string, busname) >= RULEBSIZE)
+    if (snprintf(match_rule, sizeof(match_rule), item_match_string, bus_name) >= RULEBSIZE)
         return nullptr;
 
-    item = calloc(1, sizeof(Item));
-    busname_dup = strdup(busname);
-    busobj_dup = strdup(busobj);
-    if (!item || !busname_dup || !busobj_dup)
+    item = calloc(1, sizeof(TrayItem));
+    bus_name_copy = strdup(bus_name);
+    object_path_copy = strdup(object_path);
+    if (!item || !bus_name_copy || !object_path_copy)
         goto fail;
 
-    connection = watcher->conn;
-    item->busname = busname_dup;
-    item->busobj = busobj_dup;
+    connection = watcher->connection;
+    item->bus_name = bus_name_copy;
+    item->object_path = object_path_copy;
     item->watcher = watcher;
 
     if (!dbus_connection_add_filter(connection, item_filter_bus, item, nullptr))
         goto fail;
     dbus_bus_add_match(connection, match_rule, nullptr);
 
-    helpers_request_property(connection, busname, busobj, "IconPixmap", SNI_IFACE,
+    helpers_request_property(connection, bus_name, object_path, "IconPixmap", SNI_IFACE,
                              item_handle_pixmap_ready, item);
 
-    helpers_request_property(connection, busname, busobj, "Id", SNI_IFACE, item_handle_id_ready,
-                             item);
+    helpers_request_property(connection, bus_name, object_path, "Id", SNI_IFACE,
+                             item_handle_id_ready, item);
 
-    helpers_request_property(connection, busname, busobj, "Menu", SNI_IFACE,
+    helpers_request_property(connection, bus_name, object_path, "Menu", SNI_IFACE,
                              item_handle_menu_path_ready, item);
 
     return item;
 
 fail:
-    free(busname_dup);
-    free(busobj_dup);
+    free(bus_name_copy);
+    free(object_path_copy);
     free(item);
     return nullptr;
 }
 
-void item_destroy(Item* item)
+void item_destroy(TrayItem* item)
 {
 
     DBusConnection* connection = item_get_connection(item);
 
     char match_rule[RULEBSIZE];
-    if (snprintf(match_rule, sizeof(match_rule), item_match_string, item->busname) < RULEBSIZE) {
+    if (snprintf(match_rule, sizeof(match_rule), item_match_string, item->bus_name) < RULEBSIZE) {
         dbus_bus_remove_match(connection, match_rule, nullptr);
         dbus_connection_remove_filter(connection, item_filter_bus, item);
     }
     if (item->icon)
         icon_destroy(item->icon);
-    free(item->menu_busobj);
-    free(item->busname);
-    free(item->busobj);
-    free(item->appid);
-    free(item->icon_themepath);
+    free(item->menu_object_path);
+    free(item->bus_name);
+    free(item->object_path);
+    free(item->app_id);
+    free(item->icon_theme_path);
     free(item);
 }
 
-void item_activate(Item* item)
+void item_activate(TrayItem* item)
 {
     DBusConnection* connection;
     DBusMessage* message = nullptr;
@@ -393,8 +394,8 @@ void item_activate(Item* item)
 
     connection = item_get_connection(item);
 
-    if (!(message =
-              dbus_message_new_method_call(item->busname, item->busobj, SNI_IFACE, "Activate")) ||
+    if (!(message = dbus_message_new_method_call(item->bus_name, item->object_path, SNI_IFACE,
+                                                 "Activate")) ||
         !dbus_message_append_args(message, DBUS_TYPE_INT32, &x, DBUS_TYPE_INT32, &y,
                                   DBUS_TYPE_INVALID) ||
         !dbus_connection_send_with_reply(connection, message, nullptr, -1)) {

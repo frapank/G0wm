@@ -14,7 +14,7 @@ int corner_bar_radius(Monitor* monitor);
 unsigned int corner_border_width(void);
 void corner_clear(uint32_t* pixels, int width, int height, int radius);
 void corner_cut(uint32_t* pixels, int width, int height, int radius);
-int corner_client_radius(Client* client);
-void corner_draw_all(Client* client);
+int corner_client_radius(WindowClient* client);
+void corner_draw_all(WindowClient* client);
 
 #endif

@@ -41,7 +41,7 @@ static void xwayland_handle_set_hints(struct wl_listener* listener, void*);
 #ifdef XWAYLAND
 static void xwayland_handle_request_activate(struct wl_listener* listener, void*)
 {
-    Client* client = wl_container_of(listener, client, activate);
+    WindowClient* client = wl_container_of(listener, client, activate);
 
     /* Only "managed" windows can be activated */
     if (!client_is_unmanaged(client))
@@ -50,7 +50,7 @@ static void xwayland_handle_request_activate(struct wl_listener* listener, void*
 
 static void xwayland_handle_associate(struct wl_listener* listener, void*)
 {
-    Client* client = wl_container_of(listener, client, associate);
+    WindowClient* client = wl_container_of(listener, client, associate);
 
     LISTEN(&client_surface(client)->events.map, &client->map, client_handle_map);
     LISTEN(&client_surface(client)->events.unmap, &client->unmap, client_handle_unmap);
@@ -58,14 +58,14 @@ static void xwayland_handle_associate(struct wl_listener* listener, void*)
 
 static void xwayland_handle_request_configure(struct wl_listener* listener, void* data)
 {
-    Client* client = wl_container_of(listener, client, configure);
+    WindowClient* client = wl_container_of(listener, client, configure);
     struct wlr_xwayland_surface_configure_event* event = data;
     if (!client_surface(client) || !client_surface(client)->mapped) {
         wlr_xwayland_surface_configure(client->surface.xwayland, event->x, event->y, event->width,
                                        event->height);
         return;
     }
-    /* Unmanaged clients never get a monitor, so this precedes the client->mon
+    /* Unmanaged clients never get a monitor, so this precedes the client->monitor
      * check below. */
     if (client_is_unmanaged(client)) {
         wlr_scene_node_set_position(&client->scene->node, event->x, event->y);
@@ -73,9 +73,9 @@ static void xwayland_handle_request_configure(struct wl_listener* listener, void
                                        event->height);
         return;
     }
-    /* client->mon is dereferenced below: monitor_close() leaves mapped clients
+    /* client->monitor is dereferenced below: monitor_close() leaves mapped clients
      * without a monitor whenever the last output goes away. */
-    if (!client->mon) {
+    if (!client->monitor) {
         wlr_xwayland_surface_configure(client->surface.xwayland, event->x, event->y, event->width,
                                        event->height);
         return;
@@ -85,20 +85,20 @@ static void xwayland_handle_request_configure(struct wl_listener* listener, void
      * would shrink the window to a box in the corner of the black fullscreen
      * backdrop while the game happily keeps rendering. Restate the size it
      * actually has instead. */
-    if (client->isfullscreen) {
-        client_resize(client, client->mon->m, 0);
+    if (client->is_fullscreen) {
+        client_resize(client, client->monitor->geometry, 0);
         return;
     }
 
-    if (client->isfloating && client != input_grab_client) {
+    if (client->is_floating && client != input_grab_client) {
         client_resize(client,
-                      (struct wlr_box){ .x = event->x - client->bw,
-                                        .y = event->y - client->bw,
-                                        .width = event->width + client->bw * 2,
-                                        .height = event->height + client->bw * 2 },
+                      (struct wlr_box){ .x = event->x - client->border_width,
+                                        .y = event->y - client->border_width,
+                                        .width = event->width + client->border_width * 2,
+                                        .height = event->height + client->border_width * 2 },
                       0);
     } else {
-        layout_arrange(client->mon);
+        layout_arrange(client->monitor);
     }
 }
 
@@ -106,14 +106,14 @@ void xwayland_handle_new_surface(struct wl_listener*, void* data)
 {
     struct wlr_xwayland_surface* xsurface = data;
 
-    /* Allocate a Client for this surface */
-    Client* client = xsurface->data = util_calloc(1, sizeof(*client));
+    /* Allocate a WindowClient for this surface */
+    WindowClient* client = xsurface->data = util_calloc(1, sizeof(*client));
     client->surface.xwayland = xsurface;
-    client->type = X11;
-    client->bw = client_is_unmanaged(client) ? 0 : corner_border_width();
-    client->opacity = client->opacity_unfocus = opacity_unfocus;
-    client->opacity_focus = opacity_focus;
-    client->isprivate = always_private;
+    client->type = SURFACE_TYPE_X11;
+    client->border_width = client_is_unmanaged(client) ? 0 : corner_border_width();
+    client->opacity = client->unfocused_opacity = opacity_unfocus;
+    client->focused_opacity = opacity_focus;
+    client->is_private = always_private;
 
     /* Listen to the various events it can emit */
     LISTEN(&xsurface->events.associate, &client->associate, xwayland_handle_associate);
@@ -131,14 +131,14 @@ void xwayland_handle_new_surface(struct wl_listener*, void* data)
 
 static void xwayland_handle_dissociate(struct wl_listener* listener, void*)
 {
-    Client* client = wl_container_of(listener, client, dissociate);
+    WindowClient* client = wl_container_of(listener, client, dissociate);
     wl_list_remove(&client->map.link);
     wl_list_remove(&client->unmap.link);
 }
 
 static void xwayland_handle_request_minimize(struct wl_listener* listener, void* data)
 {
-    Client* client = wl_container_of(listener, client, minimize);
+    WindowClient* client = wl_container_of(listener, client, minimize);
     struct wlr_xwayland_minimize_event* event = data;
 
     /* There is nowhere to minimize to, but the client must hear back or it
@@ -151,16 +151,16 @@ static void xwayland_handle_request_minimize(struct wl_listener* listener, void*
 
 static void xwayland_handle_set_hints(struct wl_listener* listener, void*)
 {
-    Client* client = wl_container_of(listener, client, set_hints);
+    WindowClient* client = wl_container_of(listener, client, set_hints);
     struct wlr_surface* surface = client_surface(client);
     if (client == client_top(selected_monitor) || !client->surface.xwayland->hints)
         return;
 
-    client->isurgent = xcb_icccm_wm_hints_get_urgency(client->surface.xwayland->hints);
+    client->is_urgent = xcb_icccm_wm_hints_get_urgency(client->surface.xwayland->hints);
     bar_draw_all();
 
-    if (client->isurgent && surface && surface->mapped)
-        opacity_set_border_color(client, SchemeUrg);
+    if (client->is_urgent && surface && surface->mapped)
+        opacity_set_border_color(client, COLOR_SCHEME_URGENT);
 }
 
 void xwayland_handle_ready(struct wl_listener*, void*)

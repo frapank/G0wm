@@ -56,8 +56,8 @@ static void monitor_handle_destroy(struct wl_listener* listener, void*);
 static void monitor_close(Monitor* monitor);
 static void monitor_handle_layer_commit(struct wl_listener* listener, void*);
 static void monitor_handle_layer_destroy(struct wl_listener* listener, void*);
-static Monitor* monitor_in_direction(enum wlr_direction dir);
-static Client* monitor_fullscreen_client(Monitor* monitor);
+static Monitor* monitor_in_direction(enum wlr_direction direction);
+static WindowClient* monitor_fullscreen_client(Monitor* monitor);
 static void monitor_game_mode(Monitor* monitor, struct wlr_output_state* state);
 static void monitor_apply_or_test_config(struct wlr_output_configuration_v1* config, int test);
 static void monitor_handle_frame(struct wl_listener* listener, void*);
@@ -66,7 +66,8 @@ static void monitor_handle_layer_unmap(struct wl_listener* listener, void*);
 
 /* variables */
 /* Map from ZWLR_LAYER_SHELL_* constants to Lyr* enum */
-constexpr int monitor_layer_map[] = { LyrBg, LyrBottom, LyrTop, LyrOverlay };
+constexpr int monitor_layer_map[] = { SCENE_LAYER_BACKGROUND, SCENE_LAYER_BOTTOM, SCENE_LAYER_TOP,
+                                      SCENE_LAYER_OVERLAY };
 static_assert(LENGTH(monitor_layer_map) == ZWLR_LAYER_SHELL_V1_LAYER_OVERLAY + 1);
 
 /* function implementations */
@@ -75,7 +76,7 @@ static void monitor_arrange_layer(Monitor* monitor,
                                   struct wlr_box* usable_area,
                                   int exclusive)
 {
-    struct wlr_box full_area = monitor->m;
+    struct wlr_box full_area = monitor->geometry;
 
     LayerSurface* layer;
     wl_list_for_each(layer, list, link) {
@@ -88,14 +89,14 @@ static void monitor_arrange_layer(Monitor* monitor,
             continue;
 
         wlr_scene_layer_surface_v1_configure(layer->scene_layer, &full_area, usable_area);
-        wlr_scene_node_set_position(&layer->popups->node, layer->scene->node.x,
+        wlr_scene_node_set_position(&layer->popup_tree->node, layer->scene->node.x,
                                     layer->scene->node.y);
     }
 }
 
 void monitor_arrange_layers(Monitor* monitor)
 {
-    struct wlr_box usable_area = monitor->m;
+    struct wlr_box usable_area = monitor->geometry;
     uint32_t layers_above_shell[] = {
         ZWLR_LAYER_SHELL_V1_LAYER_OVERLAY,
         ZWLR_LAYER_SHELL_V1_LAYER_TOP,
@@ -103,18 +104,18 @@ void monitor_arrange_layers(Monitor* monitor)
     if (!monitor->wlr_output->enabled)
         return;
 
-    if (monitor->scene_buffer->node.enabled) {
+    if (monitor->bar_scene_buffer->node.enabled) {
         /* the padding goes with the bar, so tiles keep the same gap */
-        usable_area.height -= monitor->b.real_height + (int)bar_padding;
-        usable_area.y += bar_top ? monitor->b.real_height + (int)bar_padding : 0;
+        usable_area.height -= monitor->bar_metrics.logical_height + (int)bar_padding;
+        usable_area.y += bar_top ? monitor->bar_metrics.logical_height + (int)bar_padding : 0;
     }
 
     /* Arrange exclusive surfaces from top->bottom */
     for (int i = 3; i >= 0; i--)
         monitor_arrange_layer(monitor, &monitor->layers[i], &usable_area, 1);
 
-    if (!wlr_box_equal(&usable_area, &monitor->w)) {
-        monitor->w = usable_area;
+    if (!wlr_box_equal(&usable_area, &monitor->usable_area)) {
+        monitor->usable_area = usable_area;
         layout_arrange(monitor);
     }
 
@@ -142,20 +143,20 @@ static void monitor_handle_destroy(struct wl_listener* listener, void*)
 {
     Monitor* monitor = wl_container_of(listener, monitor, destroy);
     LayerSurface* layer_surface;
-    LayerSurface* tmp;
+    LayerSurface* next_layer_surface;
 
     /* monitor->layers[i] are intentionally not unlinked */
     for (size_t i = 0; i < LENGTH(monitor->layers); i++) {
-        wl_list_for_each_safe(layer_surface, tmp, &monitor->layers[i], link)
+        wl_list_for_each_safe(layer_surface, next_layer_surface, &monitor->layers[i], link)
             wlr_layer_surface_v1_destroy(layer_surface->layer_surface);
     }
 
-    for (size_t i = 0; i < LENGTH(monitor->pool); i++)
-        wlr_buffer_drop(&monitor->pool[i]->base);
-    buffer_pool_drop(monitor->sharepool, LENGTH(monitor->sharepool));
+    for (size_t i = 0; i < LENGTH(monitor->bar_buffer_pool); i++)
+        wlr_buffer_drop(&monitor->bar_buffer_pool[i]->base);
+    buffer_pool_drop(monitor->capture_buffer_pool, LENGTH(monitor->capture_buffer_pool));
 #ifdef INTEGRATED_BACKGROUND
-    buffer_pool_drop(monitor->wallpaperpool, LENGTH(monitor->wallpaperpool));
-    buffer_pool_drop(monitor->blurpool, LENGTH(monitor->blurpool));
+    buffer_pool_drop(monitor->wallpaper_buffer_pool, LENGTH(monitor->wallpaper_buffer_pool));
+    buffer_pool_drop(monitor->blur_buffer_pool, LENGTH(monitor->blur_buffer_pool));
 #endif
 
     if (monitor->tray)
@@ -163,8 +164,8 @@ static void monitor_handle_destroy(struct wl_listener* listener, void*)
 
     magnifier_drop(monitor);
 
-    drwl_setimage(monitor->drw, nullptr);
-    drwl_destroy(monitor->drw);
+    drwl_setimage(monitor->draw_context, nullptr);
+    drwl_destroy(monitor->draw_context);
 
     wl_list_remove(&monitor->destroy.link);
     wl_list_remove(&monitor->frame.link);
@@ -177,11 +178,11 @@ static void monitor_handle_destroy(struct wl_listener* listener, void*)
     wlr_scene_output_destroy(monitor->scene_output);
 
     monitor_close(monitor);
-    wlr_scene_node_destroy(&monitor->fullscreen_bg->node);
-    wlr_scene_node_destroy(&monitor->scene_buffer->node);
+    wlr_scene_node_destroy(&monitor->fullscreen_background->node);
+    wlr_scene_node_destroy(&monitor->bar_scene_buffer->node);
 #ifdef INTEGRATED_BACKGROUND
-    wlr_scene_node_destroy(&monitor->wallpaper->node);
-    wlr_scene_node_destroy(&monitor->barblur->node);
+    wlr_scene_node_destroy(&monitor->wallpaper_scene_buffer->node);
+    wlr_scene_node_destroy(&monitor->bar_blur_scene_buffer->node);
 #endif
     free(monitor);
 }
@@ -202,16 +203,16 @@ static void monitor_close(Monitor* monitor)
             selected_monitor = nullptr;
     }
 
-    Client* client;
+    WindowClient* client;
     wl_list_for_each(client, &clients, link) {
-        if (client->isfloating && client->geom.x > monitor->m.width)
+        if (client->is_floating && client->geometry.x > monitor->geometry.width)
             client_resize(client,
-                          (struct wlr_box){ .x = client->geom.x - monitor->w.width,
-                                            .y = client->geom.y,
-                                            .width = client->geom.width,
-                                            .height = client->geom.height },
+                          (struct wlr_box){ .x = client->geometry.x - monitor->usable_area.width,
+                                            .y = client->geometry.y,
+                                            .width = client->geometry.width,
+                                            .height = client->geometry.height },
                           0);
-        if (client->mon == monitor)
+        if (client->monitor == monitor)
             client_set_monitor(client, selected_monitor, client->tags);
     }
     client_focus(client_top(selected_monitor), 1);
@@ -226,13 +227,13 @@ static void monitor_handle_layer_commit(struct wl_listener* listener, void*)
     struct wlr_layer_surface_v1_state old_state;
 
     if (layer->layer_surface->initial_commit) {
-        client_set_scale(layer_surface->surface, layer->mon->wlr_output->scale);
+        client_set_scale(layer_surface->surface, layer->monitor->wlr_output->scale);
 
         /* Temporarily set the layer's current state to pending
          * so that we can easily arrange it */
         old_state = layer->layer_surface->current;
         layer->layer_surface->current = layer->layer_surface->pending;
-        monitor_arrange_layers(layer->mon);
+        monitor_arrange_layers(layer->monitor);
         layer->layer_surface->current = old_state;
         return;
     }
@@ -244,14 +245,14 @@ static void monitor_handle_layer_commit(struct wl_listener* listener, void*)
     if (scene_layer != layer->scene->node.parent) {
         wlr_scene_node_reparent(&layer->scene->node, scene_layer);
         wl_list_remove(&layer->link);
-        wl_list_insert(&layer->mon->layers[layer_surface->current.layer], &layer->link);
-        wlr_scene_node_reparent(&layer->popups->node,
+        wl_list_insert(&layer->monitor->layers[layer_surface->current.layer], &layer->link);
+        wlr_scene_node_reparent(&layer->popup_tree->node,
                                 (layer_surface->current.layer < ZWLR_LAYER_SHELL_V1_LAYER_TOP
-                                     ? layers[LyrTop]
+                                     ? layers[SCENE_LAYER_TOP]
                                      : scene_layer));
     }
 
-    monitor_arrange_layers(layer->mon);
+    monitor_arrange_layers(layer->monitor);
 }
 
 void monitor_handle_new_layer_surface(struct wl_listener*, void* data)
@@ -267,21 +268,21 @@ void monitor_handle_new_layer_surface(struct wl_listener*, void* data)
     }
 
     LayerSurface* layer = layer_surface->data = util_calloc(1, sizeof(*layer));
-    layer->type = LayerShell;
+    layer->type = SURFACE_TYPE_LAYER_SHELL;
     LISTEN(&surface->events.commit, &layer->surface_commit, monitor_handle_layer_commit);
     LISTEN(&surface->events.unmap, &layer->unmap, monitor_handle_layer_unmap);
     LISTEN(&layer_surface->events.destroy, &layer->destroy, monitor_handle_layer_destroy);
 
     layer->layer_surface = layer_surface;
-    layer->mon = layer_surface->output->data;
+    layer->monitor = layer_surface->output->data;
     layer->scene_layer = wlr_scene_layer_surface_v1_create(scene_layer, layer_surface);
     layer->scene = layer->scene_layer->tree;
-    layer->popups = surface->data = wlr_scene_tree_create(
-        layer_surface->current.layer < ZWLR_LAYER_SHELL_V1_LAYER_TOP ? layers[LyrTop]
+    layer->popup_tree = surface->data = wlr_scene_tree_create(
+        layer_surface->current.layer < ZWLR_LAYER_SHELL_V1_LAYER_TOP ? layers[SCENE_LAYER_TOP]
                                                                      : scene_layer);
-    layer->scene->node.data = layer->popups->node.data = layer;
+    layer->scene->node.data = layer->popup_tree->node.data = layer;
 
-    wl_list_insert(&layer->mon->layers[layer_surface->pending.layer], &layer->link);
+    wl_list_insert(&layer->monitor->layers[layer_surface->pending.layer], &layer->link);
     wlr_surface_send_enter(surface, layer_surface->output);
 }
 
@@ -292,32 +293,32 @@ static void monitor_apply_rules(Monitor* monitor, struct wlr_output_state* state
     struct wlr_output* wlr_output = monitor->wlr_output;
     struct wlr_output_mode* mode = nullptr;
 
-    monitor->gaps = gaps;
+    monitor->gaps_enabled = gaps;
     for (const MonitorRule* rule = monitor_rules; rule < monitor_rules + monitor_rule_count;
          rule++) {
         if (rule->name && !strstr(wlr_output->name, rule->name))
             continue;
-        monitor->m.x = rule->x;
-        monitor->m.y = rule->y;
-        monitor->mfact = rule->mfact;
-        monitor->nmaster = rule->nmaster;
-        monitor->lt[0] = rule->lt;
-        monitor->lt[1] = &layouts[layout_count > 1 && rule->lt != &layouts[1]];
-        snprintf(monitor->ltsymbol, LENGTH(monitor->ltsymbol), "%s",
-                 monitor->lt[monitor->sellt]->symbol);
-        for (size_t i = 0; i < LENGTH(monitor->taglt); i++) {
-            monitor->taglt[i][0] = monitor->lt[0];
-            monitor->taglt[i][1] = monitor->lt[1];
+        monitor->geometry.x = rule->x;
+        monitor->geometry.y = rule->y;
+        monitor->master_factor = rule->master_factor;
+        monitor->master_count = rule->master_count;
+        monitor->layouts[0] = rule->layout;
+        monitor->layouts[1] = &layouts[layout_count > 1 && rule->layout != &layouts[1]];
+        snprintf(monitor->layout_symbol, LENGTH(monitor->layout_symbol), "%s",
+                 monitor->layouts[monitor->selected_layout_index]->symbol);
+        for (size_t i = 0; i < LENGTH(monitor->tag_layouts); i++) {
+            monitor->tag_layouts[i][0] = monitor->layouts[0];
+            monitor->tag_layouts[i][1] = monitor->layouts[1];
         }
         wlr_output_state_set_scale(state, rule->scale);
-        wlr_output_state_set_transform(state, rule->rr);
+        wlr_output_state_set_transform(state, rule->transform);
         /* Load (or reuse, if already cached) the xcursor theme at this
          * monitor's scale so the cursor renders crisp and sized
          * relative to cursor_size * scale, not just cursor_size. */
         wlr_xcursor_manager_load(cursor_manager, rule->scale);
         if (rule->width && rule->height) {
             struct wlr_output_mode* candidate_mode;
-            int32_t wanted_refresh = rule->refresh * 1000;
+            int32_t wanted_refresh = rule->refresh_hz * 1000;
             int32_t best_diff = INT32_MAX;
             wl_list_for_each(candidate_mode, &wlr_output->modes, link) {
                 int32_t diff = abs(candidate_mode->refresh - wanted_refresh);
@@ -354,10 +355,11 @@ void monitor_reload_rules(void)
         monitor_apply_rules(monitor, &state);
         /* before the commit: a mode change runs monitor_update_layout(), which
          * would overwrite the rule's monitor->m.x/y with the old layout position */
-        if (monitor->m.x == -1 && monitor->m.y == -1)
+        if (monitor->geometry.x == -1 && monitor->geometry.y == -1)
             wlr_output_layout_add_auto(output_layout, monitor->wlr_output);
         else
-            wlr_output_layout_add(output_layout, monitor->wlr_output, monitor->m.x, monitor->m.y);
+            wlr_output_layout_add(output_layout, monitor->wlr_output, monitor->geometry.x,
+                                  monitor->geometry.y);
 
         /* a mode or a scale the output cannot take would blank it */
         if (wlr_output_test_state(monitor->wlr_output, &state))
@@ -366,7 +368,7 @@ void monitor_reload_rules(void)
 
         /* a scale of 0 is what a scale change looks like to bar_update(), and
          * the bar has to be its new height before anything is arranged */
-        monitor->b.scale = 0;
+        monitor->bar_metrics.scale = 0;
         bar_update(monitor);
     }
 }
@@ -388,8 +390,8 @@ void monitor_handle_new_output(struct wl_listener*, void* data)
 
     struct wlr_output_state state;
     wlr_output_state_init(&state);
-    monitor->tagset[0] = monitor->tagset[1] = 1;
-    monitor->zoom = 1;
+    monitor->tagsets[0] = monitor->tagsets[1] = 1;
+    monitor->zoom_factor = 1;
     monitor_apply_rules(monitor, &state);
 
     /* Set up event listeners */
@@ -402,18 +404,19 @@ void monitor_handle_new_output(struct wl_listener*, void* data)
     wlr_output_commit_state(wlr_output, &state);
     wlr_output_state_finish(&state);
 
-    if (!(monitor->drw = drwl_create()))
+    if (!(monitor->draw_context = drwl_create()))
         util_die("failed to create drwl context");
 
 #ifdef INTEGRATED_BACKGROUND
     /* created before the bar so that it stays underneath it */
-    monitor->barblur = wlr_scene_buffer_create(layers[LyrBottom], nullptr);
-    wlr_scene_node_set_enabled(&monitor->barblur->node, 0);
+    monitor->bar_blur_scene_buffer = wlr_scene_buffer_create(layers[SCENE_LAYER_BOTTOM], nullptr);
+    wlr_scene_node_set_enabled(&monitor->bar_blur_scene_buffer->node, 0);
 #endif
-    monitor->scene_buffer = wlr_scene_buffer_create(layers[LyrBottom], nullptr);
-    monitor->scene_buffer->point_accepts_input = bar_accepts_input;
+    monitor->bar_scene_buffer = wlr_scene_buffer_create(layers[SCENE_LAYER_BOTTOM], nullptr);
+    monitor->bar_scene_buffer->point_accepts_input = bar_accepts_input;
 #ifdef INTEGRATED_BACKGROUND
-    monitor->wallpaper = wlr_scene_buffer_create(layers[LyrBg], nullptr);
+    monitor->wallpaper_scene_buffer =
+        wlr_scene_buffer_create(layers[SCENE_LAYER_BACKGROUND], nullptr);
 #endif
     bar_update(monitor);
 
@@ -429,8 +432,9 @@ void monitor_handle_new_output(struct wl_listener*, void* data)
      *
      */
     /* monitor_update_layout() will resize and set correct position */
-    monitor->fullscreen_bg = wlr_scene_rect_create(layers[LyrFS], 0, 0, fullscreen_color);
-    wlr_scene_node_set_enabled(&monitor->fullscreen_bg->node, 0);
+    monitor->fullscreen_background =
+        wlr_scene_rect_create(layers[SCENE_LAYER_FULLSCREEN], 0, 0, fullscreen_color);
+    wlr_scene_node_set_enabled(&monitor->fullscreen_background->node, 0);
 
     /* Adds this to the output layout in the order it was configured.
      *
@@ -439,10 +443,10 @@ void monitor_handle_new_output(struct wl_listener*, void* data)
      * output (such as DPI, scale factor, manufacturer, etc).
      */
     monitor->scene_output = wlr_scene_output_create(scene, wlr_output);
-    if (monitor->m.x == -1 && monitor->m.y == -1)
+    if (monitor->geometry.x == -1 && monitor->geometry.y == -1)
         wlr_output_layout_add_auto(output_layout, wlr_output);
     else
-        wlr_output_layout_add(output_layout, wlr_output, monitor->m.x, monitor->m.y);
+        wlr_output_layout_add(output_layout, wlr_output, monitor->geometry.x, monitor->geometry.y);
 }
 
 static void monitor_handle_layer_destroy(struct wl_listener* listener, void*)
@@ -458,44 +462,46 @@ static void monitor_handle_layer_destroy(struct wl_listener* listener, void*)
     if (layer_surface->layer_surface->surface)
         layer_surface->layer_surface->surface->data = nullptr;
     wlr_scene_node_destroy(&layer_surface->scene->node);
-    wlr_scene_node_destroy(&layer_surface->popups->node);
+    wlr_scene_node_destroy(&layer_surface->popup_tree->node);
     free(layer_surface);
 }
 
-static Monitor* monitor_in_direction(enum wlr_direction dir)
+static Monitor* monitor_in_direction(enum wlr_direction direction)
 {
     if (!wlr_output_layout_get(output_layout, selected_monitor->wlr_output))
         return selected_monitor;
     struct wlr_output* next;
-    if ((next = wlr_output_layout_adjacent_output(output_layout, dir, selected_monitor->wlr_output,
-                                                  selected_monitor->m.x, selected_monitor->m.y)))
+    if ((next = wlr_output_layout_adjacent_output(
+             output_layout, direction, selected_monitor->wlr_output, selected_monitor->geometry.x,
+             selected_monitor->geometry.y)))
         return next->data;
     if ((next = wlr_output_layout_farthest_output(
-             output_layout, dir ^ (WLR_DIRECTION_LEFT | WLR_DIRECTION_RIGHT),
-             selected_monitor->wlr_output, selected_monitor->m.x, selected_monitor->m.y)))
+             output_layout, direction ^ (WLR_DIRECTION_LEFT | WLR_DIRECTION_RIGHT),
+             selected_monitor->wlr_output, selected_monitor->geometry.x,
+             selected_monitor->geometry.y)))
         return next->data;
     return selected_monitor;
 }
 
-void monitor_focus(const Arg* arg)
+void monitor_focus(const ActionArg* argument)
 {
     int i = 0, nmons = wl_list_length(&monitors);
     if (nmons) {
         do /* don't switch to disabled monitors */
-            selected_monitor = monitor_in_direction(arg->i);
+            selected_monitor = monitor_in_direction(argument->integer);
         while (!selected_monitor->wlr_output->enabled && i++ < nmons);
     }
     client_focus(client_top(selected_monitor), 1);
 }
 
-static Client* monitor_fullscreen_client(Monitor* monitor)
+static WindowClient* monitor_fullscreen_client(Monitor* monitor)
 {
 
     if (lock_active)
         return nullptr;
-    Client* client;
-    wl_list_for_each(client, &focus_stack, flink) {
-        if (VISIBLEON(client, monitor) && client->isfullscreen && client_surface(client))
+    WindowClient* client;
+    wl_list_for_each(client, &focus_stack, focus_link) {
+        if (VISIBLEON(client, monitor) && client->is_fullscreen && client_surface(client))
             return client;
     }
     return nullptr;
@@ -503,7 +509,7 @@ static Client* monitor_fullscreen_client(Monitor* monitor)
 
 static void monitor_game_mode(Monitor* monitor, struct wlr_output_state* state)
 {
-    Client* client = monitor_fullscreen_client(monitor);
+    WindowClient* client = monitor_fullscreen_client(monitor);
     struct wlr_output* output = monitor->wlr_output;
     enum wp_content_type_v1_type type = WP_CONTENT_TYPE_V1_TYPE_NONE;
 
@@ -513,21 +519,21 @@ static void monitor_game_mode(Monitor* monitor, struct wlr_output_state* state)
         auto_vrr && (type == WP_CONTENT_TYPE_V1_TYPE_GAME || type == WP_CONTENT_TYPE_V1_TYPE_VIDEO);
 
     /* never undo a wlr-randr choice */
-    if (vrr && !monitor->autovrr && output->adaptive_sync_supported &&
+    if (vrr && !monitor->auto_vrr_state && output->adaptive_sync_supported &&
         output->adaptive_sync_status == WLR_OUTPUT_ADAPTIVE_SYNC_DISABLED) {
         wlr_output_state_set_adaptive_sync_enabled(state, true);
         if (!wlr_output_test_state(output, state)) {
             state->committed &= ~WLR_OUTPUT_STATE_ADAPTIVE_SYNC_ENABLED;
-            monitor->autovrr = -1; /* don't retry every frame */
+            monitor->auto_vrr_state = -1; /* don't retry every frame */
         }
-    } else if (!vrr && monitor->autovrr > 0) {
+    } else if (!vrr && monitor->auto_vrr_state > 0) {
         wlr_output_state_set_adaptive_sync_enabled(state, false);
     } else if (!vrr) {
-        monitor->autovrr = 0;
+        monitor->auto_vrr_state = 0;
     }
 
     /* needs direct scanout, which the magnifier holds back */
-    state->tearing_page_flip = allow_tearing && client && monitor->zoom <= 1 &&
+    state->tearing_page_flip = allow_tearing && client && monitor->zoom_factor <= 1 &&
                                wlr_tearing_control_manager_v1_surface_hint_from_surface(
                                    tearing_manager, client_surface(client)) ==
                                    WP_TEARING_CONTROL_V1_PRESENTATION_HINT_ASYNC;
@@ -560,7 +566,7 @@ static void monitor_apply_or_test_config(struct wlr_output_configuration_v1* con
         /* Ensure displays previously disabled by wlr-output-power-management-v1
          * are properly handled*/
         monitor->asleep = 0;
-        monitor->autovrr = 0;
+        monitor->auto_vrr_state = 0;
 
         wlr_output_state_init(&state);
         wlr_output_state_set_enabled(&state, config_head->state.enabled);
@@ -587,7 +593,8 @@ static void monitor_apply_or_test_config(struct wlr_output_configuration_v1* con
          * wlroots marking the output as manually configured.
          * wlr_output_layout_add does not like disabled outputs */
         if (!test && wlr_output->enabled &&
-            (monitor->m.x != config_head->state.x || monitor->m.y != config_head->state.y))
+            (monitor->geometry.x != config_head->state.x ||
+             monitor->geometry.y != config_head->state.y))
             wlr_output_layout_add(output_layout, wlr_output, config_head->state.x,
                                   config_head->state.y);
 
@@ -639,7 +646,7 @@ static void monitor_handle_frame(struct wl_listener* listener, void*)
     /* This function is called every time an output is ready to display a frame,
      * generally at the output's refresh rate (e.g. 60Hz). */
     Monitor* monitor = wl_container_of(listener, monitor, frame);
-    Client* client;
+    WindowClient* client;
     struct wlr_output_state pending;
     struct timespec now;
 
@@ -659,12 +666,12 @@ static void monitor_handle_frame(struct wl_listener* listener, void*)
 #endif
         /* a tab below the top one is not drawn and gets no frame callbacks,
          * so it never acks */
-        if (client->resize && !client->isfloating && client->scene_surface->node.enabled &&
-            !client_is_stopped(client))
+        if (client->pending_resize_serial && !client->is_floating &&
+            client->scene_surface->node.enabled && !client_is_stopped(client))
             goto skip;
     }
 
-    if (monitor->zoom > 1 || monitor->zoomchain) {
+    if (monitor->zoom_factor > 1 || monitor->zoom_swapchain) {
         if (!magnifier_frame(monitor, &pending))
             goto skip;
     } else if (!wlr_scene_output_needs_frame(monitor->scene_output) ||
@@ -677,7 +684,7 @@ static void monitor_handle_frame(struct wl_listener* listener, void*)
         goto skip;
     if (wlr_output_commit_state(monitor->wlr_output, &pending) &&
         (pending.committed & WLR_OUTPUT_STATE_ADAPTIVE_SYNC_ENABLED))
-        monitor->autovrr = pending.adaptive_sync_enabled;
+        monitor->auto_vrr_state = pending.adaptive_sync_enabled;
     privacy_after_commit(monitor);
 
 skip:
@@ -687,8 +694,8 @@ skip:
 
     /* a client held back by client_handle_map() still needs frame callbacks */
     wl_list_for_each(client, &clients, link)
-        if (client->mon == monitor && client_surface(client)->mapped &&
-            ((client->isfullscreen && !VISIBLEON(client, monitor)) || client->mapwait))
+        if (client->monitor == monitor && client_surface(client)->mapped &&
+            ((client->is_fullscreen && !VISIBLEON(client, monitor)) || client->map_wait_timer))
             wlr_surface_send_frame_done(client_surface(client), &now);
 
     wlr_output_state_finish(&pending);
@@ -701,11 +708,11 @@ static void monitor_handle_request_state(struct wl_listener*, void* data)
     monitor_update_layout(nullptr, nullptr);
 }
 
-void monitor_send_client(const Arg* arg)
+void monitor_send_client(const ActionArg* argument)
 {
-    Client* sel = client_top(selected_monitor);
-    if (sel)
-        client_set_monitor(sel, monitor_in_direction(arg->i), 0);
+    WindowClient* selected_client = client_top(selected_monitor);
+    if (selected_client)
+        client_set_monitor(selected_client, monitor_in_direction(argument->integer), 0);
 }
 
 static void monitor_handle_layer_unmap(struct wl_listener* listener, void*)
@@ -717,8 +724,8 @@ static void monitor_handle_layer_unmap(struct wl_listener* listener, void*)
     if (layer_surface == exclusive_focus)
         exclusive_focus = nullptr;
     if (layer_surface->layer_surface->output &&
-        (layer_surface->mon = layer_surface->layer_surface->output->data))
-        monitor_arrange_layers(layer_surface->mon);
+        (layer_surface->monitor = layer_surface->layer_surface->output->data))
+        monitor_arrange_layers(layer_surface->monitor);
     if (layer_surface->layer_surface->surface == seat->keyboard_state.focused_surface)
         client_focus(client_top(selected_monitor), 1);
     input_motion(0, nullptr, 0, 0, 0, 0);
@@ -746,7 +753,7 @@ void monitor_update_layout(struct wl_listener*, void*)
         /* Remove this output from the layout to avoid cursor enter inside it */
         wlr_output_layout_remove(output_layout, monitor->wlr_output);
         monitor_close(monitor);
-        monitor->m = monitor->w = (struct wlr_box){};
+        monitor->geometry = monitor->usable_area = (struct wlr_box){};
     }
     /* Insert outputs that need to */
     wl_list_for_each(monitor, &monitors, link) {
@@ -765,28 +772,32 @@ void monitor_update_layout(struct wl_listener*, void*)
     wlr_scene_node_set_position(&locked_background->node, screen_geometry.x, screen_geometry.y);
     wlr_scene_rect_set_size(locked_background, screen_geometry.width, screen_geometry.height);
 
-    Client* client;
+    WindowClient* client;
     wl_list_for_each(monitor, &monitors, link) {
         if (!monitor->wlr_output->enabled)
             continue;
         config_head = wlr_output_configuration_head_v1_create(config, monitor->wlr_output);
 
         /* Get the effective monitor geometry to use for surfaces */
-        wlr_output_layout_get_box(output_layout, monitor->wlr_output, &monitor->m);
-        monitor->w = monitor->m;
-        wlr_scene_output_set_position(monitor->scene_output, monitor->m.x, monitor->m.y);
+        wlr_output_layout_get_box(output_layout, monitor->wlr_output, &monitor->geometry);
+        monitor->usable_area = monitor->geometry;
+        wlr_scene_output_set_position(monitor->scene_output, monitor->geometry.x,
+                                      monitor->geometry.y);
 #ifdef INTEGRATED_BACKGROUND
         opacity_set_wallpaper(monitor);
 #endif
 
-        wlr_scene_node_set_position(&monitor->fullscreen_bg->node, monitor->m.x, monitor->m.y);
-        wlr_scene_rect_set_size(monitor->fullscreen_bg, monitor->m.width, monitor->m.height);
+        wlr_scene_node_set_position(&monitor->fullscreen_background->node, monitor->geometry.x,
+                                    monitor->geometry.y);
+        wlr_scene_rect_set_size(monitor->fullscreen_background, monitor->geometry.width,
+                                monitor->geometry.height);
 
         if (monitor->lock_surface) {
             struct wlr_scene_tree* scene_tree = monitor->lock_surface->surface->data;
-            wlr_scene_node_set_position(&scene_tree->node, monitor->m.x, monitor->m.y);
-            wlr_session_lock_surface_v1_configure(monitor->lock_surface, monitor->m.width,
-                                                  monitor->m.height);
+            wlr_scene_node_set_position(&scene_tree->node, monitor->geometry.x,
+                                        monitor->geometry.y);
+            wlr_session_lock_surface_v1_configure(monitor->lock_surface, monitor->geometry.width,
+                                                  monitor->geometry.height);
         }
 
         /* Calculate the effective monitor geometry to use for clients */
@@ -794,15 +805,15 @@ void monitor_update_layout(struct wl_listener*, void*)
         /* Don't move clients to the left output when plugging monitors */
         layout_arrange(monitor);
         /* make sure fullscreen clients have the right size */
-        if ((client = client_top(monitor)) && client->isfullscreen)
-            client_resize(client, monitor->m, 0);
+        if ((client = client_top(monitor)) && client->is_fullscreen)
+            client_resize(client, monitor->geometry, 0);
 
         /* Try to re-set the gamma LUT when updating monitors,
          * it's only really needed when enabling a disabled output, but meh. */
         monitor->gamma_lut_changed = 1;
 
-        config_head->state.x = monitor->m.x;
-        config_head->state.y = monitor->m.y;
+        config_head->state.x = monitor->geometry.x;
+        config_head->state.y = monitor->geometry.y;
 
         if (!selected_monitor) {
             selected_monitor = monitor;
@@ -813,7 +824,7 @@ void monitor_update_layout(struct wl_listener*, void*)
 
     if (selected_monitor && selected_monitor->wlr_output->enabled) {
         wl_list_for_each(client, &clients, link) {
-            if (!client->mon && client_surface(client)->mapped)
+            if (!client->monitor && client_surface(client)->mapped)
                 client_set_monitor(client, selected_monitor, client->tags);
         }
         client_focus(client_top(selected_monitor), 1);

@@ -25,7 +25,7 @@ void notify_closed(dbus_uint32_t id, dbus_uint32_t reason)
         return;
     if (dbus_message_append_args(sig, DBUS_TYPE_UINT32, &id, DBUS_TYPE_UINT32, &reason,
                                  DBUS_TYPE_INVALID))
-        dbus_connection_send(notify_state.conn, sig, nullptr);
+        dbus_connection_send(notify_state.connection, sig, nullptr);
     dbus_message_unref(sig);
 }
 
@@ -40,7 +40,8 @@ void notify_release(Notification* notification)
 int notify_same_slot(const Notification* first, const Notification* second)
 {
     return first->id == second->id ||
-           (*first->tag && !strcmp(first->tag, second->tag) && !strcmp(first->app, second->app));
+           (*first->stack_tag && !strcmp(first->stack_tag, second->stack_tag) &&
+            !strcmp(first->app_name, second->app_name));
 }
 
 /* Pushes n to the head of the history, taking over its icon. An entry for
@@ -54,57 +55,58 @@ void notify_history_push(Notification* notification)
         return;
     }
     size_t i;
-    for (i = 0; i < notify_state.nhist && !notify_same_slot(&notify_state.hist[i], notification);
+    for (i = 0; i < notify_state.history_count &&
+                !notify_same_slot(&notify_state.history[i], notification);
          i++) {}
-    if (i == notify_state.nhist && notify_state.nhist == NOTIFY_HISTMAX)
-        i = notify_state.nhist - 1; /* full: drop the oldest */
-    if (i < notify_state.nhist) {
-        notify_release(&notify_state.hist[i]);
-        memmove(&notify_state.hist[i], &notify_state.hist[i + 1],
-                (notify_state.nhist - i - 1) * sizeof(*notify_state.hist));
-        notify_state.nhist--;
+    if (i == notify_state.history_count && notify_state.history_count == NOTIFY_HISTMAX)
+        i = notify_state.history_count - 1; /* full: drop the oldest */
+    if (i < notify_state.history_count) {
+        notify_release(&notify_state.history[i]);
+        memmove(&notify_state.history[i], &notify_state.history[i + 1],
+                (notify_state.history_count - i - 1) * sizeof(*notify_state.history));
+        notify_state.history_count--;
     }
-    memmove(&notify_state.hist[1], &notify_state.hist[0],
-            notify_state.nhist * sizeof(*notification));
-    notify_state.hist[0] = *notification;
-    notify_state.nhist++;
+    memmove(&notify_state.history[1], &notify_state.history[0],
+            notify_state.history_count * sizeof(*notification));
+    notify_state.history[0] = *notification;
+    notify_state.history_count++;
     notification->icon = nullptr;
 }
 
-void notify_unqueue(size_t i, Notification* dst)
+void notify_unqueue(size_t i, Notification* destination)
 {
-    *dst = notify_state.queue[i];
+    *destination = notify_state.queue[i];
     memmove(&notify_state.queue[i], &notify_state.queue[i + 1],
-            (notify_state.nqueue - i - 1) * sizeof(*notify_state.queue));
-    notify_state.nqueue--;
+            (notify_state.queue_count - i - 1) * sizeof(*notify_state.queue));
+    notify_state.queue_count--;
 }
 
 /* A full queue sends its oldest expiring entry straight to the history. */
 void notify_enqueue(Notification* notification, int front)
 {
-    Notification old;
+    Notification previous_notification;
     size_t i;
 
-    if (notify_state.nqueue == NOTIFY_QUEUEMAX) {
-        for (i = 0; i < notify_state.nqueue && !notify_state.queue[i].timeout_ms; i++) {}
-        notify_unqueue(i < notify_state.nqueue ? i : 0, &old);
-        notify_closed(old.id, ClosedUndefined);
-        notify_history_push(&old);
+    if (notify_state.queue_count == NOTIFY_QUEUEMAX) {
+        for (i = 0; i < notify_state.queue_count && !notify_state.queue[i].timeout_ms; i++) {}
+        notify_unqueue(i < notify_state.queue_count ? i : 0, &previous_notification);
+        notify_closed(previous_notification.id, NOTIFICATION_CLOSED_UNDEFINED);
+        notify_history_push(&previous_notification);
     }
     if (front) {
         memmove(&notify_state.queue[1], &notify_state.queue[0],
-                notify_state.nqueue * sizeof(*notify_state.queue));
+                notify_state.queue_count * sizeof(*notify_state.queue));
         notify_state.queue[0] = *notification;
     } else {
-        notify_state.queue[notify_state.nqueue] = *notification;
+        notify_state.queue[notify_state.queue_count] = *notification;
     }
-    notify_state.nqueue++;
+    notify_state.queue_count++;
 }
 
 static int notify_expire(void* data)
 {
     (void)data;
-    notify_clear(ClosedExpired);
+    notify_clear(NOTIFICATION_CLOSED_EXPIRED);
     return 0;
 }
 
@@ -112,7 +114,8 @@ static int notify_expire(void* data)
 int notify_arm(unsigned int timeout_ms)
 {
     if (!notify_state.timer && timeout_ms)
-        notify_state.timer = wl_event_loop_add_timer(notify_state.loop, notify_expire, nullptr);
+        notify_state.timer =
+            wl_event_loop_add_timer(notify_state.event_loop, notify_expire, nullptr);
     if (!notify_state.timer)
         return !timeout_ms;
     return wl_event_source_timer_update(notify_state.timer, (int)timeout_ms) == 0;
@@ -120,17 +123,17 @@ int notify_arm(unsigned int timeout_ms)
 
 int notify_show(void)
 {
-    notify_state.cur.shown_ms = notify_now();
-    notify_state.cur.seen = 1;
-    if (notify_state.held) {
-        notify_state.heldleft = notify_state.cur.timeout_ms;
-        notify_state.active = 1;
+    notify_state.current.shown_at_ms = notify_now();
+    notify_state.current.seen = 1;
+    if (notify_state.is_paused) {
+        notify_state.remaining_timeout_ms = notify_state.current.timeout_ms;
+        notify_state.has_current = 1;
         return 1;
     }
     /* Without a timer the notification would sit in the bar forever, so the
      * caller is expected to drop it instead of showing it unexpirable. */
-    notify_state.active = notify_arm(notify_state.cur.timeout_ms);
-    return notify_state.active;
+    notify_state.has_current = notify_arm(notify_state.current.timeout_ms);
+    return notify_state.has_current;
 }
 
 /* An unseen critical goes first (it was held back by a pick); seen ones go
@@ -139,16 +142,17 @@ void notify_show_next(void)
 {
     size_t i;
 
-    while (!notify_state.active && notify_state.nqueue) {
-        for (i = 0; i < notify_state.nqueue; i++)
-            if (notify_state.queue[i].urgency == UrgencyCritical && !notify_state.queue[i].seen)
+    while (!notify_state.has_current && notify_state.queue_count) {
+        for (i = 0; i < notify_state.queue_count; i++)
+            if (notify_state.queue[i].urgency == NOTIFICATION_URGENCY_CRITICAL &&
+                !notify_state.queue[i].seen)
                 break;
-        if (i == notify_state.nqueue)
-            for (i = 0; i < notify_state.nqueue && !notify_state.queue[i].timeout_ms; i++) {}
-        notify_unqueue(i < notify_state.nqueue ? i : 0, &notify_state.cur);
+        if (i == notify_state.queue_count)
+            for (i = 0; i < notify_state.queue_count && !notify_state.queue[i].timeout_ms; i++) {}
+        notify_unqueue(i < notify_state.queue_count ? i : 0, &notify_state.current);
         if (!notify_show()) {
-            notify_closed(notify_state.cur.id, ClosedUndefined);
-            notify_history_push(&notify_state.cur);
+            notify_closed(notify_state.current.id, NOTIFICATION_CLOSED_UNDEFINED);
+            notify_history_push(&notify_state.current);
         }
     }
 }
@@ -156,76 +160,76 @@ void notify_show_next(void)
 /* Takes the current notification down and brings up the next one. */
 void notify_clear(dbus_uint32_t reason)
 {
-    if (!notify_state.active)
+    if (!notify_state.has_current)
         return;
-    notify_state.active = 0;
-    notify_state.held = 0;
+    notify_state.has_current = 0;
+    notify_state.is_paused = 0;
     notify_arm(0);
-    notify_closed(notify_state.cur.id, reason);
+    notify_closed(notify_state.current.id, reason);
     /* closed by the client: not worth keeping */
-    if (reason == ClosedByCall)
-        notify_release(&notify_state.cur);
+    if (reason == NOTIFICATION_CLOSED_BY_REQUEST)
+        notify_release(&notify_state.current);
     else
-        notify_history_push(&notify_state.cur);
+        notify_history_push(&notify_state.current);
     notify_show_next();
-    if (notify_state.redraw)
-        notify_state.redraw();
+    if (notify_state.redraw_callback)
+        notify_state.redraw_callback();
 }
 
 const Notification* notify_current(void)
 {
-    return notify_state.active ? &notify_state.cur : nullptr;
+    return notify_state.has_current ? &notify_state.current : nullptr;
 }
 
 size_t notify_queued(void)
 {
-    return notify_state.nqueue;
+    return notify_state.queue_count;
 }
 
 const Notification* notify_history(size_t i)
 {
-    return i < notify_state.nhist ? &notify_state.hist[i] : nullptr;
+    return i < notify_state.history_count ? &notify_state.history[i] : nullptr;
 }
 
 size_t notify_history_length(void)
 {
-    return notify_state.nhist;
+    return notify_state.history_count;
 }
 
 void notify_history_remove(size_t i)
 {
-    if (i >= notify_state.nhist)
+    if (i >= notify_state.history_count)
         return;
-    notify_release(&notify_state.hist[i]);
-    memmove(&notify_state.hist[i], &notify_state.hist[i + 1],
-            (notify_state.nhist - i - 1) * sizeof(*notify_state.hist));
-    notify_state.nhist--;
-    if (notify_state.redraw)
-        notify_state.redraw();
+    notify_release(&notify_state.history[i]);
+    memmove(&notify_state.history[i], &notify_state.history[i + 1],
+            (notify_state.history_count - i - 1) * sizeof(*notify_state.history));
+    notify_state.history_count--;
+    if (notify_state.redraw_callback)
+        notify_state.redraw_callback();
 }
 
 void notify_dismiss(void)
 {
-    notify_clear(ClosedDismissed);
+    notify_clear(NOTIFICATION_CLOSED_DISMISSED);
 }
 
 void notify_dismiss_all(void)
 {
-    if (!notify_state.active)
+    if (!notify_state.has_current)
         return;
     /* not through notify_clear(), which would bring up each queued one */
-    notify_state.active = 0;
+    notify_state.has_current = 0;
     notify_arm(0);
-    notify_closed(notify_state.cur.id, ClosedDismissed);
-    notify_history_push(&notify_state.cur);
-    while (notify_state.nqueue) {
+    notify_closed(notify_state.current.id, NOTIFICATION_CLOSED_DISMISSED);
+    notify_history_push(&notify_state.current);
+    while (notify_state.queue_count) {
         Notification notification;
         notify_unqueue(0, &notification);
-        notify_closed(notification.id, ClosedDismissed);
+        notify_closed(notification.id, NOTIFICATION_CLOSED_DISMISSED);
         notify_history_push(&notification);
     }
-    if (notify_state.redraw)
-        notify_state.redraw();
+    if (notify_state.redraw_callback)
+        notify_state.redraw_callback();
 }
 
 /* The activation token goes first, as the spec asks, so the client can
@@ -235,90 +239,93 @@ static void notify_invoke_action(const char* key)
     DBusMessage* sig;
     const char* token;
 
-    if (notify_state.token && (token = notify_state.token()) &&
+    if (notify_state.activation_token_callback &&
+        (token = notify_state.activation_token_callback()) &&
         (sig = dbus_message_new_signal(NOTIFY_OPATH, NOTIFY_IFACE, "ActivationToken"))) {
-        if (dbus_message_append_args(sig, DBUS_TYPE_UINT32, &notify_state.cur.id, DBUS_TYPE_STRING,
-                                     &token, DBUS_TYPE_INVALID))
-            dbus_connection_send(notify_state.conn, sig, nullptr);
+        if (dbus_message_append_args(sig, DBUS_TYPE_UINT32, &notify_state.current.id,
+                                     DBUS_TYPE_STRING, &token, DBUS_TYPE_INVALID))
+            dbus_connection_send(notify_state.connection, sig, nullptr);
         dbus_message_unref(sig);
     }
     if ((sig = dbus_message_new_signal(NOTIFY_OPATH, NOTIFY_IFACE, "ActionInvoked"))) {
-        if (dbus_message_append_args(sig, DBUS_TYPE_UINT32, &notify_state.cur.id, DBUS_TYPE_STRING,
-                                     &key, DBUS_TYPE_INVALID))
-            dbus_connection_send(notify_state.conn, sig, nullptr);
+        if (dbus_message_append_args(sig, DBUS_TYPE_UINT32, &notify_state.current.id,
+                                     DBUS_TYPE_STRING, &key, DBUS_TYPE_INVALID))
+            dbus_connection_send(notify_state.connection, sig, nullptr);
         dbus_message_unref(sig);
     }
-    if (notify_state.cur.resident) {
+    if (notify_state.current.resident) {
         notify_hold(0);
-        if (notify_state.redraw)
-            notify_state.redraw();
+        if (notify_state.redraw_callback)
+            notify_state.redraw_callback();
     } else {
-        notify_clear(ClosedDismissed);
+        notify_clear(NOTIFICATION_CLOSED_DISMISSED);
     }
 }
 
 void notify_invoke(void)
 {
-    if (!notify_state.active)
+    if (!notify_state.has_current)
         return;
-    if (notify_state.cur.hasdefault)
+    if (notify_state.current.has_default_action)
         notify_invoke_action("default");
     else
-        notify_clear(ClosedDismissed);
+        notify_clear(NOTIFICATION_CLOSED_DISMISSED);
 }
 
 void notify_action(size_t i)
 {
-    if (notify_state.active && i < notify_state.cur.nact)
-        notify_invoke_action(notify_state.cur.act[i].key);
+    if (notify_state.has_current && i < notify_state.current.action_count)
+        notify_invoke_action(notify_state.current.actions[i].key);
 }
 
 void notify_hold(int hold)
 {
     const uint64_t now = notify_now();
 
-    if (!notify_state.active || !hold == !notify_state.held)
+    if (!notify_state.has_current || !hold == !notify_state.is_paused)
         return;
     if (hold) {
-        const uint64_t end_ms = notify_state.cur.shown_ms + notify_state.cur.timeout_ms;
-        notify_state.heldleft = !notify_state.cur.timeout_ms ? 0
-                                : end_ms > now               ? (unsigned int)(end_ms - now)
-                                                             : 1;
+        const uint64_t end_ms = notify_state.current.shown_at_ms + notify_state.current.timeout_ms;
+        notify_state.remaining_timeout_ms = !notify_state.current.timeout_ms ? 0
+                                            : end_ms > now ? (unsigned int)(end_ms - now)
+                                                           : 1;
         notify_arm(0);
-        notify_state.held = 1;
+        notify_state.is_paused = 1;
         return;
     }
 
-    notify_state.held = 0;
+    notify_state.is_paused = 0;
     /* a critical that arrived meanwhile takes the box now */
     size_t critical_index = 0;
-    while (critical_index < notify_state.nqueue &&
-           !(notify_state.queue[critical_index].urgency == UrgencyCritical &&
+    while (critical_index < notify_state.queue_count &&
+           !(notify_state.queue[critical_index].urgency == NOTIFICATION_URGENCY_CRITICAL &&
              !notify_state.queue[critical_index].seen))
         critical_index++;
-    if (critical_index < notify_state.nqueue && notify_state.cur.urgency != UrgencyCritical) {
+    if (critical_index < notify_state.queue_count &&
+        notify_state.current.urgency != NOTIFICATION_URGENCY_CRITICAL) {
         Notification promoted;
         notify_unqueue(critical_index, &promoted);
-        notify_state.active = 0;
-        notify_enqueue(&notify_state.cur, 1);
-        notify_state.cur = promoted;
+        notify_state.has_current = 0;
+        notify_enqueue(&notify_state.current, 1);
+        notify_state.current = promoted;
         if (!notify_show()) {
-            notify_closed(notify_state.cur.id, ClosedUndefined);
-            notify_history_push(&notify_state.cur);
+            notify_closed(notify_state.current.id, NOTIFICATION_CLOSED_UNDEFINED);
+            notify_history_push(&notify_state.current);
             notify_show_next();
         }
         return;
     }
-    if (notify_state.cur.timeout_ms) {
-        notify_state.cur.shown_ms = now - (notify_state.cur.timeout_ms - notify_state.heldleft);
+    if (notify_state.current.timeout_ms) {
+        notify_state.current.shown_at_ms =
+            now - (notify_state.current.timeout_ms - notify_state.remaining_timeout_ms);
         /* no redraw from here: the bar may be drawing */
-        notify_arm(notify_state.heldleft);
+        notify_arm(notify_state.remaining_timeout_ms);
     }
 }
 
 int notify_held(unsigned int* left_ms)
 {
-    if (notify_state.held && left_ms)
-        *left_ms = notify_state.heldleft;
-    return notify_state.held;
+    if (notify_state.is_paused && left_ms)
+        *left_ms = notify_state.remaining_timeout_ms;
+    return notify_state.is_paused;
 }

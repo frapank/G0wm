@@ -9,7 +9,7 @@
 
 #include "core/g0wm.h"
 
-void bar_tray_activate(const Arg* arg);
-void bar_tray_menu(const Arg* arg);
+void bar_tray_activate(const ActionArg* argument);
+void bar_tray_menu(const ActionArg* argument);
 
 #endif

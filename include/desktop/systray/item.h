@@ -25,29 +25,31 @@
 #define SNI_OPATH "/StatusNotifierItem"
 #define SNI_IFACE "org.kde.StatusNotifierItem"
 
-typedef struct Item {
+typedef struct TrayItem {
     struct wl_list icons;
-    char* busname;
-    char* busobj;
-    char* menu_busobj;
-    char* appid;
-    char* icon_themepath; /* where IconName is looked up first, if set */
-    Icon* icon;
-    FallbackIcon* fallback_icon;
+    char* bus_name;
+    char* object_path;
+    char* menu_object_path;
+    char* app_id;
+    char* icon_theme_path; /* where IconName is looked up first, if set */
+    RasterIcon* icon;
+    FallbackIconGlyph* fallback_icon;
 
-    Watcher* watcher;
+    TrayWatcher* watcher;
 
-    int fgcolor;
+    int foreground_color;
 
-    int ready;
+    int is_ready;
 
     struct wl_list link;
-} Item;
+} TrayItem;
 
-[[nodiscard]] Item* item_create(const char* busname, const char* busobj, Watcher* watcher);
-void item_destroy(Item* item);
+[[nodiscard]] TrayItem* item_create(const char* bus_name,
+                                    const char* object_path,
+                                    TrayWatcher* watcher);
+void item_destroy(TrayItem* item);
 
-void item_activate(Item* item);
-void item_show_menu(Item* item);
+void item_activate(TrayItem* item);
+void item_show_menu(TrayItem* item);
 
 #endif

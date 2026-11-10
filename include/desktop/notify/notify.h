@@ -28,28 +28,32 @@ constexpr int NOTIFY_ICONSIZE = 64;
 constexpr int NOTIFY_ACTMAX = 8; /* actions besides "default" */
 
 /* the urgency hint, as the spec numbers it */
-enum { UrgencyLow, UrgencyNormal, UrgencyCritical };
+enum NotificationUrgency {
+    NOTIFICATION_URGENCY_LOW,
+    NOTIFICATION_URGENCY_NORMAL,
+    NOTIFICATION_URGENCY_CRITICAL
+};
 
 typedef struct {
     dbus_uint32_t id;
     int urgency;
-    int hasdefault;
+    int has_default_action;
     int resident; /* stays up after an action */
     int seen;     /* has been on screen at least once */
     int transient;
     unsigned int timeout_ms; /* 0: stays until dismissed */
-    uint64_t shown_ms;       /* CLOCK_MONOTONIC */
+    uint64_t shown_at_ms;    /* CLOCK_MONOTONIC */
     char text[NOTIFY_TEXTMAX];
-    char app[64];
-    char desktop[64];
-    char tag[64]; /* stack tag */
-    int value;    /* progress 0-100, -1 without one */
-    Icon* icon;
-    struct {
+    char app_name[64];
+    char desktop_entry[64];
+    char stack_tag[64];   /* stack tag */
+    int progress_percent; /* progress 0-100, -1 without one */
+    RasterIcon* icon;
+    struct NotificationAction {
         char key[64];
         char label[64];
-    } act[NOTIFY_ACTMAX];
-    size_t nact;
+    } actions[NOTIFY_ACTMAX];
+    size_t action_count;
 } Notification;
 
 /* token hands out an xdg-activation token, sent to the client before an

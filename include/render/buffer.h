@@ -18,10 +18,13 @@ typedef struct {
     struct wl_listener release;
     bool busy;
     Img* image;
-    uint32_t data[];
-} Buffer;
+    uint32_t pixels[];
+} RenderBuffer;
 
-[[nodiscard]] Buffer* buffer_get(Buffer** pool, size_t pool_length, int width, int height);
-void buffer_pool_drop(Buffer** pool, size_t pool_length);
+[[nodiscard]] RenderBuffer* buffer_get(RenderBuffer** pool,
+                                       size_t pool_length,
+                                       int width,
+                                       int height);
+void buffer_pool_drop(RenderBuffer** pool, size_t pool_length);
 
 #endif

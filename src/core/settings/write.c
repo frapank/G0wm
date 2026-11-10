@@ -26,18 +26,18 @@ static int settings_depth;
 static const char* settings_previous; /* last top level directive */
 
 /* function implementations */
-static const char* settings_enum_name(const Enum* table, int value)
+static const char* settings_enum_name(const EnumEntry* table, int value)
 {
-    for (const Enum* entry = table; entry->name; entry++)
-        if (entry->val == value)
+    for (const EnumEntry* entry = table; entry->name; entry++)
+        if (entry->value == value)
             return entry->name;
     return "unknown";
 }
 
-static const Action* settings_action_by_func(void (*func)(const Arg*))
+static const ActionEntry* settings_action_by_func(void (*func)(const ActionArg*))
 {
     for (size_t i = 0; i < settings_action_count; i++)
-        if (settings_actions[i].func == func)
+        if (settings_actions[i].callback == func)
             return &settings_actions[i];
     return nullptr;
 }
@@ -45,7 +45,7 @@ static const Action* settings_action_by_func(void (*func)(const Arg*))
 static const char* settings_arrange_name(void (*arrange)(Monitor*))
 {
     for (size_t i = 0; i < settings_arrange_count; i++)
-        if (settings_arranges[i].arrange == arrange)
+        if (settings_arranges[i].callback == arrange)
             return settings_arranges[i].name;
     return "tile";
 }
@@ -162,8 +162,8 @@ static void settings_write_list(const char* key, const char* const* words, size_
 static void settings_write_combo(uint32_t modifiers, const char* last_name)
 {
     fputc(' ', settings_file);
-    for (const Enum* entry = settings_modifier_names; entry->name; entry++)
-        if (modifiers & (uint32_t)entry->val)
+    for (const EnumEntry* entry = settings_modifier_names; entry->name; entry++)
+        if (modifiers & (uint32_t)entry->value)
             fprintf(settings_file, "%s+", entry->name);
     fputs(last_name, settings_file);
 }
@@ -176,8 +176,8 @@ static void settings_write_mods(const char* key, uint32_t modifiers)
     settings_start_group(key);
     if (!modifiers)
         fputs(" none", settings_file);
-    for (const Enum* entry = settings_modifier_names; entry->name; entry++) {
-        if (modifiers & (uint32_t)entry->val) {
+    for (const EnumEntry* entry = settings_modifier_names; entry->name; entry++) {
+        if (modifiers & (uint32_t)entry->value) {
             fprintf(settings_file, "%s%s", separator, entry->name);
             separator = "+";
         }
@@ -185,28 +185,29 @@ static void settings_write_mods(const char* key, uint32_t modifiers)
     fputc('\n', settings_file);
 }
 
-static void settings_write_arg(char kind, const Arg* arg)
+static void settings_write_arg(char kind, const ActionArg* argument)
 {
     switch (kind) {
         case 'i':
-            fprintf(settings_file, " %d", arg->i);
+            fprintf(settings_file, " %d", argument->integer);
             break;
         case 'u':
-            fprintf(settings_file, " %u", arg->ui);
+            fprintf(settings_file, " %u", argument->unsigned_integer);
             break;
         case 'f':
-            settings_put_number(arg->f);
+            settings_put_number(argument->floating);
             break;
         case 'v':
-            for (const char* const* word = arg->v; word && *word; word++)
+            for (const char* const* word = argument->pointer; word && *word; word++)
                 settings_put_word(*word);
             break;
         case 'l':
-            if (arg->v)
-                settings_put_word(((const Layout*)arg->v)->symbol);
+            if (argument->pointer)
+                settings_put_word(((const WindowLayout*)argument->pointer)->symbol);
             break;
         case 'c':
-            settings_put_word(settings_enum_name(settings_drag_modes, (int)arg->ui));
+            settings_put_word(
+                settings_enum_name(settings_drag_modes, (int)argument->unsigned_integer));
             break;
     }
 }
@@ -217,7 +218,7 @@ static void settings_write_look(void)
     settings_write_list("fonts", fonts, font_count);
     settings_write_open("colors");
     settings_put_note("norm", "fg bg border");
-    for (size_t i = 0; i < NumSchemes; i++) {
+    for (size_t i = 0; i < COLOR_SCHEME_COUNT; i++) {
         if (!settings_scheme_names[i])
             continue;
         settings_start_group(settings_scheme_names[i]);
@@ -476,20 +477,20 @@ static void settings_write_rules(void)
 {
     settings_put_note("rule", "rule: opacity 0 keeps the default, monitor -1 is the focused one, "
                               "without private it follows alwaysprivate");
-    for (size_t i = 0; i < rule_count; i++) {
+    for (size_t i = 0; i < client_rule_count; i++) {
         settings_write_open("rule");
-        settings_write_string("id", rules[i].id);
-        settings_write_string("title", rules[i].title);
-        settings_write_int("tags", rules[i].tags);
-        settings_write_bool("isfloating", rules[i].isfloating);
-        if (rules[i].isprivate >= 0)
-            settings_write_bool("private", rules[i].isprivate);
-        settings_write_string("privatetext", rules[i].private_text);
-        settings_write_hex("privatecolor", rules[i].private_background);
-        settings_write_hex("privatetextcolor", rules[i].private_foreground);
-        settings_write_number("opacity_focus", rules[i].opacity_focus);
-        settings_write_number("opacity_unfocus", rules[i].opacity_unfocus);
-        settings_write_int("monitor", rules[i].monitor);
+        settings_write_string("id", client_rules[i].app_id);
+        settings_write_string("title", client_rules[i].title);
+        settings_write_int("tags", client_rules[i].tags);
+        settings_write_bool("isfloating", client_rules[i].is_floating);
+        if (client_rules[i].is_private >= 0)
+            settings_write_bool("private", client_rules[i].is_private);
+        settings_write_string("privatetext", client_rules[i].private_text);
+        settings_write_hex("privatecolor", client_rules[i].private_background);
+        settings_write_hex("privatetextcolor", client_rules[i].private_foreground);
+        settings_write_number("opacity_focus", client_rules[i].focused_opacity);
+        settings_write_number("opacity_unfocus", client_rules[i].unfocused_opacity);
+        settings_write_int("monitor", client_rules[i].monitor_index);
         settings_write_close();
     }
 }
@@ -500,18 +501,18 @@ static void settings_write_monitors(void)
     for (size_t i = 0; i < monitor_rule_count; i++) {
         settings_write_open("monitor");
         settings_write_string("name", monitor_rules[i].name);
-        settings_write_number("mfact", monitor_rules[i].mfact);
-        settings_write_int("nmaster", monitor_rules[i].nmaster);
+        settings_write_number("mfact", monitor_rules[i].master_factor);
+        settings_write_int("nmaster", monitor_rules[i].master_count);
         settings_write_number("scale", monitor_rules[i].scale);
         settings_write_string("layout",
-                              monitor_rules[i].lt ? monitor_rules[i].lt->symbol : nullptr);
-        settings_write_string("transform",
-                              settings_enum_name(settings_transforms, (int)monitor_rules[i].rr));
+                              monitor_rules[i].layout ? monitor_rules[i].layout->symbol : nullptr);
+        settings_write_string(
+            "transform", settings_enum_name(settings_transforms, (int)monitor_rules[i].transform));
         settings_write_int("x", monitor_rules[i].x);
         settings_write_int("y", monitor_rules[i].y);
         settings_write_int("width", monitor_rules[i].width);
         settings_write_int("height", monitor_rules[i].height);
-        settings_write_int("refresh", monitor_rules[i].refresh);
+        settings_write_int("refresh", monitor_rules[i].refresh_hz);
         settings_write_close();
     }
 }
@@ -531,20 +532,20 @@ static void settings_write_autostart(void)
 static void settings_write_keys(void)
 {
     settings_put_note("key", "key: modifiers+key, action, argument");
-    for (size_t i = 0; i < key_count; i++) {
-        const Action* action = settings_action_by_func(keys[i].func);
+    for (size_t i = 0; i < key_binding_count; i++) {
+        const ActionEntry* action = settings_action_by_func(key_bindings[i].callback);
         char key_name[64];
 
         if (!action) {
             fprintf(stderr, "g0wm: binding %zu calls an action with no name\n", i);
             continue;
         }
-        if (xkb_keysym_get_name(keys[i].keysym, key_name, sizeof key_name) < 0)
+        if (xkb_keysym_get_name(key_bindings[i].keysym, key_name, sizeof key_name) < 0)
             continue;
         settings_start_group("key");
-        settings_write_combo(keys[i].mod, key_name);
+        settings_write_combo(key_bindings[i].modifiers, key_name);
         settings_put_word(action->name);
-        settings_write_arg(action->arg, &keys[i].arg);
+        settings_write_arg(action->argument_kind, &key_bindings[i].argument);
         fputc('\n', settings_file);
     }
 }
@@ -552,19 +553,21 @@ static void settings_write_keys(void)
 static void settings_write_buttons(void)
 {
     settings_put_note("button", "button: bar area, modifiers+button, action, argument");
-    for (size_t i = 0; i < button_count; i++) {
-        const Action* action = settings_action_by_func(buttons[i].func);
+    for (size_t i = 0; i < mouse_binding_count; i++) {
+        const ActionEntry* action = settings_action_by_func(mouse_bindings[i].callback);
 
         if (!action) {
             fprintf(stderr, "g0wm: click %zu calls an action with no name\n", i);
             continue;
         }
         settings_start_group("button");
-        settings_put_word(settings_enum_name(settings_click_areas, (int)buttons[i].click));
-        settings_write_combo(buttons[i].mod,
-                             settings_enum_name(settings_mouse_buttons, (int)buttons[i].button));
+        settings_put_word(
+            settings_enum_name(settings_click_areas, (int)mouse_bindings[i].click_area));
+        settings_write_combo(
+            mouse_bindings[i].modifiers,
+            settings_enum_name(settings_mouse_buttons, (int)mouse_bindings[i].button));
         settings_put_word(action->name);
-        settings_write_arg(action->arg, &buttons[i].arg);
+        settings_write_arg(action->argument_kind, &mouse_bindings[i].argument);
         fputc('\n', settings_file);
     }
 }
@@ -572,18 +575,19 @@ static void settings_write_buttons(void)
 static void settings_write_gestures(void)
 {
     settings_put_note("gesture", "gesture: motion, fingers, action, argument");
-    for (size_t i = 0; i < gesture_count; i++) {
-        const Action* action = settings_action_by_func(gestures[i].func);
+    for (size_t i = 0; i < gesture_binding_count; i++) {
+        const ActionEntry* action = settings_action_by_func(gesture_bindings[i].callback);
 
         if (!action) {
             fprintf(stderr, "g0wm: gesture %zu calls an action with no name\n", i);
             continue;
         }
         settings_start_group("gesture");
-        settings_put_word(settings_enum_name(settings_gesture_motions, (int)gestures[i].motion));
-        fprintf(settings_file, " %u", gestures[i].fingers);
+        settings_put_word(
+            settings_enum_name(settings_gesture_motions, (int)gesture_bindings[i].direction));
+        fprintf(settings_file, " %u", gesture_bindings[i].finger_count);
         settings_put_word(action->name);
-        settings_write_arg(action->arg, &gestures[i].arg);
+        settings_write_arg(action->argument_kind, &gesture_bindings[i].argument);
         fputc('\n', settings_file);
     }
 }
@@ -591,17 +595,17 @@ static void settings_write_gestures(void)
 static void settings_write_pad_buttons(void)
 {
     settings_put_note("padbutton", "padbutton: button from 0, action, argument");
-    for (size_t i = 0; i < pad_button_count; i++) {
-        const Action* action = settings_action_by_func(pad_buttons[i].func);
+    for (size_t i = 0; i < tablet_pad_binding_count; i++) {
+        const ActionEntry* action = settings_action_by_func(tablet_pad_bindings[i].callback);
 
         if (!action) {
             fprintf(stderr, "g0wm: pad button %zu calls an action with no name\n", i);
             continue;
         }
         settings_start_group("padbutton");
-        fprintf(settings_file, " %u", pad_buttons[i].button);
+        fprintf(settings_file, " %u", tablet_pad_bindings[i].button);
         settings_put_word(action->name);
-        settings_write_arg(action->arg, &pad_buttons[i].arg);
+        settings_write_arg(action->argument_kind, &tablet_pad_bindings[i].argument);
         fputc('\n', settings_file);
     }
 }

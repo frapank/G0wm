@@ -26,11 +26,11 @@ void bar_draw_pill(Monitor* monitor,
                    bool hollow,
                    uint32_t rgba);
 uint32_t bar_fade(uint32_t rgba);
-bool bar_private_dot(const Client* client, uint32_t* rgba);
+bool bar_private_dot(const WindowClient* client, uint32_t* rgba);
 double bar_private_radius(int diameter);
 uint32_t* bar_opaque_scheme(int scheme);
-Buffer* bar_share_buffer(Buffer** pool, int width, int height);
-void bar_draw_title_bar(Client* client);
+RenderBuffer* bar_share_buffer(RenderBuffer** pool, int width, int height);
+void bar_draw_title_bar(WindowClient* client);
 void bar_draw_notification(Monitor* monitor,
                            int x,
                            int width,
@@ -40,7 +40,7 @@ void bar_draw_notification(Monitor* monitor,
 bool bar_notification_private(void);
 bool bar_notification_private_dot(uint32_t* rgba);
 const Notification* bar_notification_shown(long* hist);
-void bar_draw_icon(Monitor* monitor, Icon* icon, int start_x, int size);
+void bar_draw_icon(Monitor* monitor, RasterIcon* icon, int start_x, int size);
 void bar_draw_icon_holder(Monitor* monitor, int start_x, int size);
 int bar_runner_icon_size(Monitor* monitor);
 void bar_draw_candidates(Monitor* monitor, int start_x, int end_x);

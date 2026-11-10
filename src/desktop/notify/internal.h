@@ -21,34 +21,39 @@
 constexpr int NOTIFY_TIMEOUT_MAX = 60'000;
 
 /* org.freedesktop.Notifications.NotificationClosed reasons */
-enum { ClosedExpired = 1, ClosedDismissed, ClosedByCall, ClosedUndefined };
+enum NotificationCloseReason {
+    NOTIFICATION_CLOSED_EXPIRED = 1,
+    NOTIFICATION_CLOSED_DISMISSED,
+    NOTIFICATION_CLOSED_BY_REQUEST,
+    NOTIFICATION_CLOSED_UNDEFINED
+};
 
 typedef struct {
-    DBusConnection* conn;
-    struct wl_event_loop* loop;
+    DBusConnection* connection;
+    struct wl_event_loop* event_loop;
     struct wl_event_source* timer;
-    void (*redraw)(void);
-    const char* (*token)(void);
+    void (*redraw_callback)(void);
+    const char* (*activation_token_callback)(void);
     unsigned int timeout_ms;
-    dbus_uint32_t seq; /* handed out to clients that don't pick one */
-    int active;
-    int running;
-    int held;
-    unsigned int heldleft; /* time cur had left when held */
-    Notification cur;      /* valid when active */
+    dbus_uint32_t next_notification_id; /* handed out to clients that don't pick one */
+    int has_current;
+    int is_running;
+    int is_paused;
+    unsigned int remaining_timeout_ms; /* timeout left when paused */
+    Notification current;              /* valid when has_current */
     Notification queue[NOTIFY_QUEUEMAX];
-    size_t nqueue;
-    Notification hist[NOTIFY_HISTMAX]; /* newest first */
-    size_t nhist;
-} NotifyState;
+    size_t queue_count;
+    Notification history[NOTIFY_HISTMAX]; /* newest first */
+    size_t history_count;
+} NotificationState;
 
-extern NotifyState notify_state;
+extern NotificationState notify_state;
 
 void notify_closed(dbus_uint32_t id, dbus_uint32_t reason);
 void notify_release(Notification* notification);
 int notify_same_slot(const Notification* first, const Notification* second);
 void notify_history_push(Notification* notification);
-void notify_unqueue(size_t i, Notification* dst);
+void notify_unqueue(size_t i, Notification* destination);
 void notify_enqueue(Notification* notification, int front);
 int notify_arm(unsigned int timeout_ms);
 int notify_show(void);

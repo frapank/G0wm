@@ -191,7 +191,7 @@ static void runner_read_app(const char* path, const char* id, int order)
     int group = 0;
     int is_application = 0;
     int rank = 0;
-    RunnerApp app = {};
+    RunnerApplication application = {};
     char line[4096];
     while (fgets(line, sizeof line, file)) {
         line[strcspn(line, "\r\n")] = '\0';
@@ -207,39 +207,41 @@ static void runner_read_app(const char* path, const char* id, int order)
         const char* value = runner_trim(equals + 1);
         if (!strcmp(key, "Type")) {
             is_application = !strcmp(value, "Application");
-        } else if (!strcmp(key, "Exec") && !app.exec) {
-            app.exec = strdup(value);
-        } else if (!strcmp(key, "Icon") && !app.icon) {
-            app.icon = strdup(value);
+        } else if (!strcmp(key, "Exec") && !application.exec_command) {
+            application.exec_command = strdup(value);
+        } else if (!strcmp(key, "Icon") && !application.icon_name) {
+            application.icon_name = strdup(value);
         } else if (!strcmp(key, "Terminal")) {
-            app.term = !strcmp(value, "true");
+            application.run_in_terminal = !strcmp(value, "true");
         } else if (!strcmp(key, "NoDisplay") || !strcmp(key, "Hidden")) {
-            app.hide |= !strcmp(value, "true");
+            application.is_hidden |= !strcmp(value, "true");
         } else {
             const int name_rank = runner_name_rank(key);
             if (name_rank > rank) {
-                free(app.name);
-                app.name = strdup(value);
+                free(application.name);
+                application.name = strdup(value);
                 rank = name_rank;
             }
         }
-        if (!strcmp(key, "Name") && !app.gname)
-            app.gname = strdup(value);
+        if (!strcmp(key, "Name") && !application.untranslated_name)
+            application.untranslated_name = strdup(value);
     }
     fclose(file);
-    if (app.gname && app.name && !strcmp(app.gname, app.name)) {
-        free(app.gname);
-        app.gname = nullptr;
+    if (application.untranslated_name && application.name &&
+        !strcmp(application.untranslated_name, application.name)) {
+        free(application.untranslated_name);
+        application.untranslated_name = nullptr;
     }
 
     /* kept even when hidden, it still hides the same id further down */
-    app.hide |= !is_application || !app.name || !app.exec || !*app.exec;
-    if (!(app.id = strdup(id)))
+    application.is_hidden |= !is_application || !application.name || !application.exec_command ||
+                             !*application.exec_command;
+    if (!(application.desktop_id = strdup(id)))
         util_die("strdup:");
-    app.order = order;
-    if (!(runner_apps = realloc(runner_apps, (runner_app_count + 1) * sizeof(RunnerApp))))
+    application.source_order = order;
+    if (!(runner_apps = realloc(runner_apps, (runner_app_count + 1) * sizeof(RunnerApplication))))
         util_die("realloc:");
-    runner_apps[runner_app_count++] = app;
+    runner_apps[runner_app_count++] = application;
 }
 
 /* desktop file ids take the path below applications/ with / turned to - */
@@ -271,27 +273,28 @@ static void runner_scan_apps(const char* dir, const char* prefix, int* order)
 
 static int runner_by_id(const void* first, const void* second)
 {
-    const RunnerApp* left = first;
-    const RunnerApp* right = second;
-    const int order = strcmp(left->id, right->id);
+    const RunnerApplication* left = first;
+    const RunnerApplication* right = second;
+    const int order = strcmp(left->desktop_id, right->desktop_id);
 
-    return order ? order : left->order - right->order;
+    return order ? order : left->source_order - right->source_order;
 }
 
 static int runner_by_name(const void* first, const void* second)
 {
-    return strcmp(((const RunnerApp*)first)->name, ((const RunnerApp*)second)->name);
+    return strcmp(((const RunnerApplication*)first)->name,
+                  ((const RunnerApplication*)second)->name);
 }
 
-static void runner_free_app(RunnerApp* app)
+static void runner_free_app(RunnerApplication* application)
 {
-    free(app->id);
-    free(app->name);
-    free(app->gname);
-    free(app->exec);
-    free(app->icon);
-    if (app->img)
-        icon_destroy(app->img);
+    free(application->desktop_id);
+    free(application->name);
+    free(application->untranslated_name);
+    free(application->exec_command);
+    free(application->icon_name);
+    if (application->icon_image)
+        icon_destroy(application->icon_image);
 }
 
 void runner_build_apps(void)
@@ -305,26 +308,27 @@ void runner_build_apps(void)
     free(dirs);
 
     /* the first of an id wins, then the hidden ones go */
-    qsort(runner_apps, runner_app_count, sizeof(RunnerApp), runner_by_id);
+    qsort(runner_apps, runner_app_count, sizeof(RunnerApplication), runner_by_id);
     int kept_count = 0;
     for (int i = 0; i < runner_app_count; i++) {
-        if ((kept_count && !strcmp(runner_apps[kept_count - 1].id, runner_apps[i].id)) ||
-            runner_apps[i].hide)
+        if ((kept_count &&
+             !strcmp(runner_apps[kept_count - 1].desktop_id, runner_apps[i].desktop_id)) ||
+            runner_apps[i].is_hidden)
             runner_free_app(&runner_apps[i]);
         else
             runner_apps[kept_count++] = runner_apps[i];
     }
     runner_app_count = kept_count;
-    qsort(runner_apps, runner_app_count, sizeof(RunnerApp), runner_by_name);
+    qsort(runner_apps, runner_app_count, sizeof(RunnerApplication), runner_by_name);
 
     if (!(runner_app_names = realloc(runner_app_names, MAX(runner_app_count, 1) * sizeof(char*))) ||
-        !(runner_app_generic_names =
-              realloc(runner_app_generic_names, MAX(runner_app_count, 1) * sizeof(char*))) ||
+        !(runner_app_untranslated_names =
+              realloc(runner_app_untranslated_names, MAX(runner_app_count, 1) * sizeof(char*))) ||
         !(runner_app_use = realloc(runner_app_use, MAX(runner_app_count, 1) * sizeof(int))))
         util_die("realloc:");
     for (int i = 0; i < runner_app_count; i++) {
         runner_app_names[i] = runner_apps[i].name;
-        runner_app_generic_names[i] = runner_apps[i].gname;
+        runner_app_untranslated_names[i] = runner_apps[i].untranslated_name;
     }
 }
 

@@ -48,8 +48,9 @@ static void lock_handle_new_surface(struct wl_listener* listener, void* data)
         wlr_scene_subsurface_tree_create(lock->scene, lock_surface->surface);
     monitor->lock_surface = lock_surface;
 
-    wlr_scene_node_set_position(&scene_tree->node, monitor->m.x, monitor->m.y);
-    wlr_session_lock_surface_v1_configure(lock_surface, monitor->m.width, monitor->m.height);
+    wlr_scene_node_set_position(&scene_tree->node, monitor->geometry.x, monitor->geometry.y);
+    wlr_session_lock_surface_v1_configure(lock_surface, monitor->geometry.width,
+                                          monitor->geometry.height);
 
     LISTEN(&lock_surface->events.destroy, &monitor->destroy_lock_surface,
            lock_handle_surface_destroy);
@@ -120,7 +121,7 @@ void lock_handle_new_lock(struct wl_listener*, void* data)
     /* an open menu would keep taking clicks under the lock surface */
     traypopup_dismiss();
 
-    lock->scene = wlr_scene_tree_create(layers[LyrBlock]);
+    lock->scene = wlr_scene_tree_create(layers[SCENE_LAYER_LOCK]);
     lock_current = lock->lock = session_lock;
     lock_active = 1;
 

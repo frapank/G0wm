@@ -11,9 +11,9 @@
 #include "core/g0wm.h"
 
 void toplevel_handle_new_capture_request(struct wl_listener*, void* data);
-void toplevel_focus(Client* client);
-void toplevel_map(Client* client);
-void toplevel_unmap(Client* client);
-void toplevel_update(Client* client);
+void toplevel_focus(WindowClient* client);
+void toplevel_map(WindowClient* client);
+void toplevel_unmap(WindowClient* client);
+void toplevel_update(WindowClient* client);
 
 #endif

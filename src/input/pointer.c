@@ -53,15 +53,15 @@ typedef struct {
 } PointerConstraint;
 
 /* function declarations */
-static unsigned int input_bar_click(Monitor* pointer_monitor, Arg* arg);
+static unsigned int input_bar_click(Monitor* pointer_monitor, ActionArg* argument);
 static void input_cursor_constrain(struct wlr_pointer_constraint_v1* constraint);
 static void input_cursor_warp_to_hint(void);
 static void input_handle_pointer_constraint_destroy(struct wl_listener* listener, void*);
-static void input_grab(Client* client, unsigned int mode);
+static void input_grab(WindowClient* client, unsigned int mode);
 static void input_cursor_activity(void);
 static void input_magnet(struct wlr_box* box);
 static void input_magnet_edge(int pos, int size, int edge, int* dist, int* to);
-static void input_pointer_focus(Client* client,
+static void input_pointer_focus(WindowClient* client,
                                 struct wlr_surface* surface,
                                 double surface_x,
                                 double surface_y,
@@ -70,9 +70,9 @@ static void input_handle_last_cursor_destroy(struct wl_listener*, void*);
 static int input_wheel_binding(const struct wlr_pointer_axis_event* event);
 
 /* variables */
-struct last_cursor_state input_last_cursor;
+struct CursorState input_last_cursor;
 unsigned int input_cursor_mode;
-Client* input_grab_client;
+WindowClient* input_grab_client;
 static struct wlr_pointer_constraint_v1* input_active_constraint;
 bool input_cursor_hidden = false;
 static int input_grab_x, input_grab_y; /* client-relative */
@@ -81,46 +81,48 @@ static double input_press_x, input_press_y;
 /* function implementations */
 /* The part of pm's bar the cursor is over, ClkRoot if it is not over it.
  * arg picks up the tag or tray item the part stands for. */
-static unsigned int input_bar_click(Monitor* pointer_monitor, Arg* arg)
+static unsigned int input_bar_click(Monitor* pointer_monitor, ActionArg* argument)
 {
     /* under bar_single_monitor the bar shows the focused monitor's tags */
     Monitor* target = bar_single_monitor && selected_monitor ? selected_monitor : pointer_monitor;
 
     if (exclusive_focus || !pointer_monitor)
-        return ClkRoot;
-    struct wlr_scene_node* node =
-        wlr_scene_node_at(&layers[LyrBottom]->node, cursor->x, cursor->y, nullptr, nullptr);
+        return CLICK_AREA_ROOT;
+    struct wlr_scene_node* node = wlr_scene_node_at(&layers[SCENE_LAYER_BOTTOM]->node, cursor->x,
+                                                    cursor->y, nullptr, nullptr);
     if (!node)
-        return ClkRoot;
+        return CLICK_AREA_ROOT;
     struct wlr_scene_buffer* buffer = wlr_scene_buffer_from_node(node);
-    if (!buffer || buffer != pointer_monitor->scene_buffer)
-        return ClkRoot;
+    if (!buffer || buffer != pointer_monitor->bar_scene_buffer)
+        return CLICK_AREA_ROOT;
 
     unsigned int tag_index = 0;
     unsigned int tags_width = 0;
-    const double click_x =
-        (cursor->x - pointer_monitor->m.x - bar_padding) * pointer_monitor->wlr_output->scale;
+    const double click_x = (cursor->x - pointer_monitor->geometry.x - bar_padding) *
+                           pointer_monitor->wlr_output->scale;
     const int tray_width = tray_get_width(pointer_monitor->tray);
     const int status_width = bar_status_shown(pointer_monitor) ? STATUSW(pointer_monitor) : 0;
     do
         tags_width += bar_tag_width(pointer_monitor, target, tag_index);
     while (click_x >= tags_width && ++tag_index < tag_count);
     if (tag_index < tag_count) {
-        arg->ui = 1 << tag_index;
-        return ClkTagBar;
-    } else if (bar_layout_symbol && click_x < tags_width + TEXTW(pointer_monitor, target->ltsymbol))
-        return ClkLtSymbol;
-    else if (tray_width && click_x > pointer_monitor->b.width - tray_width) {
-        arg->ui =
-            tray_index_at(pointer_monitor->tray, click_x - (pointer_monitor->b.width - tray_width));
-        return ClkTray;
-    } else if (click_x > pointer_monitor->b.width - (status_width + tray_width)) {
-        arg->i = (int)(click_x - (pointer_monitor->b.width - (status_width + tray_width)));
-        return ClkStatus;
+        argument->unsigned_integer = 1 << tag_index;
+        return CLICK_AREA_TAGS;
+    } else if (bar_layout_symbol &&
+               click_x < tags_width + TEXTW(pointer_monitor, target->layout_symbol))
+        return CLICK_AREA_LAYOUT_SYMBOL;
+    else if (tray_width && click_x > pointer_monitor->bar_metrics.width_px - tray_width) {
+        argument->unsigned_integer = tray_index_at(
+            pointer_monitor->tray, click_x - (pointer_monitor->bar_metrics.width_px - tray_width));
+        return CLICK_AREA_TRAY;
+    } else if (click_x > pointer_monitor->bar_metrics.width_px - (status_width + tray_width)) {
+        argument->integer =
+            (int)(click_x - (pointer_monitor->bar_metrics.width_px - (status_width + tray_width)));
+        return CLICK_AREA_STATUS;
     }
     /* x + 1, so 0 still means "from the keyboard" */
-    arg->ui = (unsigned int)click_x + 1;
-    return ClkTitle;
+    argument->unsigned_integer = (unsigned int)click_x + 1;
+    return CLICK_AREA_BAR_TITLE;
 }
 
 void input_handle_axis(struct wl_listener*, void* data)
@@ -131,26 +133,27 @@ void input_handle_axis(struct wl_listener*, void* data)
     wlr_idle_notifier_v1_notify_activity(idle_notifier, seat);
     input_cursor_activity();
     {
-        Client* client;
-        Arg arg;
+        WindowClient* client;
+        ActionArg argument;
         Monitor* pointer_monitor = monitor_at(cursor->x, cursor->y);
         struct wlr_keyboard* keyboard = wlr_seat_get_keyboard(seat);
         int horizontal = event->orientation == WL_POINTER_AXIS_HORIZONTAL_SCROLL ||
                          (keyboard && wlr_keyboard_get_modifiers(keyboard) & WLR_MODIFIER_SHIFT);
 
         input_node_at(cursor->x, cursor->y, nullptr, &client, nullptr, nullptr, nullptr);
-        if (!lock_active && !client && input_bar_click(pointer_monitor, &arg) == ClkTitle &&
+        if (!lock_active && !client &&
+            input_bar_click(pointer_monitor, &argument) == CLICK_AREA_BAR_TITLE &&
             bar_notification_wheel(pointer_monitor, event->delta, horizontal))
             return;
     }
     if (!lock_active && event->orientation == WL_POINTER_AXIS_VERTICAL_SCROLL) {
-        Client* client;
-        Arg arg;
+        WindowClient* client;
+        ActionArg argument;
         Monitor* pointer_monitor = monitor_at(cursor->x, cursor->y);
 
         input_node_at(cursor->x, cursor->y, nullptr, &client, nullptr, nullptr, nullptr);
-        if (!client && input_bar_click(pointer_monitor, &arg) == ClkStatus &&
-            bar_status_scroll(pointer_monitor, arg.i, event->delta))
+        if (!client && input_bar_click(pointer_monitor, &argument) == CLICK_AREA_STATUS &&
+            bar_status_scroll(pointer_monitor, argument.integer, event->delta))
             return;
     }
     if (!lock_active && event->orientation == WL_POINTER_AXIS_VERTICAL_SCROLL &&
@@ -164,7 +167,8 @@ void input_handle_axis(struct wl_listener*, void* data)
 void input_handle_button(struct wl_listener*, void* data)
 {
     struct wlr_pointer_button_event* event = data;
-    Arg arg = { .v = nullptr }; /* .v is the widest member: zeroes the whole union */
+    ActionArg argument = { .pointer =
+                               nullptr }; /* .v is the widest member: zeroes the whole union */
 
     wlr_idle_notifier_v1_notify_activity(idle_notifier, seat);
     input_cursor_activity();
@@ -176,15 +180,15 @@ void input_handle_button(struct wl_listener*, void* data)
         return;
     }
 
-    unsigned int click = ClkRoot;
-    Client* client;
+    unsigned int click = CLICK_AREA_ROOT;
+    WindowClient* client;
     input_node_at(cursor->x, cursor->y, nullptr, &client, nullptr, nullptr, nullptr);
     if (client)
-        click = ClkClient;
+        click = CLICK_AREA_CLIENT;
 
     switch (event->state) {
         case WL_POINTER_BUTTON_STATE_PRESSED:
-            input_cursor_mode = CurPressed;
+            input_cursor_mode = CURSOR_MODE_PRESSED;
             /* the monitor the pointer is on, bar included */
             Monitor* pointer_monitor = monitor_at(cursor->x, cursor->y);
             if (lock_active) {
@@ -192,7 +196,8 @@ void input_handle_button(struct wl_listener*, void* data)
                 break;
             }
 
-            if (!client && (click = input_bar_click(pointer_monitor, &arg)) != ClkRoot) {
+            if (!client &&
+                (click = input_bar_click(pointer_monitor, &argument)) != CLICK_AREA_ROOT) {
                 /* The bar belongs to pm, but under bar_single_monitor it stands
                  * in for the focused monitor: leaving selected_monitor alone is
                  * what lands the click on the monitor whose tags are on show.
@@ -205,28 +210,32 @@ void input_handle_button(struct wl_listener*, void* data)
 
             /* Change focus if the button was _pressed_ over a client */
             input_node_at(cursor->x, cursor->y, nullptr, &client, nullptr, nullptr, nullptr);
-            if (click == ClkClient && (!client_is_unmanaged(client) || client_wants_focus(client)))
+            if (click == CLICK_AREA_CLIENT &&
+                (!client_is_unmanaged(client) || client_wants_focus(client)))
                 client_focus(client, 1);
 
-            if (click == ClkStatus && bar_status_click(pointer_monitor, arg.i,
-                                                       event->button == BTN_LEFT     ? 1
-                                                       : event->button == BTN_RIGHT  ? 2
-                                                       : event->button == BTN_MIDDLE ? 3
-                                                                                     : 0))
+            if (click == CLICK_AREA_STATUS && bar_status_click(pointer_monitor, argument.integer,
+                                                               event->button == BTN_LEFT     ? 1
+                                                               : event->button == BTN_RIGHT  ? 2
+                                                               : event->button == BTN_MIDDLE ? 3
+                                                                                             : 0))
                 return;
 
             struct wlr_keyboard* keyboard = wlr_seat_get_keyboard(seat);
             const uint32_t mods = keyboard ? wlr_keyboard_get_modifiers(keyboard) : 0;
-            if (click == ClkClient && !CLEANMASK(mods) && event->button == BTN_LEFT &&
+            if (click == CLICK_AREA_CLIENT && !CLEANMASK(mods) && event->button == BTN_LEFT &&
                 bar_title_click(client, cursor->x, cursor->y))
                 return;
-            for (const Button* binding = buttons; binding < buttons + button_count; binding++) {
-                if (CLEANMASK(mods) == CLEANMASK(binding->mod) &&
-                    event->button == binding->button && click == binding->click && binding->func) {
-                    binding->func((click == ClkTagBar || click == ClkTray || click == ClkTitle) &&
-                                          binding->arg.i == 0
-                                      ? &arg
-                                      : &binding->arg);
+            for (const MouseBinding* binding = mouse_bindings;
+                 binding < mouse_bindings + mouse_binding_count; binding++) {
+                if (CLEANMASK(mods) == CLEANMASK(binding->modifiers) &&
+                    event->button == binding->button && click == binding->click_area &&
+                    binding->callback) {
+                    binding->callback((click == CLICK_AREA_TAGS || click == CLICK_AREA_TRAY ||
+                                       click == CLICK_AREA_BAR_TITLE) &&
+                                              binding->argument.integer == 0
+                                          ? &argument
+                                          : &binding->argument);
                     return;
                 }
             }
@@ -236,16 +245,17 @@ void input_handle_button(struct wl_listener*, void* data)
              * mode. */
             /* TODO: should reset to the pointer focus's current
              * input_handle_request_cursor */
-            if (!lock_active && input_cursor_mode != CurNormal && input_cursor_mode != CurPressed) {
+            if (!lock_active && input_cursor_mode != CURSOR_MODE_NORMAL &&
+                input_cursor_mode != CURSOR_MODE_PRESSED) {
                 wlr_cursor_set_xcursor(cursor, cursor_manager, "default");
-                input_cursor_mode = CurNormal;
+                input_cursor_mode = CURSOR_MODE_NORMAL;
                 /* Drop the window off on its new monitor */
                 selected_monitor = monitor_at(cursor->x, cursor->y);
                 client_set_monitor(input_grab_client, selected_monitor, 0);
                 input_grab_client = nullptr;
                 return;
             }
-            input_cursor_mode = CurNormal;
+            input_cursor_mode = CURSOR_MODE_NORMAL;
             input_grab_client = nullptr;
             break;
     }
@@ -286,14 +296,14 @@ void input_handle_frame(struct wl_listener*, void*)
 
 static void input_cursor_warp_to_hint(void)
 {
-    Client* client = nullptr;
+    WindowClient* client = nullptr;
     double hint_x = input_active_constraint->current.cursor_hint.x;
     double hint_y = input_active_constraint->current.cursor_hint.y;
 
     client_from_surface(input_active_constraint->surface, &client, nullptr);
     if (client && input_active_constraint->current.cursor_hint.enabled) {
-        wlr_cursor_warp(cursor, nullptr, hint_x + client->geom.x + client->bw,
-                        hint_y + client->geom.y + client->bw);
+        wlr_cursor_warp(cursor, nullptr, hint_x + client->geometry.x + client->border_width,
+                        hint_y + client->geometry.y + client->border_width);
         wlr_seat_pointer_warp(input_active_constraint->seat, hint_x, hint_y);
     }
 }
@@ -362,16 +372,17 @@ void input_cursor_moved(void)
     input_cursor_activity();
 
     /* the part of a zoomed monitor on show follows the pointer */
-    if (monitor && monitor->zoom > 1)
+    if (monitor && monitor->zoom_factor > 1)
         wlr_output_schedule_frame(monitor->wlr_output);
 
     /* Update selected_monitor (even while dragging a window) */
     if (sloppy_focus) {
-        Monitor* old = selected_monitor;
+        Monitor* previous_monitor = selected_monitor;
         selected_monitor = monitor_at(cursor->x, cursor->y);
         /* the single bar follows the focus, and crossing into empty
          * space changes it without going through client_focus() */
-        if ((bar_single_monitor || bar_status == BarStatusFocus) && selected_monitor != old)
+        if ((bar_single_monitor || bar_status == BAR_STATUS_FOCUSED) &&
+            selected_monitor != previous_monitor)
             bar_draw_all();
     }
 }
@@ -385,8 +396,8 @@ void input_motion(uint32_t time,
 {
     double surface_x = 0;
     double surface_y = 0;
-    Client* client = nullptr;
-    Client* focused_client = nullptr;
+    WindowClient* client = nullptr;
+    WindowClient* focused_client = nullptr;
     LayerSurface* layer_surface = nullptr;
     struct wlr_surface* surface = nullptr;
 
@@ -394,16 +405,16 @@ void input_motion(uint32_t time,
     input_node_at(cursor->x, cursor->y, &surface, &client, nullptr, &surface_x, &surface_y);
     bar_title_hover(client, cursor->x, cursor->y);
 
-    if (input_cursor_mode == CurPressed && !seat->drag &&
+    if (input_cursor_mode == CURSOR_MODE_PRESSED && !seat->drag &&
         surface != seat->pointer_state.focused_surface &&
         client_from_surface(seat->pointer_state.focused_surface, &focused_client, &layer_surface) >=
             0) {
         client = focused_client;
         surface = seat->pointer_state.focused_surface;
         surface_x =
-            cursor->x - (layer_surface ? layer_surface->scene->node.x : focused_client->geom.x);
+            cursor->x - (layer_surface ? layer_surface->scene->node.x : focused_client->geometry.x);
         surface_y =
-            cursor->y - (layer_surface ? layer_surface->scene->node.y : focused_client->geom.y);
+            cursor->y - (layer_surface ? layer_surface->scene->node.y : focused_client->geometry.y);
     }
 
     /* time is 0 in internal calls meant to restore pointer focus. */
@@ -416,16 +427,18 @@ void input_motion(uint32_t time,
         wl_list_for_each(constraint, &pointer_constraints->constraints, link)
             input_cursor_constrain(constraint);
 
-        if (input_active_constraint && input_cursor_mode != CurResize &&
-            input_cursor_mode != CurMove) {
+        if (input_active_constraint && input_cursor_mode != CURSOR_MODE_RESIZE &&
+            input_cursor_mode != CURSOR_MODE_MOVE) {
             /* own variable: client is the client under the cursor, and the
              * constraint may sit on an unmapped one (gamescope) */
-            Client* constraint_client = nullptr;
+            WindowClient* constraint_client = nullptr;
             client_from_surface(input_active_constraint->surface, &constraint_client, nullptr);
             if (constraint_client &&
                 input_active_constraint->surface == seat->pointer_state.focused_surface) {
-                surface_x = cursor->x - constraint_client->geom.x - constraint_client->bw;
-                surface_y = cursor->y - constraint_client->geom.y - constraint_client->bw;
+                surface_x =
+                    cursor->x - constraint_client->geometry.x - constraint_client->border_width;
+                surface_y =
+                    cursor->y - constraint_client->geometry.y - constraint_client->border_width;
                 double surface_x_confined;
                 double surface_y_confined;
                 if (wlr_region_confine(&input_active_constraint->region, surface_x, surface_y,
@@ -455,40 +468,40 @@ void input_motion(uint32_t time,
         return;
     }
 
-    if (input_cursor_mode == CurPressed && input_grab_client && time && !lock_active &&
+    if (input_cursor_mode == CURSOR_MODE_PRESSED && input_grab_client && time && !lock_active &&
         (cursor->x - input_press_x) * (cursor->x - input_press_x) +
                 (cursor->y - input_press_y) * (cursor->y - input_press_y) >=
             move_threshold * move_threshold)
-        input_grab(input_grab_client, CurMove);
+        input_grab(input_grab_client, CURSOR_MODE_MOVE);
 
     /* If we are currently grabbing the mouse, handle and return */
-    if (input_cursor_mode == CurMove) {
+    if (input_cursor_mode == CURSOR_MODE_MOVE) {
         /* A tiled client keeps its slot in the layout: dragging it just swaps
          * it with the tile under the cursor, i3/sway style. */
-        if (!input_grab_client->isfloating) {
-            if (time && client && client != input_grab_client && !client->isfloating &&
-                client->mon == input_grab_client->mon &&
-                VISIBLEON(input_grab_client, input_grab_client->mon)) {
+        if (!input_grab_client->is_floating) {
+            if (time && client && client != input_grab_client && !client->is_floating &&
+                client->monitor == input_grab_client->monitor &&
+                VISIBLEON(input_grab_client, input_grab_client->monitor)) {
                 layout_swap_clients(input_grab_client, client);
-                layout_arrange(input_grab_client->mon);
+                layout_arrange(input_grab_client->monitor);
             }
             return;
         }
         /* Move the grabbed client to the new position. */
         struct wlr_box box = (struct wlr_box){ .x = (int)round(cursor->x) - input_grab_x,
                                                .y = (int)round(cursor->y) - input_grab_y,
-                                               .width = input_grab_client->geom.width,
-                                               .height = input_grab_client->geom.height };
+                                               .width = input_grab_client->geometry.width,
+                                               .height = input_grab_client->geometry.height };
         input_magnet(&box);
         client_resize(input_grab_client, box, 1);
         return;
-    } else if (input_cursor_mode == CurResize) {
+    } else if (input_cursor_mode == CURSOR_MODE_RESIZE) {
         client_resize(
             input_grab_client,
-            (struct wlr_box){ .x = input_grab_client->geom.x,
-                              .y = input_grab_client->geom.y,
-                              .width = (int)round(cursor->x) - input_grab_client->geom.x,
-                              .height = (int)round(cursor->y) - input_grab_client->geom.y },
+            (struct wlr_box){ .x = input_grab_client->geometry.x,
+                              .y = input_grab_client->geometry.y,
+                              .width = (int)round(cursor->x) - input_grab_client->geometry.x,
+                              .height = (int)round(cursor->y) - input_grab_client->geometry.y },
             1);
         return;
     }
@@ -516,58 +529,58 @@ void input_handle_motion(struct wl_listener*, void* data)
                  event->unaccel_dx, event->unaccel_dy);
 }
 
-void input_move_resize(const Arg* arg)
+void input_move_resize(const ActionArg* argument)
 {
 
-    if (input_cursor_mode != CurNormal && input_cursor_mode != CurPressed)
+    if (input_cursor_mode != CURSOR_MODE_NORMAL && input_cursor_mode != CURSOR_MODE_PRESSED)
         return;
-    Client* client;
+    WindowClient* client;
     input_node_at(cursor->x, cursor->y, nullptr, &client, nullptr, nullptr, nullptr);
     input_press_x = cursor->x;
     input_press_y = cursor->y;
-    input_grab(client, arg->ui);
+    input_grab(client, argument->unsigned_integer);
 }
 
 /* Moving c from the title bar waits for move_threshold of motion, so a plain
  * click stays a click: until then input_grab_client is set but
  * input_cursor_mode is CurPressed.
  */
-void input_title_grab(Client* client)
+void input_title_grab(WindowClient* client)
 {
     input_grab_client = client;
     input_press_x = cursor->x;
     input_press_y = cursor->y;
 }
 
-static void input_grab(Client* client, unsigned int mode)
+static void input_grab(WindowClient* client, unsigned int mode)
 {
     input_grab_client = nullptr;
-    if (!client || client_is_unmanaged(client) || client->isfullscreen)
+    if (!client || client_is_unmanaged(client) || client->is_fullscreen)
         return;
     input_grab_client = client;
 
     /* Float the window and tell input_motion to grab it - except when moving a
      * tiled client, which stays tiled and is swapped with the tile it is
      * dragged onto instead. */
-    if (mode != CurMove || client->isfloating || !client->mon)
+    if (mode != CURSOR_MODE_MOVE || client->is_floating || !client->monitor)
         client_set_floating(client, 1);
     switch (input_cursor_mode = mode) {
-        case CurMove:
-            input_grab_x = (int)round(input_press_x) - client->geom.x;
-            input_grab_y = (int)round(input_press_y) - client->geom.y;
+        case CURSOR_MODE_MOVE:
+            input_grab_x = (int)round(input_press_x) - client->geometry.x;
+            input_grab_y = (int)round(input_press_y) - client->geometry.y;
             wlr_cursor_set_xcursor(cursor, cursor_manager, "grabbing");
             break;
-        case CurResize:
+        case CURSOR_MODE_RESIZE:
             /* Doesn't work for X11 output - the next absolute motion event
              * returns the cursor to where it started */
-            wlr_cursor_warp_closest(cursor, nullptr, client->geom.x + client->geom.width,
-                                    client->geom.y + client->geom.height);
+            wlr_cursor_warp_closest(cursor, nullptr, client->geometry.x + client->geometry.width,
+                                    client->geometry.y + client->geometry.height);
             wlr_cursor_set_xcursor(cursor, cursor_manager, "se-resize");
             break;
     }
 }
 
-static void input_pointer_focus(Client* client,
+static void input_pointer_focus(WindowClient* client,
                                 struct wlr_surface* surface,
                                 double surface_x,
                                 double surface_y,
@@ -603,8 +616,8 @@ static void input_handle_last_cursor_destroy(struct wl_listener*, void*)
 {
     /* When the surface is destroyed, clear our reference to it */
     input_last_cursor.surface = nullptr;
-    wl_list_remove(&input_last_cursor.destroy.link);
-    wl_list_init(&input_last_cursor.destroy.link);
+    wl_list_remove(&input_last_cursor.surface_destroy.link);
+    wl_list_init(&input_last_cursor.surface_destroy.link);
 }
 
 void input_handle_request_cursor(struct wl_listener*, void* data)
@@ -615,7 +628,7 @@ void input_handle_request_cursor(struct wl_listener*, void* data)
      * restore it after "grabbing" sending a leave event, followed by a enter
      * event, which will result in the client requesting set the cursor surface
      */
-    if (input_cursor_mode != CurNormal && input_cursor_mode != CurPressed)
+    if (input_cursor_mode != CURSOR_MODE_NORMAL && input_cursor_mode != CURSOR_MODE_PRESSED)
         return;
     /* This can be sent by any client, so we check to make sure this one
      * actually has pointer focus first. If so, we can tell the cursor to
@@ -634,11 +647,11 @@ void input_set_client_cursor(struct wlr_surface* surface, int hotspot_x, int hot
     input_last_cursor.hotspot_x = hotspot_x;
     input_last_cursor.hotspot_y = hotspot_y;
 
-    wl_list_remove(&input_last_cursor.destroy.link);
-    wl_list_init(&input_last_cursor.destroy.link);
+    wl_list_remove(&input_last_cursor.surface_destroy.link);
+    wl_list_init(&input_last_cursor.surface_destroy.link);
     if (surface) {
-        input_last_cursor.destroy.notify = input_handle_last_cursor_destroy;
-        wl_signal_add(&surface->events.destroy, &input_last_cursor.destroy);
+        input_last_cursor.surface_destroy.notify = input_handle_last_cursor_destroy;
+        wl_signal_add(&surface->events.destroy, &input_last_cursor.surface_destroy);
     }
 
     if (!input_cursor_hidden)
@@ -648,7 +661,7 @@ void input_set_client_cursor(struct wlr_surface* surface, int hotspot_x, int hot
 void input_handle_request_cursor_shape(struct wl_listener*, void* data)
 {
     struct wlr_cursor_shape_manager_v1_request_set_shape_event* event = data;
-    if (input_cursor_mode != CurNormal && input_cursor_mode != CurPressed)
+    if (input_cursor_mode != CURSOR_MODE_NORMAL && input_cursor_mode != CURSOR_MODE_PRESSED)
         return;
     /* This can be sent by any client, so we check to make sure this one
      * actually has pointer (or pen) focus first. If so, we can tell the
@@ -676,25 +689,28 @@ static void input_magnet(struct wlr_box* box)
     int snap_y = move_snap + 1;
     int snapped_x = box->x;
     int snapped_y = box->y;
-    input_magnet_edge(box->x, box->width, monitor->w.x, &snap_x, &snapped_x);
-    input_magnet_edge(box->x, box->width, monitor->w.x + monitor->w.width, &snap_x, &snapped_x);
-    input_magnet_edge(box->y, box->height, monitor->w.y, &snap_y, &snapped_y);
-    input_magnet_edge(box->y, box->height, monitor->w.y + monitor->w.height, &snap_y, &snapped_y);
-    Client* client;
+    input_magnet_edge(box->x, box->width, monitor->usable_area.x, &snap_x, &snapped_x);
+    input_magnet_edge(box->x, box->width, monitor->usable_area.x + monitor->usable_area.width,
+                      &snap_x, &snapped_x);
+    input_magnet_edge(box->y, box->height, monitor->usable_area.y, &snap_y, &snapped_y);
+    input_magnet_edge(box->y, box->height, monitor->usable_area.y + monitor->usable_area.height,
+                      &snap_y, &snapped_y);
+    WindowClient* client;
     wl_list_for_each(client, &clients, link) {
-        if (client == input_grab_client || !client->isfloating || client->isfullscreen ||
+        if (client == input_grab_client || !client->is_floating || client->is_fullscreen ||
             !VISIBLEON(client, monitor))
             continue;
-        if (box->y < client->geom.y + client->geom.height &&
-            client->geom.y < box->y + box->height) {
-            input_magnet_edge(box->x, box->width, client->geom.x, &snap_x, &snapped_x);
-            input_magnet_edge(box->x, box->width, client->geom.x + client->geom.width, &snap_x,
-                              &snapped_x);
+        if (box->y < client->geometry.y + client->geometry.height &&
+            client->geometry.y < box->y + box->height) {
+            input_magnet_edge(box->x, box->width, client->geometry.x, &snap_x, &snapped_x);
+            input_magnet_edge(box->x, box->width, client->geometry.x + client->geometry.width,
+                              &snap_x, &snapped_x);
         }
-        if (box->x < client->geom.x + client->geom.width && client->geom.x < box->x + box->width) {
-            input_magnet_edge(box->y, box->height, client->geom.y, &snap_y, &snapped_y);
-            input_magnet_edge(box->y, box->height, client->geom.y + client->geom.height, &snap_y,
-                              &snapped_y);
+        if (box->x < client->geometry.x + client->geometry.width &&
+            client->geometry.x < box->x + box->width) {
+            input_magnet_edge(box->y, box->height, client->geometry.y, &snap_y, &snapped_y);
+            input_magnet_edge(box->y, box->height, client->geometry.y + client->geometry.height,
+                              &snap_y, &snapped_y);
         }
     }
     box->x = snapped_x;
@@ -714,20 +730,22 @@ static void input_magnet_edge(int pos, int size, int edge, int* dist, int* to)
     }
 }
 
-void input_warp_cursor(const Client* client)
+void input_warp_cursor(const WindowClient* client)
 {
-    if (input_cursor_mode != CurNormal)
+    if (input_cursor_mode != CURSOR_MODE_NORMAL)
         return;
 
     if (!client && selected_monitor) {
-        wlr_cursor_warp_closest(cursor, nullptr,
-                                selected_monitor->w.x + selected_monitor->w.width / 2.0,
-                                selected_monitor->w.y + selected_monitor->w.height / 2.0);
-    } else if (client &&
-               (cursor->x < client->geom.x || cursor->x > client->geom.x + client->geom.width ||
-                cursor->y < client->geom.y || cursor->y > client->geom.y + client->geom.height)) {
-        wlr_cursor_warp_closest(cursor, nullptr, client->geom.x + client->geom.width / 2.0,
-                                client->geom.y + client->geom.height / 2.0);
+        wlr_cursor_warp_closest(
+            cursor, nullptr,
+            selected_monitor->usable_area.x + selected_monitor->usable_area.width / 2.0,
+            selected_monitor->usable_area.y + selected_monitor->usable_area.height / 2.0);
+    } else if (client && (cursor->x < client->geometry.x ||
+                          cursor->x > client->geometry.x + client->geometry.width ||
+                          cursor->y < client->geometry.y ||
+                          cursor->y > client->geometry.y + client->geometry.height)) {
+        wlr_cursor_warp_closest(cursor, nullptr, client->geometry.x + client->geometry.width / 2.0,
+                                client->geometry.y + client->geometry.height / 2.0);
     }
 }
 
@@ -740,28 +758,30 @@ static int input_wheel_binding(const struct wlr_pointer_axis_event* event)
     double step = event->delta_discrete ? event->delta_discrete / 120.0 : event->delta / 15.0;
     struct wlr_keyboard* keyboard = wlr_seat_get_keyboard(seat);
     uint32_t mods = keyboard ? wlr_keyboard_get_modifiers(keyboard) : 0;
-    unsigned int wheel = event->delta < 0 ? WheelUp : WheelDown;
-    Client* client;
+    unsigned int wheel = event->delta < 0 ? MOUSE_WHEEL_UP : MOUSE_WHEEL_DOWN;
+    WindowClient* client;
 
     input_node_at(cursor->x, cursor->y, nullptr, &client, nullptr, nullptr, nullptr);
-    Arg arg;
+    ActionArg argument;
     unsigned int click =
-        client ? ClkClient : input_bar_click(monitor_at(cursor->x, cursor->y), &arg);
+        client ? CLICK_AREA_CLIENT : input_bar_click(monitor_at(cursor->x, cursor->y), &argument);
     int title = client && bar_on_title_bar(client, cursor->x, cursor->y);
     unsigned int mode;
-    for (const Button* binding = buttons; binding < buttons + button_count; binding++) {
-        if (CLEANMASK(mods) != CLEANMASK(binding->mod) || binding->button != wheel ||
-            (binding->click != click && !(binding->click == ClkWinTitle && title)) ||
-            !binding->func)
+    for (const MouseBinding* binding = mouse_bindings;
+         binding < mouse_bindings + mouse_binding_count; binding++) {
+        if (CLEANMASK(mods) != CLEANMASK(binding->modifiers) || binding->button != wheel ||
+            (binding->click_area != click &&
+             !(binding->click_area == CLICK_AREA_WINDOW_TITLE && title)) ||
+            !binding->callback)
             continue;
         if ((notches < 0) != (step < 0))
             notches = 0;
         /* pressed, as for a click, so focusing does not warp the pointer
          * away from where it scrolls */
         mode = input_cursor_mode;
-        input_cursor_mode = CurPressed;
+        input_cursor_mode = CURSOR_MODE_PRESSED;
         for (notches += step; fabs(notches) >= 1; notches -= notches < 0 ? -1 : 1)
-            binding->func(&binding->arg);
+            binding->callback(&binding->argument);
         input_cursor_mode = mode;
         return 1;
     }
@@ -771,17 +791,17 @@ static int input_wheel_binding(const struct wlr_pointer_axis_event* event)
 void input_node_at(double x,
                    double y,
                    struct wlr_surface** out_surface,
-                   Client** out_client,
+                   WindowClient** out_client,
                    LayerSurface** out_layer_surface,
                    double* node_x,
                    double* node_y)
 {
     struct wlr_surface* surface = nullptr;
     struct wlr_scene_surface* scene_surface = nullptr;
-    Client* client = nullptr;
+    WindowClient* client = nullptr;
     LayerSurface* layer_surface = nullptr;
 
-    for (int layer = NUM_LAYERS - 1; !surface && layer >= 0; layer--) {
+    for (int layer = SCENE_LAYER_COUNT - 1; !surface && layer >= 0; layer--) {
         struct wlr_scene_node* node = wlr_scene_node_at(&layers[layer]->node, x, y, node_x, node_y);
         if (!node)
             continue;
@@ -794,7 +814,7 @@ void input_node_at(double x,
                 for (parent_node = node; parent_node && !client;
                      parent_node = &parent_node->parent->node)
                     client = parent_node->data;
-                if (client && client->type == LayerShell)
+                if (client && client->type == SURFACE_TYPE_LAYER_SHELL)
                     client = nullptr;
                 if (client)
                     break;
@@ -805,7 +825,7 @@ void input_node_at(double x,
         /* Walk the tree to find a node that knows the client */
         for (parent_node = node; parent_node && !client; parent_node = &parent_node->parent->node)
             client = parent_node->data;
-        if (client && client->type == LayerShell) {
+        if (client && client->type == SURFACE_TYPE_LAYER_SHELL) {
             client = nullptr;
             layer_surface = parent_node->data;
         }

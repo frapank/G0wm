@@ -55,39 +55,39 @@
         wl_signal_add((E), _l);                                                                    \
     } while (0)
 
-enum {
-    LyrBg,
-    LyrBottom,
-    LyrTile,
-    LyrFloat,
-    LyrTop,
-    LyrFS,
-    LyrOverlay,
-    LyrBlock,
-    NUM_LAYERS
+enum SceneLayer {
+    SCENE_LAYER_BACKGROUND,
+    SCENE_LAYER_BOTTOM,
+    SCENE_LAYER_TILED,
+    SCENE_LAYER_FLOATING,
+    SCENE_LAYER_TOP,
+    SCENE_LAYER_FULLSCREEN,
+    SCENE_LAYER_OVERLAY,
+    SCENE_LAYER_LOCK,
+    SCENE_LAYER_COUNT
 }; /* scene layers */
 
 typedef union {
-    int i;
-    uint32_t ui;
-    float f;
-    const void* v;
-} Arg;
+    int integer;
+    uint32_t unsigned_integer;
+    float floating;
+    const void* pointer;
+} ActionArg;
 
-typedef struct Client Client;
+typedef struct WindowClient WindowClient;
 typedef struct KeyboardGroup KeyboardGroup;
 typedef struct LayerSurface LayerSurface;
 typedef struct Monitor Monitor;
 
 void check_idle_inhibitor(struct wlr_surface* exclude);
-void change_virtual_console(const Arg* arg);
-void quit(const Arg*);
-void spawn(const Arg* arg);
+void change_virtual_console(const ActionArg* argument);
+void quit(const ActionArg*);
+void spawn(const ActionArg* argument);
 
 extern void* exclusive_focus;
 extern struct wl_event_loop* event_loop;
 extern struct wlr_scene* scene;
-extern struct wlr_scene_tree* layers[NUM_LAYERS];
+extern struct wlr_scene_tree* layers[SCENE_LAYER_COUNT];
 extern struct wlr_scene_tree* drag_icon;
 extern struct wlr_renderer* renderer;
 extern struct wlr_allocator* allocator;
@@ -118,7 +118,7 @@ extern struct wlr_box screen_geometry;
 extern struct wl_list monitors;
 extern Monitor* selected_monitor;
 extern struct wl_event_source* status_event_source;
-extern Watcher tray_watcher;
+extern TrayWatcher tray_watcher;
 #ifdef XWAYLAND
 extern struct wlr_xwayland* xwayland;
 #endif

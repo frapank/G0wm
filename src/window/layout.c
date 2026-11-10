@@ -34,13 +34,13 @@ void layout_arrange(Monitor* monitor)
     if (!monitor->wlr_output->enabled)
         return;
 
-    Client* client;
+    WindowClient* client;
     wl_list_for_each(client, &clients, link) {
-        if (client->mon == monitor) {
+        if (client->monitor == monitor) {
             /* client_map_wait_done() shows a client held back by
              * client_handle_map() */
             wlr_scene_node_set_enabled(&client->scene->node,
-                                       VISIBLEON(client, monitor) && !client->mapwait);
+                                       VISIBLEON(client, monitor) && !client->map_wait_timer);
             /* re-enable content layout_tabbed() may have hidden for a non-top
              * tab */
             wlr_scene_node_set_enabled(&client->scene_surface->node, 1);
@@ -48,44 +48,47 @@ void layout_arrange(Monitor* monitor)
         }
     }
 
-    wlr_scene_node_set_enabled(&monitor->fullscreen_bg->node,
-                               (client = client_top(monitor)) && client->isfullscreen);
+    wlr_scene_node_set_enabled(&monitor->fullscreen_background->node,
+                               (client = client_top(monitor)) && client->is_fullscreen);
 
-    snprintf(monitor->ltsymbol, LENGTH(monitor->ltsymbol), "%s",
-             monitor->lt[monitor->sellt]->symbol);
+    snprintf(monitor->layout_symbol, LENGTH(monitor->layout_symbol), "%s",
+             monitor->layouts[monitor->selected_layout_index]->symbol);
 
     /* Keep floating clients (except fullscreen and unmanaged) above the tiles
      */
     wl_list_for_each(client, &clients, link) {
-        if (client->mon != monitor || client->scene->node.parent == layers[LyrFS])
+        if (client->monitor != monitor ||
+            client->scene->node.parent == layers[SCENE_LAYER_FULLSCREEN])
             continue;
 
-        wlr_scene_node_reparent(&client->scene->node,
-                                client->isfloating ? layers[LyrFloat] : client->scene->node.parent);
+        wlr_scene_node_reparent(&client->scene->node, client->is_floating
+                                                          ? layers[SCENE_LAYER_FLOATING]
+                                                          : client->scene->node.parent);
     }
 
-    monitor->lt[monitor->sellt]->arrange(monitor);
+    monitor->layouts[monitor->selected_layout_index]->arrange(monitor);
     input_motion(0, nullptr, 0, 0, 0, 0);
     check_idle_inhibitor(nullptr);
     input_warp_cursor(client_top(selected_monitor));
 }
 
-void layout_focus_stack(const Arg* arg)
+void layout_focus_stack(const ActionArg* argument)
 {
     /* Focus the next or previous client (in tiling order) on selected_monitor
      */
-    Client *client, *sel = client_top(selected_monitor);
-    if (!sel || (sel->isfullscreen && !client_has_children(sel)))
+    WindowClient *client, *selected_client = client_top(selected_monitor);
+    if (!selected_client ||
+        (selected_client->is_fullscreen && !client_has_children(selected_client)))
         return;
-    if (arg->i > 0) {
-        wl_list_for_each(client, &sel->link, link) {
+    if (argument->integer > 0) {
+        wl_list_for_each(client, &selected_client->link, link) {
             if (&client->link == &clients)
                 continue; /* wrap past the sentinel node */
             if (VISIBLEON(client, selected_monitor))
                 break; /* found it */
         }
     } else {
-        wl_list_for_each_reverse(client, &sel->link, link) {
+        wl_list_for_each_reverse(client, &selected_client->link, link) {
             if (&client->link == &clients)
                 continue; /* wrap past the sentinel node */
             if (VISIBLEON(client, selected_monitor))
@@ -96,23 +99,23 @@ void layout_focus_stack(const Arg* arg)
     client_focus(client, 1);
 }
 
-void layout_inc_master(const Arg* arg)
+void layout_inc_master(const ActionArg* argument)
 {
-    if (!arg || !selected_monitor)
+    if (!argument || !selected_monitor)
         return;
-    selected_monitor->nmaster = MAX(selected_monitor->nmaster + arg->i, 0);
+    selected_monitor->master_count = MAX(selected_monitor->master_count + argument->integer, 0);
     layout_arrange(selected_monitor);
 }
 
-void layout_move_stack(const Arg* arg)
+void layout_move_stack(const ActionArg* argument)
 {
-    Client *client, *sel = client_top(selected_monitor);
+    WindowClient *client, *selected_client = client_top(selected_monitor);
 
-    if (!sel || wl_list_length(&clients) <= 1)
+    if (!selected_client || wl_list_length(&clients) <= 1)
         return;
 
-    if (arg->i > 0) {
-        wl_list_for_each(client, &sel->link, link) {
+    if (argument->integer > 0) {
+        wl_list_for_each(client, &selected_client->link, link) {
             if (&client->link == &clients) {
                 client = wl_container_of(&clients, client, link);
                 break; /* wrap past the sentinel node */
@@ -121,7 +124,7 @@ void layout_move_stack(const Arg* arg)
                 break; /* found it */
         }
     } else {
-        wl_list_for_each_reverse(client, &sel->link, link) {
+        wl_list_for_each_reverse(client, &selected_client->link, link) {
             if (&client->link == &clients) {
                 client = wl_container_of(&clients, client, link);
                 break; /* wrap past the sentinel node */
@@ -133,68 +136,73 @@ void layout_move_stack(const Arg* arg)
         client = wl_container_of(client->link.prev, client, link);
     }
 
-    wl_list_remove(&sel->link);
-    wl_list_insert(&client->link, &sel->link);
+    wl_list_remove(&selected_client->link);
+    wl_list_insert(&client->link, &selected_client->link);
     layout_arrange(selected_monitor);
 }
 
-void layout_resize_height(const Arg* arg)
+void layout_resize_height(const ActionArg* argument)
 {
-    Client* client = client_top(selected_monitor);
+    WindowClient* client = client_top(selected_monitor);
 
-    if (!client || !client->isfloating)
+    if (!client || !client->is_floating)
         return;
     client_resize(client,
-                  (struct wlr_box){ .x = client->geom.x,
-                                    .y = client->geom.y,
-                                    .width = client->geom.width,
-                                    .height = MAX(1, client->geom.height + arg->i) },
+                  (struct wlr_box){ .x = client->geometry.x,
+                                    .y = client->geometry.y,
+                                    .width = client->geometry.width,
+                                    .height = MAX(1, client->geometry.height + argument->integer) },
                   1);
 }
 
-void layout_resize_width(const Arg* arg)
+void layout_resize_width(const ActionArg* argument)
 {
-    Client* client = client_top(selected_monitor);
+    WindowClient* client = client_top(selected_monitor);
 
     if (!client)
         return;
-    if (!client->isfloating) {
+    if (!client->is_floating) {
         /* A tiled client has no free geometry, so widen/narrow the master
          * area instead - g0wm's equivalent of resizing a sway split. */
-        layout_set_master_factor(&(Arg){ .f = arg->i > 0 ? +0.05f : -0.05f });
+        layout_set_master_factor(
+            &(ActionArg){ .floating = argument->integer > 0 ? +0.05f : -0.05f });
         return;
     }
     client_resize(client,
-                  (struct wlr_box){ .x = client->geom.x,
-                                    .y = client->geom.y,
-                                    .width = MAX(1, client->geom.width + arg->i),
-                                    .height = client->geom.height },
+                  (struct wlr_box){ .x = client->geometry.x,
+                                    .y = client->geometry.y,
+                                    .width = MAX(1, client->geometry.width + argument->integer),
+                                    .height = client->geometry.height },
                   1);
 }
 
-void layout_set(const Arg* arg)
+void layout_set(const ActionArg* argument)
 {
     if (!selected_monitor)
         return;
-    if (!arg || !arg->v || arg->v != selected_monitor->lt[selected_monitor->sellt])
-        selected_monitor->sellt ^= 1;
-    if (arg && arg->v)
-        selected_monitor->lt[selected_monitor->sellt] = (Layout*)arg->v;
-    snprintf(selected_monitor->ltsymbol, LENGTH(selected_monitor->ltsymbol), "%s",
-             selected_monitor->lt[selected_monitor->sellt]->symbol);
+    if (!argument || !argument->pointer ||
+        argument->pointer != selected_monitor->layouts[selected_monitor->selected_layout_index])
+        selected_monitor->selected_layout_index ^= 1;
+    if (argument && argument->pointer)
+        selected_monitor->layouts[selected_monitor->selected_layout_index] =
+            (WindowLayout*)argument->pointer;
+    snprintf(selected_monitor->layout_symbol, LENGTH(selected_monitor->layout_symbol), "%s",
+             selected_monitor->layouts[selected_monitor->selected_layout_index]->symbol);
     layout_arrange(selected_monitor);
     bar_draw_selected();
 }
 
-/* arg > 1.0 will set mfact absolutely */
-void layout_set_master_factor(const Arg* arg)
+/* An argument above 1.0 sets master_factor absolutely. */
+void layout_set_master_factor(const ActionArg* argument)
 {
-    if (!arg || !selected_monitor)
+    if (!argument || !selected_monitor)
         return;
-    float new_factor = arg->f < 1.0f ? arg->f + selected_monitor->mfact : arg->f - 1.0f;
+    float new_factor = argument->floating < 1.0f
+                           ? argument->floating + selected_monitor->master_factor
+                           : argument->floating - 1.0f;
     if (new_factor < 0.1 || new_factor > 0.9)
         return;
-    selected_monitor->mfact = new_factor;
+    selected_monitor->master_factor = new_factor;
     layout_arrange(selected_monitor);
 }
 
@@ -208,31 +216,31 @@ static int layout_tag_beside(uint32_t set, int step)
     return target < 0 || target >= (int)tag_count ? -1 : target;
 }
 
-void layout_shift_tag(const Arg* arg)
+void layout_shift_tag(const ActionArg* argument)
 {
-    Client* sel = client_top(selected_monitor);
-    if (!sel)
+    WindowClient* selected_client = client_top(selected_monitor);
+    if (!selected_client)
         return;
-    const int target = layout_tag_beside(sel->tags, arg->i);
+    const int target = layout_tag_beside(selected_client->tags, argument->integer);
     if (target < 0)
         return;
-    layout_tag(&(Arg){ .ui = 1u << target });
-    layout_view(&(Arg){ .ui = 1u << target });
+    layout_tag(&(ActionArg){ .unsigned_integer = 1u << target });
+    layout_view(&(ActionArg){ .unsigned_integer = 1u << target });
 }
 
-void layout_shift_view(const Arg* arg)
+void layout_shift_view(const ActionArg* argument)
 {
     if (!selected_monitor)
         return;
-    const int target =
-        layout_tag_beside(selected_monitor->tagset[selected_monitor->seltags], arg->i);
+    const int target = layout_tag_beside(
+        selected_monitor->tagsets[selected_monitor->selected_tagset_index], argument->integer);
     if (target < 0)
         return;
-    layout_view(&(Arg){ .ui = 1u << target });
+    layout_view(&(ActionArg){ .unsigned_integer = 1u << target });
 }
 
 /* Exchanges two clients in the tiling order, which is all a layout looks at. */
-void layout_swap_clients(Client* first, Client* second)
+void layout_swap_clients(WindowClient* first, WindowClient* second)
 {
     struct wl_list* first_prev = first->link.prev;
     struct wl_list* second_prev = second->link.prev;
@@ -251,13 +259,13 @@ void layout_swap_clients(Client* first, Client* second)
     }
 }
 
-void layout_tag(const Arg* arg)
+void layout_tag(const ActionArg* argument)
 {
-    Client* sel = client_top(selected_monitor);
-    if (!sel || (arg->ui & TAGMASK) == 0)
+    WindowClient* selected_client = client_top(selected_monitor);
+    if (!selected_client || (argument->unsigned_integer & TAGMASK) == 0)
         return;
 
-    sel->tags = arg->ui & TAGMASK;
+    selected_client->tags = argument->unsigned_integer & TAGMASK;
     client_focus(client_top(selected_monitor), 1);
     layout_arrange(selected_monitor);
     bar_draw_all();
@@ -267,12 +275,12 @@ void layout_tag(const Arg* arg)
  * clients' title bars are packed into its one title row as tabs. */
 void layout_tabbed(Monitor* monitor)
 {
-    unsigned int gaps_enabled = monitor->gaps;
+    unsigned int gaps_enabled = monitor->gaps_enabled;
     int tiled_count = 0;
 
-    Client* client;
+    WindowClient* client;
     wl_list_for_each(client, &clients, link)
-        if (VISIBLEON(client, monitor) && !client->isfloating && !client->isfullscreen)
+        if (VISIBLEON(client, monitor) && !client->is_floating && !client->is_fullscreen)
             tiled_count++;
     if (tiled_count == 0)
         return;
@@ -280,30 +288,30 @@ void layout_tabbed(Monitor* monitor)
         gaps_enabled = 0;
 
     struct wlr_box area;
-    area.x = monitor->w.x + (int)(gap_size * gaps_enabled);
-    area.y = monitor->w.y + (int)(gap_size * gaps_enabled);
-    area.width = monitor->w.width - 2 * (int)(gap_size * gaps_enabled);
-    area.height = monitor->w.height - 2 * (int)(gap_size * gaps_enabled);
+    area.x = monitor->usable_area.x + (int)(gap_size * gaps_enabled);
+    area.y = monitor->usable_area.y + (int)(gap_size * gaps_enabled);
+    area.width = monitor->usable_area.width - 2 * (int)(gap_size * gaps_enabled);
+    area.height = monitor->usable_area.height - 2 * (int)(gap_size * gaps_enabled);
 
-    Client* top = layout_tab_top(monitor);
+    WindowClient* top_client = layout_tab_top(monitor);
     wl_list_for_each(client, &clients, link) {
-        if (!VISIBLEON(client, monitor) || client->isfloating || client->isfullscreen)
+        if (!VISIBLEON(client, monitor) || client->is_floating || client->is_fullscreen)
             continue;
         client_resize(client, area, 0);
         /* only the top tab's contents are drawn; scene_surface rather than
          * scene, since the title bars (the tabs) hang off the latter */
-        wlr_scene_node_set_enabled(&client->scene_surface->node, client == top);
+        wlr_scene_node_set_enabled(&client->scene_surface->node, client == top_client);
     }
-    snprintf(monitor->ltsymbol, LENGTH(monitor->ltsymbol), "|%d|", tiled_count);
-    if (top)
-        wlr_scene_node_raise_to_top(&top->scene->node);
+    snprintf(monitor->layout_symbol, LENGTH(monitor->layout_symbol), "|%d|", tiled_count);
+    if (top_client)
+        wlr_scene_node_raise_to_top(&top_client->scene->node);
 }
 
-Client* layout_tab_top(Monitor* monitor)
+WindowClient* layout_tab_top(Monitor* monitor)
 {
-    Client* client;
-    wl_list_for_each(client, &focus_stack, flink)
-        if (VISIBLEON(client, monitor) && !client->isfloating && !client->isfullscreen)
+    WindowClient* client;
+    wl_list_for_each(client, &focus_stack, focus_link)
+        if (VISIBLEON(client, monitor) && !client->is_floating && !client->is_fullscreen)
             return client;
     return nullptr;
 }
@@ -315,12 +323,12 @@ static unsigned int layout_tag_index(uint32_t tagset)
 
 void layout_tile(Monitor* monitor)
 {
-    unsigned int gaps_enabled = monitor->gaps;
+    unsigned int gaps_enabled = monitor->gaps_enabled;
     int tiled_count = 0;
-    Client* client;
+    WindowClient* client;
 
     wl_list_for_each(client, &clients, link)
-        if (VISIBLEON(client, monitor) && !client->isfloating && !client->isfullscreen)
+        if (VISIBLEON(client, monitor) && !client->is_floating && !client->is_fullscreen)
             tiled_count++;
     if (tiled_count == 0)
         return;
@@ -328,52 +336,52 @@ void layout_tile(Monitor* monitor)
         gaps_enabled = 0;
 
     unsigned int master_width;
-    if (tiled_count > monitor->nmaster)
-        master_width =
-            monitor->nmaster
-                ? (int)roundf((monitor->w.width + gap_size * gaps_enabled) * monitor->mfact)
-                : 0;
+    if (tiled_count > monitor->master_count)
+        master_width = monitor->master_count
+                           ? (int)roundf((monitor->usable_area.width + gap_size * gaps_enabled) *
+                                         monitor->master_factor)
+                           : 0;
     else
-        master_width = monitor->w.width;
+        master_width = monitor->usable_area.width;
     int index = 0;
     int master_y = gap_size * gaps_enabled;
     int stack_y = master_y;
     wl_list_for_each(client, &clients, link) {
-        if (!VISIBLEON(client, monitor) || client->isfloating || client->isfullscreen)
+        if (!VISIBLEON(client, monitor) || client->is_floating || client->is_fullscreen)
             continue;
-        if (index < monitor->nmaster) {
-            const unsigned int remaining = MIN(tiled_count, monitor->nmaster) - index;
-            const int height = MAX(1, ((int)monitor->w.height - master_y -
+        if (index < monitor->master_count) {
+            const unsigned int remaining = MIN(tiled_count, monitor->master_count) - index;
+            const int height = MAX(1, ((int)monitor->usable_area.height - master_y -
                                        (int)(gap_size * gaps_enabled * remaining)) /
                                           (int)remaining);
             client_resize(client,
-                          (struct wlr_box){ .x = monitor->w.x + gap_size * gaps_enabled,
-                                            .y = monitor->w.y + master_y,
+                          (struct wlr_box){ .x = monitor->usable_area.x + gap_size * gaps_enabled,
+                                            .y = monitor->usable_area.y + master_y,
                                             .width = master_width - 2 * gap_size * gaps_enabled,
                                             .height = height },
                           0);
-            master_y += client->geom.height + gap_size * gaps_enabled;
+            master_y += client->geometry.height + gap_size * gaps_enabled;
         } else {
             const unsigned int remaining = tiled_count - index;
-            const int height = MAX(
-                1, ((int)monitor->w.height - stack_y - (int)(gap_size * gaps_enabled * remaining)) /
-                       (int)remaining);
+            const int height = MAX(1, ((int)monitor->usable_area.height - stack_y -
+                                       (int)(gap_size * gaps_enabled * remaining)) /
+                                          (int)remaining);
             client_resize(client,
-                          (struct wlr_box){ .x = monitor->w.x + master_width,
-                                            .y = monitor->w.y + stack_y,
-                                            .width = monitor->w.width - master_width -
+                          (struct wlr_box){ .x = monitor->usable_area.x + master_width,
+                                            .y = monitor->usable_area.y + stack_y,
+                                            .width = monitor->usable_area.width - master_width -
                                                      gap_size * gaps_enabled,
                                             .height = height },
                           0);
-            stack_y += client->geom.height + gap_size * gaps_enabled;
+            stack_y += client->geometry.height + gap_size * gaps_enabled;
         }
         index++;
     }
 }
 
-void layout_toggle_gaps(const Arg*)
+void layout_toggle_gaps(const ActionArg*)
 {
-    selected_monitor->gaps = !selected_monitor->gaps;
+    selected_monitor->gaps_enabled = !selected_monitor->gaps_enabled;
     layout_arrange(selected_monitor);
 }
 
@@ -381,84 +389,90 @@ void layout_toggle_gaps(const Arg*)
  * selected before it if we are already tabbed - layout_set(nullptr) flips lt[]
  * back to the other slot, which still holds it.
  *
- * Passing nullptr rather than &(Arg){0}: Arg is a union, so that initialiser
+ * Passing nullptr rather than &(ActionArg){0}: ActionArg is a union, so that initialiser
  * only covers its first member (int i) and leaves the rest of ->v as whatever
  * was on the stack, which layout_set() then stores as the layout pointer. */
-void layout_toggle_tabbed(const Arg* arg)
+void layout_toggle_tabbed(const ActionArg* argument)
 {
-    if (!selected_monitor || !arg || !arg->v)
+    if (!selected_monitor || !argument || !argument->pointer)
         return;
-    layout_set(selected_monitor->lt[selected_monitor->sellt]->arrange == layout_tabbed ? nullptr
-                                                                                       : arg);
+    layout_set(selected_monitor->layouts[selected_monitor->selected_layout_index]->arrange ==
+                       layout_tabbed
+                   ? nullptr
+                   : argument);
 }
 
-void layout_toggle_tag(const Arg* arg)
+void layout_toggle_tag(const ActionArg* argument)
 {
-    Client* sel = client_top(selected_monitor);
+    WindowClient* selected_client = client_top(selected_monitor);
     uint32_t newtags;
-    if (!sel || !(newtags = sel->tags ^ (arg->ui & TAGMASK)))
+    if (!selected_client ||
+        !(newtags = selected_client->tags ^ (argument->unsigned_integer & TAGMASK)))
         return;
 
-    sel->tags = newtags;
+    selected_client->tags = newtags;
     client_focus(client_top(selected_monitor), 1);
     layout_arrange(selected_monitor);
     bar_draw_all();
 }
 
-void layout_toggle_view(const Arg* arg)
+void layout_toggle_view(const ActionArg* argument)
 {
     uint32_t newtagset;
-    if (!(newtagset = selected_monitor ? selected_monitor->tagset[selected_monitor->seltags] ^
-                                             (arg->ui & TAGMASK)
-                                       : 0))
+    if (!(newtagset = selected_monitor
+                          ? selected_monitor->tagsets[selected_monitor->selected_tagset_index] ^
+                                (argument->unsigned_integer & TAGMASK)
+                          : 0))
         return;
 
-    selected_monitor->tagset[selected_monitor->seltags] = newtagset;
+    selected_monitor->tagsets[selected_monitor->selected_tagset_index] = newtagset;
     client_focus(client_top(selected_monitor), 1);
     layout_arrange(selected_monitor);
     bar_draw_all();
 }
 
-void layout_view(const Arg* arg)
+void layout_view(const ActionArg* argument)
 {
 
-    if (!selected_monitor ||
-        (arg->ui & TAGMASK) == selected_monitor->tagset[selected_monitor->seltags])
+    if (!selected_monitor || (argument->unsigned_integer & TAGMASK) ==
+                                 selected_monitor->tagsets[selected_monitor->selected_tagset_index])
         return;
 
-    unsigned int i = layout_tag_index(selected_monitor->tagset[selected_monitor->seltags]);
-    selected_monitor->taglt[i][0] = selected_monitor->lt[0];
-    selected_monitor->taglt[i][1] = selected_monitor->lt[1];
-    selected_monitor->tagsellt[i] = selected_monitor->sellt;
+    unsigned int i =
+        layout_tag_index(selected_monitor->tagsets[selected_monitor->selected_tagset_index]);
+    selected_monitor->tag_layouts[i][0] = selected_monitor->layouts[0];
+    selected_monitor->tag_layouts[i][1] = selected_monitor->layouts[1];
+    selected_monitor->tag_layout_indices[i] = selected_monitor->selected_layout_index;
 
-    selected_monitor->seltags ^= 1; /* toggle sel tagset */
-    if (arg->ui & TAGMASK)
-        selected_monitor->tagset[selected_monitor->seltags] = arg->ui & TAGMASK;
+    selected_monitor->selected_tagset_index ^= 1; /* toggle sel tagsets */
+    if (argument->unsigned_integer & TAGMASK)
+        selected_monitor->tagsets[selected_monitor->selected_tagset_index] =
+            argument->unsigned_integer & TAGMASK;
 
-    i = layout_tag_index(selected_monitor->tagset[selected_monitor->seltags]);
-    selected_monitor->lt[0] = selected_monitor->taglt[i][0];
-    selected_monitor->lt[1] = selected_monitor->taglt[i][1];
-    selected_monitor->sellt = selected_monitor->tagsellt[i];
+    i = layout_tag_index(selected_monitor->tagsets[selected_monitor->selected_tagset_index]);
+    selected_monitor->layouts[0] = selected_monitor->tag_layouts[i][0];
+    selected_monitor->layouts[1] = selected_monitor->tag_layouts[i][1];
+    selected_monitor->selected_layout_index = selected_monitor->tag_layout_indices[i];
 
     client_focus(client_top(selected_monitor), 1);
     layout_arrange(selected_monitor);
     bar_draw_all();
 }
 
-void layout_zoom(const Arg*)
+void layout_zoom(const ActionArg*)
 {
-    Client *client, *sel = client_top(selected_monitor);
+    WindowClient *client, *selected_client = client_top(selected_monitor);
 
-    if (!sel || !selected_monitor || sel->isfloating)
+    if (!selected_client || !selected_monitor || selected_client->is_floating)
         return;
 
     /* Search for the first tiled window that is not sel, marking sel as
      * NULL if we pass it along the way */
     wl_list_for_each(client, &clients, link) {
-        if (VISIBLEON(client, selected_monitor) && !client->isfloating) {
-            if (client != sel)
+        if (VISIBLEON(client, selected_monitor) && !client->is_floating) {
+            if (client != selected_client)
                 break;
-            sel = nullptr;
+            selected_client = nullptr;
         }
     }
 
@@ -468,11 +482,11 @@ void layout_zoom(const Arg*)
 
     /* If we passed sel, move client to the front; otherwise, move sel to the
      * front */
-    if (!sel)
-        sel = client;
-    wl_list_remove(&sel->link);
-    wl_list_insert(&clients, &sel->link);
+    if (!selected_client)
+        selected_client = client;
+    wl_list_remove(&selected_client->link);
+    wl_list_insert(&clients, &selected_client->link);
 
-    client_focus(sel, 1);
+    client_focus(selected_client, 1);
     layout_arrange(selected_monitor);
 }

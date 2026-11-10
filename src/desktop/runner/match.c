@@ -23,10 +23,13 @@
 #include "window/client.h"
 
 /* variables */
-static const char** runner_prefixes[NumModes] = {
-    [ModeRun] = &runner_run_prefix,       [ModeTerm] = &runner_terminal_prefix,
-    [ModeCalc] = &runner_calc_prefix,     [ModeSearch] = &runner_search_prefix,
-    [ModeWindow] = &runner_window_prefix, [ModeTag] = &runner_tag_prefix,
+static const char** runner_prefixes[RUNNER_MODE_COUNT] = {
+    [RUNNER_MODE_COMMAND] = &runner_run_prefix,
+    [RUNNER_MODE_TERMINAL] = &runner_terminal_prefix,
+    [RUNNER_MODE_CALCULATOR] = &runner_calc_prefix,
+    [RUNNER_MODE_SEARCH] = &runner_search_prefix,
+    [RUNNER_MODE_WINDOW] = &runner_window_prefix,
+    [RUNNER_MODE_TAG] = &runner_tag_prefix,
 };
 static int runner_source_count;
 static int runner_room;
@@ -43,9 +46,9 @@ static int runner_entry_hidden;
 static int runner_mode_on(int mode)
 {
     switch (mode) {
-        case ModeTerm:
+        case RUNNER_MODE_TERMINAL:
             return runner_terminal && *runner_terminal;
-        case ModeSearch:
+        case RUNNER_MODE_SEARCH:
             return runner_search_url && *runner_search_url;
         default:
             return 1;
@@ -58,9 +61,9 @@ static int runner_mode_on(int mode)
 int runner_mode(const char* text, int* offset)
 {
     size_t best_length = 0;
-    int mode = ModeApp;
+    int mode = RUNNER_MODE_APPLICATION;
 
-    for (int candidate = 0; candidate < NumModes; candidate++) {
+    for (int candidate = 0; candidate < RUNNER_MODE_COUNT; candidate++) {
         const char* prefix = runner_prefixes[candidate] ? *runner_prefixes[candidate] : nullptr;
         if (!prefix)
             continue;
@@ -72,11 +75,11 @@ int runner_mode(const char* text, int* offset)
         best_length = prefix_length;
     }
     /* a path is matched by the name after its last slash */
-    if (mode == ModeApp && runner_files &&
+    if (mode == RUNNER_MODE_APPLICATION && runner_files &&
         (*text == '/' || (*text == '~' && (!text[1] || text[1] == '/')))) {
         const char* last_slash = strrchr(text, '/');
         *offset = last_slash ? (int)(last_slash - text) + 1 : 0;
-        return ModeFile;
+        return RUNNER_MODE_FILE;
     }
     while (best_length && (text[best_length] == ' ' || text[best_length] == '\t'))
         best_length++;
@@ -143,14 +146,14 @@ static void runner_windows(void)
         free(runner_window_labels[--runner_window_count]);
     size_t window_count = wl_list_length(&focus_stack);
     if (!(runner_window_clients =
-              realloc(runner_window_clients, MAX(window_count, 1) * sizeof(Client*))) ||
+              realloc(runner_window_clients, MAX(window_count, 1) * sizeof(WindowClient*))) ||
         !(runner_window_labels =
               realloc(runner_window_labels, MAX(window_count, 1) * sizeof(char*))))
         util_die("realloc:");
     int window_index = 0;
-    Client* client;
-    wl_list_for_each(client, &focus_stack, flink) {
-        if (client_is_unmanaged(client) || !client->mon)
+    WindowClient* client;
+    wl_list_for_each(client, &focus_stack, focus_link) {
+        if (client_is_unmanaged(client) || !client->monitor)
             continue;
         const char* id = client_get_app_id(client);
         const char* title = privacy_share_title(client);
@@ -233,26 +236,26 @@ static void runner_set_source(int mode)
 {
     runner_alt_names = nullptr;
     switch (mode) {
-        case ModeApp:
+        case RUNNER_MODE_APPLICATION:
             runner_source = (const char**)runner_app_names;
-            runner_alt_names = (const char**)runner_app_generic_names;
+            runner_alt_names = (const char**)runner_app_untranslated_names;
             runner_source_count = runner_app_count;
             break;
-        case ModeRun:
-        case ModeTerm:
+        case RUNNER_MODE_COMMAND:
+        case RUNNER_MODE_TERMINAL:
             runner_source = (const char**)runner_commands;
             runner_source_count = runner_command_count;
             break;
-        case ModeWindow:
+        case RUNNER_MODE_WINDOW:
             runner_windows();
             runner_source = (const char**)runner_window_labels;
             runner_source_count = runner_window_count;
             break;
-        case ModeTag:
+        case RUNNER_MODE_TAG:
             runner_source = (const char**)tags;
             runner_source_count = (int)tag_count;
             break;
-        case ModeFile:
+        case RUNNER_MODE_FILE:
             runner_read_entries(runner_query());
             runner_source = (const char**)runner_entries;
             runner_source_count = runner_entry_count;
@@ -283,7 +286,8 @@ void runner_filter(void)
     runner_selection = 0;
     runner_set_source(mode);
     /* with nothing typed yet a short list shows all of it */
-    if (!query_length && (mode == ModeWindow || mode == ModeTag || mode == ModeFile))
+    if (!query_length &&
+        (mode == RUNNER_MODE_WINDOW || mode == RUNNER_MODE_TAG || mode == RUNNER_MODE_FILE))
         for (int i = 0; i < runner_source_count; i++)
             runner_matches[runner_match_count++] = i;
     double calc_value;

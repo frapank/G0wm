@@ -12,34 +12,44 @@
 #include "core/g0wm.h"
 #include "desktop/systray/icon.h"
 
-enum { ModeApp, ModeRun, ModeTerm, ModeCalc, ModeSearch, ModeWindow, ModeTag, ModeFile, NumModes };
+enum RunnerMode {
+    RUNNER_MODE_APPLICATION,
+    RUNNER_MODE_COMMAND,
+    RUNNER_MODE_TERMINAL,
+    RUNNER_MODE_CALCULATOR,
+    RUNNER_MODE_SEARCH,
+    RUNNER_MODE_WINDOW,
+    RUNNER_MODE_TAG,
+    RUNNER_MODE_FILE,
+    RUNNER_MODE_COUNT
+};
 
 typedef struct {
-    char* id;
+    char* desktop_id;
     char* name;
-    char* gname; /* the untranslated Name when it differs */
-    char* exec;
-    char* icon;
-    int term;
-    int hide;
-    int order;
-    Icon* img;
-    int imgread;
-} RunnerApp;
+    char* untranslated_name; /* the untranslated Name when it differs */
+    char* exec_command;
+    char* icon_name;
+    int run_in_terminal;
+    int is_hidden;
+    int source_order;
+    RasterIcon* icon_image;
+    int icon_load_attempted;
+} RunnerApplication;
 
 extern char** runner_commands;
 extern int runner_command_count;
 extern const char** runner_source;
 extern int* runner_matches;
 extern int runner_match_count;
-extern Client** runner_window_clients;
+extern WindowClient** runner_window_clients;
 extern int runner_selection;
 extern int* runner_use;
 extern int runner_history_read;
 extern int runner_history_pos;
-extern RunnerApp* runner_apps;
+extern RunnerApplication* runner_apps;
 extern char** runner_app_names;
-extern char** runner_app_generic_names;
+extern char** runner_app_untranslated_names;
 extern int runner_app_count;
 extern int* runner_app_use;
 

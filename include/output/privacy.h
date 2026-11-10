@@ -19,8 +19,8 @@ void privacy_damage(void);
 void privacy_finish(void);
 void privacy_reload(void);
 void privacy_placeholder(char* buf, size_t size, const char* template, const char* app);
-const char* privacy_share_title(Client* client);
-void privacy_shield_client(Client* client);
-void privacy_toggle(const Arg*);
+const char* privacy_share_title(WindowClient* client);
+void privacy_shield_client(WindowClient* client);
+void privacy_toggle(const ActionArg*);
 
 #endif

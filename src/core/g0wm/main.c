@@ -54,13 +54,13 @@ static void run_autostart(void)
     }
 }
 
-void change_virtual_console(const Arg* arg)
+void change_virtual_console(const ActionArg* argument)
 {
-    wlr_session_change_vt(session, arg->ui);
+    wlr_session_change_vt(session, argument->unsigned_integer);
 }
 
 /* stop the Wayland event loop, which makes run() return */
-void quit(const Arg*)
+void quit(const ActionArg*)
 {
     wl_display_terminate(display);
 }
@@ -127,14 +127,14 @@ static void run(void)
 }
 
 /* run arg->v (a NULL terminated argv) detached from the compositor */
-void spawn(const Arg* arg)
+void spawn(const ActionArg* argument)
 {
     if (fork() == 0) {
         close(STDIN_FILENO);
         open("/dev/null", O_RDWR);
         dup2(STDERR_FILENO, STDOUT_FILENO);
         setsid();
-        char** argv = (char**)arg->v;
+        char** argv = (char**)argument->pointer;
         execvp(argv[0], argv);
 
         /* only reached if execvp fails */
