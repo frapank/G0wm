@@ -267,6 +267,16 @@ static void settings_write_windows(void)
     settings_write_close();
 }
 
+static void settings_write_private(void)
+{
+    settings_write_open("private");
+    settings_put_note("text", "screen capture placeholder, only {app} is expanded");
+    settings_write_string("text", private_text);
+    settings_write_hex("color", private_background);
+    settings_write_hex("textcolor", private_foreground);
+    settings_write_close();
+}
+
 static void settings_write_bar(void)
 {
     settings_write_open("bar");
@@ -469,6 +479,9 @@ static void settings_write_rules(void)
         settings_write_bool("isfloating", rules[i].isfloating);
         if (rules[i].isprivate >= 0)
             settings_write_bool("private", rules[i].isprivate);
+        settings_write_string("privatetext", rules[i].private_text);
+        settings_write_hex("privatecolor", rules[i].private_background);
+        settings_write_hex("privatetextcolor", rules[i].private_foreground);
         settings_write_number("opacity_focus", rules[i].opacity_focus);
         settings_write_number("opacity_unfocus", rules[i].opacity_unfocus);
         settings_write_int("monitor", rules[i].monitor);
@@ -593,6 +606,7 @@ static void settings_write_all(void)
     settings_put_note("", "a setting left out keeps its default, one with no value is off");
     settings_write_look();
     settings_write_windows();
+    settings_write_private();
     settings_write_bar();
     settings_write_opacity();
     settings_write_input();

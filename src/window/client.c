@@ -95,6 +95,12 @@ static void client_apply_rules(Client* client)
             client->isfloating = rule->isfloating;
             if (rule->isprivate >= 0)
                 client->isprivate = rule->isprivate;
+            if (rule->private_text)
+                client->private_text = rule->private_text;
+            if (rule->private_background)
+                client->private_background = rule->private_background;
+            if (rule->private_foreground)
+                client->private_foreground = rule->private_foreground;
             if (rule->opacity_focus > 0)
                 client->opacity_focus = rule->opacity_focus;
             if (rule->opacity_unfocus > 0)

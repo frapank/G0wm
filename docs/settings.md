@@ -377,6 +377,35 @@ If you don't write any `layout` line, you get the two above.
 
 ---
 
+## private
+
+The placeholder shown over private windows in screen captures. Your screen
+keeps the window contents. It follows `cornerpx` and `cornerstyle`; fullscreen
+windows have square corners. Colors are always drawn opaque.
+
+| Setting | Default | Description |
+| --- | --- | --- |
+| `text` | `""` | Centered placeholder text. `{app}` expands to the app id. `{title}` stays literal, so a private title is never exposed. |
+| `color` | `#000000ff` | Placeholder background. |
+| `textcolor` | `#ffffffff` | Placeholder text color. |
+
+Rules can override these settings for individual windows. For example:
+
+```scfg
+private {
+    text "Private window"
+    color "#202020ff"
+}
+rule {
+    id firefox
+    private true
+    privatetext "Private browser"
+    privatecolor "#303030ff"
+}
+```
+
+---
+
 ## rule
 
 Rules let you decide how an app's windows open, for example on which tag or
@@ -397,6 +426,9 @@ rule {
 | `tags` | `0` | Tags to open on, as a bitmask (see [Tags as bitmasks](#tags-as-bitmasks)). `0` for the current tags. |
 | `isfloating` | `false` | Open floating. |
 | `private` | | Open private with `true` or public with `false`. Left out, it follows `alwaysprivate`. |
+| `privatetext` | | Override `private.text`. An empty string hides the text; left out, it follows the global setting. |
+| `privatecolor` | `#00000000` | Override `private.color`. Zero follows the global setting. |
+| `privatetextcolor` | `#00000000` | Override `private.textcolor`. Zero follows the global setting. |
 | `opacity_focus` | `0` | Opacity when focused. `0` keeps the global one. |
 | `opacity_unfocus` | `0` | Opacity when unfocused. `0` keeps the global one. |
 | `monitor` | `-1` | Monitor to open on, counted from `0`. `-1` for the focused one. |

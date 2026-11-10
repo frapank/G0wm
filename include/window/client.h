@@ -93,6 +93,8 @@ struct Client {
     unsigned int bw;
     uint32_t tags;
     int isfloating, isurgent, isfullscreen, isprivate;
+    const char* private_text;
+    uint32_t private_background, private_foreground;
     float opacity;                   /* the one in effect, focused or not */
     float opacity_focus;             /* used while the client holds focus */
     float opacity_unfocus;           /* used while it does not */
