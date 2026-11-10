@@ -102,6 +102,9 @@ typedef struct {
     uint32_t tags;
     int isfloating;
     int isprivate;
+    const char* private_text;
+    uint32_t private_background;
+    uint32_t private_foreground;
     float opacity_focus;   /* 0 keeps the default from config.h */
     float opacity_unfocus; /* 0 keeps the default from config.h */
     int monitor;
@@ -133,6 +136,12 @@ extern float private_round;
 extern int always_private;
 extern uint32_t public_color;
 extern const char* private_title;
+extern const char* private_text;
+extern const char* private_image;
+extern unsigned int private_image_size;
+extern float private_text_scale;
+extern uint32_t private_background;
+extern uint32_t private_foreground;
 extern Layout* layouts;
 extern size_t layout_count;
 extern Rule* rules;

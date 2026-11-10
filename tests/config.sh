@@ -36,3 +36,32 @@ case $log in
     *) fail "invalid setting was not reported: $log" ;;
 esac
 grep -q 'borderpx 7' "$output" || fail 'valid setting was not applied'
+
+sed '/^private {/,/^}/d' "$config" >"$workdir/base"
+mv "$workdir/base" "$config"
+cat >>"$config" <<'CONFIG'
+private {
+    text "Hidden {app} {title}"
+    image "/tmp/private image.png"
+    imagesize 80
+    textscale 1.5
+    color "#12345600"
+    textcolor "#abcdef00"
+}
+rule {
+    id PrivacyTest
+    private true
+    privatetext ""
+    privatecolor "#654321ff"
+    privatetextcolor "#fedcbaff"
+}
+CONFIG
+log=$("$binary" -c 2>&1 >"$output") || fail "reading privacy settings failed: $log"
+case $log in
+    *"private."*|*"rule.private"*) fail "privacy settings failed validation: $log" ;;
+esac
+for value in '/tmp/private image.png' 'imagesize 80' 'textscale 1.5' 'Hidden {app} {title}' '#12345600' '#abcdef00' 'privatetext ""' '#654321ff' '#fedcbaff'; do
+    grep -Fq "$value" "$output" || fail "privacy setting was not preserved: $value"
+done
+"$binary" -c 2>/dev/null >"$workdir/repeated"
+cmp -s "$output" "$workdir/repeated" || fail 'privacy settings changed on repeated reads'

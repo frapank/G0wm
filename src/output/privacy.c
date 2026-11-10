@@ -34,9 +34,11 @@
 #include "core/util.h"
 #include "desktop/bar/bar.h"
 #include "desktop/bar/title.h"
+#include "desktop/systray/icon.h"
 #include "output/monitor.h"
 #include "output/privacy.h"
 #include "render/buffer.h"
+#include "render/corner.h"
 #include "window/client.h"
 #include "window/toplevel.h"
 
@@ -70,6 +72,7 @@ static void privacy_copy_frame(struct wlr_ext_image_capture_source_v1* source,
                                struct wlr_ext_image_capture_source_v1_frame_event* event);
 static pixman_format_code_t privacy_pixman_format(uint32_t format);
 static int privacy_private_boxes(Monitor* monitor, Patch* out);
+static Buffer* privacy_draw_placeholder(Client* client, int width, int height, int radius);
 static int privacy_to_buffer(Monitor* monitor, struct wlr_box box, struct wlr_box* out);
 static void privacy_shield(struct wlr_ext_image_capture_source_v1* source,
                            struct wlr_output* output,
@@ -81,6 +84,10 @@ static void privacy_wipe(struct wlr_buffer* buf);
 static struct wl_array privacy_copies;
 static Patch privacy_masks[MAXBOXES];
 static int privacy_mask_count;
+static Icon* privacy_icon;
+static int privacy_icon_size = -1;
+static Fnt* privacy_font;
+static float privacy_font_scale;
 
 /* function implementations */
 
@@ -113,8 +120,8 @@ static int privacy_black_out(struct wlr_buffer* buffer, Patch* patches, int patc
                                                                       clipped_box.width,
                                                                       clipped_box.height });
             else
-                pixman_image_composite32(PIXMAN_OP_SRC, patches[i].buf->image, nullptr, image, 0, 0,
-                                         0, 0, patches[i].box.x, patches[i].box.y,
+                pixman_image_composite32(PIXMAN_OP_OVER, patches[i].buf->image, nullptr, image, 0,
+                                         0, 0, 0, patches[i].box.x, patches[i].box.y,
                                          MIN(patches[i].box.width, patches[i].buf->base.width),
                                          MIN(patches[i].box.height, patches[i].buf->base.height));
         }
@@ -145,8 +152,7 @@ static int privacy_black_out(struct wlr_buffer* buffer, Patch* patches, int patc
                       .src_box = { (clipped_box.x - patches[i].box.x) * scale_x,
                                    (clipped_box.y - patches[i].box.y) * scale_y,
                                    clipped_box.width * scale_x, clipped_box.height * scale_y },
-                      .dst_box = clipped_box,
-                      .blend_mode = WLR_RENDER_BLEND_MODE_NONE });
+                      .dst_box = clipped_box });
     }
     /* in use until the pass is submitted */
     const int submitted = wlr_render_pass_submit(pass);
@@ -170,7 +176,10 @@ static void privacy_copy_frame(struct wlr_ext_image_capture_source_v1* source,
             shield->orig->copy_frame(source, frame, event);
             return;
         }
-        patches[0] = (Patch){ { 0, 0, frame->buffer->width, frame->buffer->height }, nullptr };
+        /* a toplevel source contains the surface, without its rounded border */
+        patches[0] = (Patch){ { 0, 0, frame->buffer->width, frame->buffer->height },
+                              privacy_draw_placeholder(shield->client, frame->buffer->width,
+                                                       frame->buffer->height, 0) };
         if (!privacy_black_out(frame->buffer, patches, 1))
             goto fail;
         wlr_ext_image_copy_capture_frame_v1_ready(frame, WL_OUTPUT_TRANSFORM_NORMAL, &now);
@@ -253,7 +262,7 @@ int privacy_before_commit(Monitor* monitor, struct wlr_output_state* state)
 {
     monitor->shown = state->buffer;
     privacy_copies.size = 0;
-    if (!screencopy_manager ||
+    if (!screencopy_manager || wl_list_empty(&screencopy_manager->frames) ||
         !(privacy_mask_count = privacy_private_boxes(monitor, privacy_masks)))
         return 1;
     struct wlr_screencopy_frame_v1* frame;
@@ -294,6 +303,20 @@ void privacy_damage(void)
 void privacy_finish(void)
 {
     wl_array_release(&privacy_copies);
+    privacy_reload();
+}
+
+/* also forget a failed load, so replacing the file and reloading retries it */
+void privacy_reload(void)
+{
+    if (privacy_icon)
+        icon_destroy(privacy_icon);
+    privacy_icon = nullptr;
+    privacy_icon_size = -1;
+    if (privacy_font)
+        drwl_font_destroy(privacy_font);
+    privacy_font = nullptr;
+    privacy_font_scale = 0;
 }
 
 /* template with {app} replaced, an unset one gives an empty text */
@@ -313,6 +336,72 @@ void privacy_placeholder(char* buf, size_t size, const char* template, const cha
     buf[length] = '\0';
 }
 
+/* opaque inside the curve: blending must never reveal the window underneath */
+static Buffer* privacy_draw_placeholder(Client* client, int width, int height, int radius)
+{
+    Monitor* monitor = client->mon;
+    if (!monitor || width <= 0 || height <= 0)
+        return nullptr;
+    Buffer** pool = client->privatepool;
+    if (*pool && ((*pool)->base.width != width || (*pool)->base.height != height))
+        buffer_pool_drop(pool, 1);
+    Buffer* buffer = buffer_get(pool, 1, width, height);
+    if (!buffer)
+        return nullptr;
+
+    char text[256];
+    privacy_placeholder(text, sizeof text,
+                        client->private_text ? client->private_text : private_text,
+                        client_get_app_id(client));
+    uint32_t scheme[] = {
+        (client->private_foreground ? client->private_foreground : private_foreground) | 0xff,
+        (client->private_background ? client->private_background : private_background) | 0xff,
+        0,
+    };
+    const float font_scale = monitor->wlr_output->scale * private_text_scale;
+    if (font_scale != privacy_font_scale) {
+        if (privacy_font)
+            drwl_font_destroy(privacy_font);
+        char attributes[32];
+        snprintf(attributes, sizeof attributes, "dpi=%.2f", 96. * font_scale);
+        privacy_font = drwl_font_create(nullptr, font_count, fonts, attributes);
+        privacy_font_scale = font_scale;
+    }
+    Drwl drw = *monitor->drw;
+    if (privacy_font)
+        drwl_setfont(&drw, privacy_font);
+    drwl_setimage(&drw, buffer->image);
+    drwl_setscheme(&drw, scheme);
+    drwl_rect(&drw, 0, 0, width, height, 1, 1);
+    const int text_height = *text ? MIN(height, (int)drw.font->height) : 0;
+    int gap = text_height ? text_height / 2 : 0;
+    const int image_size = (int)fmin((double)private_image_size * monitor->wlr_output->scale,
+                                     MIN(width, MAX(0, height - text_height - gap)));
+    if (image_size != privacy_icon_size) {
+        if (privacy_icon)
+            icon_destroy(privacy_icon);
+        privacy_icon = nullptr;
+        privacy_icon_size = image_size;
+        if (private_image && *private_image && image_size > 0)
+            privacy_icon = icon_create_from_name(private_image, nullptr, image_size);
+    }
+    const int image_width = privacy_icon ? pixman_image_get_width(privacy_icon->img) : 0;
+    const int image_height = privacy_icon ? pixman_image_get_height(privacy_icon->img) : 0;
+    if (!image_height)
+        gap = 0;
+    const int top = (height - image_height - gap - text_height) / 2;
+    if (privacy_icon)
+        pixman_image_composite32(PIXMAN_OP_OVER, privacy_icon->img, nullptr, buffer->image, 0, 0, 0,
+                                 0, (width - image_width) / 2, top, image_width, image_height);
+    if (text_height) {
+        const int padding = MAX(0, (width - (int)drwl_font_getwidth(&drw, text)) / 2);
+        drwl_text(&drw, 0, top + image_height + gap, width, text_height, padding, text, 0);
+    }
+    corner_cut(buffer->data, width, height, MIN(radius, MIN(width, height) / 2));
+    wlr_buffer_unlock(&buffer->base);
+    return buffer;
+}
+
 /* areas of m hidden from screen sharing, in buffer pixels */
 static int privacy_private_boxes(Monitor* monitor, Patch* out)
 {
@@ -327,11 +416,7 @@ static int privacy_private_boxes(Monitor* monitor, Patch* out)
         int box_count = 0;
         const int title_height = bar_title_height(client);
         if (client->scene_surface->node.enabled) {
-            boxes[box_count] =
-                (struct wlr_box){ client->geom.x + (int)client->bw,
-                                  client->geom.y + (int)client->bw + title_height,
-                                  client->geom.width - 2 * (int)client->bw,
-                                  client->geom.height - 2 * (int)client->bw - title_height };
+            boxes[box_count] = client->geom;
             shared_buffers[box_count++] = nullptr;
         }
         int x;
@@ -352,6 +437,11 @@ static int privacy_private_boxes(Monitor* monitor, Patch* out)
                 goto full;
             switch (privacy_to_buffer(monitor, boxes[i], &out[patch_count].box)) {
                 case 1:
+                    if (!i && client->scene_surface->node.enabled)
+                        shared_buffers[i] = privacy_draw_placeholder(
+                            client, out[patch_count].box.width, out[patch_count].box.height,
+                            (int)roundf((float)corner_client_radius(client) *
+                                        monitor->wlr_output->scale));
                     out[patch_count++].buf = shared_buffers[i];
                     break;
                 case -1:

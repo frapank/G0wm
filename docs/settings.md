@@ -9,6 +9,7 @@
 **[<kbd> <br> File format <br> </kbd>](#file-format)** 
 **[<kbd> <br> look <br> </kbd>](#look)** 
 **[<kbd> <br> windows <br> </kbd>](#windows)** 
+**[<kbd> <br> private <br> </kbd>](#private)** 
 **[<kbd> <br> bar <br> </kbd>](#bar)** 
 **[<kbd> <br> opacity <br> </kbd>](#opacity)** 
 **[<kbd> <br> input <br> </kbd>](#input)** 
@@ -153,6 +154,42 @@ Borders, gaps and title bars.
 | `publiccolor` | <img src="../.github/assets/color-5bc8f5.svg" width="12" height="12"> `#5bc8f5ff` | Color of the dot on a public window, with `alwaysprivate` on. |
 | `movethreshold` | `4` | Pixels to drag a title bar before the window starts moving. |
 | `movesnap` | `12` | Distance in pixels at which a moved floating window sticks to an edge. `0` turns it off. |
+
+---
+
+## private
+
+The placeholder shown over private windows in screen captures. Your screen
+keeps the window contents. It follows `cornerpx` and `cornerstyle`; fullscreen
+windows have square corners. Colors are always drawn opaque. Rotated or zoomed
+outputs keep the black fallback; single-window captures have no compositor border.
+
+| Setting | Default | Description |
+| --- | --- | --- |
+| `text` | `""` | Centered placeholder text. `{app}` expands to the app id. `{title}` stays literal, so a private title is never exposed. |
+| `image` | off | Path to an optional image above the text. Transparent pixels show the placeholder background. Image and text are centered together; with empty text, only the image is centered. |
+| `textscale` | `1.2` | Text scale relative to `look.fonts`, from `0.1` to `10`. `1` keeps its size; `1.2` is 20% larger. Image and text remain centered together. |
+| `imagesize` | `64` | Maximum image width and height in logical pixels. Keeps its aspect ratio and shrinks to fit the window. `0` hides the image. |
+| `color` | `#000000ff` | Placeholder background. |
+| `textcolor` | `#ffffffff` | Placeholder text color. |
+
+Rules can override text and colors for individual windows. For example:
+
+```scfg
+private {
+    text "Private window"
+    image "/home/user/Pictures/lock.png"
+    imagesize 64
+    textscale 1.2
+    color "#202020ff"
+}
+rule {
+    id firefox
+    private true
+    privatetext "Private browser"
+    privatecolor "#303030ff"
+}
+```
 
 ---
 
@@ -397,6 +434,9 @@ rule {
 | `tags` | `0` | Tags to open on, as a bitmask (see [Tags as bitmasks](#tags-as-bitmasks)). `0` for the current tags. |
 | `isfloating` | `false` | Open floating. |
 | `private` | | Open private with `true` or public with `false`. Left out, it follows `alwaysprivate`. |
+| `privatetext` | | Override `private.text`. An empty string hides the text; left out, it follows the global setting. |
+| `privatecolor` | `#00000000` | Override `private.color`. Zero follows the global setting. |
+| `privatetextcolor` | `#00000000` | Override `private.textcolor`. Zero follows the global setting. |
 | `opacity_focus` | `0` | Opacity when focused. `0` keeps the global one. |
 | `opacity_unfocus` | `0` | Opacity when unfocused. `0` keeps the global one. |
 | `monitor` | `-1` | Monitor to open on, counted from `0`. `-1` for the focused one. |
@@ -576,7 +616,7 @@ doubling each time) and you add them up to pick more than one.
 | `zoom` | | Swap the focused window with the master. |
 | `togglefloating` | | Float or tile the window. |
 | `togglefullscreen` | | Toggle fullscreen. |
-| `toggleprivate` | | Make the window private, or public again. Screen and window sharing show a private window as a black box. |
+| `toggleprivate` | | Make the window private, or public again. Screen and window sharing show a private window with its placeholder. |
 | `moveresize` | `move` or `resize` | Move or resize the window with the pointer, for `button` bindings on `client`. |
 | `resizewidth` | pixels | Change the width of a floating window. On a tiled one, it changes the master area. |
 | `resizeheight` | pixels | Change the height of a floating window. |

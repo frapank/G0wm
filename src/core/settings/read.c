@@ -372,6 +372,19 @@ static void settings_apply_windows(const struct scfg_block* block)
     move_snap = (int)settings_get_number(block, "movesnap", move_snap);
 }
 
+static void settings_apply_private(const struct scfg_block* block)
+{
+    if (!block)
+        return;
+    private_text = settings_get_string(block, "text", private_text);
+    private_image = settings_get_string(block, "image", private_image);
+    private_image_size = settings_get_uint(block, "imagesize", private_image_size);
+    private_text_scale =
+        (float)fmax(0.1, fmin(10, settings_get_number(block, "textscale", private_text_scale)));
+    private_background = settings_get_hex(block, "color", private_background);
+    private_foreground = settings_get_hex(block, "textcolor", private_foreground);
+}
+
 static void settings_apply_bar(const struct scfg_block* block)
 {
     if (!block)
@@ -575,6 +588,9 @@ static void settings_apply_rules(const struct scfg_block* block)
         rule->tags = settings_get_uint(rule_block, "tags", 0);
         rule->isfloating = settings_get_bool(rule_block, "isfloating", 0);
         rule->isprivate = settings_get_bool(rule_block, "private", -1);
+        rule->private_text = settings_get_string(rule_block, "privatetext", nullptr);
+        rule->private_background = settings_get_hex(rule_block, "privatecolor", 0);
+        rule->private_foreground = settings_get_hex(rule_block, "privatetextcolor", 0);
         rule->opacity_focus = (float)settings_get_number(rule_block, "opacity_focus", 0);
         rule->opacity_unfocus = (float)settings_get_number(rule_block, "opacity_unfocus", 0);
         rule->monitor = (int)settings_get_number(rule_block, "monitor", -1);
@@ -768,6 +784,7 @@ static void settings_apply_sections(const struct scfg_block* block)
 {
     settings_apply_look(settings_find_section(block, "look"));
     settings_apply_windows(settings_find_section(block, "windows"));
+    settings_apply_private(settings_find_section(block, "private"));
     settings_apply_bar(settings_find_section(block, "bar"));
     settings_apply_opacity(settings_find_section(block, "opacity"));
     settings_apply_input(settings_find_section(block, "input"));

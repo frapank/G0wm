@@ -92,6 +92,12 @@ float private_round = -1.0f;
 int always_private = 0;
 uint32_t public_color = 0x5bc8f5ff;
 const char* private_title = "{app}";
+const char* private_text = "";
+const char* private_image = nullptr;
+unsigned int private_image_size = 64;
+float private_text_scale = 1.2f;
+uint32_t private_background = 0x000000ff;
+uint32_t private_foreground = 0xffffffff;
 
 static Layout default_layouts[] = {
     { "[ ]", layout_tile },
