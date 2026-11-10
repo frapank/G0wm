@@ -85,6 +85,7 @@ struct Client {
 #endif
     Buffer* titlepool[2];
     Buffer* sharepool[1];
+    Buffer* privatepool[1];
     int titlex, titlew; /* title bar placement, relative to the border box */
     int titlebufw;      /* pixel width titlepool was allocated at */
     Buffer* cornerpool[4][2];

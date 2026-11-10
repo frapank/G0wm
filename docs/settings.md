@@ -9,6 +9,7 @@
 **[<kbd> <br> File format <br> </kbd>](#file-format)** 
 **[<kbd> <br> look <br> </kbd>](#look)** 
 **[<kbd> <br> windows <br> </kbd>](#windows)** 
+**[<kbd> <br> private <br> </kbd>](#private)** 
 **[<kbd> <br> bar <br> </kbd>](#bar)** 
 **[<kbd> <br> opacity <br> </kbd>](#opacity)** 
 **[<kbd> <br> input <br> </kbd>](#input)** 
@@ -153,6 +154,36 @@ Borders, gaps and title bars.
 | `publiccolor` | <img src="../.github/assets/color-5bc8f5.svg" width="12" height="12"> `#5bc8f5ff` | Color of the dot on a public window, with `alwaysprivate` on. |
 | `movethreshold` | `4` | Pixels to drag a title bar before the window starts moving. |
 | `movesnap` | `12` | Distance in pixels at which a moved floating window sticks to an edge. `0` turns it off. |
+
+---
+
+## private
+
+The placeholder shown over private windows in screen captures. Your screen
+keeps the window contents. It follows `cornerpx` and `cornerstyle`; fullscreen
+windows have square corners. Colors are always drawn opaque. Rotated or zoomed
+outputs keep the black fallback; single-window captures have no compositor border.
+
+| Setting | Default | Description |
+| --- | --- | --- |
+| `text` | `""` | Centered placeholder text. `{app}` expands to the app id. `{title}` stays literal, so a private title is never exposed. |
+| `color` | `#000000ff` | Placeholder background. |
+| `textcolor` | `#ffffffff` | Placeholder text color. |
+
+Rules can override these settings for individual windows. For example:
+
+```scfg
+private {
+    text "Private window"
+    color "#202020ff"
+}
+rule {
+    id firefox
+    private true
+    privatetext "Private browser"
+    privatecolor "#303030ff"
+}
+```
 
 ---
 
@@ -377,35 +408,6 @@ If you don't write any `layout` line, you get the two above.
 
 ---
 
-## private
-
-The placeholder shown over private windows in screen captures. Your screen
-keeps the window contents. It follows `cornerpx` and `cornerstyle`; fullscreen
-windows have square corners. Colors are always drawn opaque.
-
-| Setting | Default | Description |
-| --- | --- | --- |
-| `text` | `""` | Centered placeholder text. `{app}` expands to the app id. `{title}` stays literal, so a private title is never exposed. |
-| `color` | `#000000ff` | Placeholder background. |
-| `textcolor` | `#ffffffff` | Placeholder text color. |
-
-Rules can override these settings for individual windows. For example:
-
-```scfg
-private {
-    text "Private window"
-    color "#202020ff"
-}
-rule {
-    id firefox
-    private true
-    privatetext "Private browser"
-    privatecolor "#303030ff"
-}
-```
-
----
-
 ## rule
 
 Rules let you decide how an app's windows open, for example on which tag or
@@ -608,7 +610,7 @@ doubling each time) and you add them up to pick more than one.
 | `zoom` | | Swap the focused window with the master. |
 | `togglefloating` | | Float or tile the window. |
 | `togglefullscreen` | | Toggle fullscreen. |
-| `toggleprivate` | | Make the window private, or public again. Screen and window sharing show a private window as a black box. |
+| `toggleprivate` | | Make the window private, or public again. Screen and window sharing show a private window with its placeholder. |
 | `moveresize` | `move` or `resize` | Move or resize the window with the pointer, for `button` bindings on `client`. |
 | `resizewidth` | pixels | Change the width of a floating window. On a tiled one, it changes the master area. |
 | `resizeheight` | pixels | Change the height of a floating window. |

@@ -83,6 +83,8 @@ static void client_apply_bounds(Client* client, struct wlr_box* bbox)
 static void client_apply_rules(Client* client)
 {
     /* rule matching */
+    client->private_text = nullptr;
+    client->private_background = client->private_foreground = 0;
     uint32_t newtags = 0;
     Monitor* monitor = selected_monitor;
 
@@ -746,6 +748,7 @@ void client_handle_unmap(struct wl_listener* listener, void*)
 #endif
     buffer_pool_drop(client->titlepool, LENGTH(client->titlepool));
     buffer_pool_drop(client->sharepool, LENGTH(client->sharepool));
+    buffer_pool_drop(client->privatepool, LENGTH(client->privatepool));
     client->titlebufw = 0;
     for (int i = 0; i < 4; i++) {
         client->corner[i] = nullptr;
