@@ -275,6 +275,8 @@ static void settings_write_private(void)
     settings_put_note("image", "optional image above the text, transparency is kept");
     settings_write_string("image", private_image);
     settings_write_int("imagesize", private_image_size);
+    settings_put_note("textscale", "relative to look.fonts, 1.2 is 20% larger");
+    settings_write_number("textscale", private_text_scale);
     settings_write_hex("color", private_background);
     settings_write_hex("textcolor", private_foreground);
     settings_write_close();

@@ -168,6 +168,7 @@ outputs keep the black fallback; single-window captures have no compositor borde
 | --- | --- | --- |
 | `text` | `""` | Centered placeholder text. `{app}` expands to the app id. `{title}` stays literal, so a private title is never exposed. |
 | `image` | off | Path to an optional image above the text. Transparent pixels show the placeholder background. Image and text are centered together; with empty text, only the image is centered. |
+| `textscale` | `1.2` | Text scale relative to `look.fonts`, from `0.1` to `10`. `1` keeps its size; `1.2` is 20% larger. Image and text remain centered together. |
 | `imagesize` | `64` | Maximum image width and height in logical pixels. Keeps its aspect ratio and shrinks to fit the window. `0` hides the image. |
 | `color` | `#000000ff` | Placeholder background. |
 | `textcolor` | `#ffffffff` | Placeholder text color. |
@@ -179,6 +180,7 @@ private {
     text "Private window"
     image "/home/user/Pictures/lock.png"
     imagesize 64
+    textscale 1.2
     color "#202020ff"
 }
 rule {

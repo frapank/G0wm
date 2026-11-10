@@ -86,6 +86,8 @@ static Patch privacy_masks[MAXBOXES];
 static int privacy_mask_count;
 static Icon* privacy_icon;
 static int privacy_icon_size = -1;
+static Fnt* privacy_font;
+static float privacy_font_scale;
 
 /* function implementations */
 
@@ -311,6 +313,10 @@ void privacy_reload(void)
         icon_destroy(privacy_icon);
     privacy_icon = nullptr;
     privacy_icon_size = -1;
+    if (privacy_font)
+        drwl_font_destroy(privacy_font);
+    privacy_font = nullptr;
+    privacy_font_scale = 0;
 }
 
 /* template with {app} replaced, an unset one gives an empty text */
@@ -352,7 +358,18 @@ static Buffer* privacy_draw_placeholder(Client* client, int width, int height, i
         (client->private_background ? client->private_background : private_background) | 0xff,
         0,
     };
+    const float font_scale = monitor->wlr_output->scale * private_text_scale;
+    if (font_scale != privacy_font_scale) {
+        if (privacy_font)
+            drwl_font_destroy(privacy_font);
+        char attributes[32];
+        snprintf(attributes, sizeof attributes, "dpi=%.2f", 96. * font_scale);
+        privacy_font = drwl_font_create(nullptr, font_count, fonts, attributes);
+        privacy_font_scale = font_scale;
+    }
     Drwl drw = *monitor->drw;
+    if (privacy_font)
+        drwl_setfont(&drw, privacy_font);
     drwl_setimage(&drw, buffer->image);
     drwl_setscheme(&drw, scheme);
     drwl_rect(&drw, 0, 0, width, height, 1, 1);
@@ -361,7 +378,9 @@ static Buffer* privacy_draw_placeholder(Client* client, int width, int height, i
     const int image_size = (int)fmin((double)private_image_size * monitor->wlr_output->scale,
                                      MIN(width, MAX(0, height - text_height - gap)));
     if (image_size != privacy_icon_size) {
-        privacy_reload();
+        if (privacy_icon)
+            icon_destroy(privacy_icon);
+        privacy_icon = nullptr;
         privacy_icon_size = image_size;
         if (private_image && *private_image && image_size > 0)
             privacy_icon = icon_create_from_name(private_image, nullptr, image_size);
