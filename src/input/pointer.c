@@ -83,8 +83,9 @@ static double input_press_x, input_press_y;
  * arg picks up the tag or tray item the part stands for. */
 static unsigned int input_bar_click(Monitor* pointer_monitor, ActionArg* argument)
 {
-    /* under bar_single_monitor the bar shows the focused monitor's tags */
-    Monitor* target = bar_single_monitor && selected_monitor ? selected_monitor : pointer_monitor;
+    /* under bar.single_monitor the bar shows the focused monitor's tags */
+    Monitor* target =
+        settings->bar.single_monitor && selected_monitor ? selected_monitor : pointer_monitor;
 
     if (exclusive_focus || !pointer_monitor)
         return CLICK_AREA_ROOT;
@@ -98,17 +99,17 @@ static unsigned int input_bar_click(Monitor* pointer_monitor, ActionArg* argumen
 
     unsigned int tag_index = 0;
     unsigned int tags_width = 0;
-    const double click_x = (cursor->x - pointer_monitor->geometry.x - bar_padding) *
+    const double click_x = (cursor->x - pointer_monitor->geometry.x - settings->bar.padding) *
                            pointer_monitor->wlr_output->scale;
     const int tray_width = tray_get_width(pointer_monitor->tray);
     const int status_width = bar_status_shown(pointer_monitor) ? STATUSW(pointer_monitor) : 0;
     do
         tags_width += bar_tag_width(pointer_monitor, target, tag_index);
-    while (click_x >= tags_width && ++tag_index < tag_count);
-    if (tag_index < tag_count) {
+    while (click_x >= tags_width && ++tag_index < settings->look.tag_count);
+    if (tag_index < settings->look.tag_count) {
         argument->unsigned_integer = 1 << tag_index;
         return CLICK_AREA_TAGS;
-    } else if (bar_layout_symbol &&
+    } else if (settings->bar.layout_symbol &&
                click_x < tags_width + TEXTW(pointer_monitor, target->layout_symbol))
         return CLICK_AREA_LAYOUT_SYMBOL;
     else if (tray_width && click_x > pointer_monitor->bar_metrics.width_px - tray_width) {
@@ -198,11 +199,11 @@ void input_handle_button(struct wl_listener*, void* data)
 
             if (!client &&
                 (click = input_bar_click(pointer_monitor, &argument)) != CLICK_AREA_ROOT) {
-                /* The bar belongs to pm, but under bar_single_monitor it stands
+                /* The bar belongs to pm, but under bar.single_monitor it stands
                  * in for the focused monitor: leaving selected_monitor alone is
                  * what lands the click on the monitor whose tags are on show.
                  */
-                if (!bar_single_monitor || !selected_monitor)
+                if (!settings->bar.single_monitor || !selected_monitor)
                     selected_monitor = pointer_monitor;
             } else {
                 selected_monitor = pointer_monitor;
@@ -226,8 +227,9 @@ void input_handle_button(struct wl_listener*, void* data)
             if (click == CLICK_AREA_CLIENT && !CLEANMASK(mods) && event->button == BTN_LEFT &&
                 bar_title_click(client, cursor->x, cursor->y))
                 return;
-            for (const MouseBinding* binding = mouse_bindings;
-                 binding < mouse_bindings + mouse_binding_count; binding++) {
+            for (const MouseBinding *binding = settings->bindings.mouse_bindings,
+                                    *end = binding + settings->bindings.mouse_binding_count;
+                 binding < end; binding++) {
                 if (CLEANMASK(mods) == CLEANMASK(binding->modifiers) &&
                     event->button == binding->button && click == binding->click_area &&
                     binding->callback) {
@@ -376,12 +378,12 @@ void input_cursor_moved(void)
         wlr_output_schedule_frame(monitor->wlr_output);
 
     /* Update selected_monitor (even while dragging a window) */
-    if (sloppy_focus) {
+    if (settings->input.sloppy_focus) {
         Monitor* previous_monitor = selected_monitor;
         selected_monitor = monitor_at(cursor->x, cursor->y);
         /* the single bar follows the focus, and crossing into empty
          * space changes it without going through client_focus() */
-        if ((bar_single_monitor || bar_status == BAR_STATUS_FOCUSED) &&
+        if ((settings->bar.single_monitor || settings->bar.status == BAR_STATUS_FOCUSED) &&
             selected_monitor != previous_monitor)
             bar_draw_all();
     }
@@ -471,7 +473,7 @@ void input_motion(uint32_t time,
     if (input_cursor_mode == CURSOR_MODE_PRESSED && input_grab_client && time && !lock_active &&
         (cursor->x - input_press_x) * (cursor->x - input_press_x) +
                 (cursor->y - input_press_y) * (cursor->y - input_press_y) >=
-            move_threshold * move_threshold)
+            settings->input.move_threshold * settings->input.move_threshold)
         input_grab(input_grab_client, CURSOR_MODE_MOVE);
 
     /* If we are currently grabbing the mouse, handle and return */
@@ -589,8 +591,8 @@ static void input_pointer_focus(WindowClient* client,
 
     /* Only a real client surface takes focus: hovering a title bar (a tab) or
      * a border has no surface, and must not select anything until clicked. */
-    if (surface && surface != seat->pointer_state.focused_surface && sloppy_focus && time &&
-        client && !client_is_unmanaged(client))
+    if (surface && surface != seat->pointer_state.focused_surface && settings->input.sloppy_focus &&
+        time && client && !client_is_unmanaged(client))
         client_focus(client, 0);
 
     /* If surface is NULL, clear pointer focus */
@@ -683,10 +685,10 @@ static void input_magnet(struct wlr_box* box)
 {
     Monitor* monitor = monitor_at(cursor->x, cursor->y);
 
-    if (!monitor || move_snap <= 0)
+    if (!monitor || settings->input.move_snap <= 0)
         return;
-    int snap_x = move_snap + 1;
-    int snap_y = move_snap + 1;
+    int snap_x = settings->input.move_snap + 1;
+    int snap_y = settings->input.move_snap + 1;
     int snapped_x = box->x;
     int snapped_y = box->y;
     input_magnet_edge(box->x, box->width, monitor->usable_area.x, &snap_x, &snapped_x);
@@ -767,8 +769,9 @@ static int input_wheel_binding(const struct wlr_pointer_axis_event* event)
         client ? CLICK_AREA_CLIENT : input_bar_click(monitor_at(cursor->x, cursor->y), &argument);
     int title = client && bar_on_title_bar(client, cursor->x, cursor->y);
     unsigned int mode;
-    for (const MouseBinding* binding = mouse_bindings;
-         binding < mouse_bindings + mouse_binding_count; binding++) {
+    for (const MouseBinding *binding = settings->bindings.mouse_bindings,
+                            *end = binding + settings->bindings.mouse_binding_count;
+         binding < end; binding++) {
         if (CLEANMASK(mods) != CLEANMASK(binding->modifiers) || binding->button != wheel ||
             (binding->click_area != click &&
              !(binding->click_area == CLICK_AREA_WINDOW_TITLE && title)) ||

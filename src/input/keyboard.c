@@ -64,14 +64,16 @@ KeyboardGroup* input_create_keyboard_group(void)
     struct xkb_keymap* keymap;
     /* Prepare an XKB keymap and assign it to the keyboard group. */
     struct xkb_context* context = xkb_context_new(XKB_CONTEXT_NO_FLAGS);
-    if (!(keymap = xkb_keymap_new_from_names(context, &xkb_rules, XKB_KEYMAP_COMPILE_NO_FLAGS)))
+    if (!(keymap = xkb_keymap_new_from_names(context, &settings->input.xkb_rules,
+                                             XKB_KEYMAP_COMPILE_NO_FLAGS)))
         util_die("failed to compile keymap");
 
     wlr_keyboard_set_keymap(&group->wlr_group->keyboard, keymap);
     xkb_keymap_unref(keymap);
     xkb_context_unref(context);
 
-    wlr_keyboard_set_repeat_info(&group->wlr_group->keyboard, repeat_rate, repeat_delay);
+    wlr_keyboard_set_repeat_info(&group->wlr_group->keyboard, settings->input.repeat_rate,
+                                 settings->input.repeat_delay);
 
     /* Set up listeners for keyboard events */
     LISTEN(&group->wlr_group->keyboard.events.key, &group->key, input_handle_key);
@@ -132,8 +134,9 @@ static int input_key_binding(uint32_t mods, xkb_keysym_t sym)
     struct wlr_keyboard_shortcuts_inhibitor_v1* inhibitor = input_focused_inhibitor();
     int inhibited = inhibitor && inhibitor->active;
 
-    for (const KeyBinding* binding = key_bindings; binding < key_bindings + key_binding_count;
-         binding++) {
+    for (const KeyBinding *binding = settings->bindings.key_bindings,
+                          *end = binding + settings->bindings.key_binding_count;
+         binding < end; binding++) {
         if (CLEANMASK(mods) == CLEANMASK(binding->modifiers) &&
             xkb_keysym_to_lower(sym) == xkb_keysym_to_lower(binding->keysym) && binding->callback &&
             (!inhibited || binding->callback == input_toggle_inhibit)) {
@@ -163,7 +166,7 @@ static void input_handle_key(struct wl_listener* listener, void* data)
     wlr_idle_notifier_v1_notify_activity(idle_notifier, seat);
 
     /* hide cursor when typing starts */
-    if (hide_cursor_when_typing && !input_cursor_hidden &&
+    if (settings->input.hide_cursor_when_typing && !input_cursor_hidden &&
         event->state == WL_KEYBOARD_KEY_STATE_PRESSED)
         input_hide_cursor(nullptr);
 

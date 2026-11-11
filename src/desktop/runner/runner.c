@@ -157,7 +157,8 @@ static void runner_cut(int from, int to)
  * the terminal. */
 static void runner_exec(const char* cmd, int term)
 {
-    char* shell = (char*)(runner_shell && *runner_shell ? runner_shell : "/bin/sh");
+    char* shell = (char*)(settings->runner.shell && *settings->runner.shell ? settings->runner.shell
+                                                                            : "/bin/sh");
     char* script = nullptr;
     char* path = nullptr;
     char* saved = nullptr;
@@ -168,10 +169,10 @@ static void runner_exec(const char* cmd, int term)
     argv[2] = (char*)cmd;
     argv[3] = nullptr;
     if (term) {
-        const size_t script_size = strlen(runner_terminal) + 32;
+        const size_t script_size = strlen(settings->runner.terminal) + 32;
         script = util_calloc(1, script_size);
         snprintf(script, script_size, *cmd ? "exec %s \"$0\" -c \"$1\"" : "exec %s",
-                 runner_terminal);
+                 settings->runner.terminal);
         argv[2] = script;
         argv[3] = shell;
         argv[4] = (char*)cmd;
@@ -179,7 +180,7 @@ static void runner_exec(const char* cmd, int term)
     }
     const ActionArg spawn_arg = { .pointer = argv };
     /* only the child gets the wider PATH */
-    if (runner_paths && *runner_paths) {
+    if (settings->runner.paths && *settings->runner.paths) {
         path = runner_search_path();
         if (getenv("PATH") && !(saved = strdup(getenv("PATH"))))
             util_die("strdup:");
@@ -204,10 +205,10 @@ static void runner_open(const char* what)
     spawn(&(ActionArg){ .pointer = argv });
 }
 
-/* runner_search_url with q in place of its %s, or after it without one */
+/* runner.search_url with q in place of its %s, or after it without one */
 static void runner_search(const char* query)
 {
-    const char* url = runner_search_url;
+    const char* url = settings->runner.search_url;
     const char* placeholder = strstr(url, "%s");
     char* result = util_calloc(1, strlen(url) + 3 * strlen(query) + 1);
     char* write_at = result;
@@ -301,6 +302,14 @@ static void runner_enter(void)
     runner_record(line);
 }
 
+void runner_reload(void)
+{
+    runner_source = nullptr;
+    runner_match_count = 0;
+    if (runner_active)
+        runner_filter();
+}
+
 void runner_toggle(const ActionArg*)
 {
     if (!selected_monitor)
@@ -315,7 +324,7 @@ void runner_toggle(const ActionArg*)
             runner_free_apps();
             runner_build_apps();
         }
-        if (!runner_history_read && runner_history_size)
+        if (!runner_history_read && settings->runner.history_size)
             runner_read_history();
         /* runner_history_size may have shrunk on a reload */
         runner_trim_history();

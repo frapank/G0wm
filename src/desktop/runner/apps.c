@@ -27,7 +27,7 @@ char* runner_search_path(void)
 {
     const char* path = getenv("PATH");
     const char* home = getenv("HOME");
-    const char* entry = runner_paths;
+    const char* entry = settings->runner.paths;
     char* out = nullptr;
     size_t length = 0;
 

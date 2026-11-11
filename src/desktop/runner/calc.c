@@ -173,7 +173,7 @@ static int runner_is_expr(const char* text, int need_operator)
 /* a double has no more than 17 significant digits */
 void runner_calc_format(char* out, size_t size, double value)
 {
-    snprintf(out, size, "%.*g", (int)MIN(MAX(runner_calc_precision, 1), 17), value);
+    snprintf(out, size, "%.*g", (int)MIN(MAX(settings->runner.calc_precision, 1), 17), value);
 }
 
 int runner_calc(double* out)

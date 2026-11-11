@@ -46,21 +46,23 @@ void bar_draw_icon(Monitor* monitor, RasterIcon* icon, int start_x, int size)
 void bar_draw_icon_holder(Monitor* monitor, int start_x, int size)
 {
     int top_y = ((int)monitor->bar_metrics.height_px - size) / 2;
-    int frame_width = MIN((int)round(runner_icon_border * monitor->wlr_output->scale), size / 2);
-    double radius = size / 2.0 * runner_icon_round;
+    int frame_width =
+        MIN((int)round(settings->runner.icon_border * monitor->wlr_output->scale), size / 2);
+    double radius = size / 2.0 * settings->runner.icon_round;
 
     if (frame_width > 0)
         bar_draw_pill(monitor, start_x, top_y, size, size, radius, 0,
-                      colors[COLOR_SCHEME_RUNNER_ICON][ColBorder]);
+                      settings->look.colors[COLOR_SCHEME_RUNNER_ICON][ColBorder]);
     bar_draw_pill(monitor, start_x + frame_width, top_y + frame_width, size - 2 * frame_width,
                   size - 2 * frame_width, MAX(radius - frame_width, 0), 0,
-                  colors[COLOR_SCHEME_RUNNER_ICON][ColBg]);
+                  settings->look.colors[COLOR_SCHEME_RUNNER_ICON][ColBg]);
 }
 
 int bar_runner_icon_size(Monitor* monitor)
 {
-    int size = runner_icon_size ? (int)round(runner_icon_size * monitor->wlr_output->scale)
-                                : monitor->draw_context->font->height;
+    int size = settings->runner.icon_size
+                   ? (int)round(settings->runner.icon_size * monitor->wlr_output->scale)
+                   : monitor->draw_context->font->height;
 
     return MIN(size, (int)monitor->bar_metrics.height_px);
 }
@@ -71,18 +73,20 @@ void bar_draw_candidates(Monitor* monitor, int start_x, int end_x)
 {
     int count = runner_candidate_count();
     int selected = runner_selected();
-    int per_page = (int)MIN(runner_max_candidates, (unsigned int)count);
+    int per_page = (int)MIN(settings->runner.max_candidates, (unsigned int)count);
     int font_height = monitor->draw_context->font->height;
     int bar_px = (int)monitor->bar_metrics.height_px;
     double scale = monitor->wlr_output->scale;
 
-    int pill_height =
-        runner_pill_height ? (int)round(runner_pill_height * scale) : font_height * 4 / 3;
+    int pill_height = settings->runner.pill_height
+                          ? (int)round(settings->runner.pill_height * scale)
+                          : font_height * 4 / 3;
     pill_height = MIN(MAX(pill_height, font_height), bar_px);
-    int padding = runner_pill_padding ? (int)round(runner_pill_padding * scale)
-                                      : monitor->horizontal_padding / 2;
-    double radius =
-        pill_height / 2.0 * (runner_pill_round < 0 ? bar_tag_dot_round : runner_pill_round);
+    int padding = settings->runner.pill_padding ? (int)round(settings->runner.pill_padding * scale)
+                                                : monitor->horizontal_padding / 2;
+    double radius = pill_height / 2.0 *
+                    (settings->runner.pill_round < 0 ? settings->bar.tag_dot_round
+                                                     : settings->runner.pill_round);
 
     /* drwl_text() paints behind the text too, keep that off the round ends */
     int margin = (pill_height - font_height) / 2;
@@ -95,8 +99,9 @@ void bar_draw_candidates(Monitor* monitor, int start_x, int end_x)
     int page_start = selected / per_page * per_page;
     for (int i = page_start; i < count && i < page_start + per_page; i++) {
         const char* text = runner_candidate(i);
-        RasterIcon* icon = runner_icons == RUNNER_ICONS_ALL ? runner_icon(i) : nullptr;
-        bool show_holder = runner_icons == RUNNER_ICONS_ALL && !icon && runner_has_icons();
+        RasterIcon* icon = settings->runner.icons == RUNNER_ICONS_ALL ? runner_icon(i) : nullptr;
+        bool show_holder =
+            settings->runner.icons == RUNNER_ICONS_ALL && !icon && runner_has_icons();
         int icon_width = icon || show_holder ? icon_size + padding / 2 : 0;
         int text_width = MIN((int)drwl_font_getwidth(monitor->draw_context, text),
                              end_x - start_x - 2 * padding - icon_width);
@@ -105,14 +110,14 @@ void bar_draw_candidates(Monitor* monitor, int start_x, int end_x)
         if (i == selected)
             bar_draw_pill(monitor, start_x, (bar_px - pill_height) / 2,
                           icon_width + text_width + 2 * padding, pill_height, radius, 0,
-                          colors[COLOR_SCHEME_RUNNER_SELECTED][ColBg]);
+                          settings->look.colors[COLOR_SCHEME_RUNNER_SELECTED][ColBg]);
         if (icon)
             bar_draw_icon(monitor, icon, start_x + padding, icon_size);
         else if (show_holder)
             bar_draw_icon_holder(monitor, start_x + padding, icon_size);
-        drwl_setscheme(
-            monitor->draw_context,
-            colors[i == selected ? COLOR_SCHEME_RUNNER_SELECTED : COLOR_SCHEME_RUNNER_SUGGESTION]);
+        drwl_setscheme(monitor->draw_context,
+                       settings->look.colors[i == selected ? COLOR_SCHEME_RUNNER_SELECTED
+                                                           : COLOR_SCHEME_RUNNER_SUGGESTION]);
         drwl_text(monitor->draw_context, start_x + padding + icon_width, (bar_px - font_height) / 2,
                   text_width, font_height, 0, text, 0);
         start_x += icon_width + text_width + 2 * padding;

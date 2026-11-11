@@ -99,7 +99,7 @@ struct WindowClient {
     unsigned int border_width;
     uint32_t tags;
     int is_floating, is_urgent, is_fullscreen, is_private;
-    const char* private_text;
+    char* private_text;
     uint32_t private_background, private_foreground;
     float opacity;                          /* the one in effect, focused or not */
     float focused_opacity;                  /* used while the client holds focus */

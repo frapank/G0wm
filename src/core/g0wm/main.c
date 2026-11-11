@@ -33,7 +33,7 @@ Monitor* selected_monitor;
 /* autostart is a list of NULL terminated argv arrays, ended by an empty one */
 static void run_autostart(void)
 {
-    for (const char* const* argv = autostart; *argv; argv++) {
+    for (const char* const* argv = settings->bindings.autostart; *argv; argv++) {
         autostart_len++;
         while (*++argv) {}
     }
@@ -41,7 +41,7 @@ static void run_autostart(void)
     autostart_pids = calloc(autostart_len, sizeof(pid_t));
 
     size_t index = 0;
-    for (const char* const* argv = autostart; *argv; index++, argv++) {
+    for (const char* const* argv = settings->bindings.autostart; *argv; index++, argv++) {
         autostart_pids[index] = fork();
         if (autostart_pids[index] == 0) {
             setsid();
@@ -172,12 +172,13 @@ int main(int argc, char* argv[])
     settings_load();
 
     if (debug)
-        log_level = WLR_DEBUG; /* Should be set after settings_load() */
+        settings->misc.log_level = WLR_DEBUG; /* Should be set after settings_load() */
 
     setup();
     run();
 
     cleanup();
+    settings_finish();
     return EXIT_SUCCESS;
 
 usage:

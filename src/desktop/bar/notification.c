@@ -82,7 +82,7 @@ static struct wl_event_source* bar_notification_timer;
 static long bar_notification_pick_selected = -1;
 static dbus_uint32_t bar_notification_pick_id;
 static int bar_notification_box_x; /* last drawn x, for hit testing */
-/* -1 follows private_notifications, until toggleprivatenotify */
+/* -1 follows notifications.private, until toggleprivatenotify */
 static int bar_notification_hide = -1;
 
 /* function implementations */
@@ -134,7 +134,7 @@ static void bar_draw_notification_text(Monitor* monitor,
     }
     if (box->action_sign_width)
         drwl_text(monitor->draw_context, box->action_sign_x, 0, box->action_sign_width,
-                  monitor->bar_metrics.height_px, 0, notification_action_sign, 0);
+                  monitor->bar_metrics.height_px, 0, settings->notifications.action_sign, 0);
     if (box->count_width)
         drwl_text(monitor->draw_context, box->count_x, 0, box->count_width,
                   monitor->bar_metrics.height_px, 0, box->count_text, 0);
@@ -155,8 +155,9 @@ void bar_draw_notification(Monitor* monitor,
                        : notification->urgency == NOTIFICATION_URGENCY_CRITICAL
                            ? COLOR_SCHEME_NOTIFICATION_CRITICAL
                            : COLOR_SCHEME_NOTIFICATION;
-    uint32_t* scheme = shared ? bar_opaque_scheme(color_scheme) : colors[color_scheme];
-    uint32_t line_color = colors[color_scheme][ColBorder];
+    uint32_t* scheme =
+        shared ? bar_opaque_scheme(color_scheme) : settings->look.colors[color_scheme];
+    uint32_t line_color = settings->look.colors[color_scheme][ColBorder];
 
     if (!shared) {
         bar_notification_sync(notification, hist);
@@ -178,8 +179,8 @@ void bar_draw_notification(Monitor* monitor,
         /* the fill's background is premixed: a tint drawn over would dye the
          * text too */
         uint32_t filled_colors[3];
-        memcpy(filled_colors, colors[color_scheme], sizeof(filled_colors));
-        uint32_t background = colors[color_scheme][ColBg];
+        memcpy(filled_colors, settings->look.colors[color_scheme], sizeof(filled_colors));
+        uint32_t background = settings->look.colors[color_scheme][ColBg];
         uint32_t alpha = (line_color & 0xff) / 3;
         filled_colors[ColBg] = background & 0xff;
         for (int shift = 8; shift < 32; shift += 8) {
@@ -235,8 +236,8 @@ void bar_draw_notification(Monitor* monitor,
             line_color = (line_color & ~0xffu) | (line_color & 0xffu) / 2;
         int line_top = (monitor->bar_metrics.height_px - font_height) / 2;
         bar_draw_pill(monitor, box.line_x, line_top + font_height - line_length, box.line_width,
-                      line_length, notification_line_radius * monitor->wlr_output->scale, 0,
-                      line_color);
+                      line_length, settings->notifications.line_radius * monitor->wlr_output->scale,
+                      0, line_color);
     }
 
     if (box.icon_width) {
@@ -258,7 +259,7 @@ void bar_draw_notification(Monitor* monitor,
     if (shared)
         return;
     if (bar_notification_view_id) {
-        uint64_t end_ms = bar_notification_view_ms + notification_timeout * 1000;
+        uint64_t end_ms = bar_notification_view_ms + settings->notifications.timeout * 1000;
         uint64_t left_ms = end_ms > now_ms ? end_ms - now_ms : 1;
         wake_ms = !wake_ms || left_ms < wake_ms ? left_ms : wake_ms;
     }
@@ -309,9 +310,10 @@ static void bar_notification_box(Monitor* monitor,
 
     *box = (NotificationLayout){};
     int cursor_x = x + pad;
-    if (notification_line_width) {
+    if (settings->notifications.line_width) {
         box->line_x = cursor_x;
-        box->line_width = (int)roundf((float)notification_line_width * monitor->wlr_output->scale);
+        box->line_width =
+            (int)roundf((float)settings->notifications.line_width * monitor->wlr_output->scale);
         box->line_width = box->line_width > 0 ? box->line_width : 1;
         cursor_x += box->line_width + pad;
     }
@@ -348,9 +350,10 @@ static void bar_notification_box(Monitor* monitor,
     }
     int picking = hist < 0 && bar_notification_pick_selected >= 0 &&
                   notification->id == bar_notification_pick_id;
-    if (hist < 0 && notification->action_count && !picking && *notification_action_sign) {
+    if (hist < 0 && notification->action_count && !picking &&
+        *settings->notifications.action_sign) {
         box->action_sign_width =
-            (int)drwl_font_getwidth(monitor->draw_context, notification_action_sign);
+            (int)drwl_font_getwidth(monitor->draw_context, settings->notifications.action_sign);
         box->action_sign_x = end - box->action_sign_width;
         end = box->action_sign_x - pad;
     }
@@ -402,7 +405,7 @@ const Notification* bar_notification_shown(long* hist)
     }
     if (bar_notification_view_id &&
         (bar_notification_pick_selected >= 0 ||
-         notify_now() >= bar_notification_view_ms + notification_timeout * 1000))
+         notify_now() >= bar_notification_view_ms + settings->notifications.timeout * 1000))
         bar_notification_view_id = 0;
 
     for (size_t i = 0; bar_notification_view_id && (entry = notify_history(i)); i++)
@@ -417,18 +420,20 @@ const Notification* bar_notification_shown(long* hist)
 
 bool bar_notification_private(void)
 {
-    return bar_notification_hide < 0 ? private_notifications : bar_notification_hide;
+    return bar_notification_hide < 0 ? settings->notifications.private : bar_notification_hide;
 }
 
-/* the dot marks the notifications when they differ from private_notifications */
+/* the dot marks the notifications when they differ from notifications.private */
 bool bar_notification_private_dot(uint32_t* rgba)
 {
-    if (!bar_notification_private() == !private_notifications)
+    if (!bar_notification_private() == !settings->notifications.private)
         return false;
     if (bar_notification_private())
-        *rgba = notification_private_color ? notification_private_color : private_color;
+        *rgba = settings->notifications.private_color ? settings->notifications.private_color
+                                                      : settings->windows.private_color;
     else
-        *rgba = notification_public_color ? notification_public_color : public_color;
+        *rgba = settings->notifications.public_color ? settings->notifications.public_color
+                                                     : settings->windows.public_color;
     return true;
 }
 
@@ -449,7 +454,7 @@ static const char* bar_notification_share_text(const Notification* notification)
 {
     static char placeholder[NOTIFY_TEXTMAX];
 
-    privacy_placeholder(placeholder, sizeof(placeholder), notification_private_text,
+    privacy_placeholder(placeholder, sizeof(placeholder), settings->notifications.private_text,
                         notification->app_name);
     return placeholder;
 }
@@ -503,7 +508,7 @@ static void bar_notification_pick_run(size_t i)
 void bar_notification_actions(const ActionArg*)
 {
 
-    if (!notifications_enabled)
+    if (!settings->notifications.enabled)
         return;
     const Notification* current_notification;
     if (bar_notification_picking()) {
@@ -565,7 +570,7 @@ void bar_notification_scroll(const ActionArg*)
     const Notification* notification;
     long hist;
 
-    if (!notifications_enabled || !monitor || !monitor->bar_metrics.content_width_px ||
+    if (!settings->notifications.enabled || !monitor || !monitor->bar_metrics.content_width_px ||
         !(notification = bar_notification_shown(&hist)))
         return;
     bar_notification_sync(notification, hist);
@@ -603,7 +608,7 @@ void bar_notification_scroll(const ActionArg*)
 void bar_notification_prev(const ActionArg*)
 {
 
-    if (!notifications_enabled)
+    if (!settings->notifications.enabled)
         return;
     long hist;
     bar_notification_shown(&hist);
@@ -618,7 +623,7 @@ void bar_notification_prev(const ActionArg*)
 void bar_notification_next(const ActionArg*)
 {
 
-    if (!notifications_enabled)
+    if (!settings->notifications.enabled)
         return;
     long hist;
     bar_notification_shown(&hist);
@@ -635,7 +640,7 @@ void bar_notification_next(const ActionArg*)
 void bar_notification_dismiss(const ActionArg*)
 {
 
-    if (!notifications_enabled)
+    if (!settings->notifications.enabled)
         return;
     if (bar_notification_picking()) {
         bar_notification_pick_close();
@@ -662,7 +667,7 @@ void bar_notification_dismiss_all(const ActionArg*)
 {
     int browsing = bar_notification_view_id != 0;
 
-    if (!notifications_enabled)
+    if (!settings->notifications.enabled)
         return;
     bar_notification_view_id = 0;
     notify_dismiss_all();
@@ -682,7 +687,7 @@ void bar_notification_open(const ActionArg* argument)
                                : -1;
 
     const Notification* notification;
-    if (!notifications_enabled || !(notification = bar_notification_shown(&hist)))
+    if (!settings->notifications.enabled || !(notification = bar_notification_shown(&hist)))
         return;
     NotificationLayout box;
     if (pointer_x >= 0 && monitor && hist < 0) {
@@ -744,7 +749,7 @@ int bar_notification_wheel(Monitor* pointer_monitor, double delta, int horizonta
     static double vertical_accumulator;
     static double horizontal_accumulator;
 
-    if (!notifications_enabled || !bar_mon || bar_mon != pointer_monitor ||
+    if (!settings->notifications.enabled || !bar_mon || bar_mon != pointer_monitor ||
         !bar_mon->bar_metrics.content_width_px)
         return 0;
 
@@ -811,14 +816,14 @@ int bar_notification_wheel(Monitor* pointer_monitor, double delta, int horizonta
 
 void bar_notification_toggle_private(const ActionArg*)
 {
-    if (!notifications_enabled)
+    if (!settings->notifications.enabled)
         return;
     bar_notification_hide = !bar_notification_private();
     privacy_damage();
     bar_draw_all();
 }
 
-/* back to private_notifications, once it changes */
+/* back to notifications.private, once it changes */
 void bar_notification_reset_private(void)
 {
     bar_notification_hide = -1;

@@ -44,9 +44,10 @@ static struct TrayPopupState {
 /* Radius the popup is cut to, as corner_bar_radius() is for the bar. */
 static int traypopup_corner(void)
 {
-    if (!corner_radius)
+    if (!settings->windows.corner_radius)
         return 0;
-    return MAX(0, MIN((int)corner_radius, MIN(traypopup_state.width, traypopup_state.height) / 2));
+    return MAX(0, MIN((int)settings->windows.corner_radius,
+                      MIN(traypopup_state.width, traypopup_state.height) / 2));
 }
 
 int traypopup_active(void)
@@ -177,15 +178,16 @@ static void traypopup_draw(void)
     /* the whole buffer in the border colour, rows laid over it inset */
     uint32_t border_scheme[3];
     border_scheme[ColFg] = border_scheme[ColBg] = border_scheme[ColBorder] =
-        colors[COLOR_SCHEME_NORMAL][ColBorder];
+        settings->look.colors[COLOR_SCHEME_NORMAL][ColBorder];
     drwl_setscheme(monitor->draw_context, border_scheme);
     drwl_rect(monitor->draw_context, 0, 0, (unsigned int)buffer_width, (unsigned int)buffer_height,
               1, 1);
 
     for (int i = 0; i < traypopup_state.item_count; i++) {
-        drwl_setscheme(monitor->draw_context,
-                       colors[i == traypopup_state.hovered_index ? COLOR_SCHEME_SELECTED
-                                                                 : COLOR_SCHEME_NORMAL]);
+        drwl_setscheme(
+            monitor->draw_context,
+            settings->look.colors[i == traypopup_state.hovered_index ? COLOR_SCHEME_SELECTED
+                                                                     : COLOR_SCHEME_NORMAL]);
         drwl_text(monitor->draw_context, border_inset, border_inset + i * rowh,
                   (unsigned int)(buffer_width - 2 * border_inset),
                   /* the last row takes the rounding slack */

@@ -10,6 +10,18 @@
 #include <stdint.h>
 
 #include "core/g0wm.h"
+#include "core/settings.h"
+
+typedef struct SettingsAllocation SettingsAllocation;
+
+typedef struct LoadedSettings {
+    struct LoadedSettings* next;
+    Settings values;
+    struct scfg_block tree;
+    SettingsAllocation* allocations;
+} LoadedSettings;
+
+void* settings_alloc(LoadedSettings* loaded, size_t count, size_t size);
 
 typedef struct {
     int value;
@@ -57,11 +69,11 @@ extern const struct scfg_block* settings_builtin;
 
 uint32_t settings_pack_rgba(const float color[static 4]);
 void settings_load_builtin(void);
-void settings_apply(const struct scfg_block* block);
+void settings_apply(LoadedSettings* loaded, const struct scfg_block* block);
 void settings_validate(const struct scfg_block* want,
                        const struct scfg_block* got,
                        const char* path,
                        int* problems);
-char* settings_rendered_defaults(void);
+char* settings_render(const Settings* values);
 
 #endif

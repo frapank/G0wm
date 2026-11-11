@@ -270,7 +270,7 @@ void check_idle_inhibitor(struct wlr_surface* exclude)
          * surface->data), so it cannot be visible and must not keep the
          * session awake. */
         if (exclude != surface &&
-            (bypass_surface_visibility ||
+            (settings->misc.bypass_surface_visibility ||
              (surface->mapped &&
               (!tree || wlr_scene_node_coords(&tree->node, &unused_lx, &unused_ly))))) {
             inhibited = 1;
@@ -313,7 +313,7 @@ void cleanup(void)
     bar_finish();
 
     privacy_finish();
-    if (notifications_enabled)
+    if (settings->notifications.enabled)
         notify_stop();
 
     if (bus_connection) {
@@ -326,6 +326,7 @@ void cleanup(void)
     wlr_backend_destroy(backend);
 
     wl_display_destroy(display);
+    event_loop = nullptr;
     /* Destroy after the wayland display (when the monitors are already
        destroyed) to avoid destroying them with an invalid scene output. */
     wlr_scene_node_destroy(&scene->tree.node);
@@ -514,7 +515,7 @@ void setup(void)
     for (size_t i = 0; i < LENGTH(handled_signals); i++)
         sigaction(handled_signals[i], &signal_action, nullptr);
 
-    wlr_log_init(log_level, nullptr);
+    wlr_log_init(settings->misc.log_level, nullptr);
 
     /* The Wayland display is managed by libwayland. It handles accepting
      * clients from the Unix socket, managing Wayland globals, and so on. */
@@ -530,7 +531,7 @@ void setup(void)
 
     /* Initialize the scene graph used to lay out windows */
     scene = wlr_scene_create();
-    root_background = wlr_scene_rect_create(&scene->tree, 0, 0, root_color);
+    root_background = wlr_scene_rect_create(&scene->tree, 0, 0, settings->look.root_color);
     for (int layer = 0; layer < SCENE_LAYER_COUNT; layer++)
         layers[layer] = wlr_scene_tree_create(&scene->tree);
     drag_icon = wlr_scene_tree_create(&scene->tree);
@@ -691,11 +692,12 @@ void setup(void)
      * to a fixed-size built-in cursor that ignores cursor_size entirely. Naming
      * a theme explicitly in config.h avoids that. */
     char cursor_size_env[8];
-    snprintf(cursor_size_env, sizeof(cursor_size_env), "%d", cursor_size);
-    cursor_manager = wlr_xcursor_manager_create(cursor_theme, cursor_size);
+    snprintf(cursor_size_env, sizeof(cursor_size_env), "%d", settings->input.cursor_size);
+    cursor_manager =
+        wlr_xcursor_manager_create(settings->input.cursor_theme, settings->input.cursor_size);
     setenv("XCURSOR_SIZE", cursor_size_env, 1);
-    if (cursor_theme)
-        setenv("XCURSOR_THEME", cursor_theme, 1);
+    if (settings->input.cursor_theme)
+        setenv("XCURSOR_THEME", settings->input.cursor_theme, 1);
 
     /*
      * wlr_cursor *only* displays an image on screen. It does not move around
@@ -776,14 +778,14 @@ void setup(void)
 
     /* Missing the session bus is not fatal: g0wm comes up without a tray
      * and/or bar notifications. */
-    if (bar_enabled && (systray_enabled || notifications_enabled)) {
+    if (settings->bar.enabled && (settings->systray.enabled || settings->notifications.enabled)) {
         if ((bus_connection = dbus_bus_get(DBUS_BUS_SESSION, nullptr)) &&
             (bus_source = bus_start(bus_connection, event_loop))) {
-            if (systray_enabled)
+            if (settings->systray.enabled)
                 watcher_start(&tray_watcher, bus_connection, event_loop);
-            if (notifications_enabled)
-                notify_start(bus_connection, event_loop, notification_timeout, bar_draw_all,
-                             activation_token_new);
+            if (settings->notifications.enabled)
+                notify_start(bus_connection, event_loop, settings->notifications.timeout,
+                             bar_draw_all, activation_token_new);
         } else
             fprintf(stderr, "Couldn't connect to the session bus, "
                             "systray/notifications not available\n");

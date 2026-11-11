@@ -111,9 +111,9 @@ void xwayland_handle_new_surface(struct wl_listener*, void* data)
     client->surface.xwayland = xsurface;
     client->type = SURFACE_TYPE_X11;
     client->border_width = client_is_unmanaged(client) ? 0 : corner_border_width();
-    client->opacity = client->unfocused_opacity = opacity_unfocus;
-    client->focused_opacity = opacity_focus;
-    client->is_private = always_private;
+    client->opacity = client->unfocused_opacity = settings->opacity.unfocus;
+    client->focused_opacity = settings->opacity.focus;
+    client->is_private = settings->windows.always_private;
 
     /* Listen to the various events it can emit */
     LISTEN(&xsurface->events.associate, &client->associate, xwayland_handle_associate);

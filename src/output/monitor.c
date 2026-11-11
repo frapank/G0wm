@@ -106,8 +106,10 @@ void monitor_arrange_layers(Monitor* monitor)
 
     if (monitor->bar_scene_buffer->node.enabled) {
         /* the padding goes with the bar, so tiles keep the same gap */
-        usable_area.height -= monitor->bar_metrics.logical_height + (int)bar_padding;
-        usable_area.y += bar_top ? monitor->bar_metrics.logical_height + (int)bar_padding : 0;
+        usable_area.height -= monitor->bar_metrics.logical_height + (int)settings->bar.padding;
+        usable_area.y += settings->bar.top
+                             ? monitor->bar_metrics.logical_height + (int)settings->bar.padding
+                             : 0;
     }
 
     /* Arrange exclusive surfaces from top->bottom */
@@ -293,9 +295,9 @@ static void monitor_apply_rules(Monitor* monitor, struct wlr_output_state* state
     struct wlr_output* wlr_output = monitor->wlr_output;
     struct wlr_output_mode* mode = nullptr;
 
-    monitor->gaps_enabled = gaps;
-    for (const MonitorRule* rule = monitor_rules; rule < monitor_rules + monitor_rule_count;
-         rule++) {
+    monitor->gaps_enabled = settings->windows.gaps;
+    for (const MonitorRule* rule = settings->rules.monitor_rules;
+         rule < settings->rules.monitor_rules + settings->rules.monitor_rule_count; rule++) {
         if (rule->name && !strstr(wlr_output->name, rule->name))
             continue;
         monitor->geometry.x = rule->x;
@@ -303,7 +305,8 @@ static void monitor_apply_rules(Monitor* monitor, struct wlr_output_state* state
         monitor->master_factor = rule->master_factor;
         monitor->master_count = rule->master_count;
         monitor->layouts[0] = rule->layout;
-        monitor->layouts[1] = &layouts[layout_count > 1 && rule->layout != &layouts[1]];
+        monitor->layouts[1] = &settings->rules.layouts[settings->rules.layout_count > 1 &&
+                                                       rule->layout != &settings->rules.layouts[1]];
         snprintf(monitor->layout_symbol, LENGTH(monitor->layout_symbol), "%s",
                  monitor->layouts[monitor->selected_layout_index]->symbol);
         for (size_t i = 0; i < LENGTH(monitor->tag_layouts); i++) {
@@ -342,6 +345,18 @@ static void monitor_apply_rules(Monitor* monitor, struct wlr_output_state* state
     wlr_output_state_set_mode(state, mode ? mode : wlr_output_preferred_mode(wlr_output));
 }
 
+static const WindowLayout* monitor_reload_layout(const WindowLayout* previous)
+{
+    if (previous) {
+        for (size_t i = 0; i < settings->rules.layout_count; i++) {
+            const WindowLayout* layout = &settings->rules.layouts[i];
+            if (!strcmp(layout->symbol, previous->symbol))
+                return layout;
+        }
+    }
+    return settings->rules.layouts;
+}
+
 /* the monitor_rules again, over monitors that already exist */
 void monitor_reload_rules(void)
 {
@@ -349,6 +364,12 @@ void monitor_reload_rules(void)
     Monitor* monitor;
 
     wl_list_for_each(monitor, &monitors, link) {
+        /* Disabled outputs keep per-tag layouts too. */
+        for (size_t i = 0; i < LENGTH(monitor->layouts); i++)
+            monitor->layouts[i] = monitor_reload_layout(monitor->layouts[i]);
+        for (size_t tag = 0; tag < LENGTH(monitor->tag_layouts); tag++)
+            for (size_t i = 0; i < LENGTH(monitor->tag_layouts[tag]); i++)
+                monitor->tag_layouts[tag][i] = monitor_reload_layout(monitor->tag_layouts[tag][i]);
         if (!monitor->wlr_output->enabled)
             continue;
         wlr_output_state_init(&state);
@@ -432,8 +453,8 @@ void monitor_handle_new_output(struct wl_listener*, void* data)
      *
      */
     /* monitor_update_layout() will resize and set correct position */
-    monitor->fullscreen_background =
-        wlr_scene_rect_create(layers[SCENE_LAYER_FULLSCREEN], 0, 0, fullscreen_color);
+    monitor->fullscreen_background = wlr_scene_rect_create(layers[SCENE_LAYER_FULLSCREEN], 0, 0,
+                                                           settings->look.fullscreen_color);
     wlr_scene_node_set_enabled(&monitor->fullscreen_background->node, 0);
 
     /* Adds this to the output layout in the order it was configured.
@@ -515,8 +536,8 @@ static void monitor_game_mode(Monitor* monitor, struct wlr_output_state* state)
 
     if (client)
         type = wlr_surface_get_content_type_v1(content_type_manager, client_surface(client));
-    int vrr =
-        auto_vrr && (type == WP_CONTENT_TYPE_V1_TYPE_GAME || type == WP_CONTENT_TYPE_V1_TYPE_VIDEO);
+    int vrr = settings->misc.auto_vrr &&
+              (type == WP_CONTENT_TYPE_V1_TYPE_GAME || type == WP_CONTENT_TYPE_V1_TYPE_VIDEO);
 
     /* never undo a wlr-randr choice */
     if (vrr && !monitor->auto_vrr_state && output->adaptive_sync_supported &&
@@ -533,10 +554,11 @@ static void monitor_game_mode(Monitor* monitor, struct wlr_output_state* state)
     }
 
     /* needs direct scanout, which the magnifier holds back */
-    state->tearing_page_flip = allow_tearing && client && monitor->zoom_factor <= 1 &&
-                               wlr_tearing_control_manager_v1_surface_hint_from_surface(
-                                   tearing_manager, client_surface(client)) ==
-                                   WP_TEARING_CONTROL_V1_PRESENTATION_HINT_ASYNC;
+    state->tearing_page_flip =
+        settings->misc.allow_tearing && client && monitor->zoom_factor <= 1 &&
+        wlr_tearing_control_manager_v1_surface_hint_from_surface(tearing_manager,
+                                                                 client_surface(client)) ==
+            WP_TEARING_CONTROL_V1_PRESENTATION_HINT_ASYNC;
     if (state->tearing_page_flip && !wlr_output_test_state(output, state))
         state->tearing_page_flip = false;
 }
