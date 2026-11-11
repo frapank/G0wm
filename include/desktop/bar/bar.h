@@ -26,6 +26,8 @@ extern char bar_status_text[STATUS_MAX];
 bool bar_accepts_input(struct wlr_scene_buffer*, double*, double*);
 void bar_finish(void);
 void bar_draw(Monitor* monitor);
+void bar_schedule_title_update(Monitor* monitor);
+Monitor* bar_monitor(void);
 void bar_draw_all(void);
 void bar_draw_selected(void);
 int bar_tag_width(Monitor* monitor, Monitor* target, uint32_t tag);

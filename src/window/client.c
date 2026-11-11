@@ -277,6 +277,7 @@ void client_handle_destroy(struct wl_listener* listener, void*)
         wl_list_remove(&client->maximize.link);
     }
     free(client->private_text);
+    free(client->last_title);
     free(client);
 }
 
@@ -783,9 +784,19 @@ void client_handle_unmap(struct wl_listener* listener, void*)
 void client_handle_set_title(struct wl_listener* listener, void*)
 {
     WindowClient* client = wl_container_of(listener, client, set_title);
+    const char* title = client_get_title(client);
+    if (client->last_title && !strcmp(client->last_title, title))
+        return;
+    char* copy = strdup(title);
+    if (!copy)
+        util_die("failed to copy window title");
+    free(client->last_title);
+    client->last_title = copy;
     toplevel_update(client);
-    if (client == client_top(client->monitor))
-        bar_draw_all();
+    bar_schedule_title_update(client->monitor);
+    if (settings->bar.single_monitor && client->monitor == selected_monitor &&
+        client == client_top(client->monitor))
+        bar_schedule_title_update(bar_monitor());
 }
 
 void client_handle_request_activate(struct wl_listener*, void* data)

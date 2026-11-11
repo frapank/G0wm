@@ -42,6 +42,7 @@ constexpr int PULSE_FRAME_MS = 40;
 char bar_status_text[STATUS_MAX];
 /* redraws the bars while an urgent dot pulses */
 static struct wl_event_source* bar_pulse_timer;
+static struct wl_event_source* bar_title_update_source;
 struct PillMask {
     int width, height;
     double radius;
@@ -234,8 +235,35 @@ static void bar_pulse_arm(void)
         wl_event_source_timer_update(bar_pulse_timer, PULSE_FRAME_MS);
 }
 
+static void bar_flush_title_updates(void*)
+{
+    bar_title_update_source = nullptr;
+    Monitor* monitor;
+    wl_list_for_each(monitor, &monitors, link) {
+        if (!monitor->title_update_pending)
+            continue;
+        monitor->title_update_pending = false;
+        bar_draw(monitor);
+    }
+}
+
+void bar_schedule_title_update(Monitor* monitor)
+{
+    if (!monitor)
+        return;
+    monitor->title_update_pending = true;
+    if (!bar_title_update_source)
+        bar_title_update_source =
+            wl_event_loop_add_idle(event_loop, bar_flush_title_updates, nullptr);
+    if (!bar_title_update_source)
+        bar_flush_title_updates(nullptr);
+}
+
 void bar_finish(void)
 {
+    if (bar_title_update_source)
+        wl_event_source_remove(bar_title_update_source);
+    bar_title_update_source = nullptr;
     for (size_t i = 0; i < LENGTH(pill_masks); i++) {
         if (pill_masks[i].image)
             pixman_image_unref(pill_masks[i].image);
@@ -362,6 +390,8 @@ void bar_draw(Monitor* monitor)
 
 static void bar_draw_contents(Monitor* monitor, bool draw_titles)
 {
+    if (draw_titles)
+        monitor->title_update_pending = false;
     /* what the bar reports on: its own monitor, or the focused one when
      * bar.single_monitor leaves a single bar standing in for the lot */
     Monitor* target = settings->bar.single_monitor && selected_monitor ? selected_monitor : monitor;
