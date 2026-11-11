@@ -240,7 +240,7 @@ static GestureBinding default_gestures[] = {
     { GESTURE_SWIPE_RIGHT, 3, layout_shift_view, { .integer = -1 } },
 };
 
-static Settings default_settings = {
+static const Settings default_settings = {
     .look = {
         .fonts = default_fonts,
         .font_count = LENGTH(default_fonts),

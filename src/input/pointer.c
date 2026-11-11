@@ -227,10 +227,9 @@ void input_handle_button(struct wl_listener*, void* data)
             if (click == CLICK_AREA_CLIENT && !CLEANMASK(mods) && event->button == BTN_LEFT &&
                 bar_title_click(client, cursor->x, cursor->y))
                 return;
-            for (const MouseBinding* binding = settings->bindings.mouse_bindings;
-                 binding <
-                 settings->bindings.mouse_bindings + settings->bindings.mouse_binding_count;
-                 binding++) {
+            for (const MouseBinding *binding = settings->bindings.mouse_bindings,
+                                    *end = binding + settings->bindings.mouse_binding_count;
+                 binding < end; binding++) {
                 if (CLEANMASK(mods) == CLEANMASK(binding->modifiers) &&
                     event->button == binding->button && click == binding->click_area &&
                     binding->callback) {
@@ -770,9 +769,9 @@ static int input_wheel_binding(const struct wlr_pointer_axis_event* event)
         client ? CLICK_AREA_CLIENT : input_bar_click(monitor_at(cursor->x, cursor->y), &argument);
     int title = client && bar_on_title_bar(client, cursor->x, cursor->y);
     unsigned int mode;
-    for (const MouseBinding* binding = settings->bindings.mouse_bindings;
-         binding < settings->bindings.mouse_bindings + settings->bindings.mouse_binding_count;
-         binding++) {
+    for (const MouseBinding *binding = settings->bindings.mouse_bindings,
+                            *end = binding + settings->bindings.mouse_binding_count;
+         binding < end; binding++) {
         if (CLEANMASK(mods) != CLEANMASK(binding->modifiers) || binding->button != wheel ||
             (binding->click_area != click &&
              !(binding->click_area == CLICK_AREA_WINDOW_TITLE && title)) ||

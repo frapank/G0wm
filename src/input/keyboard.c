@@ -134,9 +134,9 @@ static int input_key_binding(uint32_t mods, xkb_keysym_t sym)
     struct wlr_keyboard_shortcuts_inhibitor_v1* inhibitor = input_focused_inhibitor();
     int inhibited = inhibitor && inhibitor->active;
 
-    for (const KeyBinding* binding = settings->bindings.key_bindings;
-         binding < settings->bindings.key_bindings + settings->bindings.key_binding_count;
-         binding++) {
+    for (const KeyBinding *binding = settings->bindings.key_bindings,
+                          *end = binding + settings->bindings.key_binding_count;
+         binding < end; binding++) {
         if (CLEANMASK(mods) == CLEANMASK(binding->modifiers) &&
             xkb_keysym_to_lower(sym) == xkb_keysym_to_lower(binding->keysym) && binding->callback &&
             (!inhibited || binding->callback == input_toggle_inhibit)) {

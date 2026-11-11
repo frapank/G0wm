@@ -210,10 +210,9 @@ static void tablet_handle_pad_button(struct wl_listener* listener, void* data)
 
     wlr_idle_notifier_v1_notify_activity(idle_notifier, seat);
     /* bound buttons are not forwarded */
-    for (const TabletPadBinding* pad_binding = settings->bindings.tablet_pad_bindings;
-         !lock_active && pad_binding < settings->bindings.tablet_pad_bindings +
-                                           settings->bindings.tablet_pad_binding_count;
-         pad_binding++) {
+    for (const TabletPadBinding *pad_binding = settings->bindings.tablet_pad_bindings,
+                                *end = pad_binding + settings->bindings.tablet_pad_binding_count;
+         !lock_active && pad_binding < end; pad_binding++) {
         if (pad_binding->button == event->button && pad_binding->callback) {
             if (event->state == WLR_BUTTON_PRESSED)
                 pad_binding->callback(&pad_binding->argument);
@@ -481,9 +480,9 @@ static int tablet_tip_bound(void)
 
     if (lock_active)
         return 0;
-    for (const MouseBinding* binding = settings->bindings.mouse_bindings;
-         binding < settings->bindings.mouse_bindings + settings->bindings.mouse_binding_count;
-         binding++)
+    for (const MouseBinding *binding = settings->bindings.mouse_bindings,
+                            *end = binding + settings->bindings.mouse_binding_count;
+         binding < end; binding++)
         if (binding->click_area == CLICK_AREA_CLIENT && binding->button == BTN_LEFT &&
             binding->callback && CLEANMASK(mods) == CLEANMASK(binding->modifiers))
             return 1;

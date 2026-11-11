@@ -302,6 +302,14 @@ static void runner_enter(void)
     runner_record(line);
 }
 
+void runner_reload(void)
+{
+    runner_source = nullptr;
+    runner_match_count = 0;
+    if (runner_active)
+        runner_filter();
+}
+
 void runner_toggle(const ActionArg*)
 {
     if (!selected_monitor)

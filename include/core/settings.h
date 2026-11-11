@@ -320,7 +320,8 @@ typedef struct {
 
 extern Settings* settings;
 
-void settings_load(void);
+bool settings_load(void);
+void settings_finish(void);
 [[nodiscard]] int settings_write(void);
 [[nodiscard]] int settings_make_dirs(char* path);
 

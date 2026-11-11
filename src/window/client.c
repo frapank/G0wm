@@ -83,6 +83,7 @@ static void client_apply_bounds(WindowClient* client, struct wlr_box* bbox)
 static void client_apply_rules(WindowClient* client)
 {
     /* rule matching */
+    free(client->private_text);
     client->private_text = nullptr;
     client->private_background = client->private_foreground = 0;
     uint32_t newtags = 0;
@@ -98,8 +99,13 @@ static void client_apply_rules(WindowClient* client)
             client->is_floating = rule->is_floating;
             if (rule->is_private >= 0)
                 client->is_private = rule->is_private;
-            if (rule->private_text)
-                client->private_text = rule->private_text;
+            if (rule->private_text) {
+                char* text = strdup(rule->private_text);
+                if (!text)
+                    util_die("cannot copy private text");
+                free(client->private_text);
+                client->private_text = text;
+            }
             if (rule->private_background)
                 client->private_background = rule->private_background;
             if (rule->private_foreground)
@@ -270,6 +276,7 @@ void client_handle_destroy(struct wl_listener* listener, void*)
         wl_list_remove(&client->unmap.link);
         wl_list_remove(&client->maximize.link);
     }
+    free(client->private_text);
     free(client);
 }
 

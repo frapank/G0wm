@@ -5,6 +5,7 @@
  * reading the config file and applying each section
  */
 
+#include <errno.h>
 #include <libinput.h>
 #include <limits.h>
 #include <linux/input-event-codes.h>
@@ -50,6 +51,8 @@ static int settings_enum_value(const EnumEntry* table,
                                int fallback,
                                const char* what)
 {
+    if (!name)
+        return fallback;
     for (const EnumEntry* entry = table; entry->name; entry++)
         if (!strcmp(entry->name, name))
             return entry->value;
@@ -115,8 +118,9 @@ static int settings_is_number(const char* text, double* out_value)
     if (!text || !*text)
         return 0;
     char* end;
+    errno = 0;
     const double parsed = strtod(text, &end);
-    if (*end)
+    if (*end || errno == ERANGE || !isfinite(parsed))
         return 0;
     if (out_value)
         *out_value = parsed;
@@ -128,6 +132,18 @@ static double settings_number_value(const char* text, double fallback)
     double value;
 
     return settings_is_number(text, &value) ? value : fallback;
+}
+
+static int settings_int_value(const char* text, int fallback)
+{
+    double value;
+    if (!settings_is_number(text, &value))
+        return fallback;
+    if (value < INT_MIN || value > INT_MAX) {
+        settings_warn("%s is out of range", text);
+        return fallback;
+    }
+    return (int)value;
 }
 
 /* a negative one would not convert */
@@ -170,6 +186,11 @@ static double settings_get_number(const struct scfg_block* block, const char* ke
 {
     return settings_number_value(settings_param_at(settings_find_directive(block, key), 0),
                                  fallback);
+}
+
+static int settings_get_int(const struct scfg_block* block, const char* key, int fallback)
+{
+    return settings_int_value(settings_param_at(settings_find_directive(block, key), 0), fallback);
 }
 
 static unsigned int settings_get_uint(const struct scfg_block* block,
@@ -218,13 +239,14 @@ static void settings_get_rgba(float color[static 4],
 
 /* the parsed file outlives the settings, so its strings are used in place.
  * One slot to spare: the result is NULL terminated as well as counted. */
-static const char** settings_collect_params(const struct scfg_directive* directive,
+static const char** settings_collect_params(LoadedSettings* loaded,
+                                            const struct scfg_directive* directive,
                                             size_t from,
                                             size_t* out_count)
 {
     if (!directive || directive->params_len < from)
         return nullptr;
-    const char** list = util_calloc(directive->params_len - from + 1, sizeof *list);
+    const char** list = settings_alloc(loaded, directive->params_len - from + 1, sizeof *list);
     for (size_t i = from; i < directive->params_len; i++)
         list[i - from] = directive->params[i];
     if (out_count)
@@ -236,6 +258,8 @@ static const char** settings_collect_params(const struct scfg_directive* directi
 static const char* settings_split_mods(const char* combo, uint32_t* modifiers)
 {
     *modifiers = 0;
+    if (!combo)
+        return "";
     const char* plus;
     while ((plus = strchr(combo, '+'))) {
         char modifier_name[16];
@@ -262,18 +286,19 @@ static uint32_t settings_get_mods(const struct scfg_block* block,
     return modifiers | (uint32_t)settings_enum_value(settings_modifier_names, combo, 0, "modifier");
 }
 
-static const WindowLayout* settings_layout_by_symbol(const char* symbol)
+static const WindowLayout* settings_layout_by_symbol(LoadedSettings* loaded, const char* symbol)
 {
     if (!symbol)
         return nullptr;
-    for (size_t i = 0; i < settings->rules.layout_count; i++)
-        if (!strcmp(settings->rules.layouts[i].symbol, symbol))
-            return &settings->rules.layouts[i];
+    for (size_t i = 0; i < loaded->values.rules.layout_count; i++)
+        if (!strcmp(loaded->values.rules.layouts[i].symbol, symbol))
+            return &loaded->values.rules.layouts[i];
     settings_warn("no layout draws %s", symbol);
     return nullptr;
 }
 
-static ActionArg settings_get_arg(char kind,
+static ActionArg settings_get_arg(LoadedSettings* loaded,
+                                  char kind,
                                   const struct scfg_directive* directive,
                                   size_t param_index)
 {
@@ -282,7 +307,7 @@ static ActionArg settings_get_arg(char kind,
 
     switch (kind) {
         case 'i':
-            argument.integer = (int)settings_number_value(text, 0);
+            argument.integer = settings_int_value(text, 0);
             break;
         case 'u':
             argument.unsigned_integer = settings_uint_value(text, 0);
@@ -291,10 +316,10 @@ static ActionArg settings_get_arg(char kind,
             argument.floating = (float)settings_number_value(text, 0);
             break;
         case 'v':
-            argument.pointer = settings_collect_params(directive, param_index, nullptr);
+            argument.pointer = settings_collect_params(loaded, directive, param_index, nullptr);
             break;
         case 'l':
-            argument.pointer = settings_layout_by_symbol(text);
+            argument.pointer = settings_layout_by_symbol(loaded, text);
             break;
         case 'c':
             argument.unsigned_integer =
@@ -306,7 +331,7 @@ static ActionArg settings_get_arg(char kind,
     return argument;
 }
 
-static void settings_apply_colors(const struct scfg_block* block)
+static void settings_apply_colors(LoadedSettings* loaded, const struct scfg_block* block)
 {
     for (size_t scheme = 0; scheme < COLOR_SCHEME_COUNT; scheme++) {
         if (!settings_scheme_names[scheme])
@@ -316,320 +341,335 @@ static void settings_apply_colors(const struct scfg_block* block)
         if (!directive)
             continue;
         for (size_t color = 0; color < 3; color++)
-            settings->look.colors[scheme][color] = settings_hex_value(
-                settings_param_at(directive, color), settings->look.colors[scheme][color]);
+            loaded->values.look.colors[scheme][color] = settings_hex_value(
+                settings_param_at(directive, color), loaded->values.look.colors[scheme][color]);
     }
 }
 
-static void settings_apply_look(const struct scfg_block* block)
+static void settings_apply_look(LoadedSettings* loaded, const struct scfg_block* block)
 {
-    static const char** owned_fonts;
-    static const char** owned_tags;
 
     if (!block)
         return;
-    const char** font_list = settings_collect_params(settings_find_directive(block, "fonts"), 0,
-                                                     &settings->look.font_count);
+    const char** font_list = settings_collect_params(
+        loaded, settings_find_directive(block, "fonts"), 0, &loaded->values.look.font_count);
     if (font_list) {
-        free(owned_fonts);
-        settings->look.fonts = owned_fonts = font_list;
+        loaded->values.look.fonts = font_list;
     }
-    settings_apply_colors(settings_find_section(block, "colors"));
-    settings_get_rgba(settings->look.root_color, block, "rootcolor");
-    settings_get_rgba(settings->look.fullscreen_color, block, "fullscreen_bg");
+    settings_apply_colors(loaded, settings_find_section(block, "colors"));
+    settings_get_rgba(loaded->values.look.root_color, block, "rootcolor");
+    settings_get_rgba(loaded->values.look.fullscreen_color, block, "fullscreen_bg");
 #ifdef INTEGRATED_BACKGROUND
-    settings->look.wallpaper = settings_get_string(block, "wallpaper", settings->look.wallpaper);
+    loaded->values.look.wallpaper =
+        settings_get_string(block, "wallpaper", loaded->values.look.wallpaper);
 #endif
-    const char** tag_list = settings_collect_params(settings_find_directive(block, "tags"), 0,
-                                                    &settings->look.tag_count);
+    const char** tag_list = settings_collect_params(loaded, settings_find_directive(block, "tags"),
+                                                    0, &loaded->values.look.tag_count);
     if (tag_list) {
-        free(owned_tags);
-        owned_tags = tag_list;
-        settings->look.tags = (char**)tag_list;
-        if (settings->look.tag_count > 31) { /* TAGMASK has to fit in a uint32_t */
+        loaded->values.look.tags = (char**)tag_list;
+        if (loaded->values.look.tag_count > 31) { /* TAGMASK has to fit in a uint32_t */
             settings_warn("only the first 31 tags are used");
-            settings->look.tag_count = 31;
+            loaded->values.look.tag_count = 31;
         }
     }
 }
 
-static void settings_apply_windows(const struct scfg_block* block)
+static void settings_apply_windows(LoadedSettings* loaded, const struct scfg_block* block)
 {
     if (!block)
         return;
-    settings->windows.border_width =
-        settings_get_uint(block, "borderpx", settings->windows.border_width);
-    settings->windows.corner_style =
+    loaded->values.windows.border_width =
+        settings_get_uint(block, "borderpx", loaded->values.windows.border_width);
+    loaded->values.windows.corner_style =
         settings_get_enum(block, "cornerstyle", settings_corner_styles,
-                          settings->windows.corner_style, "corner style");
-    settings->windows.corner_radius =
-        settings_get_uint(block, "cornerpx", settings->windows.corner_radius);
-    settings->windows.gaps = (int)settings_get_number(block, "gaps", settings->windows.gaps);
-    settings->windows.gap_size = settings_get_uint(block, "gappx", settings->windows.gap_size);
-    settings->windows.smart_gaps =
-        settings_get_bool(block, "smartgaps", settings->windows.smart_gaps);
-    settings->windows.title_bar = settings_get_bool(block, "titlebar", settings->windows.title_bar);
-    settings->windows.title_padding =
-        settings_get_uint(block, "titlepadding", settings->windows.title_padding);
-    settings->windows.title_center =
-        settings_get_bool(block, "titlecenter", settings->windows.title_center);
-    settings->windows.title_close =
-        settings_get_bool(block, "titleclose", settings->windows.title_close);
-    settings->windows.title_close_color =
-        settings_get_hex(block, "titleclosecolor", settings->windows.title_close_color);
-    settings->windows.private_color =
-        settings_get_hex(block, "privatecolor", settings->windows.private_color);
-    settings->windows.private_round =
-        (float)fmin(settings_get_number(block, "privateround", settings->windows.private_round), 1);
-    settings->windows.always_private =
-        settings_get_bool(block, "alwaysprivate", settings->windows.always_private);
-    settings->windows.public_color =
-        settings_get_hex(block, "publiccolor", settings->windows.public_color);
-    settings->windows.private_title =
-        settings_get_string(block, "privatetitle", settings->windows.private_title);
-    settings->input.move_threshold =
-        (int)settings_get_number(block, "movethreshold", settings->input.move_threshold);
-    settings->input.move_snap =
-        (int)settings_get_number(block, "movesnap", settings->input.move_snap);
+                          loaded->values.windows.corner_style, "corner style");
+    loaded->values.windows.corner_radius =
+        settings_get_uint(block, "cornerpx", loaded->values.windows.corner_radius);
+    loaded->values.windows.gaps = settings_get_int(block, "gaps", loaded->values.windows.gaps);
+    loaded->values.windows.gap_size =
+        settings_get_uint(block, "gappx", loaded->values.windows.gap_size);
+    loaded->values.windows.smart_gaps =
+        settings_get_bool(block, "smartgaps", loaded->values.windows.smart_gaps);
+    loaded->values.windows.title_bar =
+        settings_get_bool(block, "titlebar", loaded->values.windows.title_bar);
+    loaded->values.windows.title_padding =
+        settings_get_uint(block, "titlepadding", loaded->values.windows.title_padding);
+    loaded->values.windows.title_center =
+        settings_get_bool(block, "titlecenter", loaded->values.windows.title_center);
+    loaded->values.windows.title_close =
+        settings_get_bool(block, "titleclose", loaded->values.windows.title_close);
+    loaded->values.windows.title_close_color =
+        settings_get_hex(block, "titleclosecolor", loaded->values.windows.title_close_color);
+    loaded->values.windows.private_color =
+        settings_get_hex(block, "privatecolor", loaded->values.windows.private_color);
+    loaded->values.windows.private_round = (float)fmin(
+        settings_get_number(block, "privateround", loaded->values.windows.private_round), 1);
+    loaded->values.windows.always_private =
+        settings_get_bool(block, "alwaysprivate", loaded->values.windows.always_private);
+    loaded->values.windows.public_color =
+        settings_get_hex(block, "publiccolor", loaded->values.windows.public_color);
+    loaded->values.windows.private_title =
+        settings_get_string(block, "privatetitle", loaded->values.windows.private_title);
+    loaded->values.input.move_threshold =
+        settings_get_int(block, "movethreshold", loaded->values.input.move_threshold);
+    loaded->values.input.move_snap =
+        settings_get_int(block, "movesnap", loaded->values.input.move_snap);
 }
 
-static void settings_apply_private(const struct scfg_block* block)
+static void settings_apply_private(LoadedSettings* loaded, const struct scfg_block* block)
 {
     if (!block)
         return;
-    settings->privacy.text = settings_get_string(block, "text", settings->privacy.text);
-    settings->privacy.image = settings_get_string(block, "image", settings->privacy.image);
-    settings->privacy.image_size =
-        settings_get_uint(block, "imagesize", settings->privacy.image_size);
-    settings->privacy.text_scale = (float)fmax(
-        0.1, fmin(10, settings_get_number(block, "textscale", settings->privacy.text_scale)));
-    settings->privacy.background = settings_get_hex(block, "color", settings->privacy.background);
-    settings->privacy.foreground =
-        settings_get_hex(block, "textcolor", settings->privacy.foreground);
+    loaded->values.privacy.text = settings_get_string(block, "text", loaded->values.privacy.text);
+    loaded->values.privacy.image =
+        settings_get_string(block, "image", loaded->values.privacy.image);
+    loaded->values.privacy.image_size =
+        settings_get_uint(block, "imagesize", loaded->values.privacy.image_size);
+    loaded->values.privacy.text_scale = (float)fmax(
+        0.1, fmin(10, settings_get_number(block, "textscale", loaded->values.privacy.text_scale)));
+    loaded->values.privacy.background =
+        settings_get_hex(block, "color", loaded->values.privacy.background);
+    loaded->values.privacy.foreground =
+        settings_get_hex(block, "textcolor", loaded->values.privacy.foreground);
 }
 
-static void settings_apply_bar(const struct scfg_block* block)
+static void settings_apply_bar(LoadedSettings* loaded, const struct scfg_block* block)
 {
     if (!block)
         return;
-    settings->bar.enabled = settings_get_bool(block, "showbar", settings->bar.enabled);
-    settings->bar.top = settings_get_bool(block, "topbar", settings->bar.top);
-    settings->bar.window_title =
-        settings_get_bool(block, "barwintitle", settings->bar.window_title);
-    settings->bar.tag_dots = settings_get_bool(block, "bartagdots", settings->bar.tag_dots);
-    settings->bar.tag_dot_size =
-        settings_get_uint(block, "bartagdotsize", settings->bar.tag_dot_size);
-    settings->bar.tag_dot_gap = settings_get_uint(block, "bartagdotgap", settings->bar.tag_dot_gap);
-    settings->bar.tag_dot_width =
-        (float)fmax(settings_get_number(block, "bartagdotwidth", settings->bar.tag_dot_width), 1);
-    settings->bar.tag_dot_round = (float)fmin(
-        fmax(settings_get_number(block, "bartagdotround", settings->bar.tag_dot_round), 0), 1);
-    settings->bar.urgent_pulse =
-        settings_get_uint(block, "barurgentpulse", settings->bar.urgent_pulse);
-    settings->bar.layout_symbol =
-        settings_get_bool(block, "barltsymbol", settings->bar.layout_symbol);
-    settings->bar.box_radius = settings_get_uint(block, "barboxradius", settings->bar.box_radius);
-    settings->bar.padding = settings_get_uint(block, "barpadding", settings->bar.padding);
-    settings->bar.height = (float)settings_get_number(block, "barheight", settings->bar.height);
-    settings->bar.single_monitor =
-        settings_get_bool(block, "barsinglemon", settings->bar.single_monitor);
-    settings->bar.status = settings_get_enum(block, "barstatus", settings_bar_statuses,
-                                             settings->bar.status, "bar status setting");
-    settings->systray.enabled = settings_get_bool(block, "showsystray", settings->systray.enabled);
-    settings->systray.spacing =
-        settings_get_uint(block, "systrayspacing", settings->systray.spacing);
-    settings->systray.padding =
-        settings_get_uint(block, "systraypadding", settings->systray.padding);
-    settings->systray.icon_size =
-        settings_get_uint(block, "systrayiconsize", settings->systray.icon_size);
-    settings->notifications.enabled =
-        settings_get_bool(block, "shownotifications", settings->notifications.enabled);
-    settings->notifications.private =
-        settings_get_bool(block, "privatenotify", settings->notifications.private);
-    settings->notifications.timeout =
-        settings_get_uint(block, "notification_timeout", settings->notifications.timeout);
-    settings->notifications.line_width =
-        settings_get_uint(block, "notification_linewidth", settings->notifications.line_width);
-    settings->notifications.line_radius =
-        settings_get_uint(block, "notification_lineradius", settings->notifications.line_radius);
-    settings->notifications.action_sign =
-        settings_get_string(block, "notification_actionsign", settings->notifications.action_sign);
-    settings->notifications.private_text = settings_get_string(
-        block, "notification_privatetext", settings->notifications.private_text);
-    settings->notifications.private_hide =
-        settings_get_bool(block, "notification_privatehide", settings->notifications.private_hide);
-    settings->notifications.dot =
+    loaded->values.bar.enabled = settings_get_bool(block, "showbar", loaded->values.bar.enabled);
+    loaded->values.bar.top = settings_get_bool(block, "topbar", loaded->values.bar.top);
+    loaded->values.bar.window_title =
+        settings_get_bool(block, "barwintitle", loaded->values.bar.window_title);
+    loaded->values.bar.tag_dots =
+        settings_get_bool(block, "bartagdots", loaded->values.bar.tag_dots);
+    loaded->values.bar.tag_dot_size =
+        settings_get_uint(block, "bartagdotsize", loaded->values.bar.tag_dot_size);
+    loaded->values.bar.tag_dot_gap =
+        settings_get_uint(block, "bartagdotgap", loaded->values.bar.tag_dot_gap);
+    loaded->values.bar.tag_dot_width = (float)fmax(
+        settings_get_number(block, "bartagdotwidth", loaded->values.bar.tag_dot_width), 1);
+    loaded->values.bar.tag_dot_round = (float)fmin(
+        fmax(settings_get_number(block, "bartagdotround", loaded->values.bar.tag_dot_round), 0), 1);
+    loaded->values.bar.urgent_pulse =
+        settings_get_uint(block, "barurgentpulse", loaded->values.bar.urgent_pulse);
+    loaded->values.bar.layout_symbol =
+        settings_get_bool(block, "barltsymbol", loaded->values.bar.layout_symbol);
+    loaded->values.bar.box_radius =
+        settings_get_uint(block, "barboxradius", loaded->values.bar.box_radius);
+    loaded->values.bar.padding = settings_get_uint(block, "barpadding", loaded->values.bar.padding);
+    loaded->values.bar.height =
+        (float)settings_get_number(block, "barheight", loaded->values.bar.height);
+    loaded->values.bar.single_monitor =
+        settings_get_bool(block, "barsinglemon", loaded->values.bar.single_monitor);
+    loaded->values.bar.status = settings_get_enum(block, "barstatus", settings_bar_statuses,
+                                                  loaded->values.bar.status, "bar status setting");
+    loaded->values.systray.enabled =
+        settings_get_bool(block, "showsystray", loaded->values.systray.enabled);
+    loaded->values.systray.spacing =
+        settings_get_uint(block, "systrayspacing", loaded->values.systray.spacing);
+    loaded->values.systray.padding =
+        settings_get_uint(block, "systraypadding", loaded->values.systray.padding);
+    loaded->values.systray.icon_size =
+        settings_get_uint(block, "systrayiconsize", loaded->values.systray.icon_size);
+    loaded->values.notifications.enabled =
+        settings_get_bool(block, "shownotifications", loaded->values.notifications.enabled);
+    loaded->values.notifications.private =
+        settings_get_bool(block, "privatenotify", loaded->values.notifications.private);
+    loaded->values.notifications.timeout =
+        settings_get_uint(block, "notification_timeout", loaded->values.notifications.timeout);
+    loaded->values.notifications.line_width =
+        settings_get_uint(block, "notification_linewidth", loaded->values.notifications.line_width);
+    loaded->values.notifications.line_radius = settings_get_uint(
+        block, "notification_lineradius", loaded->values.notifications.line_radius);
+    loaded->values.notifications.action_sign = settings_get_string(
+        block, "notification_actionsign", loaded->values.notifications.action_sign);
+    loaded->values.notifications.private_text = settings_get_string(
+        block, "notification_privatetext", loaded->values.notifications.private_text);
+    loaded->values.notifications.private_hide = settings_get_bool(
+        block, "notification_privatehide", loaded->values.notifications.private_hide);
+    loaded->values.notifications.dot =
         settings_get_enum(block, "notification_dot", settings_notification_dots,
-                          settings->notifications.dot, "notification dot setting");
-    settings->notifications.private_color =
-        settings_get_hex(block, "notification_privatecolor", settings->notifications.private_color);
-    settings->notifications.public_color =
-        settings_get_hex(block, "notification_publiccolor", settings->notifications.public_color);
-    settings->runner.placeholder =
-        settings_get_string(block, "runner_placeholder", settings->runner.placeholder);
-    settings->runner.max_candidates =
-        settings_get_uint(block, "runner_max_candidates", settings->runner.max_candidates);
-    settings->runner.pill_height =
-        settings_get_uint(block, "runner_pillheight", settings->runner.pill_height);
-    settings->runner.pill_padding =
-        settings_get_uint(block, "runner_pillpadding", settings->runner.pill_padding);
-    settings->runner.pill_round =
-        (float)fmin(settings_get_number(block, "runner_pillround", settings->runner.pill_round), 1);
-    settings->runner.fuzzy = settings_get_bool(block, "runner_fuzzy", settings->runner.fuzzy);
-    settings->runner.icons = settings_get_enum(block, "runner_icons", settings_runner_icons,
-                                               settings->runner.icons, "runner icon setting");
-    settings->runner.icon_size =
-        settings_get_uint(block, "runner_iconsize", settings->runner.icon_size);
-    settings->runner.icon_round = (float)fmin(
-        fmax(settings_get_number(block, "runner_iconround", settings->runner.icon_round), 0), 1);
-    settings->runner.icon_border =
-        settings_get_uint(block, "runner_iconborder", settings->runner.icon_border);
-    settings->runner.history_size =
-        settings_get_uint(block, "runner_history_size", settings->runner.history_size);
-    settings->runner.shell = settings_get_string(block, "runner_shell", settings->runner.shell);
-    settings->runner.terminal =
-        settings_get_string(block, "runner_terminal", settings->runner.terminal);
-    settings->runner.terminal_prefix =
-        settings_get_string(block, "runner_termprefix", settings->runner.terminal_prefix);
-    settings->runner.run_prefix =
-        settings_get_string(block, "runner_runprefix", settings->runner.run_prefix);
-    settings->runner.calc_prefix =
-        settings_get_string(block, "runner_calcprefix", settings->runner.calc_prefix);
-    settings->runner.search_prefix =
-        settings_get_string(block, "runner_searchprefix", settings->runner.search_prefix);
-    settings->runner.search_url =
-        settings_get_string(block, "runner_searchurl", settings->runner.search_url);
-    settings->runner.window_prefix =
-        settings_get_string(block, "runner_windowprefix", settings->runner.window_prefix);
-    settings->runner.tag_prefix =
-        settings_get_string(block, "runner_tagprefix", settings->runner.tag_prefix);
-    settings->runner.files = settings_get_bool(block, "runner_files", settings->runner.files);
-    settings->runner.paths = settings_get_string(block, "runner_paths", settings->runner.paths);
-    settings->runner.calc_precision =
-        settings_get_uint(block, "runner_calc_precision", settings->runner.calc_precision);
+                          loaded->values.notifications.dot, "notification dot setting");
+    loaded->values.notifications.private_color = settings_get_hex(
+        block, "notification_privatecolor", loaded->values.notifications.private_color);
+    loaded->values.notifications.public_color = settings_get_hex(
+        block, "notification_publiccolor", loaded->values.notifications.public_color);
+    loaded->values.runner.placeholder =
+        settings_get_string(block, "runner_placeholder", loaded->values.runner.placeholder);
+    loaded->values.runner.max_candidates =
+        settings_get_uint(block, "runner_max_candidates", loaded->values.runner.max_candidates);
+    loaded->values.runner.pill_height =
+        settings_get_uint(block, "runner_pillheight", loaded->values.runner.pill_height);
+    loaded->values.runner.pill_padding =
+        settings_get_uint(block, "runner_pillpadding", loaded->values.runner.pill_padding);
+    loaded->values.runner.pill_round = (float)fmin(
+        settings_get_number(block, "runner_pillround", loaded->values.runner.pill_round), 1);
+    loaded->values.runner.fuzzy =
+        settings_get_bool(block, "runner_fuzzy", loaded->values.runner.fuzzy);
+    loaded->values.runner.icons =
+        settings_get_enum(block, "runner_icons", settings_runner_icons, loaded->values.runner.icons,
+                          "runner icon setting");
+    loaded->values.runner.icon_size =
+        settings_get_uint(block, "runner_iconsize", loaded->values.runner.icon_size);
+    loaded->values.runner.icon_round = (float)fmin(
+        fmax(settings_get_number(block, "runner_iconround", loaded->values.runner.icon_round), 0),
+        1);
+    loaded->values.runner.icon_border =
+        settings_get_uint(block, "runner_iconborder", loaded->values.runner.icon_border);
+    loaded->values.runner.history_size =
+        settings_get_uint(block, "runner_history_size", loaded->values.runner.history_size);
+    loaded->values.runner.shell =
+        settings_get_string(block, "runner_shell", loaded->values.runner.shell);
+    loaded->values.runner.terminal =
+        settings_get_string(block, "runner_terminal", loaded->values.runner.terminal);
+    loaded->values.runner.terminal_prefix =
+        settings_get_string(block, "runner_termprefix", loaded->values.runner.terminal_prefix);
+    loaded->values.runner.run_prefix =
+        settings_get_string(block, "runner_runprefix", loaded->values.runner.run_prefix);
+    loaded->values.runner.calc_prefix =
+        settings_get_string(block, "runner_calcprefix", loaded->values.runner.calc_prefix);
+    loaded->values.runner.search_prefix =
+        settings_get_string(block, "runner_searchprefix", loaded->values.runner.search_prefix);
+    loaded->values.runner.search_url =
+        settings_get_string(block, "runner_searchurl", loaded->values.runner.search_url);
+    loaded->values.runner.window_prefix =
+        settings_get_string(block, "runner_windowprefix", loaded->values.runner.window_prefix);
+    loaded->values.runner.tag_prefix =
+        settings_get_string(block, "runner_tagprefix", loaded->values.runner.tag_prefix);
+    loaded->values.runner.files =
+        settings_get_bool(block, "runner_files", loaded->values.runner.files);
+    loaded->values.runner.paths =
+        settings_get_string(block, "runner_paths", loaded->values.runner.paths);
+    loaded->values.runner.calc_precision =
+        settings_get_uint(block, "runner_calc_precision", loaded->values.runner.calc_precision);
 }
 
-static void settings_apply_opacity(const struct scfg_block* block)
+static void settings_apply_opacity(LoadedSettings* loaded, const struct scfg_block* block)
 {
     if (!block)
         return;
-    settings->opacity.enabled =
-        settings_get_bool(block, "opacity_enabled", settings->opacity.enabled);
-    settings->opacity.focus =
-        (float)settings_get_number(block, "opacity_focus", settings->opacity.focus);
-    settings->opacity.unfocus =
-        (float)settings_get_number(block, "opacity_unfocus", settings->opacity.unfocus);
-    settings->opacity.decorations =
-        (float)settings_get_number(block, "opacity_deco", settings->opacity.decorations);
+    loaded->values.opacity.enabled =
+        settings_get_bool(block, "opacity_enabled", loaded->values.opacity.enabled);
+    loaded->values.opacity.focus =
+        (float)settings_get_number(block, "opacity_focus", loaded->values.opacity.focus);
+    loaded->values.opacity.unfocus =
+        (float)settings_get_number(block, "opacity_unfocus", loaded->values.opacity.unfocus);
+    loaded->values.opacity.decorations =
+        (float)settings_get_number(block, "opacity_deco", loaded->values.opacity.decorations);
 #ifdef INTEGRATED_BACKGROUND
-    settings->opacity.type = settings_get_enum(block, "opacity_type", settings_opacity_kinds,
-                                               settings->opacity.type, "kind of opacity");
-    settings->opacity.blur_radius =
-        settings_get_uint(block, "blur_radius", settings->opacity.blur_radius);
-    settings->opacity.blur_passes =
-        settings_get_uint(block, "blur_passes", settings->opacity.blur_passes);
-    settings->opacity.blur_saturation =
-        (float)settings_get_number(block, "blur_saturation", settings->opacity.blur_saturation);
-    settings->opacity.blur_brightness =
-        (float)settings_get_number(block, "blur_brightness", settings->opacity.blur_brightness);
+    loaded->values.opacity.type = settings_get_enum(block, "opacity_type", settings_opacity_kinds,
+                                                    loaded->values.opacity.type, "kind of opacity");
+    loaded->values.opacity.blur_radius =
+        settings_get_uint(block, "blur_radius", loaded->values.opacity.blur_radius);
+    loaded->values.opacity.blur_passes =
+        settings_get_uint(block, "blur_passes", loaded->values.opacity.blur_passes);
+    loaded->values.opacity.blur_saturation = (float)settings_get_number(
+        block, "blur_saturation", loaded->values.opacity.blur_saturation);
+    loaded->values.opacity.blur_brightness = (float)settings_get_number(
+        block, "blur_brightness", loaded->values.opacity.blur_brightness);
 #endif
 }
 
-static void settings_apply_input(const struct scfg_block* block)
+static void settings_apply_input(LoadedSettings* loaded, const struct scfg_block* block)
 {
     if (!block)
         return;
-    settings->input.sloppy_focus =
-        settings_get_bool(block, "sloppyfocus", settings->input.sloppy_focus);
+    loaded->values.input.sloppy_focus =
+        settings_get_bool(block, "sloppyfocus", loaded->values.input.sloppy_focus);
     const struct scfg_block* xkb_section = settings_find_section(block, "xkb_rules");
     if (xkb_section) {
-        settings->input.xkb_rules.rules =
-            settings_get_string(xkb_section, "rules", settings->input.xkb_rules.rules);
-        settings->input.xkb_rules.model =
-            settings_get_string(xkb_section, "model", settings->input.xkb_rules.model);
-        settings->input.xkb_rules.layout =
-            settings_get_string(xkb_section, "layout", settings->input.xkb_rules.layout);
-        settings->input.xkb_rules.variant =
-            settings_get_string(xkb_section, "variant", settings->input.xkb_rules.variant);
-        settings->input.xkb_rules.options =
-            settings_get_string(xkb_section, "options", settings->input.xkb_rules.options);
+        loaded->values.input.xkb_rules.rules =
+            settings_get_string(xkb_section, "rules", loaded->values.input.xkb_rules.rules);
+        loaded->values.input.xkb_rules.model =
+            settings_get_string(xkb_section, "model", loaded->values.input.xkb_rules.model);
+        loaded->values.input.xkb_rules.layout =
+            settings_get_string(xkb_section, "layout", loaded->values.input.xkb_rules.layout);
+        loaded->values.input.xkb_rules.variant =
+            settings_get_string(xkb_section, "variant", loaded->values.input.xkb_rules.variant);
+        loaded->values.input.xkb_rules.options =
+            settings_get_string(xkb_section, "options", loaded->values.input.xkb_rules.options);
     }
-    settings->input.repeat_rate =
-        (int)settings_get_number(block, "repeat_rate", settings->input.repeat_rate);
-    settings->input.repeat_delay =
-        (int)settings_get_number(block, "repeat_delay", settings->input.repeat_delay);
-    settings->input.cursor_theme =
-        settings_get_string(block, "cursor_theme", settings->input.cursor_theme);
-    settings->input.cursor_size =
-        (int)settings_get_number(block, "cursor_size", settings->input.cursor_size);
-    settings->input.hide_cursor_when_typing = settings_get_bool(
-        block, "hide_cursor_when_typing", settings->input.hide_cursor_when_typing);
-    settings->input.tap_to_click =
-        settings_get_bool(block, "tap_to_click", settings->input.tap_to_click);
-    settings->input.tap_and_drag =
-        settings_get_bool(block, "tap_and_drag", settings->input.tap_and_drag);
-    settings->input.drag_lock = settings_get_bool(block, "drag_lock", settings->input.drag_lock);
-    settings->input.natural_scrolling =
-        settings_get_bool(block, "natural_scrolling", settings->input.natural_scrolling);
-    settings->input.disable_while_typing =
-        settings_get_bool(block, "disable_while_typing", settings->input.disable_while_typing);
-    settings->input.left_handed =
-        settings_get_bool(block, "left_handed", settings->input.left_handed);
-    settings->input.middle_button_emulation = settings_get_bool(
-        block, "middle_button_emulation", settings->input.middle_button_emulation);
-    settings->input.scroll_method = (enum libinput_config_scroll_method)settings_get_enum(
-        block, "scroll_method", settings_scroll_methods, settings->input.scroll_method,
+    loaded->values.input.repeat_rate =
+        settings_get_int(block, "repeat_rate", loaded->values.input.repeat_rate);
+    loaded->values.input.repeat_delay =
+        settings_get_int(block, "repeat_delay", loaded->values.input.repeat_delay);
+    loaded->values.input.cursor_theme =
+        settings_get_string(block, "cursor_theme", loaded->values.input.cursor_theme);
+    loaded->values.input.cursor_size =
+        settings_get_int(block, "cursor_size", loaded->values.input.cursor_size);
+    loaded->values.input.hide_cursor_when_typing = settings_get_bool(
+        block, "hide_cursor_when_typing", loaded->values.input.hide_cursor_when_typing);
+    loaded->values.input.tap_to_click =
+        settings_get_bool(block, "tap_to_click", loaded->values.input.tap_to_click);
+    loaded->values.input.tap_and_drag =
+        settings_get_bool(block, "tap_and_drag", loaded->values.input.tap_and_drag);
+    loaded->values.input.drag_lock =
+        settings_get_bool(block, "drag_lock", loaded->values.input.drag_lock);
+    loaded->values.input.natural_scrolling =
+        settings_get_bool(block, "natural_scrolling", loaded->values.input.natural_scrolling);
+    loaded->values.input.disable_while_typing =
+        settings_get_bool(block, "disable_while_typing", loaded->values.input.disable_while_typing);
+    loaded->values.input.left_handed =
+        settings_get_bool(block, "left_handed", loaded->values.input.left_handed);
+    loaded->values.input.middle_button_emulation = settings_get_bool(
+        block, "middle_button_emulation", loaded->values.input.middle_button_emulation);
+    loaded->values.input.scroll_method = (enum libinput_config_scroll_method)settings_get_enum(
+        block, "scroll_method", settings_scroll_methods, loaded->values.input.scroll_method,
         "scroll method");
-    settings->input.click_method = (enum libinput_config_click_method)settings_get_enum(
-        block, "click_method", settings_click_methods, settings->input.click_method,
+    loaded->values.input.click_method = (enum libinput_config_click_method)settings_get_enum(
+        block, "click_method", settings_click_methods, loaded->values.input.click_method,
         "click method");
-    settings->input.send_events_mode =
+    loaded->values.input.send_events_mode =
         (uint32_t)settings_get_enum(block, "send_events_mode", settings_send_events,
-                                    (int)settings->input.send_events_mode, "send events mode");
-    settings->input.accel_profile = (enum libinput_config_accel_profile)settings_get_enum(
-        block, "accel_profile", settings_accel_profiles, settings->input.accel_profile,
+                                    (int)loaded->values.input.send_events_mode, "send events mode");
+    loaded->values.input.accel_profile = (enum libinput_config_accel_profile)settings_get_enum(
+        block, "accel_profile", settings_accel_profiles, loaded->values.input.accel_profile,
         "acceleration profile");
-    settings->input.accel_speed =
-        settings_get_number(block, "accel_speed", settings->input.accel_speed);
-    settings->input.touchpad_natural_scrolling = settings_get_bool(
-        block, "touchpad_natural_scrolling", settings->input.touchpad_natural_scrolling);
-    settings->input.touchpad_accel_profile = (enum libinput_config_accel_profile)settings_get_enum(
-        block, "touchpad_accel_profile", settings_accel_profiles,
-        settings->input.touchpad_accel_profile, "acceleration profile");
-    settings->input.touchpad_accel_speed =
-        settings_get_number(block, "touchpad_accel_speed", settings->input.touchpad_accel_speed);
-    settings->bindings.pinch_zoom_modifier =
-        settings_get_mods(block, "pinchzoom_mod", settings->bindings.pinch_zoom_modifier);
-    settings->input.tap_button_map = (enum libinput_config_tap_button_map)settings_get_enum(
-        block, "button_map", settings_button_maps, settings->input.tap_button_map, "button map");
-    settings->input.tablet_output =
-        settings_get_string(block, "tablet_output", settings->input.tablet_output);
-    settings->input.tablet_left_handed =
-        settings_get_bool(block, "tablet_left_handed", settings->input.tablet_left_handed);
-    settings->input.touch_output =
-        settings_get_string(block, "touch_output", settings->input.touch_output);
+    loaded->values.input.accel_speed =
+        settings_get_number(block, "accel_speed", loaded->values.input.accel_speed);
+    loaded->values.input.touchpad_natural_scrolling = settings_get_bool(
+        block, "touchpad_natural_scrolling", loaded->values.input.touchpad_natural_scrolling);
+    loaded->values.input.touchpad_accel_profile =
+        (enum libinput_config_accel_profile)settings_get_enum(
+            block, "touchpad_accel_profile", settings_accel_profiles,
+            loaded->values.input.touchpad_accel_profile, "acceleration profile");
+    loaded->values.input.touchpad_accel_speed = settings_get_number(
+        block, "touchpad_accel_speed", loaded->values.input.touchpad_accel_speed);
+    loaded->values.bindings.pinch_zoom_modifier =
+        settings_get_mods(block, "pinchzoom_mod", loaded->values.bindings.pinch_zoom_modifier);
+    loaded->values.input.tap_button_map = (enum libinput_config_tap_button_map)settings_get_enum(
+        block, "button_map", settings_button_maps, loaded->values.input.tap_button_map,
+        "button map");
+    loaded->values.input.tablet_output =
+        settings_get_string(block, "tablet_output", loaded->values.input.tablet_output);
+    loaded->values.input.tablet_left_handed =
+        settings_get_bool(block, "tablet_left_handed", loaded->values.input.tablet_left_handed);
+    loaded->values.input.touch_output =
+        settings_get_string(block, "touch_output", loaded->values.input.touch_output);
 }
 
-static void settings_apply_misc(const struct scfg_block* block)
+static void settings_apply_misc(LoadedSettings* loaded, const struct scfg_block* block)
 {
     if (!block)
         return;
-    settings->misc.log_level = settings_get_enum(block, "log_level", settings_log_levels,
-                                                 settings->misc.log_level, "log level");
-    settings->misc.bypass_surface_visibility = settings_get_bool(
-        block, "bypass_surface_visibility", settings->misc.bypass_surface_visibility);
-    settings->misc.allow_tearing =
-        settings_get_bool(block, "allow_tearing", settings->misc.allow_tearing);
-    settings->misc.auto_vrr = settings_get_bool(block, "auto_vrr", settings->misc.auto_vrr);
+    loaded->values.misc.log_level = settings_get_enum(block, "log_level", settings_log_levels,
+                                                      loaded->values.misc.log_level, "log level");
+    loaded->values.misc.bypass_surface_visibility = settings_get_bool(
+        block, "bypass_surface_visibility", loaded->values.misc.bypass_surface_visibility);
+    loaded->values.misc.allow_tearing =
+        settings_get_bool(block, "allow_tearing", loaded->values.misc.allow_tearing);
+    loaded->values.misc.auto_vrr =
+        settings_get_bool(block, "auto_vrr", loaded->values.misc.auto_vrr);
 }
 
 /* none keeps the defaults: a monitor needs a layout */
-static void settings_apply_layouts(const struct scfg_block* block)
+static void settings_apply_layouts(LoadedSettings* loaded, const struct scfg_block* block)
 {
     if (!settings_count_directives(block, "layout"))
         return;
     WindowLayout* parsed_layouts =
-        util_calloc(settings_count_directives(block, "layout"), sizeof *parsed_layouts);
+        settings_alloc(loaded, settings_count_directives(block, "layout"), sizeof *parsed_layouts);
     size_t count = 0;
     for (size_t i = 0; i < block->directives_len; i++) {
         const struct scfg_directive* directive = &block->directives[i];
@@ -652,14 +692,14 @@ static void settings_apply_layouts(const struct scfg_block* block)
         }
         count++;
     }
-    settings->rules.layouts = parsed_layouts;
-    settings->rules.layout_count = count;
+    loaded->values.rules.layouts = parsed_layouts;
+    loaded->values.rules.layout_count = count;
 }
 
-static void settings_apply_rules(const struct scfg_block* block)
+static void settings_apply_rules(LoadedSettings* loaded, const struct scfg_block* block)
 {
     ClientRule* parsed_rules =
-        util_calloc(settings_count_directives(block, "rule") + 1, sizeof *parsed_rules);
+        settings_alloc(loaded, settings_count_directives(block, "rule") + 1, sizeof *parsed_rules);
     size_t count = 0;
     for (size_t i = 0; i < block->directives_len; i++) {
         if (strcmp(block->directives[i].name, "rule"))
@@ -676,19 +716,19 @@ static void settings_apply_rules(const struct scfg_block* block)
         rule->private_foreground = settings_get_hex(rule_block, "privatetextcolor", 0);
         rule->focused_opacity = (float)settings_get_number(rule_block, "opacity_focus", 0);
         rule->unfocused_opacity = (float)settings_get_number(rule_block, "opacity_unfocus", 0);
-        rule->monitor_index = (int)settings_get_number(rule_block, "monitor", -1);
+        rule->monitor_index = settings_get_int(rule_block, "monitor", -1);
         count++;
     }
-    settings->rules.client_rules = parsed_rules;
-    settings->rules.client_rule_count = count;
+    loaded->values.rules.client_rules = parsed_rules;
+    loaded->values.rules.client_rule_count = count;
 }
 
-static void settings_apply_monitors(const struct scfg_block* block)
+static void settings_apply_monitors(LoadedSettings* loaded, const struct scfg_block* block)
 {
     if (!settings_count_directives(block, "monitor"))
         return;
     MonitorRule* parsed_rules =
-        util_calloc(settings_count_directives(block, "monitor"), sizeof *parsed_rules);
+        settings_alloc(loaded, settings_count_directives(block, "monitor"), sizeof *parsed_rules);
     size_t count = 0;
     for (size_t i = 0; i < block->directives_len; i++) {
         if (strcmp(block->directives[i].name, "monitor"))
@@ -697,34 +737,34 @@ static void settings_apply_monitors(const struct scfg_block* block)
         MonitorRule* rule = &parsed_rules[count];
         rule->name = settings_get_string(monitor_block, "name", nullptr);
         rule->master_factor = (float)settings_get_number(monitor_block, "mfact", 0.55);
-        rule->master_count = (int)settings_get_number(monitor_block, "nmaster", 1);
+        rule->master_count = settings_get_int(monitor_block, "nmaster", 1);
         rule->scale = (float)settings_get_number(monitor_block, "scale", 1);
-        rule->layout =
-            settings_layout_by_symbol(settings_get_string(monitor_block, "layout", nullptr));
+        rule->layout = settings_layout_by_symbol(
+            loaded, settings_get_string(monitor_block, "layout", nullptr));
         if (!rule->layout)
-            rule->layout = settings->rules.layouts;
+            rule->layout = loaded->values.rules.layouts;
         rule->transform = (enum wl_output_transform)settings_get_enum(
             monitor_block, "transform", settings_transforms, WL_OUTPUT_TRANSFORM_NORMAL,
             "transform");
-        rule->x = (int)settings_get_number(monitor_block, "x", -1);
-        rule->y = (int)settings_get_number(monitor_block, "y", -1);
-        rule->width = (int)settings_get_number(monitor_block, "width", 0);
-        rule->height = (int)settings_get_number(monitor_block, "height", 0);
-        rule->refresh_hz = (int)settings_get_number(monitor_block, "refresh", 0);
+        rule->x = settings_get_int(monitor_block, "x", -1);
+        rule->y = settings_get_int(monitor_block, "y", -1);
+        rule->width = settings_get_int(monitor_block, "width", 0);
+        rule->height = settings_get_int(monitor_block, "height", 0);
+        rule->refresh_hz = settings_get_int(monitor_block, "refresh", 0);
         count++;
     }
-    settings->rules.monitor_rules = parsed_rules;
-    settings->rules.monitor_rule_count = count;
+    loaded->values.rules.monitor_rules = parsed_rules;
+    loaded->values.rules.monitor_rule_count = count;
 }
 
 /* back to one flat run of arguments per command, each NULL terminated */
-static void settings_apply_autostart(const struct scfg_block* block)
+static void settings_apply_autostart(LoadedSettings* loaded, const struct scfg_block* block)
 {
     size_t slots = 0;
     for (size_t i = 0; i < block->directives_len; i++)
         if (!strcmp(block->directives[i].name, "autostart"))
             slots += block->directives[i].params_len + 1;
-    const char** flat_commands = util_calloc(slots + 1, sizeof *flat_commands);
+    const char** flat_commands = settings_alloc(loaded, slots + 1, sizeof *flat_commands);
 
     size_t count = 0;
     for (size_t i = 0; i < block->directives_len; i++) {
@@ -736,13 +776,13 @@ static void settings_apply_autostart(const struct scfg_block* block)
             flat_commands[count++] = directive->params[param];
         flat_commands[count++] = nullptr;
     }
-    settings->bindings.autostart = flat_commands;
+    loaded->values.bindings.autostart = flat_commands;
 }
 
-static void settings_apply_keys(const struct scfg_block* block)
+static void settings_apply_keys(LoadedSettings* loaded, const struct scfg_block* block)
 {
     KeyBinding* parsed_keys =
-        util_calloc(settings_count_directives(block, "key") + 1, sizeof *parsed_keys);
+        settings_alloc(loaded, settings_count_directives(block, "key") + 1, sizeof *parsed_keys);
     size_t count = 0;
     for (size_t i = 0; i < block->directives_len; i++) {
         const struct scfg_directive* directive = &block->directives[i];
@@ -760,17 +800,17 @@ static void settings_apply_keys(const struct scfg_block* block)
         }
         parsed_keys[count].keysym = keysym;
         parsed_keys[count].callback = action->callback;
-        parsed_keys[count].argument = settings_get_arg(action->argument_kind, directive, 2);
+        parsed_keys[count].argument = settings_get_arg(loaded, action->argument_kind, directive, 2);
         count++;
     }
-    settings->bindings.key_bindings = parsed_keys;
-    settings->bindings.key_binding_count = count;
+    loaded->values.bindings.key_bindings = parsed_keys;
+    loaded->values.bindings.key_binding_count = count;
 }
 
-static void settings_apply_buttons(const struct scfg_block* block)
+static void settings_apply_buttons(LoadedSettings* loaded, const struct scfg_block* block)
 {
-    MouseBinding* parsed_buttons =
-        util_calloc(settings_count_directives(block, "button") + 1, sizeof *parsed_buttons);
+    MouseBinding* parsed_buttons = settings_alloc(
+        loaded, settings_count_directives(block, "button") + 1, sizeof *parsed_buttons);
     size_t count = 0;
     for (size_t i = 0; i < block->directives_len; i++) {
         const struct scfg_directive* directive = &block->directives[i];
@@ -787,17 +827,17 @@ static void settings_apply_buttons(const struct scfg_block* block)
             settings_split_mods(settings_param_at(directive, 1), &button->modifiers), BTN_LEFT,
             "button");
         button->callback = action->callback;
-        button->argument = settings_get_arg(action->argument_kind, directive, 3);
+        button->argument = settings_get_arg(loaded, action->argument_kind, directive, 3);
         count++;
     }
-    settings->bindings.mouse_bindings = parsed_buttons;
-    settings->bindings.mouse_binding_count = count;
+    loaded->values.bindings.mouse_bindings = parsed_buttons;
+    loaded->values.bindings.mouse_binding_count = count;
 }
 
-static void settings_apply_gestures(const struct scfg_block* block)
+static void settings_apply_gestures(LoadedSettings* loaded, const struct scfg_block* block)
 {
-    GestureBinding* parsed_gestures =
-        util_calloc(settings_count_directives(block, "gesture") + 1, sizeof *parsed_gestures);
+    GestureBinding* parsed_gestures = settings_alloc(
+        loaded, settings_count_directives(block, "gesture") + 1, sizeof *parsed_gestures);
     size_t count = 0;
     for (size_t i = 0; i < block->directives_len; i++) {
         const struct scfg_directive* directive = &block->directives[i];
@@ -812,17 +852,17 @@ static void settings_apply_gestures(const struct scfg_block* block)
             "gesture motion");
         gesture->finger_count = settings_uint_value(settings_param_at(directive, 1), 3);
         gesture->callback = action->callback;
-        gesture->argument = settings_get_arg(action->argument_kind, directive, 3);
+        gesture->argument = settings_get_arg(loaded, action->argument_kind, directive, 3);
         count++;
     }
-    settings->bindings.gesture_bindings = parsed_gestures;
-    settings->bindings.gesture_binding_count = count;
+    loaded->values.bindings.gesture_bindings = parsed_gestures;
+    loaded->values.bindings.gesture_binding_count = count;
 }
 
-static void settings_apply_pad_buttons(const struct scfg_block* block)
+static void settings_apply_pad_buttons(LoadedSettings* loaded, const struct scfg_block* block)
 {
-    TabletPadBinding* parsed_pad_buttons =
-        util_calloc(settings_count_directives(block, "padbutton") + 1, sizeof *parsed_pad_buttons);
+    TabletPadBinding* parsed_pad_buttons = settings_alloc(
+        loaded, settings_count_directives(block, "padbutton") + 1, sizeof *parsed_pad_buttons);
     size_t count = 0;
     for (size_t i = 0; i < block->directives_len; i++) {
         const struct scfg_directive* directive = &block->directives[i];
@@ -834,29 +874,11 @@ static void settings_apply_pad_buttons(const struct scfg_block* block)
         TabletPadBinding* pad_button = &parsed_pad_buttons[count];
         pad_button->button = settings_uint_value(settings_param_at(directive, 0), 0);
         pad_button->callback = action->callback;
-        pad_button->argument = settings_get_arg(action->argument_kind, directive, 2);
+        pad_button->argument = settings_get_arg(loaded, action->argument_kind, directive, 2);
         count++;
     }
-    settings->bindings.tablet_pad_bindings = parsed_pad_buttons;
-    settings->bindings.tablet_pad_binding_count = count;
-}
-
-void settings_load_builtin(void)
-{
-    static struct scfg_block builtin_block;
-
-    if (settings_builtin)
-        return;
-    char* text = settings_rendered_defaults();
-    if (!text)
-        return;
-    FILE* file = fmemopen(text, strlen(text), "r");
-    if (file) {
-        if (!scfg_parse_file(&builtin_block, file))
-            settings_builtin = &builtin_block;
-        fclose(file);
-    }
-    free(text);
+    loaded->values.bindings.tablet_pad_bindings = parsed_pad_buttons;
+    loaded->values.bindings.tablet_pad_binding_count = count;
 }
 
 /* the file's lines of kind k, or the built-in ones when it has none */
@@ -866,31 +888,31 @@ static const struct scfg_block* settings_lines_or_builtin(const struct scfg_bloc
     return settings_count_directives(block, key) || !settings_builtin ? block : settings_builtin;
 }
 
-static void settings_apply_sections(const struct scfg_block* block)
+static void settings_apply_sections(LoadedSettings* loaded, const struct scfg_block* block)
 {
-    settings_apply_look(settings_find_section(block, "look"));
-    settings_apply_windows(settings_find_section(block, "windows"));
-    settings_apply_private(settings_find_section(block, "private"));
-    settings_apply_bar(settings_find_section(block, "bar"));
-    settings_apply_opacity(settings_find_section(block, "opacity"));
-    settings_apply_input(settings_find_section(block, "input"));
-    settings_apply_misc(settings_find_section(block, "misc"));
+    settings_apply_look(loaded, settings_find_section(block, "look"));
+    settings_apply_windows(loaded, settings_find_section(block, "windows"));
+    settings_apply_private(loaded, settings_find_section(block, "private"));
+    settings_apply_bar(loaded, settings_find_section(block, "bar"));
+    settings_apply_opacity(loaded, settings_find_section(block, "opacity"));
+    settings_apply_input(loaded, settings_find_section(block, "input"));
+    settings_apply_misc(loaded, settings_find_section(block, "misc"));
 }
 
 /* the layouts first: the rest names them by symbol */
-void settings_apply(const struct scfg_block* block)
+void settings_apply(LoadedSettings* loaded, const struct scfg_block* block)
 {
-    settings_apply_layouts(settings_lines_or_builtin(block, "layout"));
+    settings_apply_layouts(loaded, settings_lines_or_builtin(block, "layout"));
     /* a reload has to undo a setting since left out */
-    settings_apply_sections(settings_builtin);
-    settings_apply_sections(block);
-    settings_apply_rules(settings_lines_or_builtin(block, "rule"));
-    settings_apply_monitors(settings_lines_or_builtin(block, "monitor"));
-    settings_apply_autostart(settings_lines_or_builtin(block, "autostart"));
-    settings_apply_keys(settings_lines_or_builtin(block, "key"));
-    settings_apply_buttons(settings_lines_or_builtin(block, "button"));
-    settings_apply_gestures(settings_lines_or_builtin(block, "gesture"));
-    settings_apply_pad_buttons(settings_lines_or_builtin(block, "padbutton"));
+    settings_apply_sections(loaded, settings_builtin);
+    settings_apply_sections(loaded, block);
+    settings_apply_rules(loaded, settings_lines_or_builtin(block, "rule"));
+    settings_apply_monitors(loaded, settings_lines_or_builtin(block, "monitor"));
+    settings_apply_autostart(loaded, settings_lines_or_builtin(block, "autostart"));
+    settings_apply_keys(loaded, settings_lines_or_builtin(block, "key"));
+    settings_apply_buttons(loaded, settings_lines_or_builtin(block, "button"));
+    settings_apply_gestures(loaded, settings_lines_or_builtin(block, "gesture"));
+    settings_apply_pad_buttons(loaded, settings_lines_or_builtin(block, "padbutton"));
 }
 
 static int settings_is_record(const char* name)

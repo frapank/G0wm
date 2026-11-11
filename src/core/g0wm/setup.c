@@ -326,6 +326,7 @@ void cleanup(void)
     wlr_backend_destroy(backend);
 
     wl_display_destroy(display);
+    event_loop = nullptr;
     /* Destroy after the wayland display (when the monitors are already
        destroyed) to avoid destroying them with an invalid scene output. */
     wlr_scene_node_destroy(&scene->tree.node);

@@ -178,6 +178,7 @@ int main(int argc, char* argv[])
     run();
 
     cleanup();
+    settings_finish();
     return EXIT_SUCCESS;
 
 usage:

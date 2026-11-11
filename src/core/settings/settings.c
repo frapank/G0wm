@@ -10,6 +10,7 @@
 #include <limits.h>
 #include <linux/input-event-codes.h>
 #include <scfg.h>
+#include <stddef.h>
 #include <stdint.h>
 #include <stdio.h>
 #include <stdlib.h>
@@ -50,8 +51,6 @@ static void settings_reload(const ActionArg*);
 
 /* the only file that includes it: these are the definitions */
 #include "config.h"
-
-Settings* settings = &default_settings;
 
 /* variables */
 /* tables end on { 0, nullptr }; a real zero value is listed before it */
@@ -216,20 +215,92 @@ static_assert(LENGTH(settings_scheme_names) == COLOR_SCHEME_COUNT);
  * fills in for what it leaves out */
 const struct scfg_block* settings_builtin;
 
-/* Settings borrow strings from every loaded tree, including across reloads. */
-static struct SettingsBlockOwner {
-    struct scfg_block block;
-    struct SettingsBlockOwner* next;
-}* settings_trees;
+struct SettingsAllocation {
+    struct SettingsAllocation* next;
+    max_align_t data[];
+};
 
-static void settings_free_trees(void)
+static Settings startup_settings;
+Settings* settings = &startup_settings;
+static LoadedSettings* active_settings;
+static LoadedSettings* retired_settings;
+static struct wl_event_source* settings_cleanup_source;
+static struct scfg_block builtin_block;
+static int settings_initialized;
+
+static void settings_destroy(LoadedSettings* loaded)
 {
-    while (settings_trees) {
-        struct SettingsBlockOwner* tree = settings_trees;
-        settings_trees = tree->next;
-        scfg_block_finish(&tree->block);
-        free(tree);
+    if (!loaded)
+        return;
+    while (loaded->allocations) {
+        SettingsAllocation* allocation = loaded->allocations;
+        loaded->allocations = allocation->next;
+        free(allocation);
     }
+    scfg_block_finish(&loaded->tree);
+    free(loaded);
+}
+
+static void settings_free_retired(void* unused)
+{
+    (void)unused;
+    settings_cleanup_source = nullptr;
+    while (retired_settings) {
+        LoadedSettings* loaded = retired_settings;
+        retired_settings = loaded->next;
+        settings_destroy(loaded);
+    }
+}
+
+void settings_finish(void)
+{
+    if (settings_cleanup_source && event_loop)
+        wl_event_source_remove(settings_cleanup_source);
+    settings_free_retired(nullptr);
+    settings_destroy(active_settings);
+    active_settings = nullptr;
+    scfg_block_finish(&builtin_block);
+    builtin_block = (struct scfg_block){ 0 };
+    settings_builtin = nullptr;
+    settings = &startup_settings;
+}
+
+void* settings_alloc(LoadedSettings* loaded, size_t count, size_t size)
+{
+    if (size && count > (SIZE_MAX - sizeof(SettingsAllocation)) / size)
+        util_die("config: allocation is too large");
+    SettingsAllocation* allocation = util_calloc(1, sizeof *allocation + count * size);
+    allocation->next = loaded->allocations;
+    loaded->allocations = allocation;
+    return allocation->data;
+}
+
+static void settings_initialize(void)
+{
+    if (settings_initialized)
+        return;
+    startup_settings = default_settings;
+    if (atexit(settings_finish))
+        util_die("config: cannot register settings cleanup");
+    settings_initialized = 1;
+}
+
+void settings_load_builtin(void)
+{
+    if (settings_builtin)
+        return;
+    char* text = settings_render(&default_settings);
+    if (!text)
+        util_die("config: cannot render defaults");
+    FILE* file = fmemopen(text, strlen(text), "r");
+    if (!file)
+        util_die("config: cannot open defaults");
+    int result = scfg_parse_file(&builtin_block, file);
+    int close_result = fclose(file);
+    free(text);
+    if (result || close_result)
+        util_die("config: cannot parse defaults");
+    settings_builtin = &builtin_block;
 }
 
 /* function implementations */
@@ -273,6 +344,7 @@ int settings_make_dirs(char* path)
  * stdout, so the two can be told apart. */
 int settings_write(void)
 {
+    settings_initialize();
     const char* path = settings_path();
 
     if (!path) {
@@ -293,7 +365,7 @@ int settings_write(void)
             fprintf(stderr, "g0wm: cannot create %s: %s\n", dir, strerror(errno));
             return 1;
         }
-        char* defaults = settings_rendered_defaults();
+        char* defaults = settings_render(settings);
         if (!defaults)
             return 1;
         FILE* file = fopen(path, "w");
@@ -312,7 +384,7 @@ int settings_write(void)
     }
 
     settings_load();
-    char* effective = settings_rendered_defaults();
+    char* effective = settings_render(settings);
     if (!effective)
         return 1;
     fputs(effective, stdout);
@@ -320,40 +392,53 @@ int settings_write(void)
     return 0;
 }
 
-void settings_load(void)
+bool settings_load(void)
 {
+    settings_initialize();
     const char* path = settings_path();
 
     if (!path) {
         fprintf(stderr, "g0wm: neither XDG_CONFIG_HOME nor HOME is set\n");
-        return;
+        return false;
     }
     if (access(path, F_OK) < 0) {
         fprintf(stderr, "g0wm: no settings in %s, run 'g0wm -c' to write them\n", path);
-        return;
+        return false;
     }
-    struct SettingsBlockOwner* owner = util_calloc(1, sizeof *owner);
-    struct scfg_block* tree = &owner->block;
-    if (scfg_load_file(tree, path) < 0) {
+    LoadedSettings* loaded = util_calloc(1, sizeof *loaded);
+    loaded->values = default_settings;
+    if (scfg_load_file(&loaded->tree, path) < 0) {
         fprintf(stderr, "g0wm: cannot read %s\n", path);
-        scfg_block_finish(tree);
-        free(owner);
-        return;
+        settings_destroy(loaded);
+        return false;
     }
-
-    if (!settings_trees && atexit(settings_free_trees))
-        util_die("config: cannot register settings cleanup");
-    owner->next = settings_trees;
-    settings_trees = owner;
 
     settings_load_builtin();
     int problems = 0;
-    if (settings_builtin)
-        settings_validate(settings_builtin, tree, "", &problems);
-    /* Keep the tree alive until exit: settings point into its strings. */
-    settings_apply(tree);
+    settings_validate(settings_builtin, &loaded->tree, "", &problems);
+    settings_apply(loaded, &loaded->tree);
     if (problems)
         fprintf(stderr, "g0wm: %s has %d problem%s\n", path, problems, problems == 1 ? "" : "s");
+
+    /* A binding may be executing from the old settings until this event ends. */
+    if (active_settings && event_loop && !settings_cleanup_source) {
+        settings_cleanup_source =
+            wl_event_loop_add_idle(event_loop, settings_free_retired, nullptr);
+        if (!settings_cleanup_source) {
+            fprintf(stderr, "g0wm: cannot schedule settings cleanup\n");
+            settings_destroy(loaded);
+            return false;
+        }
+    }
+    if (active_settings) {
+        active_settings->next = retired_settings;
+        retired_settings = active_settings;
+    }
+    active_settings = loaded;
+    settings = &loaded->values;
+    if (!event_loop)
+        settings_free_retired(nullptr);
+    return true;
 }
 
 /* the keymap and the repeat rate are otherwise only set when a keyboard
@@ -381,7 +466,8 @@ static void settings_reload(const ActionArg*)
     const int was_private = settings->windows.always_private;
     const int was_private_notify = settings->notifications.private;
 
-    settings_load();
+    if (!settings_load())
+        return;
 
     /* fewer tags than before would leave windows on bits nothing shows */
     Monitor* monitor;
@@ -424,5 +510,6 @@ static void settings_reload(const ActionArg*)
 
     opacity_reload();
     notify_set_timeout(settings->notifications.timeout);
+    runner_reload();
     bar_draw_all();
 }

@@ -345,6 +345,18 @@ static void monitor_apply_rules(Monitor* monitor, struct wlr_output_state* state
     wlr_output_state_set_mode(state, mode ? mode : wlr_output_preferred_mode(wlr_output));
 }
 
+static const WindowLayout* monitor_reload_layout(const WindowLayout* previous)
+{
+    if (previous) {
+        for (size_t i = 0; i < settings->rules.layout_count; i++) {
+            const WindowLayout* layout = &settings->rules.layouts[i];
+            if (!strcmp(layout->symbol, previous->symbol))
+                return layout;
+        }
+    }
+    return settings->rules.layouts;
+}
+
 /* the monitor_rules again, over monitors that already exist */
 void monitor_reload_rules(void)
 {
@@ -352,6 +364,12 @@ void monitor_reload_rules(void)
     Monitor* monitor;
 
     wl_list_for_each(monitor, &monitors, link) {
+        /* Disabled outputs keep per-tag layouts too. */
+        for (size_t i = 0; i < LENGTH(monitor->layouts); i++)
+            monitor->layouts[i] = monitor_reload_layout(monitor->layouts[i]);
+        for (size_t tag = 0; tag < LENGTH(monitor->tag_layouts); tag++)
+            for (size_t i = 0; i < LENGTH(monitor->tag_layouts[tag]); i++)
+                monitor->tag_layouts[tag][i] = monitor_reload_layout(monitor->tag_layouts[tag][i]);
         if (!monitor->wlr_output->enabled)
             continue;
         wlr_output_state_init(&state);

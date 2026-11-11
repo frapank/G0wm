@@ -31,6 +31,7 @@ void runner_key(xkb_keysym_t sym, uint32_t mods, uint32_t codepoint);
 int runner_query(void);
 int runner_selected(void);
 const char* runner_suggest(void);
+void runner_reload(void);
 void runner_toggle(const ActionArg*);
 
 #endif
