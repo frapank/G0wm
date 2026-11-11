@@ -20,7 +20,7 @@
 #define COLOR(hex)                                                                                 \
     { ((hex >> 24) & 0xFF) / 255.0f, ((hex >> 16) & 0xFF) / 255.0f, ((hex >> 8) & 0xFF) / 255.0f,  \
       (hex & 0xFF) / 255.0f }
-#define TAGMASK ((1u << tag_count) - 1)
+#define TAGMASK ((1u << settings->look.tag_count) - 1)
 
 enum ColorScheme {
     COLOR_SCHEME_NORMAL,
@@ -123,150 +123,202 @@ typedef struct {
     int monitor_index;
 } ClientRule;
 
-extern const char** fonts;
-extern size_t font_count;
-extern uint32_t colors[COLOR_SCHEME_COUNT][3];
-extern float root_color[4];
-extern float fullscreen_color[4];
+typedef struct {
+    const char** fonts;
+    size_t font_count;
+    uint32_t colors[COLOR_SCHEME_COUNT][3];
+    float root_color[4];
+    float fullscreen_color[4];
 #ifdef INTEGRATED_BACKGROUND
-extern const char* wallpaper;
+    const char* wallpaper;
 #endif
-extern char** tags;
-extern size_t tag_count;
-extern unsigned int border_width;
-extern int corner_style;
-extern unsigned int corner_radius;
-extern int gaps;
-extern unsigned int gap_size;
-extern int smart_gaps;
-extern int title_bar;
-extern unsigned int title_padding;
-extern int title_center;
-extern int title_close;
-extern uint32_t title_close_color;
-extern uint32_t private_color;
-extern float private_round;
-extern int always_private;
-extern uint32_t public_color;
-extern const char* private_title;
-extern const char* private_text;
-extern const char* private_image;
-extern unsigned int private_image_size;
-extern float private_text_scale;
-extern uint32_t private_background;
-extern uint32_t private_foreground;
-extern WindowLayout* layouts;
-extern size_t layout_count;
-extern ClientRule* client_rules;
-extern size_t client_rule_count;
-extern int bar_enabled;
-extern int bar_top;
-extern int bar_window_title;
-extern int bar_tag_dots;
-extern unsigned int bar_tag_dot_size;
-extern unsigned int bar_tag_dot_gap;
-extern float bar_tag_dot_width;
-extern float bar_tag_dot_round;
-extern unsigned int bar_urgent_pulse;
-extern int bar_layout_symbol;
-extern unsigned int bar_box_radius;
-extern unsigned int bar_padding;
-extern float bar_height;
-extern int bar_single_monitor;
-extern int bar_status;
-extern int systray_enabled;
-extern unsigned int systray_spacing;
-extern unsigned int systray_padding;
-extern unsigned int systray_icon_size;
-extern int notifications_enabled;
-extern int private_notifications;
-extern unsigned int notification_timeout;
-extern unsigned int notification_line_width;
-extern unsigned int notification_line_radius;
-extern const char* notification_action_sign;
-extern const char* notification_private_text;
-extern int notification_private_hide;
-extern int notification_dot;
-extern uint32_t notification_private_color;
-extern uint32_t notification_public_color;
-extern const char* runner_placeholder;
-extern unsigned int runner_max_candidates;
-extern unsigned int runner_pill_height;
-extern unsigned int runner_pill_padding;
-extern float runner_pill_round;
-extern int runner_fuzzy;
-extern int runner_icons;
-extern unsigned int runner_icon_size;
-extern float runner_icon_round;
-extern unsigned int runner_icon_border;
-extern unsigned int runner_history_size;
-extern const char* runner_shell;
-extern const char* runner_terminal;
-extern const char* runner_terminal_prefix;
-extern const char* runner_run_prefix;
-extern const char* runner_calc_prefix;
-extern const char* runner_search_prefix;
-extern const char* runner_search_url;
-extern const char* runner_window_prefix;
-extern const char* runner_tag_prefix;
-extern int runner_files;
-extern const char* runner_paths;
-extern unsigned int runner_calc_precision;
-extern int opacity_enabled;
-extern float opacity_focus;
-extern float opacity_unfocus;
-extern float opacity_decorations;
+    char** tags;
+    size_t tag_count;
+} LookSettings;
+
+typedef struct {
+    unsigned int border_width;
+    int corner_style;
+    unsigned int corner_radius;
+    int gaps;
+    unsigned int gap_size;
+    int smart_gaps;
+    int title_bar;
+    unsigned int title_padding;
+    int title_center;
+    int title_close;
+    uint32_t title_close_color;
+    uint32_t private_color;
+    float private_round;
+    int always_private;
+    uint32_t public_color;
+    const char* private_title;
+} WindowsSettings;
+
+typedef struct {
+    const char* text;
+    const char* image;
+    unsigned int image_size;
+    float text_scale;
+    uint32_t background;
+    uint32_t foreground;
+} PrivacySettings;
+
+typedef struct {
+    WindowLayout* layouts;
+    size_t layout_count;
+    ClientRule* client_rules;
+    size_t client_rule_count;
+    MonitorRule* monitor_rules;
+    size_t monitor_rule_count;
+} RulesSettings;
+
+typedef struct {
+    int enabled;
+    int top;
+    int window_title;
+    int tag_dots;
+    unsigned int tag_dot_size;
+    unsigned int tag_dot_gap;
+    float tag_dot_width;
+    float tag_dot_round;
+    unsigned int urgent_pulse;
+    int layout_symbol;
+    unsigned int box_radius;
+    unsigned int padding;
+    float height;
+    int single_monitor;
+    int status;
+} BarSettings;
+
+typedef struct {
+    int enabled;
+    unsigned int spacing;
+    unsigned int padding;
+    unsigned int icon_size;
+} SystraySettings;
+
+typedef struct {
+    int enabled;
+    int private;
+    unsigned int timeout;
+    unsigned int line_width;
+    unsigned int line_radius;
+    const char* action_sign;
+    const char* private_text;
+    int private_hide;
+    int dot;
+    uint32_t private_color;
+    uint32_t public_color;
+} NotificationsSettings;
+
+typedef struct {
+    const char* placeholder;
+    unsigned int max_candidates;
+    unsigned int pill_height;
+    unsigned int pill_padding;
+    float pill_round;
+    int fuzzy;
+    int icons;
+    unsigned int icon_size;
+    float icon_round;
+    unsigned int icon_border;
+    unsigned int history_size;
+    const char* shell;
+    const char* terminal;
+    const char* terminal_prefix;
+    const char* run_prefix;
+    const char* calc_prefix;
+    const char* search_prefix;
+    const char* search_url;
+    const char* window_prefix;
+    const char* tag_prefix;
+    int files;
+    const char* paths;
+    unsigned int calc_precision;
+} RunnerSettings;
+
+typedef struct {
+    int enabled;
+    float focus;
+    float unfocus;
+    float decorations;
 #ifdef INTEGRATED_BACKGROUND
-extern int opacity_type;
-extern unsigned int blur_radius;
-extern unsigned int blur_passes;
-extern float blur_saturation;
-extern float blur_brightness;
+    int type;
+    unsigned int blur_radius;
+    unsigned int blur_passes;
+    float blur_saturation;
+    float blur_brightness;
 #endif
-extern MonitorRule* monitor_rules;
-extern size_t monitor_rule_count;
-extern int sloppy_focus;
-extern int move_threshold;
-extern int move_snap;
-extern struct xkb_rule_names xkb_rules;
-extern int repeat_rate;
-extern int repeat_delay;
-extern const char* cursor_theme;
-extern int cursor_size;
-extern int hide_cursor_when_typing;
-extern int tap_to_click;
-extern int tap_and_drag;
-extern int drag_lock;
-extern int natural_scrolling;
-extern int disable_while_typing;
-extern int left_handed;
-extern int middle_button_emulation;
-extern enum libinput_config_scroll_method scroll_method;
-extern enum libinput_config_click_method click_method;
-extern uint32_t send_events_mode;
-extern enum libinput_config_accel_profile accel_profile;
-extern double accel_speed;
-extern int touchpad_natural_scrolling;
-extern enum libinput_config_accel_profile touchpad_accel_profile;
-extern double touchpad_accel_speed;
-extern enum libinput_config_tap_button_map tap_button_map;
-extern const char* tablet_output;
-extern int tablet_left_handed;
-extern const char* touch_output;
-extern const char** autostart;
-extern KeyBinding* key_bindings;
-extern size_t key_binding_count;
-extern MouseBinding* mouse_bindings;
-extern size_t mouse_binding_count;
-extern GestureBinding* gesture_bindings;
-extern unsigned int pinch_zoom_modifier;
-extern size_t gesture_binding_count;
-extern TabletPadBinding* tablet_pad_bindings;
-extern size_t tablet_pad_binding_count;
-extern int log_level;
-extern int bypass_surface_visibility;
-extern int allow_tearing;
-extern int auto_vrr;
+} OpacitySettings;
+
+typedef struct {
+    int sloppy_focus;
+    int move_threshold;
+    int move_snap;
+    struct xkb_rule_names xkb_rules;
+    int repeat_rate;
+    int repeat_delay;
+    const char* cursor_theme;
+    int cursor_size;
+    int hide_cursor_when_typing;
+    int tap_to_click;
+    int tap_and_drag;
+    int drag_lock;
+    int natural_scrolling;
+    int disable_while_typing;
+    int left_handed;
+    int middle_button_emulation;
+    enum libinput_config_scroll_method scroll_method;
+    enum libinput_config_click_method click_method;
+    uint32_t send_events_mode;
+    enum libinput_config_accel_profile accel_profile;
+    double accel_speed;
+    int touchpad_natural_scrolling;
+    enum libinput_config_accel_profile touchpad_accel_profile;
+    double touchpad_accel_speed;
+    enum libinput_config_tap_button_map tap_button_map;
+    const char* tablet_output;
+    int tablet_left_handed;
+    const char* touch_output;
+} InputSettings;
+
+typedef struct {
+    const char** autostart;
+    KeyBinding* key_bindings;
+    size_t key_binding_count;
+    MouseBinding* mouse_bindings;
+    size_t mouse_binding_count;
+    GestureBinding* gesture_bindings;
+    unsigned int pinch_zoom_modifier;
+    size_t gesture_binding_count;
+    TabletPadBinding* tablet_pad_bindings;
+    size_t tablet_pad_binding_count;
+} BindingsSettings;
+
+typedef struct {
+    int log_level;
+    int bypass_surface_visibility;
+    int allow_tearing;
+    int auto_vrr;
+} MiscSettings;
+
+typedef struct {
+    LookSettings look;
+    WindowsSettings windows;
+    PrivacySettings privacy;
+    RulesSettings rules;
+    BarSettings bar;
+    SystraySettings systray;
+    NotificationsSettings notifications;
+    RunnerSettings runner;
+    OpacitySettings opacity;
+    InputSettings input;
+    BindingsSettings bindings;
+    MiscSettings misc;
+} Settings;
+
+extern Settings* settings;
 
 void settings_load(void);
 [[nodiscard]] int settings_write(void);

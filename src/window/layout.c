@@ -213,7 +213,7 @@ static int layout_tag_beside(uint32_t set, int step)
         return -1;
     int target = step > 0 ? (int)stdc_bit_width(set & TAGMASK) - 1 : (int)stdc_trailing_zeros(set);
     target += step;
-    return target < 0 || target >= (int)tag_count ? -1 : target;
+    return target < 0 || target >= (int)settings->look.tag_count ? -1 : target;
 }
 
 void layout_shift_tag(const ActionArg* argument)
@@ -284,14 +284,15 @@ void layout_tabbed(Monitor* monitor)
             tiled_count++;
     if (tiled_count == 0)
         return;
-    if (smart_gaps == tiled_count)
+    if (settings->windows.smart_gaps == tiled_count)
         gaps_enabled = 0;
 
     struct wlr_box area;
-    area.x = monitor->usable_area.x + (int)(gap_size * gaps_enabled);
-    area.y = monitor->usable_area.y + (int)(gap_size * gaps_enabled);
-    area.width = monitor->usable_area.width - 2 * (int)(gap_size * gaps_enabled);
-    area.height = monitor->usable_area.height - 2 * (int)(gap_size * gaps_enabled);
+    area.x = monitor->usable_area.x + (int)(settings->windows.gap_size * gaps_enabled);
+    area.y = monitor->usable_area.y + (int)(settings->windows.gap_size * gaps_enabled);
+    area.width = monitor->usable_area.width - 2 * (int)(settings->windows.gap_size * gaps_enabled);
+    area.height =
+        monitor->usable_area.height - 2 * (int)(settings->windows.gap_size * gaps_enabled);
 
     WindowClient* top_client = layout_tab_top(monitor);
     wl_list_for_each(client, &clients, link) {
@@ -332,48 +333,53 @@ void layout_tile(Monitor* monitor)
             tiled_count++;
     if (tiled_count == 0)
         return;
-    if (smart_gaps == tiled_count)
+    if (settings->windows.smart_gaps == tiled_count)
         gaps_enabled = 0;
 
     unsigned int master_width;
     if (tiled_count > monitor->master_count)
         master_width = monitor->master_count
-                           ? (int)roundf((monitor->usable_area.width + gap_size * gaps_enabled) *
+                           ? (int)roundf((monitor->usable_area.width +
+                                          settings->windows.gap_size * gaps_enabled) *
                                          monitor->master_factor)
                            : 0;
     else
         master_width = monitor->usable_area.width;
     int index = 0;
-    int master_y = gap_size * gaps_enabled;
+    int master_y = settings->windows.gap_size * gaps_enabled;
     int stack_y = master_y;
     wl_list_for_each(client, &clients, link) {
         if (!VISIBLEON(client, monitor) || client->is_floating || client->is_fullscreen)
             continue;
         if (index < monitor->master_count) {
             const unsigned int remaining = MIN(tiled_count, monitor->master_count) - index;
-            const int height = MAX(1, ((int)monitor->usable_area.height - master_y -
-                                       (int)(gap_size * gaps_enabled * remaining)) /
-                                          (int)remaining);
-            client_resize(client,
-                          (struct wlr_box){ .x = monitor->usable_area.x + gap_size * gaps_enabled,
-                                            .y = monitor->usable_area.y + master_y,
-                                            .width = master_width - 2 * gap_size * gaps_enabled,
-                                            .height = height },
-                          0);
-            master_y += client->geometry.height + gap_size * gaps_enabled;
+            const int height =
+                MAX(1, ((int)monitor->usable_area.height - master_y -
+                        (int)(settings->windows.gap_size * gaps_enabled * remaining)) /
+                           (int)remaining);
+            client_resize(
+                client,
+                (struct wlr_box){
+                    .x = monitor->usable_area.x + settings->windows.gap_size * gaps_enabled,
+                    .y = monitor->usable_area.y + master_y,
+                    .width = master_width - 2 * settings->windows.gap_size * gaps_enabled,
+                    .height = height },
+                0);
+            master_y += client->geometry.height + settings->windows.gap_size * gaps_enabled;
         } else {
             const unsigned int remaining = tiled_count - index;
-            const int height = MAX(1, ((int)monitor->usable_area.height - stack_y -
-                                       (int)(gap_size * gaps_enabled * remaining)) /
-                                          (int)remaining);
+            const int height =
+                MAX(1, ((int)monitor->usable_area.height - stack_y -
+                        (int)(settings->windows.gap_size * gaps_enabled * remaining)) /
+                           (int)remaining);
             client_resize(client,
                           (struct wlr_box){ .x = monitor->usable_area.x + master_width,
                                             .y = monitor->usable_area.y + stack_y,
                                             .width = monitor->usable_area.width - master_width -
-                                                     gap_size * gaps_enabled,
+                                                     settings->windows.gap_size * gaps_enabled,
                                             .height = height },
                           0);
-            stack_y += client->geometry.height + gap_size * gaps_enabled;
+            stack_y += client->geometry.height + settings->windows.gap_size * gaps_enabled;
         }
         index++;
     }

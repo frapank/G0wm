@@ -32,10 +32,10 @@ static void bar_status_stop(void);
 /* whether the bar on m shows the status text */
 int bar_status_shown(Monitor* monitor)
 {
-    if (bar_status == BAR_STATUS_MAIN)
+    if (settings->bar.status == BAR_STATUS_MAIN)
         return monitor == bar_main_monitor();
-    if (bar_status == BAR_STATUS_FOCUSED)
-        return bar_single_monitor || monitor == selected_monitor;
+    if (settings->bar.status == BAR_STATUS_FOCUSED)
+        return settings->bar.single_monitor || monitor == selected_monitor;
     return 1;
 }
 
@@ -71,8 +71,8 @@ static int bar_status_escape(const char* text, uint32_t* scheme)
     /* retrun to default colors */
     if (text[1] == 'd' && text[2] == '^') {
         if (scheme) {
-            scheme[ColFg] = colors[COLOR_SCHEME_STATUS][ColFg];
-            scheme[ColBg] = colors[COLOR_SCHEME_STATUS][ColBg];
+            scheme[ColFg] = settings->look.colors[COLOR_SCHEME_STATUS][ColFg];
+            scheme[ColBg] = settings->look.colors[COLOR_SCHEME_STATUS][ColBg];
         }
         return 3;
     }
@@ -109,12 +109,12 @@ int bar_draw_status(Monitor* monitor, const char* text, int x, int width, int re
         return 0;
 
     uint32_t scheme[3];
-    memcpy(scheme, colors[COLOR_SCHEME_STATUS], sizeof(scheme));
+    memcpy(scheme, settings->look.colors[COLOR_SCHEME_STATUS], sizeof(scheme));
 
     /* the runs cover the glyphs only, so the padding around them would keep
      * whatever the buffer held */
     if (render) {
-        drwl_setscheme(monitor->draw_context, colors[COLOR_SCHEME_STATUS]);
+        drwl_setscheme(monitor->draw_context, settings->look.colors[COLOR_SCHEME_STATUS]);
         drwl_rect(monitor->draw_context, x, 0, width, monitor->bar_metrics.height_px, 1, 1);
     }
 

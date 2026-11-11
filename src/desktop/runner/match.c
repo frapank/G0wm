@@ -23,14 +23,6 @@
 #include "window/client.h"
 
 /* variables */
-static const char** runner_prefixes[RUNNER_MODE_COUNT] = {
-    [RUNNER_MODE_COMMAND] = &runner_run_prefix,
-    [RUNNER_MODE_TERMINAL] = &runner_terminal_prefix,
-    [RUNNER_MODE_CALCULATOR] = &runner_calc_prefix,
-    [RUNNER_MODE_SEARCH] = &runner_search_prefix,
-    [RUNNER_MODE_WINDOW] = &runner_window_prefix,
-    [RUNNER_MODE_TAG] = &runner_tag_prefix,
-};
 static int runner_source_count;
 static int runner_room;
 static char** runner_window_labels;
@@ -47,9 +39,9 @@ static int runner_mode_on(int mode)
 {
     switch (mode) {
         case RUNNER_MODE_TERMINAL:
-            return runner_terminal && *runner_terminal;
+            return settings->runner.terminal && *settings->runner.terminal;
         case RUNNER_MODE_SEARCH:
-            return runner_search_url && *runner_search_url;
+            return settings->runner.search_url && *settings->runner.search_url;
         default:
             return 1;
     }
@@ -60,11 +52,19 @@ static int runner_mode_on(int mode)
  * empty prefix turns its mode off. */
 int runner_mode(const char* text, int* offset)
 {
+    const char* runner_prefixes[RUNNER_MODE_COUNT] = {
+        [RUNNER_MODE_COMMAND] = settings->runner.run_prefix,
+        [RUNNER_MODE_TERMINAL] = settings->runner.terminal_prefix,
+        [RUNNER_MODE_CALCULATOR] = settings->runner.calc_prefix,
+        [RUNNER_MODE_SEARCH] = settings->runner.search_prefix,
+        [RUNNER_MODE_WINDOW] = settings->runner.window_prefix,
+        [RUNNER_MODE_TAG] = settings->runner.tag_prefix,
+    };
     size_t best_length = 0;
     int mode = RUNNER_MODE_APPLICATION;
 
     for (int candidate = 0; candidate < RUNNER_MODE_COUNT; candidate++) {
-        const char* prefix = runner_prefixes[candidate] ? *runner_prefixes[candidate] : nullptr;
+        const char* prefix = runner_prefixes[candidate];
         if (!prefix)
             continue;
         const size_t prefix_length = strlen(prefix);
@@ -75,7 +75,7 @@ int runner_mode(const char* text, int* offset)
         best_length = prefix_length;
     }
     /* a path is matched by the name after its last slash */
-    if (mode == RUNNER_MODE_APPLICATION && runner_files &&
+    if (mode == RUNNER_MODE_APPLICATION && settings->runner.files &&
         (*text == '/' || (*text == '~' && (!text[1] || text[1] == '/')))) {
         const char* last_slash = strrchr(text, '/');
         *offset = last_slash ? (int)(last_slash - text) + 1 : 0;
@@ -101,7 +101,7 @@ static int runner_score(const char* candidate, const char* query, int query_leng
 
     if (candidate_length == query_length && !strcmp(candidate, query))
         return 1 << 24;
-    if (!runner_fuzzy)
+    if (!settings->runner.fuzzy)
         return !strncmp(candidate, query, query_length);
     int score = 0;
     int run = 0;
@@ -252,8 +252,8 @@ static void runner_set_source(int mode)
             runner_source_count = runner_window_count;
             break;
         case RUNNER_MODE_TAG:
-            runner_source = (const char**)tags;
-            runner_source_count = (int)tag_count;
+            runner_source = (const char**)settings->look.tags;
+            runner_source_count = (int)settings->look.tag_count;
             break;
         case RUNNER_MODE_FILE:
             runner_read_entries(runner_query());

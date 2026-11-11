@@ -40,7 +40,7 @@ static void corner_draw(uint32_t* pixels,
  * circular arc, a larger n eases the curvature into the turn (squircle). */
 static double corner_exponent(void)
 {
-    return corner_style == CORNER_STYLE_SQUIRCLE ? 4.0 : 2.0;
+    return settings->windows.corner_style == CORNER_STYLE_SQUIRCLE ? 4.0 : 2.0;
 }
 
 /* The contents stay square, so the border has to be at least as thick as the
@@ -48,30 +48,31 @@ static double corner_exponent(void)
 unsigned int corner_border_width(void)
 {
 
-    if (!corner_radius)
-        return border_width;
+    if (!settings->windows.corner_radius)
+        return settings->windows.border_width;
 
     double bite = 1.0 - pow(2.0, -1.0 / corner_exponent());
-    return MAX(border_width, (unsigned int)ceil(bite * (double)corner_radius));
+    return MAX(settings->windows.border_width,
+               (unsigned int)ceil(bite * (double)settings->windows.corner_radius));
 }
 
 /* Radius c is drawn with: none without a border (fullscreen, unmanaged),
  * never more than half the box. */
 int corner_client_radius(WindowClient* client)
 {
-    if (!corner_radius || !client->border_width || !client->corner_buffers[0])
+    if (!settings->windows.corner_radius || !client->border_width || !client->corner_buffers[0])
         return 0;
-    return MAX(0,
-               MIN((int)corner_radius, MIN(client->geometry.width, client->geometry.height) / 2));
+    return MAX(0, MIN((int)settings->windows.corner_radius,
+                      MIN(client->geometry.width, client->geometry.height) / 2));
 }
 
 /* Radius the bar is cut to, in layout coordinates. */
 int corner_bar_radius(Monitor* monitor)
 {
-    if (!corner_radius)
+    if (!settings->windows.corner_radius)
         return 0;
     return MAX(
-        0, MIN((int)corner_radius,
+        0, MIN((int)settings->windows.corner_radius,
                MIN(monitor->bar_metrics.logical_width, monitor->bar_metrics.logical_height) / 2));
 }
 
@@ -116,7 +117,7 @@ void corner_cut(uint32_t* pixels, int width, int height, int radius)
  * faded like the straight borders in opacity_set_border_color(). */
 static uint32_t corner_color(int scheme)
 {
-    uint32_t border = colors[scheme][ColBorder];
+    uint32_t border = settings->look.colors[scheme][ColBorder];
     uint32_t alpha = (uint32_t)((float)(border & 0xff) * opacity_decorations_current());
 
     return (alpha << 24) | ((((border >> 24) & 0xff) * alpha / 255) << 16) |

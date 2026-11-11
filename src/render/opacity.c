@@ -84,14 +84,14 @@ void opacity_blur_bar(Monitor* monitor)
         return;
 
     RenderBuffer* buffer = monitor->blur_buffer_pool[0];
-    int x = (int)bar_padding + bar_rounding;
-    int y = bar_top
-                ? (int)bar_padding
-                : monitor->geometry.height - monitor->bar_metrics.logical_height - (int)bar_padding;
+    int x = (int)settings->bar.padding + bar_rounding;
+    int y = settings->bar.top ? (int)settings->bar.padding
+                              : monitor->geometry.height - monitor->bar_metrics.logical_height -
+                                    (int)settings->bar.padding;
     int width =
         MIN(monitor->bar_metrics.logical_width - 2 * bar_rounding, monitor->wallpaper_width_px - x);
     int height = MIN(monitor->bar_metrics.logical_height, monitor->wallpaper_height_px - y);
-    if (!buffer || !monitor->bar_scene_buffer->node.enabled || !opacity_enabled ||
+    if (!buffer || !monitor->bar_scene_buffer->node.enabled || !settings->opacity.enabled ||
         !opacity_decorations_translucent() || y < 0 || width <= 0 || height <= 0) {
         wlr_scene_node_set_enabled(&monitor->bar_blur_scene_buffer->node, 0);
         return;
@@ -181,7 +181,8 @@ void opacity_blur_client(WindowClient* client)
 
     /* the box covers the decorations too, so either letting light through is
      * enough; a fullscreen client is drawn opaque and never does */
-    if (!monitor || !monitor->blur_buffer_pool[0] || client->is_fullscreen || !opacity_enabled ||
+    if (!monitor || !monitor->blur_buffer_pool[0] || client->is_fullscreen ||
+        !settings->opacity.enabled ||
         (client->opacity >= 1.0f && !opacity_decorations_translucent())) {
         wlr_scene_node_set_enabled(&client->blur_scene_buffer->node, 0);
         if (client->title_blur_scene_buffer)
@@ -317,7 +318,7 @@ static void opacity_blur_source_box(Monitor* monitor,
  * that is what makes it read as glass rather than as a smudge. */
 static void opacity_blur_tint(uint32_t* pixels, size_t count)
 {
-    if (blur_saturation == 1.0f && blur_brightness == 1.0f)
+    if (settings->opacity.blur_saturation == 1.0f && settings->opacity.blur_brightness == 1.0f)
         return;
 
     for (size_t i = 0; i < count; i++) {
@@ -326,9 +327,12 @@ static void opacity_blur_tint(uint32_t* pixels, size_t count)
         float blue = (float)(pixels[i] & 0xff);
         float luma = 0.2126f * red + 0.7152f * green + 0.0722f * blue;
 
-        red = (luma + (red - luma) * blur_saturation) * blur_brightness;
-        green = (luma + (green - luma) * blur_saturation) * blur_brightness;
-        blue = (luma + (blue - luma) * blur_saturation) * blur_brightness;
+        red = (luma + (red - luma) * settings->opacity.blur_saturation) *
+              settings->opacity.blur_brightness;
+        green = (luma + (green - luma) * settings->opacity.blur_saturation) *
+                settings->opacity.blur_brightness;
+        blue = (luma + (blue - luma) * settings->opacity.blur_saturation) *
+               settings->opacity.blur_brightness;
         pixels[i] = 0xff000000u | ((uint32_t)(MAX(0.0f, MIN(255.0f, red)) + 0.5f) << 16) |
                     ((uint32_t)(MAX(0.0f, MIN(255.0f, green)) + 0.5f) << 8) |
                     (uint32_t)(MAX(0.0f, MIN(255.0f, blue)) + 0.5f);
@@ -368,16 +372,16 @@ static void opacity_blur_wallpaper(Monitor* monitor)
         if (client->monitor == monitor)
             client->blur_buffer = client->title_blur_buffer = nullptr;
 
-    if (opacity_type != OPACITY_MODE_BLUR || !monitor->wallpaper_buffer_pool[0] || width <= 0 ||
-        height <= 0)
+    if (settings->opacity.type != OPACITY_MODE_BLUR || !monitor->wallpaper_buffer_pool[0] ||
+        width <= 0 || height <= 0)
         return;
 
     /* the shrink blurs by itself, so the radius shrinks with the image; never
      * less than a quarter, as this size is what the effect costs per frame */
-    int block_size = MAX(4, MIN(8, (int)blur_radius / 4));
+    int block_size = MAX(4, MIN(8, (int)settings->opacity.blur_radius / 4));
     int small_width = MAX(1, width / block_size);
     int small_height = MAX(1, height / block_size);
-    int pass_radius = MAX(1, (int)blur_radius / block_size);
+    int pass_radius = MAX(1, (int)settings->opacity.blur_radius / block_size);
 
     if (!(buffer = buffer_get(monitor->blur_buffer_pool, LENGTH(monitor->blur_buffer_pool),
                               small_width, small_height)))
@@ -389,13 +393,13 @@ static void opacity_blur_wallpaper(Monitor* monitor)
     opacity_blur_shrink(current, monitor->wallpaper_buffer_pool[0]->pixels, width, height,
                         block_size);
     uint32_t* swap;
-    for (unsigned int i = 0; i < blur_passes; i++) {
+    for (unsigned int i = 0; i < settings->opacity.blur_passes; i++) {
         opacity_blur_rows(scratch, current, small_width, small_height, pass_radius);
         swap = current, current = scratch, scratch = swap;
     }
     opacity_blur_transpose(scratch, current, small_width, small_height);
     swap = current, current = scratch, scratch = swap;
-    for (unsigned int i = 0; i < blur_passes; i++) {
+    for (unsigned int i = 0; i < settings->opacity.blur_passes; i++) {
         opacity_blur_rows(scratch, current, small_height, small_width, pass_radius);
         swap = current, current = scratch, scratch = swap;
     }
@@ -424,19 +428,19 @@ static void opacity_blur_wallpaper(Monitor* monitor)
  * one key turns the windows and the decorations off and on together. */
 float opacity_decorations_current(void)
 {
-    return opacity_enabled ? opacity_decorations : 1.0f;
+    return settings->opacity.enabled ? settings->opacity.decorations : 1.0f;
 }
 
-/* Whether light gets through what g0wm draws itself. opacity_decorations fades
+/* Whether light gets through what g0wm draws itself. opacity.decorations fades
  * the lot, and a colour in colors[] can carry an alpha of its own, which is how
- * a bar stays see-through with opacity_decorations left at 1. */
+ * a bar stays see-through with opacity.decorations left at 1. */
 static int opacity_decorations_translucent(void)
 {
     if (opacity_decorations_current() < 1.0f)
         return 1;
-    for (size_t i = 0; i < LENGTH(colors); i++)
-        for (size_t j = 1; j < LENGTH(colors[i]); j++) /* 0 is the foreground */
-            if ((colors[i][j] & 0xff) < 0xff)
+    for (size_t i = 0; i < LENGTH(settings->look.colors); i++)
+        for (size_t j = 1; j < LENGTH(settings->look.colors[i]); j++) /* 0 is the foreground */
+            if ((settings->look.colors[i][j] & 0xff) < 0xff)
                 return 1;
     return 0;
 }
@@ -448,7 +452,8 @@ void opacity_set_wallpaper(Monitor* monitor)
     int monitor_width = monitor->geometry.width;
     int monitor_height = monitor->geometry.height;
 
-    if (!wallpaper || !*wallpaper || monitor_width <= 0 || monitor_height <= 0) {
+    if (!settings->look.wallpaper || !*settings->look.wallpaper || monitor_width <= 0 ||
+        monitor_height <= 0) {
         wlr_scene_buffer_set_buffer(monitor->wallpaper_scene_buffer, nullptr);
         monitor->wallpaper_buffer = nullptr;
         buffer_pool_drop(monitor->wallpaper_buffer_pool, LENGTH(monitor->wallpaper_buffer_pool));
@@ -480,7 +485,7 @@ void opacity_set_wallpaper(Monitor* monitor)
     }
 
     if (!wallpaper_source && !opacity_wallpaper_failed &&
-        !(wallpaper_source = gdk_pixbuf_new_from_file(wallpaper, &error))) {
+        !(wallpaper_source = gdk_pixbuf_new_from_file(settings->look.wallpaper, &error))) {
         wlr_log(WLR_ERROR, "wallpaper: %s", error->message);
         g_error_free(error);
         opacity_wallpaper_failed = 1;
@@ -497,7 +502,7 @@ void opacity_set_wallpaper(Monitor* monitor)
     GdkPixbuf* scaled =
         gdk_pixbuf_scale_simple(wallpaper_source, scaled_width, scaled_height, GDK_INTERP_BILINEAR);
     if (!scaled) {
-        wlr_log(WLR_ERROR, "wallpaper: failed to scale %s", wallpaper);
+        wlr_log(WLR_ERROR, "wallpaper: failed to scale %s", settings->look.wallpaper);
         return;
     }
 
@@ -564,7 +569,7 @@ void opacity_set_scene_buffer(struct wlr_scene_buffer* buffer, int, int, void* d
     /* xdg-popups hang off WindowClient.scene, not WindowClient.scene_surface, so this
      * never touches them */
     wlr_scene_buffer_set_opacity(
-        buffer, client->is_fullscreen || !opacity_enabled ? 1.0f : client->opacity);
+        buffer, client->is_fullscreen || !settings->opacity.enabled ? 1.0f : client->opacity);
 }
 
 /* Colours a client's border, remembering the scheme so the opacity toggle can
@@ -572,7 +577,7 @@ void opacity_set_scene_buffer(struct wlr_scene_buffer* buffer, int, int, void* d
  * the other three channels with it. */
 void opacity_set_border_color(WindowClient* client, int scheme)
 {
-    float color[4] = COLOR(colors[scheme][ColBorder]);
+    float color[4] = COLOR(settings->look.colors[scheme][ColBorder]);
     float alpha = color[3] * opacity_decorations_current();
 
     client->border_scheme = scheme;
@@ -634,6 +639,6 @@ void opacity_reload(void)
 
 void opacity_toggle(const ActionArg*)
 {
-    opacity_enabled = !opacity_enabled;
+    settings->opacity.enabled = !settings->opacity.enabled;
     opacity_refresh();
 }

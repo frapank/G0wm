@@ -52,39 +52,43 @@ static void input_create_pointer(struct wlr_pointer* pointer)
         /* only touchpads can tap */
         touchpad = libinput_device_config_tap_get_finger_count(device) > 0;
         if (touchpad) {
-            libinput_device_config_tap_set_enabled(device, tap_to_click);
-            libinput_device_config_tap_set_drag_enabled(device, tap_and_drag);
-            libinput_device_config_tap_set_drag_lock_enabled(device, drag_lock);
-            libinput_device_config_tap_set_button_map(device, tap_button_map);
+            libinput_device_config_tap_set_enabled(device, settings->input.tap_to_click);
+            libinput_device_config_tap_set_drag_enabled(device, settings->input.tap_and_drag);
+            libinput_device_config_tap_set_drag_lock_enabled(device, settings->input.drag_lock);
+            libinput_device_config_tap_set_button_map(device, settings->input.tap_button_map);
         }
 
         if (libinput_device_config_scroll_has_natural_scroll(device))
             libinput_device_config_scroll_set_natural_scroll_enabled(
-                device, touchpad ? touchpad_natural_scrolling : natural_scrolling);
+                device, touchpad ? settings->input.touchpad_natural_scrolling
+                                 : settings->input.natural_scrolling);
 
         if (libinput_device_config_dwt_is_available(device))
-            libinput_device_config_dwt_set_enabled(device, disable_while_typing);
+            libinput_device_config_dwt_set_enabled(device, settings->input.disable_while_typing);
 
         if (libinput_device_config_left_handed_is_available(device))
-            libinput_device_config_left_handed_set(device, left_handed);
+            libinput_device_config_left_handed_set(device, settings->input.left_handed);
 
         if (libinput_device_config_middle_emulation_is_available(device))
-            libinput_device_config_middle_emulation_set_enabled(device, middle_button_emulation);
+            libinput_device_config_middle_emulation_set_enabled(
+                device, settings->input.middle_button_emulation);
 
         if (libinput_device_config_scroll_get_methods(device) != LIBINPUT_CONFIG_SCROLL_NO_SCROLL)
-            libinput_device_config_scroll_set_method(device, scroll_method);
+            libinput_device_config_scroll_set_method(device, settings->input.scroll_method);
 
         if (libinput_device_config_click_get_methods(device) != LIBINPUT_CONFIG_CLICK_METHOD_NONE)
-            libinput_device_config_click_set_method(device, click_method);
+            libinput_device_config_click_set_method(device, settings->input.click_method);
 
         if (libinput_device_config_send_events_get_modes(device))
-            libinput_device_config_send_events_set_mode(device, send_events_mode);
+            libinput_device_config_send_events_set_mode(device, settings->input.send_events_mode);
 
         if (libinput_device_config_accel_is_available(device)) {
-            libinput_device_config_accel_set_profile(device, touchpad ? touchpad_accel_profile
-                                                                      : accel_profile);
+            libinput_device_config_accel_set_profile(
+                device,
+                touchpad ? settings->input.touchpad_accel_profile : settings->input.accel_profile);
             libinput_device_config_accel_set_speed(device,
-                                                   touchpad ? touchpad_accel_speed : accel_speed);
+                                                   touchpad ? settings->input.touchpad_accel_speed
+                                                            : settings->input.accel_speed);
         }
     }
 

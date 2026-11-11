@@ -210,8 +210,9 @@ static void tablet_handle_pad_button(struct wl_listener* listener, void* data)
 
     wlr_idle_notifier_v1_notify_activity(idle_notifier, seat);
     /* bound buttons are not forwarded */
-    for (const TabletPadBinding* pad_binding = tablet_pad_bindings;
-         !lock_active && pad_binding < tablet_pad_bindings + tablet_pad_binding_count;
+    for (const TabletPadBinding* pad_binding = settings->bindings.tablet_pad_bindings;
+         !lock_active && pad_binding < settings->bindings.tablet_pad_bindings +
+                                           settings->bindings.tablet_pad_binding_count;
          pad_binding++) {
         if (pad_binding->button == event->button && pad_binding->callback) {
             if (event->state == WLR_BUTTON_PRESSED)
@@ -387,12 +388,13 @@ static void tablet_configure(TabletDevice* tablet)
 {
     struct wlr_input_device* device = &tablet->wlr_tablet->base;
 
-    wlr_cursor_map_input_to_output(cursor, device, tablet_output_named(tablet_output));
+    wlr_cursor_map_input_to_output(cursor, device,
+                                   tablet_output_named(settings->input.tablet_output));
     if (!wlr_input_device_is_libinput(device))
         return;
     struct libinput_device* handle = wlr_libinput_get_device_handle(device);
     if (handle && libinput_device_config_left_handed_is_available(handle))
-        libinput_device_config_left_handed_set(handle, tablet_left_handed);
+        libinput_device_config_left_handed_set(handle, settings->input.tablet_left_handed);
 }
 
 static void tablet_handle_destroy(struct wl_listener* listener, void*)
@@ -428,9 +430,10 @@ void tablet_remap(void)
         tablet_configure(tablet);
     TouchDevice* touch;
     wl_list_for_each(touch, &tablet_touch_devices, link) {
-        wlr_cursor_map_input_to_output(
-            cursor, &touch->wlr_touch->base,
-            tablet_output_named(touch_output ? touch_output : touch->wlr_touch->output_name));
+        wlr_cursor_map_input_to_output(cursor, &touch->wlr_touch->base,
+                                       tablet_output_named(settings->input.touch_output
+                                                               ? settings->input.touch_output
+                                                               : touch->wlr_touch->output_name));
     }
 }
 
@@ -478,8 +481,9 @@ static int tablet_tip_bound(void)
 
     if (lock_active)
         return 0;
-    for (const MouseBinding* binding = mouse_bindings;
-         binding < mouse_bindings + mouse_binding_count; binding++)
+    for (const MouseBinding* binding = settings->bindings.mouse_bindings;
+         binding < settings->bindings.mouse_bindings + settings->bindings.mouse_binding_count;
+         binding++)
         if (binding->click_area == CLICK_AREA_CLIENT && binding->button == BTN_LEFT &&
             binding->callback && CLEANMASK(mods) == CLEANMASK(binding->modifiers))
             return 1;
@@ -559,8 +563,8 @@ static void tablet_tool_motion(TabletTool* tool,
         /* the pen and the pointer are not both on an app at once */
         if (seat->pointer_state.focused_surface)
             wlr_seat_pointer_notify_clear_focus(seat);
-        if (surface != tool->protocol_tool->focused_surface && sloppy_focus && client &&
-            !client_is_unmanaged(client))
+        if (surface != tool->protocol_tool->focused_surface && settings->input.sloppy_focus &&
+            client && !client_is_unmanaged(client))
             client_focus(client, 0);
         tool->surface_layout_x = layout_x - surface_x;
         tool->surface_layout_y = layout_y - surface_y;

@@ -41,7 +41,7 @@ static const char* runner_history_path(void)
 
 void runner_trim_history(void)
 {
-    int drop = runner_history_count - (int)MIN(runner_history_size, INT_MAX);
+    int drop = runner_history_count - (int)MIN(settings->runner.history_size, INT_MAX);
 
     if (drop <= 0)
         return;
@@ -145,7 +145,7 @@ void runner_weigh(void)
 
 void runner_record(const char* cmd)
 {
-    if (!runner_history_size)
+    if (!settings->runner.history_size)
         return;
     runner_push_history(cmd);
     runner_trim_history();

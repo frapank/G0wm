@@ -51,6 +51,8 @@ static void settings_reload(const ActionArg*);
 /* the only file that includes it: these are the definitions */
 #include "config.h"
 
+Settings* settings = &default_settings;
+
 /* variables */
 /* tables end on { 0, nullptr }; a real zero value is listed before it */
 /* in combo order: logo+shift+q */
@@ -362,21 +364,22 @@ static void settings_reload_keyboard(void)
         return;
     struct xkb_context* context = xkb_context_new(XKB_CONTEXT_NO_FLAGS);
     if (context) {
-        struct xkb_keymap* keymap =
-            xkb_keymap_new_from_names(context, &xkb_rules, XKB_KEYMAP_COMPILE_NO_FLAGS);
+        struct xkb_keymap* keymap = xkb_keymap_new_from_names(context, &settings->input.xkb_rules,
+                                                              XKB_KEYMAP_COMPILE_NO_FLAGS);
         if (keymap) {
             wlr_keyboard_set_keymap(&keyboard_group->wlr_group->keyboard, keymap);
             xkb_keymap_unref(keymap);
         }
         xkb_context_unref(context);
     }
-    wlr_keyboard_set_repeat_info(&keyboard_group->wlr_group->keyboard, repeat_rate, repeat_delay);
+    wlr_keyboard_set_repeat_info(&keyboard_group->wlr_group->keyboard, settings->input.repeat_rate,
+                                 settings->input.repeat_delay);
 }
 
 static void settings_reload(const ActionArg*)
 {
-    const int was_private = always_private;
-    const int was_private_notify = private_notifications;
+    const int was_private = settings->windows.always_private;
+    const int was_private_notify = settings->notifications.private;
 
     settings_load();
 
@@ -385,7 +388,7 @@ static void settings_reload(const ActionArg*)
     wl_list_for_each(monitor, &monitors, link) {
         if (!(monitor->tagsets[monitor->selected_tagset_index] & TAGMASK))
             monitor->tagsets[monitor->selected_tagset_index] = 1;
-        wlr_scene_rect_set_color(monitor->fullscreen_background, fullscreen_color);
+        wlr_scene_rect_set_color(monitor->fullscreen_background, settings->look.fullscreen_color);
     }
     /* what a client copied out of the settings when it was mapped: its
      * border, its own opacity and the title shown when private */
@@ -393,19 +396,19 @@ static void settings_reload(const ActionArg*)
     wl_list_for_each(client, &clients, link) {
         if (!(client->tags & TAGMASK))
             client->tags = 1;
-        client->opacity = client->unfocused_opacity = opacity_unfocus;
-        client->focused_opacity = opacity_focus;
+        client->opacity = client->unfocused_opacity = settings->opacity.unfocus;
+        client->focused_opacity = settings->opacity.focus;
         if (!client->is_fullscreen)
             client->border_width = client_is_unmanaged(client) ? 0 : corner_border_width();
-        if (always_private != was_private)
-            client->is_private = always_private;
+        if (settings->windows.always_private != was_private)
+            client->is_private = settings->windows.always_private;
         toplevel_update(client);
     }
     privacy_reload();
     privacy_damage();
-    if (private_notifications != was_private_notify)
+    if (settings->notifications.private != was_private_notify)
         bar_notification_reset_private();
-    wlr_scene_rect_set_color(root_background, root_color);
+    wlr_scene_rect_set_color(root_background, settings->look.root_color);
 
     settings_reload_keyboard();
     tablet_remap();
@@ -420,6 +423,6 @@ static void settings_reload(const ActionArg*)
     }
 
     opacity_reload();
-    notify_set_timeout(notification_timeout);
+    notify_set_timeout(settings->notifications.timeout);
     bar_draw_all();
 }

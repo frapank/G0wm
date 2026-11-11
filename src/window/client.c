@@ -91,7 +91,8 @@ static void client_apply_rules(WindowClient* client)
     const char* app_id = client_get_app_id(client);
     const char* title = client_get_title(client);
 
-    for (const ClientRule* rule = client_rules; rule < client_rules + client_rule_count; rule++) {
+    for (const ClientRule* rule = settings->rules.client_rules;
+         rule < settings->rules.client_rules + settings->rules.client_rule_count; rule++) {
         if ((!rule->title || strstr(title, rule->title)) &&
             (!rule->app_id || strstr(app_id, rule->app_id))) {
             client->is_floating = rule->is_floating;
@@ -216,9 +217,9 @@ void client_handle_new_toplevel(struct wl_listener*, void* data)
     client = toplevel->base->data = util_calloc(1, sizeof(*client));
     client->surface.xdg = toplevel->base;
     client->border_width = corner_border_width();
-    client->opacity = client->unfocused_opacity = opacity_unfocus;
-    client->focused_opacity = opacity_focus;
-    client->is_private = always_private;
+    client->opacity = client->unfocused_opacity = settings->opacity.unfocus;
+    client->focused_opacity = settings->opacity.focus;
+    client->is_private = settings->windows.always_private;
 
     LISTEN(&toplevel->base->surface->events.commit, &client->commit, client_handle_commit);
     LISTEN(&toplevel->base->surface->events.map, &client->map, client_handle_map);
@@ -440,7 +441,7 @@ void client_handle_map(struct wl_listener* listener, void*)
 
 #ifdef INTEGRATED_BACKGROUND
     /* the frosted backdrop goes under the lot: the surface, which is what it
-     * shows through, and the decorations, which opacity_decorations may fade
+     * shows through, and the decorations, which opacity.decorations may fade
      * too */
     client->blur_scene_buffer = wlr_scene_buffer_create(client->scene, nullptr);
     client->blur_scene_buffer->node.data = client;

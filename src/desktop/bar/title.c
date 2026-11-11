@@ -47,7 +47,7 @@ static int bar_title_close_x(WindowClient* client, int bar_width, int* button_si
     Monitor* monitor = client->monitor;
 
     *button_size = MAX(monitor->draw_context->font->height * 3 / 5, 4);
-    if (!title_close)
+    if (!settings->windows.title_close)
         return bar_width;
     const int button_x = bar_width - monitor->horizontal_padding / 2 - *button_size;
     return button_x > bar_width / 2 ? button_x : bar_width;
@@ -65,7 +65,7 @@ static void bar_paint_title_bar(WindowClient* client, RenderBuffer* buffer, int 
     const int is_tab = monitor->layouts[monitor->selected_layout_index]->arrange == layout_tabbed &&
                        !client->is_floating &&
                        client->title_width < client->geometry.width - 2 * (int)client->border_width;
-    const uint32_t foreground = colors[scheme_index][ColFg];
+    const uint32_t foreground = settings->look.colors[scheme_index][ColFg];
     const char* title = for_sharing ? privacy_share_title(client) : client_get_title(client);
     int close_button_size;
     const int close_button_x = bar_title_close_x(client, buffer_width, &close_button_size);
@@ -76,7 +76,7 @@ static void bar_paint_title_bar(WindowClient* client, RenderBuffer* buffer, int 
     const int dot_count = !!client->is_floating + has_private_dot;
     int text_start =
         monitor->horizontal_padding / 2 + dot_count * (dot_size + monitor->horizontal_padding / 3);
-    if (title_center) {
+    if (settings->windows.title_center) {
         const int text_width = (int)drwl_font_getwidth(monitor->draw_context, title);
         text_start = MAX(MIN((buffer_width - text_width) / 2,
                              close_button_x - monitor->horizontal_padding / 2 - text_width),
@@ -84,8 +84,8 @@ static void bar_paint_title_bar(WindowClient* client, RenderBuffer* buffer, int 
     }
 
     drwl_setimage(monitor->draw_context, buffer->image);
-    drwl_setscheme(monitor->draw_context,
-                   for_sharing ? bar_opaque_scheme(scheme_index) : colors[scheme_index]);
+    drwl_setscheme(monitor->draw_context, for_sharing ? bar_opaque_scheme(scheme_index)
+                                                      : settings->look.colors[scheme_index]);
     drwl_rect(monitor->draw_context, 0, 0, buffer_width, buffer_height, 1, 1);
     if (close_button_x > text_start)
         drwl_text(monitor->draw_context, 0, 0, close_button_x, buffer_height, text_start, title, 0);
@@ -101,11 +101,11 @@ static void bar_paint_title_bar(WindowClient* client, RenderBuffer* buffer, int 
     if (is_tab && client->title_x)
         bar_draw_pill(monitor, 0, buffer_height / 4, (int)MAX(monitor->wlr_output->scale, 1),
                       buffer_height - buffer_height / 2, 0, 0,
-                      bar_fade(colors[COLOR_SCHEME_TITLE][ColFg]));
+                      bar_fade(settings->look.colors[COLOR_SCHEME_TITLE][ColFg]));
     if (close_button_x < buffer_width && client == bar_hovered)
         bar_draw_pill(monitor, close_button_x, (buffer_height - close_button_size) / 2,
                       close_button_size, close_button_size, close_button_size / 2.0, 0,
-                      title_close_color);
+                      settings->windows.title_close_color);
 }
 
 /* Renders the client's own title bar. In the tabbed layout every client of the
@@ -117,8 +117,8 @@ void bar_draw_title_bar(WindowClient* client)
     Monitor* monitor = client->monitor;
 
     bar_place_title_bar(client);
-    if (!monitor || !title_bar || client->is_fullscreen || client->title_width <= 0 ||
-        !client->scene->node.enabled) {
+    if (!monitor || !settings->windows.title_bar || client->is_fullscreen ||
+        client->title_width <= 0 || !client->scene->node.enabled) {
         wlr_scene_node_set_enabled(&client->title_scene_buffer->node, 0);
         return;
     }
@@ -255,7 +255,7 @@ void bar_place_title_bar(WindowClient* client)
 
 int bar_title_height(WindowClient* client)
 {
-    return title_bar && client->monitor && !client->is_fullscreen
+    return settings->windows.title_bar && client->monitor && !client->is_fullscreen
                ? client->monitor->titlebar_metrics.logical_height
                : 0;
 }
@@ -265,7 +265,7 @@ int bar_title_height(WindowClient* client)
 void bar_toggle_title_bars(const ActionArg*)
 {
 
-    title_bar = !title_bar;
+    settings->windows.title_bar = !settings->windows.title_bar;
 
     Monitor* monitor;
     wl_list_for_each(monitor, &monitors, link)

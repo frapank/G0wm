@@ -51,8 +51,9 @@ static int input_gesture_bound(int pinch, uint32_t fingers)
 {
     if (lock_active)
         return 0;
-    for (const GestureBinding* gesture = gesture_bindings;
-         gesture < gesture_bindings + gesture_binding_count; gesture++)
+    for (const GestureBinding* gesture = settings->bindings.gesture_bindings;
+         gesture < settings->bindings.gesture_bindings + settings->bindings.gesture_binding_count;
+         gesture++)
         if ((gesture->direction >= GESTURE_PINCH_IN) == pinch && gesture->finger_count == fingers)
             return 1;
     return 0;
@@ -60,8 +61,9 @@ static int input_gesture_bound(int pinch, uint32_t fingers)
 
 static void input_gesture_run(unsigned int motion)
 {
-    for (const GestureBinding* gesture = gesture_bindings;
-         gesture < gesture_bindings + gesture_binding_count; gesture++)
+    for (const GestureBinding* gesture = settings->bindings.gesture_bindings;
+         gesture < settings->bindings.gesture_bindings + settings->bindings.gesture_binding_count;
+         gesture++)
         if (gesture->direction == motion && gesture->finger_count == input_gesture.finger_count &&
             gesture->callback)
             gesture->callback(&gesture->argument);
@@ -122,7 +124,8 @@ void input_handle_pinch_begin(struct wl_listener*, void* data)
 
     wlr_idle_notifier_v1_notify_activity(idle_notifier, seat);
     Monitor* monitor;
-    if (!lock_active && pinch_zoom_modifier && CLEANMASK(mods) == CLEANMASK(pinch_zoom_modifier) &&
+    if (!lock_active && settings->bindings.pinch_zoom_modifier &&
+        CLEANMASK(mods) == CLEANMASK(settings->bindings.pinch_zoom_modifier) &&
         (monitor = monitor_at(cursor->x, cursor->y))) {
         input_gesture.initial_zoom = monitor->zoom_factor;
         return;
