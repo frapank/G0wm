@@ -28,6 +28,7 @@ constexpr int CORNER_SAMPLES = 4; /* per axis, so sixteen coverage samples a pix
 static uint32_t corner_color(int scheme);
 static uint8_t* corner_coverage(int radius, int border_thickness);
 static double corner_exponent(void);
+static double corner_power(double value, double exponent);
 static void corner_draw(uint32_t* pixels,
                         const uint8_t* coverage,
                         int radius,
@@ -41,6 +42,12 @@ static void corner_draw(uint32_t* pixels,
 static double corner_exponent(void)
 {
     return settings->windows.corner_style == CORNER_STYLE_SQUIRCLE ? 4.0 : 2.0;
+}
+
+static double corner_power(double value, double exponent)
+{
+    const double square = value * value;
+    return exponent == 2.0 ? square : square * square;
 }
 
 /* The contents stay square, so the border has to be at least as thick as the
@@ -142,11 +149,11 @@ static uint8_t* corner_coverage(int radius, int border_thickness)
                         ((double)radius - (x + (i + 0.5) / CORNER_SAMPLES)) / radius;
                     const double sample_y =
                         ((double)radius - (y + (j + 0.5) / CORNER_SAMPLES)) / radius;
-                    if (pow(sample_x, exponent) + pow(sample_y, exponent) > 1.0)
+                    if (corner_power(sample_x, exponent) + corner_power(sample_y, exponent) > 1.0)
                         continue; /* outside the window */
                     if (inner_radius > 0.0 &&
-                        pow(sample_x * radius / inner_radius, exponent) +
-                                pow(sample_y * radius / inner_radius, exponent) <=
+                        corner_power(sample_x * radius / inner_radius, exponent) +
+                                corner_power(sample_y * radius / inner_radius, exponent) <=
                             1.0)
                         continue; /* inside, where the contents are */
                     covered_samples++;
