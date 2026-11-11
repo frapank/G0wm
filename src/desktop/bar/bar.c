@@ -42,6 +42,14 @@ constexpr int PULSE_FRAME_MS = 40;
 char bar_status_text[STATUS_MAX];
 /* redraws the bars while an urgent dot pulses */
 static struct wl_event_source* bar_pulse_timer;
+struct PillMask {
+    int width, height;
+    double radius;
+    bool hollow;
+    pixman_image_t* image;
+};
+static struct PillMask pill_masks[16];
+static size_t pill_mask_next;
 
 /* function implementations */
 bool bar_accepts_input(struct wlr_scene_buffer*, double*, double*)
@@ -108,29 +116,44 @@ void bar_draw_pill(Monitor* monitor,
 {
     if (width <= 0 || height <= 0)
         return;
-    pixman_image_t* mask = pixman_image_create_bits(PIXMAN_a8, width, height, nullptr, 0);
-    if (!mask)
-        return;
     radius = fmin(fmax(radius, 0), fmin(width, height) / 2.0);
-    uint8_t* data = (uint8_t*)pixman_image_get_data(mask);
-    const int stride = pixman_image_get_stride(mask);
-
-    /* 4x4 supersampling */
-    for (int py = 0; py < height; py++)
-        for (int px = 0; px < width; px++) {
-            int coverage = 0;
-            for (int sub_y = 0; sub_y < 4; sub_y++)
-                for (int sub_x = 0; sub_x < 4; sub_x++) {
-                    const double sample_x = px + (sub_x + 0.5) / 4;
-                    const double sample_y = py + (sub_y + 0.5) / 4;
-                    coverage += bar_in_pill(sample_x, sample_y, width, height, radius) &&
-                                !(hollow && sample_x > 1 && sample_y > 1 &&
-                                  bar_in_pill(sample_x - 1, sample_y - 1, width - 2, height - 2,
-                                              radius - 1));
-                }
-            data[py * stride + px] = (uint8_t)(coverage * 255 / 16);
+    pixman_image_t* mask = nullptr;
+    for (size_t i = 0; i < LENGTH(pill_masks); i++) {
+        const struct PillMask* entry = &pill_masks[i];
+        if (entry->image && entry->width == width && entry->height == height &&
+            entry->radius == radius && entry->hollow == hollow) {
+            mask = entry->image;
+            break;
         }
+    }
+    if (!mask) {
+        mask = pixman_image_create_bits(PIXMAN_a8, width, height, nullptr, 0);
+        if (!mask)
+            return;
+        uint8_t* data = (uint8_t*)pixman_image_get_data(mask);
+        const int stride = pixman_image_get_stride(mask);
 
+        /* 4x4 supersampling */
+        for (int py = 0; py < height; py++)
+            for (int px = 0; px < width; px++) {
+                int coverage = 0;
+                for (int sub_y = 0; sub_y < 4; sub_y++)
+                    for (int sub_x = 0; sub_x < 4; sub_x++) {
+                        const double sample_x = px + (sub_x + 0.5) / 4;
+                        const double sample_y = py + (sub_y + 0.5) / 4;
+                        coverage += bar_in_pill(sample_x, sample_y, width, height, radius) &&
+                                    !(hollow && sample_x > 1 && sample_y > 1 &&
+                                      bar_in_pill(sample_x - 1, sample_y - 1, width - 2, height - 2,
+                                                  radius - 1));
+                    }
+                data[py * stride + px] = (uint8_t)(coverage * 255 / 16);
+            }
+
+        struct PillMask* entry = &pill_masks[pill_mask_next++ % LENGTH(pill_masks)];
+        if (entry->image)
+            pixman_image_unref(entry->image);
+        *entry = (struct PillMask){ width, height, radius, hollow, mask };
+    }
     const pixman_color_t color = convert_color(rgba);
     pixman_image_t* source = pixman_image_create_solid_fill(&color);
     if (source) {
@@ -138,7 +161,6 @@ void bar_draw_pill(Monitor* monitor,
                                  0, 0, x, y, width, height);
         pixman_image_unref(source);
     }
-    pixman_image_unref(mask);
 }
 
 /* the same colour at a third of its alpha */
@@ -210,6 +232,12 @@ static void bar_pulse_arm(void)
 
 void bar_finish(void)
 {
+    for (size_t i = 0; i < LENGTH(pill_masks); i++) {
+        if (pill_masks[i].image)
+            pixman_image_unref(pill_masks[i].image);
+        pill_masks[i] = (struct PillMask){ 0 };
+    }
+    pill_mask_next = 0;
     if (bar_pulse_timer)
         wl_event_source_remove(bar_pulse_timer);
     bar_pulse_timer = nullptr;

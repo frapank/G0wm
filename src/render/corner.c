@@ -26,7 +26,7 @@ constexpr int CORNER_SAMPLES = 4; /* per axis, so sixteen coverage samples a pix
 
 /* function declarations */
 static uint32_t corner_color(int scheme);
-static uint8_t* corner_coverage(int radius, int border_thickness);
+static const uint8_t* corner_coverage(int radius, int border_thickness);
 static double corner_exponent(void);
 static double corner_power(double value, double exponent);
 static void corner_draw(uint32_t* pixels,
@@ -34,6 +34,23 @@ static void corner_draw(uint32_t* pixels,
                         int radius,
                         int corner,
                         uint32_t color);
+
+struct CornerMask {
+    int radius, border_thickness;
+    double exponent;
+    uint8_t* pixels;
+};
+static struct CornerMask corner_masks[16];
+static size_t corner_mask_next;
+
+void corner_finish(void)
+{
+    for (size_t i = 0; i < LENGTH(corner_masks); i++) {
+        free(corner_masks[i].pixels);
+        corner_masks[i] = (struct CornerMask){ 0 };
+    }
+    corner_mask_next = 0;
+}
 
 /* function implementations */
 
@@ -102,7 +119,7 @@ void corner_cut(uint32_t* pixels, int width, int height, int radius)
         return;
 
     /* bw = r, no inner curve: the cut goes all the way through */
-    uint8_t* coverage = corner_coverage(radius, radius);
+    const uint8_t* coverage = corner_coverage(radius, radius);
     for (int corner = 0; corner < 4; corner++) {
         for (int y = 0; y < radius; y++) {
             for (int x = 0; x < radius; x++) {
@@ -117,7 +134,6 @@ void corner_cut(uint32_t* pixels, int width, int height, int radius)
             }
         }
     }
-    free(coverage);
 }
 
 /* Border colour of a scheme as the premultiplied ARGB the buffers hold,
@@ -134,10 +150,16 @@ static uint32_t corner_color(int scheme)
 /* Coverage of the ring between the outer curve and the inner one, a byte a
  * pixel, for the top left corner; the others are it mirrored. Sampling
  * antialiases both edges of the ring in one pass, whatever the curve. */
-static uint8_t* corner_coverage(int radius, int border_thickness)
+static const uint8_t* corner_coverage(int radius, int border_thickness)
 {
-    uint8_t* coverage = util_calloc((size_t)radius * (size_t)radius, 1);
     const double exponent = corner_exponent();
+    for (size_t i = 0; i < LENGTH(corner_masks); i++) {
+        const struct CornerMask* mask = &corner_masks[i];
+        if (mask->pixels && mask->radius == radius && mask->border_thickness == border_thickness &&
+            mask->exponent == exponent)
+            return mask->pixels;
+    }
+    uint8_t* coverage = util_calloc((size_t)radius * (size_t)radius, 1);
     const double inner_radius = radius - border_thickness;
 
     for (int y = 0; y < radius; y++) {
@@ -163,6 +185,9 @@ static uint8_t* corner_coverage(int radius, int border_thickness)
                 (uint8_t)(covered_samples * 255 / (CORNER_SAMPLES * CORNER_SAMPLES));
         }
     }
+    struct CornerMask* mask = &corner_masks[corner_mask_next++ % LENGTH(corner_masks)];
+    free(mask->pixels);
+    *mask = (struct CornerMask){ radius, border_thickness, exponent, coverage };
     return coverage;
 }
 
@@ -234,7 +259,7 @@ void corner_draw_all(WindowClient* client)
     client->cached_corner_border_width = scaled_border;
     client->cached_corner_color = color;
 
-    uint8_t* cov = corner_coverage(scaled_radius, scaled_border);
+    const uint8_t* cov = corner_coverage(scaled_radius, scaled_border);
     for (int i = 0; i < 4; i++) {
         RenderBuffer* buffer =
             buffer_get(client->corner_buffer_pool[i], LENGTH(client->corner_buffer_pool[i]),
@@ -245,5 +270,4 @@ void corner_draw_all(WindowClient* client)
         wlr_scene_buffer_set_buffer(client->corner_buffers[i], &buffer->base);
         wlr_buffer_unlock(&buffer->base);
     }
-    free(cov);
 }
