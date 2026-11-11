@@ -51,6 +51,8 @@ struct PillMask {
 static struct PillMask pill_masks[16];
 static size_t pill_mask_next;
 
+static void bar_draw_contents(Monitor* monitor, bool draw_titles);
+
 /* function implementations */
 bool bar_accepts_input(struct wlr_scene_buffer*, double*, double*)
 {
@@ -216,7 +218,9 @@ static uint32_t bar_pulse(uint32_t rgba)
 
 static int bar_pulse_tick(void*)
 {
-    bar_draw_all();
+    Monitor* monitor;
+    wl_list_for_each(monitor, &monitors, link)
+        bar_draw_contents(monitor, false);
     return 0;
 }
 
@@ -353,6 +357,11 @@ int bar_tag_width(Monitor* monitor, Monitor* target, uint32_t tag)
 
 void bar_draw(Monitor* monitor)
 {
+    bar_draw_contents(monitor, true);
+}
+
+static void bar_draw_contents(Monitor* monitor, bool draw_titles)
+{
     /* what the bar reports on: its own monitor, or the focused one when
      * bar.single_monitor leaves a single bar standing in for the lot */
     Monitor* target = settings->bar.single_monitor && selected_monitor ? selected_monitor : monitor;
@@ -361,7 +370,7 @@ void bar_draw(Monitor* monitor)
     /* Title bars are refreshed on the same events as the bar */
     WindowClient* client;
     wl_list_for_each(client, &clients, link)
-        if (client->monitor == monitor)
+        if (draw_titles && client->monitor == monitor)
             bar_draw_title_bar(client);
 
     monitor->capture_width = 0;
