@@ -17,7 +17,7 @@
 #define NOTIFY_NAME "org.freedesktop.Notifications"
 
 /* variables */
-NotifyState notify_state;
+NotificationState notify_state;
 static const DBusObjectPathVTable notify_vtable = { .message_function = notify_handle_message };
 
 /* function implementations */
@@ -39,11 +39,11 @@ void notify_start(DBusConnection* connection,
         return;
 
     notify_state = (typeof(notify_state)){};
-    notify_state.conn = connection;
-    notify_state.loop = loop;
+    notify_state.connection = connection;
+    notify_state.event_loop = loop;
     notify_set_timeout(timeout_secs);
-    notify_state.redraw = redraw;
-    notify_state.token = token;
+    notify_state.redraw_callback = redraw;
+    notify_state.activation_token_callback = token;
 
     /* if another daemon (mako, dunst, swaync, ...) already owns the name,
      * don't fight it for it: just stay disabled */
@@ -63,33 +63,33 @@ void notify_start(DBusConnection* connection,
         return;
     }
 
-    notify_state.running = 1;
+    notify_state.is_running = 1;
 }
 
 void notify_stop(void)
 {
-    if (!notify_state.running)
+    if (!notify_state.is_running)
         return;
 
     /* nothing is worth redrawing on the way out, but clients still deserve
      * to hear that their notification went away */
-    notify_state.redraw = nullptr;
-    while (notify_state.nqueue) {
+    notify_state.redraw_callback = nullptr;
+    while (notify_state.queue_count) {
         Notification notification;
         notify_unqueue(0, &notification);
-        notify_closed(notification.id, ClosedUndefined);
+        notify_closed(notification.id, NOTIFICATION_CLOSED_UNDEFINED);
         notify_release(&notification);
     }
-    notify_clear(ClosedUndefined);
-    while (notify_state.nhist)
-        notify_release(&notify_state.hist[--notify_state.nhist]);
+    notify_clear(NOTIFICATION_CLOSED_UNDEFINED);
+    while (notify_state.history_count)
+        notify_release(&notify_state.history[--notify_state.history_count]);
     if (notify_state.timer) {
         wl_event_source_remove(notify_state.timer);
         notify_state.timer = nullptr;
     }
-    dbus_connection_unregister_object_path(notify_state.conn, NOTIFY_OPATH);
-    dbus_bus_release_name(notify_state.conn, NOTIFY_NAME, nullptr);
-    notify_state.running = 0;
+    dbus_connection_unregister_object_path(notify_state.connection, NOTIFY_OPATH);
+    dbus_bus_release_name(notify_state.connection, NOTIFY_NAME, nullptr);
+    notify_state.is_running = 0;
 }
 
 void notify_set_timeout(unsigned int timeout_secs)

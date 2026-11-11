@@ -132,11 +132,12 @@ static int input_key_binding(uint32_t mods, xkb_keysym_t sym)
     struct wlr_keyboard_shortcuts_inhibitor_v1* inhibitor = input_focused_inhibitor();
     int inhibited = inhibitor && inhibitor->active;
 
-    for (const Key* binding = keys; binding < keys + key_count; binding++) {
-        if (CLEANMASK(mods) == CLEANMASK(binding->mod) &&
-            xkb_keysym_to_lower(sym) == xkb_keysym_to_lower(binding->keysym) && binding->func &&
-            (!inhibited || binding->func == input_toggle_inhibit)) {
-            binding->func(&binding->arg);
+    for (const KeyBinding* binding = key_bindings; binding < key_bindings + key_binding_count;
+         binding++) {
+        if (CLEANMASK(mods) == CLEANMASK(binding->modifiers) &&
+            xkb_keysym_to_lower(sym) == xkb_keysym_to_lower(binding->keysym) && binding->callback &&
+            (!inhibited || binding->callback == input_toggle_inhibit)) {
+            binding->callback(&binding->argument);
             return 1;
         }
     }
@@ -152,8 +153,9 @@ static void input_handle_key(struct wl_listener* listener, void* data)
     /* Translate libinput keycode -> xkbcommon */
     uint32_t keycode = event->keycode + 8;
     /* Get a list of keysyms based on the keymap for this keyboard */
-    const xkb_keysym_t* syms;
-    int nsyms = xkb_state_key_get_syms(group->wlr_group->keyboard.xkb_state, keycode, &syms);
+    const xkb_keysym_t* keysyms;
+    int keysym_count =
+        xkb_state_key_get_syms(group->wlr_group->keyboard.xkb_state, keycode, &keysyms);
 
     int handled = 0;
     uint32_t mods = wlr_keyboard_get_modifiers(&group->wlr_group->keyboard);
@@ -172,21 +174,21 @@ static void input_handle_key(struct wl_listener* listener, void* data)
      * as handled and left a repeat armed, which would replay the binding and
      * toggle the prompt straight back off. */
     if (runner_active) {
-        if (!lock_active && nsyms > 0 && event->state == WL_KEYBOARD_KEY_STATE_PRESSED) {
+        if (!lock_active && keysym_count > 0 && event->state == WL_KEYBOARD_KEY_STATE_PRESSED) {
             /* only the primary keysym: the codepoint belongs to the key, not
              * to each of the syms it can produce, so looping would type it
              * once per sym */
             uint32_t codepoint =
                 xkb_state_key_get_utf32(group->wlr_group->keyboard.xkb_state, keycode);
-            runner_key(syms[0], mods, codepoint);
+            runner_key(keysyms[0], mods, codepoint);
             /* Arm the repeat for the prompt the way a handled binding does,
              * so a held key (backspace above all) repeats into it. Return and
              * Escape close the prompt from inside runner_key(), and there is
              * nothing left to repeat into once they have. */
             if (runner_active && group->wlr_group->keyboard.repeat_info.delay > 0) {
-                group->mods = mods;
-                group->keysyms = syms;
-                group->nsyms = nsyms;
+                group->modifiers_mask = mods;
+                group->keysyms = keysyms;
+                group->keysym_count = keysym_count;
                 input_runner_repeat_codepoint = codepoint;
                 runner_repeating = 1;
                 wl_event_source_timer_update(group->key_repeat_source,
@@ -194,7 +196,7 @@ static void input_handle_key(struct wl_listener* listener, void* data)
                 return;
             }
         }
-        group->nsyms = 0;
+        group->keysym_count = 0;
         runner_repeating = 0;
         wl_event_source_timer_update(group->key_repeat_source, 0);
         return;
@@ -202,17 +204,18 @@ static void input_handle_key(struct wl_listener* listener, void* data)
 
     /* the open menu holds the keyboard, Escape closes it */
     if (!lock_active && traypopup_active()) {
-        if (nsyms > 0 && event->state == WL_KEYBOARD_KEY_STATE_PRESSED && syms[0] == XKB_KEY_Escape)
+        if (keysym_count > 0 && event->state == WL_KEYBOARD_KEY_STATE_PRESSED &&
+            keysyms[0] == XKB_KEY_Escape)
             traypopup_dismiss();
-        group->nsyms = 0;
+        group->keysym_count = 0;
         wl_event_source_timer_update(group->key_repeat_source, 0);
         return;
     }
 
     if (!lock_active && bar_notification_picking()) {
-        if (nsyms > 0 && event->state == WL_KEYBOARD_KEY_STATE_PRESSED)
-            bar_notification_pick_key(syms[0]);
-        group->nsyms = 0;
+        if (keysym_count > 0 && event->state == WL_KEYBOARD_KEY_STATE_PRESSED)
+            bar_notification_pick_key(keysyms[0]);
+        group->keysym_count = 0;
         wl_event_source_timer_update(group->key_repeat_source, 0);
         return;
     }
@@ -220,18 +223,18 @@ static void input_handle_key(struct wl_listener* listener, void* data)
     /* On _press_ if there is no active screen locker,
      * attempt to process a compositor keybinding. */
     if (!lock_active && event->state == WL_KEYBOARD_KEY_STATE_PRESSED) {
-        for (int i = 0; i < nsyms; i++)
-            handled = input_key_binding(mods, syms[i]) || handled;
+        for (int i = 0; i < keysym_count; i++)
+            handled = input_key_binding(mods, keysyms[i]) || handled;
     }
 
     if (handled && group->wlr_group->keyboard.repeat_info.delay > 0) {
-        group->mods = mods;
-        group->keysyms = syms;
-        group->nsyms = nsyms;
+        group->modifiers_mask = mods;
+        group->keysyms = keysyms;
+        group->keysym_count = keysym_count;
         wl_event_source_timer_update(group->key_repeat_source,
                                      group->wlr_group->keyboard.repeat_info.delay);
     } else {
-        group->nsyms = 0;
+        group->keysym_count = 0;
         wl_event_source_timer_update(group->key_repeat_source, 0);
     }
 
@@ -263,7 +266,7 @@ static void input_handle_modifiers(struct wl_listener* listener, void*)
 static int input_key_repeat(void* data)
 {
     KeyboardGroup* group = data;
-    if (!group->nsyms || group->wlr_group->keyboard.repeat_info.rate <= 0)
+    if (!group->keysym_count || group->wlr_group->keyboard.repeat_info.rate <= 0)
         return 0;
     /* the repeat of the key that opened the picker would close it */
     if (bar_notification_picking())
@@ -275,25 +278,25 @@ static int input_key_repeat(void* data)
          * keeps a key that closed the prompt from repeating into nothing. */
         if (!runner_repeating)
             return 0;
-        runner_key(group->keysyms[0], group->mods, input_runner_repeat_codepoint);
+        runner_key(group->keysyms[0], group->modifiers_mask, input_runner_repeat_codepoint);
         if (runner_active)
             wl_event_source_timer_update(group->key_repeat_source,
                                          1000 / group->wlr_group->keyboard.repeat_info.rate);
         else
-            group->nsyms = 0;
+            group->keysym_count = 0;
         return 0;
     }
 
     wl_event_source_timer_update(group->key_repeat_source,
                                  1000 / group->wlr_group->keyboard.repeat_info.rate);
 
-    for (int i = 0; i < group->nsyms; i++)
-        input_key_binding(group->mods, group->keysyms[i]);
+    for (int i = 0; i < group->keysym_count; i++)
+        input_key_binding(group->modifiers_mask, group->keysyms[i]);
 
     return 0;
 }
 
-void input_toggle_inhibit(const Arg*)
+void input_toggle_inhibit(const ActionArg*)
 {
     struct wlr_keyboard_shortcuts_inhibitor_v1* inhibitor = input_focused_inhibitor();
 
@@ -310,7 +313,7 @@ void input_handle_new_virtual_keyboard(struct wl_listener*, void* data)
     struct wlr_virtual_keyboard_v1* virtual_keyboard = data;
     /* virtual keyboards shouldn't share keyboard group */
     KeyboardGroup* group = input_create_keyboard_group();
-    group->vkb = virtual_keyboard;
+    group->virtual_keyboard = virtual_keyboard;
     /* Set the keymap to match the group keymap */
     wlr_keyboard_set_keymap(&virtual_keyboard->keyboard, group->wlr_group->keyboard.keymap);
     LISTEN(&virtual_keyboard->keyboard.base.events.destroy, &group->destroy,

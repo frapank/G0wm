@@ -36,17 +36,17 @@ typedef struct {
     int text_x, text_width;
     int count_x, count_width;
     char count_text[32];
-    int sign_x, sign_width;
+    int action_sign_x, action_sign_width;
     /* while picking, the action labels shown in place of the text */
-    int chip_x[NOTIFY_ACTMAX], chip_width[NOTIFY_ACTMAX];
-    size_t chip_first, chip_count;
-} NotifyBox;
+    int action_x[NOTIFY_ACTMAX], action_width[NOTIFY_ACTMAX];
+    size_t first_action_index, visible_action_count;
+} NotificationLayout;
 
 constexpr char bar_notification_more[] = "\xe2\x80\xba"; /* › */
 
 /* function declarations */
 static void bar_draw_notification_text(Monitor* monitor,
-                                       const NotifyBox* box,
+                                       const NotificationLayout* box,
                                        int x,
                                        int width,
                                        const Notification* notification,
@@ -59,7 +59,7 @@ static void bar_notification_box(Monitor* monitor,
                                  int x,
                                  int width,
                                  bool shared,
-                                 NotifyBox* box);
+                                 NotificationLayout* box);
 static void bar_notification_browse(dbus_uint32_t id);
 static void bar_notification_pick_close(void);
 static void bar_notification_pick_run(size_t i);
@@ -89,49 +89,55 @@ static int bar_notification_hide = -1;
 /* Background and text. drwl_text() paints its own background, so a progress
  * fill is drawn by calling this twice under different clips. */
 static void bar_draw_notification_text(Monitor* monitor,
-                                       const NotifyBox* box,
+                                       const NotificationLayout* box,
                                        int x,
                                        int width,
                                        const Notification* notification,
                                        const char* text,
                                        uint32_t* scheme)
 {
-    drwl_setscheme(monitor->drw, scheme);
-    drwl_rect(monitor->drw, x, 0, (unsigned int)width, monitor->b.height, 1, 1);
-    if (box->chip_count) {
-        for (size_t i = box->chip_first; i < box->chip_first + box->chip_count; i++)
-            drwl_text(monitor->drw, box->chip_x[i], 0, box->chip_width[i], monitor->b.height,
-                      monitor->lrpad / 2, notification->act[i].label,
-                      (long)i == bar_notification_pick_selected);
-        if (box->chip_first || box->chip_first + box->chip_count < notification->nact) {
-            const int more_width = (int)drwl_font_getwidth(monitor->drw, bar_notification_more);
+    drwl_setscheme(monitor->draw_context, scheme);
+    drwl_rect(monitor->draw_context, x, 0, (unsigned int)width, monitor->bar_metrics.height_px, 1,
+              1);
+    if (box->visible_action_count) {
+        for (size_t i = box->first_action_index;
+             i < box->first_action_index + box->visible_action_count; i++)
+            drwl_text(monitor->draw_context, box->action_x[i], 0, box->action_width[i],
+                      monitor->bar_metrics.height_px, monitor->horizontal_padding / 2,
+                      notification->actions[i].label, (long)i == bar_notification_pick_selected);
+        if (box->first_action_index ||
+            box->first_action_index + box->visible_action_count < notification->action_count) {
+            const int more_width =
+                (int)drwl_font_getwidth(monitor->draw_context, bar_notification_more);
             if (more_width <= box->text_width)
-                drwl_text(monitor->drw, box->text_x + box->text_width - more_width, 0, more_width,
-                          monitor->b.height, 0, bar_notification_more, 0);
+                drwl_text(monitor->draw_context, box->text_x + box->text_width - more_width, 0,
+                          more_width, monitor->bar_metrics.height_px, 0, bar_notification_more, 0);
         }
     } else if (box->text_width > 0 &&
-               (int)drwl_font_getwidth(monitor->drw, text) <= box->text_width) {
-        drwl_text(monitor->drw, box->text_x, 0, box->text_width, monitor->b.height, 0, text, 0);
+               (int)drwl_font_getwidth(monitor->draw_context, text) <= box->text_width) {
+        drwl_text(monitor->draw_context, box->text_x, 0, box->text_width,
+                  monitor->bar_metrics.height_px, 0, text, 0);
     } else if (box->text_width > 0) {
         /* our own › instead of drwl's …, which covers the last codepoint */
-        const int more_width = (int)drwl_font_getwidth(monitor->drw, bar_notification_more);
+        const int more_width =
+            (int)drwl_font_getwidth(monitor->draw_context, bar_notification_more);
         const size_t prefix_length = bar_fit_prefix(monitor, text, box->text_width - more_width);
         char buf[NOTIFY_TEXTMAX];
         memcpy(buf, text, prefix_length);
         buf[prefix_length] = '\0';
         if (prefix_length)
-            drwl_text(monitor->drw, box->text_x, 0, box->text_width - more_width, monitor->b.height,
-                      0, buf, 0);
+            drwl_text(monitor->draw_context, box->text_x, 0, box->text_width - more_width,
+                      monitor->bar_metrics.height_px, 0, buf, 0);
         if (more_width <= box->text_width)
-            drwl_text(monitor->drw, box->text_x + box->text_width - more_width, 0, more_width,
-                      monitor->b.height, 0, bar_notification_more, 0);
+            drwl_text(monitor->draw_context, box->text_x + box->text_width - more_width, 0,
+                      more_width, monitor->bar_metrics.height_px, 0, bar_notification_more, 0);
     }
-    if (box->sign_width)
-        drwl_text(monitor->drw, box->sign_x, 0, box->sign_width, monitor->b.height, 0,
-                  notification_action_sign, 0);
+    if (box->action_sign_width)
+        drwl_text(monitor->draw_context, box->action_sign_x, 0, box->action_sign_width,
+                  monitor->bar_metrics.height_px, 0, notification_action_sign, 0);
     if (box->count_width)
-        drwl_text(monitor->drw, box->count_x, 0, box->count_width, monitor->b.height, 0,
-                  box->count_text, 0);
+        drwl_text(monitor->draw_context, box->count_x, 0, box->count_width,
+                  monitor->bar_metrics.height_px, 0, box->count_text, 0);
 }
 
 /* hist is its history index, -1 for the live one. shared draws what screen
@@ -144,9 +150,11 @@ void bar_draw_notification(Monitor* monitor,
                            long hist,
                            bool shared)
 {
-    int color_scheme = notification->urgency == UrgencyLow        ? SchemeNotifyLow
-                       : notification->urgency == UrgencyCritical ? SchemeNotifyCrit
-                                                                  : SchemeNotify;
+    int color_scheme = notification->urgency == NOTIFICATION_URGENCY_LOW
+                           ? COLOR_SCHEME_NOTIFICATION_LOW
+                       : notification->urgency == NOTIFICATION_URGENCY_CRITICAL
+                           ? COLOR_SCHEME_NOTIFICATION_CRITICAL
+                           : COLOR_SCHEME_NOTIFICATION;
     uint32_t* scheme = shared ? bar_opaque_scheme(color_scheme) : colors[color_scheme];
     uint32_t line_color = colors[color_scheme][ColBorder];
 
@@ -155,7 +163,7 @@ void bar_draw_notification(Monitor* monitor,
         bar_notification_picking();
         bar_notification_box_x = x;
     }
-    NotifyBox box;
+    NotificationLayout box;
     bar_notification_box(monitor, notification, hist, x, width, shared, &box);
 
     const char* visible_text =
@@ -164,7 +172,7 @@ void bar_draw_notification(Monitor* monitor,
                                            ? bar_notification_offset
                                            : 0);
 
-    if (notification->value < 0) {
+    if (notification->progress_percent < 0) {
         bar_draw_notification_text(monitor, &box, x, width, notification, visible_text, scheme);
     } else {
         /* the fill's background is premixed: a tint drawn over would dye the
@@ -182,23 +190,25 @@ void bar_draw_notification(Monitor* monitor,
         if (shared)
             filled_colors[ColBg] |= 0xff;
 
-        int filled_width = width * notification->value / 100;
+        int filled_width = width * notification->progress_percent / 100;
         pixman_region32_t clip_region;
         pixman_region32_init_rect(&clip_region, x, 0, (unsigned int)filled_width,
-                                  monitor->b.height);
-        pixman_image_set_clip_region32(monitor->drw->image, &clip_region);
+                                  monitor->bar_metrics.height_px);
+        pixman_image_set_clip_region32(monitor->draw_context->image, &clip_region);
         pixman_region32_fini(&clip_region);
         bar_draw_notification_text(monitor, &box, x, width, notification, visible_text,
                                    filled_colors);
 
         pixman_region32_init_rect(&clip_region, x + filled_width, 0,
-                                  (unsigned int)(width - filled_width), monitor->b.height);
-        pixman_image_set_clip_region32(monitor->drw->image, &clip_region);
+                                  (unsigned int)(width - filled_width),
+                                  monitor->bar_metrics.height_px);
+        pixman_image_set_clip_region32(monitor->draw_context->image, &clip_region);
         pixman_region32_fini(&clip_region);
         bar_draw_notification_text(monitor, &box, x, width, notification, visible_text, scheme);
 
-        pixman_region32_init_rect(&clip_region, 0, 0, monitor->b.width, monitor->b.height);
-        pixman_image_set_clip_region32(monitor->drw->image, &clip_region);
+        pixman_region32_init_rect(&clip_region, 0, 0, monitor->bar_metrics.width_px,
+                                  monitor->bar_metrics.height_px);
+        pixman_image_set_clip_region32(monitor->draw_context->image, &clip_region);
         pixman_region32_fini(&clip_region);
     }
 
@@ -207,7 +217,7 @@ void bar_draw_notification(Monitor* monitor,
 
     /* once, after both passes: they blend with OVER */
     if (box.line_width) {
-        int font_height = monitor->drw->font->height;
+        int font_height = monitor->draw_context->font->height;
         int line_length = font_height;
         unsigned int held_ms;
 
@@ -215,7 +225,7 @@ void bar_draw_notification(Monitor* monitor,
         if (hist < 0 && notification->timeout_ms && notify_held(&held_ms)) {
             line_length = (int)((uint64_t)font_height * held_ms / notification->timeout_ms);
         } else if (hist < 0 && notification->timeout_ms) {
-            uint64_t end_ms = notification->shown_ms + notification->timeout_ms;
+            uint64_t end_ms = notification->shown_at_ms + notification->timeout_ms;
             uint64_t left_ms = end_ms > now_ms ? end_ms - now_ms : 0;
             line_length = (int)((uint64_t)font_height * left_ms / notification->timeout_ms);
             wake_ms = notification->timeout_ms / (unsigned int)(font_height > 0 ? font_height : 1);
@@ -223,14 +233,14 @@ void bar_draw_notification(Monitor* monitor,
         }
         if (hist >= 0)
             line_color = (line_color & ~0xffu) | (line_color & 0xffu) / 2;
-        int line_top = (monitor->b.height - font_height) / 2;
+        int line_top = (monitor->bar_metrics.height_px - font_height) / 2;
         bar_draw_pill(monitor, box.line_x, line_top + font_height - line_length, box.line_width,
                       line_length, notification_line_radius * monitor->wlr_output->scale, 0,
                       line_color);
     }
 
     if (box.icon_width) {
-        pixman_image_t* icon_image = notification->icon->img;
+        pixman_image_t* icon_image = notification->icon->image;
         pixman_transform_t icon_transform;
         pixman_transform_init_scale(
             &icon_transform,
@@ -238,8 +248,9 @@ void bar_draw_notification(Monitor* monitor,
             pixman_double_to_fixed((double)pixman_image_get_height(icon_image) / box.icon_height));
         pixman_image_set_transform(icon_image, &icon_transform);
         pixman_image_set_filter(icon_image, PIXMAN_FILTER_BILINEAR, nullptr, 0);
-        pixman_image_composite32(PIXMAN_OP_OVER, icon_image, nullptr, monitor->drw->image, 0, 0, 0,
-                                 0, box.icon_x, (monitor->b.height - box.icon_height) / 2,
+        pixman_image_composite32(PIXMAN_OP_OVER, icon_image, nullptr, monitor->draw_context->image,
+                                 0, 0, 0, 0, box.icon_x,
+                                 (monitor->bar_metrics.height_px - box.icon_height) / 2,
                                  box.icon_width, box.icon_height);
         pixman_image_set_transform(icon_image, nullptr);
     }
@@ -276,7 +287,7 @@ static size_t bar_fit_prefix(Monitor* monitor, const char* text, int max_width)
         const size_t mid = (low + high + 1) / 2;
         memcpy(buf, text, cut_points[mid - 1]);
         buf[cut_points[mid - 1]] = '\0';
-        if ((int)drwl_font_getwidth(monitor->drw, buf) <= max_width)
+        if ((int)drwl_font_getwidth(monitor->draw_context, buf) <= max_width)
             low = mid;
         else
             high = mid - 1;
@@ -291,12 +302,12 @@ static void bar_notification_box(Monitor* monitor,
                                  int x,
                                  int width,
                                  bool shared,
-                                 NotifyBox* box)
+                                 NotificationLayout* box)
 {
-    const int pad = monitor->lrpad / 2;
-    const int size = monitor->drw->font->height;
+    const int pad = monitor->horizontal_padding / 2;
+    const int size = monitor->draw_context->font->height;
 
-    *box = (NotifyBox){};
+    *box = (NotificationLayout){};
     int cursor_x = x + pad;
     if (notification_line_width) {
         box->line_x = cursor_x;
@@ -306,8 +317,8 @@ static void bar_notification_box(Monitor* monitor,
     }
     /* an app icon can be the sender's picture */
     if (notification->icon && size > 0 && !shared) {
-        const int icon_source_width = pixman_image_get_width(notification->icon->img);
-        const int icon_source_height = pixman_image_get_height(notification->icon->img);
+        const int icon_source_width = pixman_image_get_width(notification->icon->image);
+        const int icon_source_height = pixman_image_get_height(notification->icon->image);
         if (icon_source_width > 0 && icon_source_height > 0) {
             box->icon_width = icon_source_width >= icon_source_height
                                   ? size
@@ -331,16 +342,17 @@ static void bar_notification_box(Monitor* monitor,
         snprintf(box->count_text, sizeof(box->count_text), "+%zu", notify_queued());
     int end = x + width - pad;
     if (*box->count_text) {
-        box->count_width = (int)drwl_font_getwidth(monitor->drw, box->count_text);
+        box->count_width = (int)drwl_font_getwidth(monitor->draw_context, box->count_text);
         box->count_x = end - box->count_width;
         end = box->count_x - pad;
     }
     int picking = hist < 0 && bar_notification_pick_selected >= 0 &&
                   notification->id == bar_notification_pick_id;
-    if (hist < 0 && notification->nact && !picking && *notification_action_sign) {
-        box->sign_width = (int)drwl_font_getwidth(monitor->drw, notification_action_sign);
-        box->sign_x = end - box->sign_width;
-        end = box->sign_x - pad;
+    if (hist < 0 && notification->action_count && !picking && *notification_action_sign) {
+        box->action_sign_width =
+            (int)drwl_font_getwidth(monitor->draw_context, notification_action_sign);
+        box->action_sign_x = end - box->action_sign_width;
+        end = box->action_sign_x - pad;
     }
     box->text_x = cursor_x;
     box->text_width = end > cursor_x ? end - cursor_x : 0;
@@ -348,21 +360,22 @@ static void bar_notification_box(Monitor* monitor,
     if (!picking)
         return;
     /* scroll the chips until the picked one fits */
-    for (box->chip_first = 0;; box->chip_first++) {
-        size_t chip_index = box->chip_first;
+    for (box->first_action_index = 0;; box->first_action_index++) {
+        size_t chip_index = box->first_action_index;
         cursor_x = box->text_x;
-        for (; chip_index < notification->nact; chip_index++) {
-            box->chip_width[chip_index] =
-                (int)drwl_font_getwidth(monitor->drw, notification->act[chip_index].label) +
-                monitor->lrpad;
-            if (cursor_x + box->chip_width[chip_index] > end)
+        for (; chip_index < notification->action_count; chip_index++) {
+            box->action_width[chip_index] =
+                (int)drwl_font_getwidth(monitor->draw_context,
+                                        notification->actions[chip_index].label) +
+                monitor->horizontal_padding;
+            if (cursor_x + box->action_width[chip_index] > end)
                 break;
-            box->chip_x[chip_index] = cursor_x;
-            cursor_x += box->chip_width[chip_index] + pad;
+            box->action_x[chip_index] = cursor_x;
+            cursor_x += box->action_width[chip_index] + pad;
         }
-        box->chip_count = chip_index - box->chip_first;
+        box->visible_action_count = chip_index - box->first_action_index;
         if (chip_index > (size_t)bar_notification_pick_selected ||
-            box->chip_first >= (size_t)bar_notification_pick_selected)
+            box->first_action_index >= (size_t)bar_notification_pick_selected)
             break;
     }
 }
@@ -437,7 +450,7 @@ static const char* bar_notification_share_text(const Notification* notification)
     static char placeholder[NOTIFY_TEXTMAX];
 
     privacy_placeholder(placeholder, sizeof(placeholder), notification_private_text,
-                        notification->app);
+                        notification->app_name);
     return placeholder;
 }
 
@@ -460,13 +473,15 @@ int bar_notification_picking(void)
 
     if (bar_notification_pick_selected < 0)
         return 0;
-    const Notification* cur = notify_current();
-    if (!cur || cur->id != bar_notification_pick_id || !cur->nact) {
+    const Notification* current_notification = notify_current();
+    if (!current_notification || current_notification->id != bar_notification_pick_id ||
+        !current_notification->action_count) {
         bar_notification_pick_close();
         return 0;
     }
-    if ((size_t)bar_notification_pick_selected >= cur->nact) /* updated with fewer */
-        bar_notification_pick_selected = (long)cur->nact - 1;
+    if ((size_t)bar_notification_pick_selected >=
+        current_notification->action_count) /* updated with fewer */
+        bar_notification_pick_selected = (long)current_notification->action_count - 1;
     return 1;
 }
 
@@ -485,18 +500,18 @@ static void bar_notification_pick_run(size_t i)
 
 /* Toggles the picker; while open it owns the keyboard
  * (bar_notification_pick_key()). */
-void bar_notification_actions(const Arg*)
+void bar_notification_actions(const ActionArg*)
 {
 
     if (!notifications_enabled)
         return;
-    const Notification* cur;
+    const Notification* current_notification;
     if (bar_notification_picking()) {
         bar_notification_pick_close();
-    } else if ((cur = notify_current()) && cur->nact) {
+    } else if ((current_notification = notify_current()) && current_notification->action_count) {
         bar_notification_view_id = 0;
         bar_notification_pick_selected = 0;
-        bar_notification_pick_id = cur->id;
+        bar_notification_pick_id = current_notification->id;
         notify_hold(1);
     } else {
         return;
@@ -512,7 +527,7 @@ void bar_notification_pick_key(xkb_keysym_t sym)
 
     if (!bar_notification_picking() || !(current = notify_current()))
         return;
-    long action_count = (long)current->nact;
+    long action_count = (long)current->action_count;
     switch (sym) {
         case XKB_KEY_Left:
         case XKB_KEY_h:
@@ -543,27 +558,28 @@ void bar_notification_pick_key(xkb_keysym_t sym)
 
 /* Scrolls the notification on by one screenful, wrapping to the start once
  * the tail has been shown. */
-void bar_notification_scroll(const Arg*)
+void bar_notification_scroll(const ActionArg*)
 {
     /* the box is measured on the monitor the bar is drawn on */
     Monitor* monitor = bar_monitor();
     const Notification* notification;
     long hist;
 
-    if (!notifications_enabled || !monitor || !monitor->b.titlew ||
+    if (!notifications_enabled || !monitor || !monitor->bar_metrics.content_width_px ||
         !(notification = bar_notification_shown(&hist)))
         return;
     bar_notification_sync(notification, hist);
     if (hist >= 0)
         bar_notification_view_ms = notify_now();
-    NotifyBox box;
-    bar_notification_box(monitor, notification, hist, 0, monitor->b.titlew, false, &box);
+    NotificationLayout box;
+    bar_notification_box(monitor, notification, hist, 0, monitor->bar_metrics.content_width_px,
+                         false, &box);
 
     const char* text = notification->text;
     size_t length = strlen(text);
     size_t offset = bar_notification_offset < length ? bar_notification_offset : 0;
     if (box.text_width <= 0 ||
-        (int)drwl_font_getwidth(monitor->drw, text + offset) <= box.text_width) {
+        (int)drwl_font_getwidth(monitor->draw_context, text + offset) <= box.text_width) {
         bar_notification_offset = 0;
         bar_draw_all();
         return;
@@ -572,8 +588,8 @@ void bar_notification_scroll(const Arg*)
     /* on from what was shown, which left room for the › */
     size_t next_offset =
         offset + bar_fit_prefix(monitor, text + offset,
-                                box.text_width -
-                                    (int)drwl_font_getwidth(monitor->drw, bar_notification_more));
+                                box.text_width - (int)drwl_font_getwidth(monitor->draw_context,
+                                                                         bar_notification_more));
     if (next_offset == offset) {
         /* not even one codepoint fits: force progress anyway */
         next_offset = offset + 1;
@@ -584,7 +600,7 @@ void bar_notification_scroll(const Arg*)
     bar_draw_all();
 }
 
-void bar_notification_prev(const Arg*)
+void bar_notification_prev(const ActionArg*)
 {
 
     if (!notifications_enabled)
@@ -599,7 +615,7 @@ void bar_notification_prev(const Arg*)
 }
 
 /* One step forward; on the live one, dismisses it for the next queued. */
-void bar_notification_next(const Arg*)
+void bar_notification_next(const ActionArg*)
 {
 
     if (!notifications_enabled)
@@ -616,7 +632,7 @@ void bar_notification_next(const Arg*)
 
 /* Puts the notification away early, giving the box back to the window title.
  * On a history entry, forgets it; with the picker open, closes the picker. */
-void bar_notification_dismiss(const Arg*)
+void bar_notification_dismiss(const ActionArg*)
 {
 
     if (!notifications_enabled)
@@ -642,7 +658,7 @@ void bar_notification_dismiss(const Arg*)
 }
 
 /* The live and queued ones go to the history. */
-void bar_notification_dismiss_all(const Arg*)
+void bar_notification_dismiss_all(const ActionArg*)
 {
     int browsing = bar_notification_view_id != 0;
 
@@ -658,21 +674,25 @@ void bar_notification_dismiss_all(const Arg*)
  * sender's window, since it can't raise itself. From the pointer (arg->ui is
  * x + 1) a click on the action sign opens the picker, and with the picker
  * open a click runs the action under it or closes the picker. */
-void bar_notification_open(const Arg* arg)
+void bar_notification_open(const ActionArg* argument)
 {
     Monitor* monitor = bar_monitor();
-    long hist, pointer_x = arg && arg->ui ? (long)arg->ui - 1 : -1;
+    long hist, pointer_x = argument && argument->unsigned_integer
+                               ? (long)argument->unsigned_integer - 1
+                               : -1;
 
     const Notification* notification;
     if (!notifications_enabled || !(notification = bar_notification_shown(&hist)))
         return;
-    NotifyBox box;
+    NotificationLayout box;
     if (pointer_x >= 0 && monitor && hist < 0) {
-        bar_notification_box(monitor, notification, hist, bar_notification_box_x, monitor->b.titlew,
-                             false, &box);
+        bar_notification_box(monitor, notification, hist, bar_notification_box_x,
+                             monitor->bar_metrics.content_width_px, false, &box);
         if (bar_notification_picking()) {
-            for (size_t i = box.chip_first; i < box.chip_first + box.chip_count; i++)
-                if (pointer_x >= box.chip_x[i] && pointer_x < box.chip_x[i] + box.chip_width[i]) {
+            for (size_t i = box.first_action_index;
+                 i < box.first_action_index + box.visible_action_count; i++)
+                if (pointer_x >= box.action_x[i] &&
+                    pointer_x < box.action_x[i] + box.action_width[i]) {
                     bar_notification_pick_run(i);
                     return;
                 }
@@ -680,23 +700,25 @@ void bar_notification_open(const Arg* arg)
             bar_draw_all();
             return;
         }
-        if (box.sign_width && pointer_x >= box.sign_x - monitor->lrpad / 2 &&
-            pointer_x < box.sign_x + box.sign_width + monitor->lrpad / 2) {
+        if (box.action_sign_width &&
+            pointer_x >= box.action_sign_x - monitor->horizontal_padding / 2 &&
+            pointer_x <
+                box.action_sign_x + box.action_sign_width + monitor->horizontal_padding / 2) {
             bar_notification_actions(nullptr);
             return;
         }
     }
     const char* id;
-    Client* client;
+    WindowClient* client;
     wl_list_for_each(client, &clients, link) {
         id = client_get_app_id(client);
-        if (!client->mon || client_is_unmanaged(client) ||
-            (strcasecmp(id, notification->app) &&
-             (!*notification->desktop || strcasecmp(id, notification->desktop))))
+        if (!client->monitor || client_is_unmanaged(client) ||
+            (strcasecmp(id, notification->app_name) &&
+             (!*notification->desktop_entry || strcasecmp(id, notification->desktop_entry))))
             continue;
-        selected_monitor = client->mon;
-        if (!VISIBLEON(client, client->mon))
-            layout_view(&(Arg){ .ui = client->tags });
+        selected_monitor = client->monitor;
+        if (!VISIBLEON(client, client->monitor))
+            layout_view(&(ActionArg){ .unsigned_integer = client->tags });
         client_focus(client, 1);
         break;
     }
@@ -722,7 +744,8 @@ int bar_notification_wheel(Monitor* pointer_monitor, double delta, int horizonta
     static double vertical_accumulator;
     static double horizontal_accumulator;
 
-    if (!notifications_enabled || !bar_mon || bar_mon != pointer_monitor || !bar_mon->b.titlew)
+    if (!notifications_enabled || !bar_mon || bar_mon != pointer_monitor ||
+        !bar_mon->bar_metrics.content_width_px)
         return 0;
 
     long history_index;
@@ -762,8 +785,9 @@ int bar_notification_wheel(Monitor* pointer_monitor, double delta, int horizonta
     if (history_index >= 0)
         bar_notification_view_ms = notify_now();
 
-    NotifyBox box;
-    bar_notification_box(bar_mon, notification, history_index, 0, bar_mon->b.titlew, false, &box);
+    NotificationLayout box;
+    bar_notification_box(bar_mon, notification, history_index, 0,
+                         bar_mon->bar_metrics.content_width_px, false, &box);
     const char* text = notification->text;
 
     /* Scroll the text right one character per step, but only while the rest
@@ -771,7 +795,8 @@ int bar_notification_wheel(Monitor* pointer_monitor, double delta, int horizonta
      * skipped so the offset always lands on the start of a UTF-8 character. */
     for (horizontal_accumulator += delta; horizontal_accumulator >= scroll_step;
          horizontal_accumulator -= scroll_step)
-        if ((int)drwl_font_getwidth(bar_mon->drw, text + bar_notification_offset) > box.text_width)
+        if ((int)drwl_font_getwidth(bar_mon->draw_context, text + bar_notification_offset) >
+            box.text_width)
             do
                 bar_notification_offset++;
             while ((text[bar_notification_offset] & 0xC0) == 0x80);
@@ -784,7 +809,7 @@ int bar_notification_wheel(Monitor* pointer_monitor, double delta, int horizonta
     return 1;
 }
 
-void bar_notification_toggle_private(const Arg*)
+void bar_notification_toggle_private(const ActionArg*)
 {
     if (!notifications_enabled)
         return;

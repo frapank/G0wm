@@ -45,16 +45,19 @@ static const char* const settings_records[] = { "layout", "rule",   "monitor", "
     fputc('\n', stderr);
 }
 
-static int settings_enum_value(const Enum* table, const char* name, int fallback, const char* what)
+static int settings_enum_value(const EnumEntry* table,
+                               const char* name,
+                               int fallback,
+                               const char* what)
 {
-    for (const Enum* entry = table; entry->name; entry++)
+    for (const EnumEntry* entry = table; entry->name; entry++)
         if (!strcmp(entry->name, name))
-            return entry->val;
+            return entry->value;
     settings_warn("%s is not a %s", name, what);
     return fallback;
 }
 
-static const Action* settings_action_by_name(const char* name)
+static const ActionEntry* settings_action_by_name(const char* name)
 {
     if (!name)
         return nullptr;
@@ -187,7 +190,7 @@ static const char* settings_get_string(const struct scfg_block* block,
 
 static int settings_get_enum(const struct scfg_block* block,
                              const char* key,
-                             const Enum* enum_table,
+                             const EnumEntry* enum_table,
                              int fallback,
                              const char* what)
 {
@@ -259,7 +262,7 @@ static uint32_t settings_get_mods(const struct scfg_block* block,
     return modifiers | (uint32_t)settings_enum_value(settings_modifier_names, combo, 0, "modifier");
 }
 
-static const Layout* settings_layout_by_symbol(const char* symbol)
+static const WindowLayout* settings_layout_by_symbol(const char* symbol)
 {
     if (!symbol)
         return nullptr;
@@ -270,39 +273,42 @@ static const Layout* settings_layout_by_symbol(const char* symbol)
     return nullptr;
 }
 
-static Arg settings_get_arg(char kind, const struct scfg_directive* directive, size_t param_index)
+static ActionArg settings_get_arg(char kind,
+                                  const struct scfg_directive* directive,
+                                  size_t param_index)
 {
     const char* text = settings_param_at(directive, param_index);
-    Arg arg = {};
+    ActionArg argument = {};
 
     switch (kind) {
         case 'i':
-            arg.i = (int)settings_number_value(text, 0);
+            argument.integer = (int)settings_number_value(text, 0);
             break;
         case 'u':
-            arg.ui = settings_uint_value(text, 0);
+            argument.unsigned_integer = settings_uint_value(text, 0);
             break;
         case 'f':
-            arg.f = (float)settings_number_value(text, 0);
+            argument.floating = (float)settings_number_value(text, 0);
             break;
         case 'v':
-            arg.v = settings_collect_params(directive, param_index, nullptr);
+            argument.pointer = settings_collect_params(directive, param_index, nullptr);
             break;
         case 'l':
-            arg.v = settings_layout_by_symbol(text);
+            argument.pointer = settings_layout_by_symbol(text);
             break;
         case 'c':
-            arg.ui = text ? (uint32_t)settings_enum_value(settings_drag_modes, text, CurMove,
-                                                          "drag mode")
-                          : CurMove;
+            argument.unsigned_integer =
+                text ? (uint32_t)settings_enum_value(settings_drag_modes, text, CURSOR_MODE_MOVE,
+                                                     "drag mode")
+                     : CURSOR_MODE_MOVE;
             break;
     }
-    return arg;
+    return argument;
 }
 
 static void settings_apply_colors(const struct scfg_block* block)
 {
-    for (size_t scheme = 0; scheme < NumSchemes; scheme++) {
+    for (size_t scheme = 0; scheme < COLOR_SCHEME_COUNT; scheme++) {
         if (!settings_scheme_names[scheme])
             continue;
         const struct scfg_directive* directive =
@@ -545,7 +551,7 @@ static void settings_apply_layouts(const struct scfg_block* block)
 {
     if (!settings_count_directives(block, "layout"))
         return;
-    Layout* parsed_layouts =
+    WindowLayout* parsed_layouts =
         util_calloc(settings_count_directives(block, "layout"), sizeof *parsed_layouts);
     size_t count = 0;
     for (size_t i = 0; i < block->directives_len; i++) {
@@ -562,7 +568,7 @@ static void settings_apply_layouts(const struct scfg_block* block)
                strcmp(settings_arranges[arrange_index].name, arrange_name))
             arrange_index++;
         if (arrange_index < settings_arrange_count) {
-            parsed_layouts[count].arrange = settings_arranges[arrange_index].arrange;
+            parsed_layouts[count].arrange = settings_arranges[arrange_index].callback;
         } else {
             parsed_layouts[count].arrange = layout_tile;
             settings_warn("%s is not a layout, using tile", arrange_name);
@@ -575,29 +581,29 @@ static void settings_apply_layouts(const struct scfg_block* block)
 
 static void settings_apply_rules(const struct scfg_block* block)
 {
-    Rule* parsed_rules =
+    ClientRule* parsed_rules =
         util_calloc(settings_count_directives(block, "rule") + 1, sizeof *parsed_rules);
     size_t count = 0;
     for (size_t i = 0; i < block->directives_len; i++) {
         if (strcmp(block->directives[i].name, "rule"))
             continue;
         const struct scfg_block* rule_block = &block->directives[i].children;
-        Rule* rule = &parsed_rules[count];
-        rule->id = settings_get_string(rule_block, "id", nullptr);
+        ClientRule* rule = &parsed_rules[count];
+        rule->app_id = settings_get_string(rule_block, "id", nullptr);
         rule->title = settings_get_string(rule_block, "title", nullptr);
         rule->tags = settings_get_uint(rule_block, "tags", 0);
-        rule->isfloating = settings_get_bool(rule_block, "isfloating", 0);
-        rule->isprivate = settings_get_bool(rule_block, "private", -1);
+        rule->is_floating = settings_get_bool(rule_block, "isfloating", 0);
+        rule->is_private = settings_get_bool(rule_block, "private", -1);
         rule->private_text = settings_get_string(rule_block, "privatetext", nullptr);
         rule->private_background = settings_get_hex(rule_block, "privatecolor", 0);
         rule->private_foreground = settings_get_hex(rule_block, "privatetextcolor", 0);
-        rule->opacity_focus = (float)settings_get_number(rule_block, "opacity_focus", 0);
-        rule->opacity_unfocus = (float)settings_get_number(rule_block, "opacity_unfocus", 0);
-        rule->monitor = (int)settings_get_number(rule_block, "monitor", -1);
+        rule->focused_opacity = (float)settings_get_number(rule_block, "opacity_focus", 0);
+        rule->unfocused_opacity = (float)settings_get_number(rule_block, "opacity_unfocus", 0);
+        rule->monitor_index = (int)settings_get_number(rule_block, "monitor", -1);
         count++;
     }
-    rules = parsed_rules;
-    rule_count = count;
+    client_rules = parsed_rules;
+    client_rule_count = count;
 }
 
 static void settings_apply_monitors(const struct scfg_block* block)
@@ -613,20 +619,21 @@ static void settings_apply_monitors(const struct scfg_block* block)
         const struct scfg_block* monitor_block = &block->directives[i].children;
         MonitorRule* rule = &parsed_rules[count];
         rule->name = settings_get_string(monitor_block, "name", nullptr);
-        rule->mfact = (float)settings_get_number(monitor_block, "mfact", 0.55);
-        rule->nmaster = (int)settings_get_number(monitor_block, "nmaster", 1);
+        rule->master_factor = (float)settings_get_number(monitor_block, "mfact", 0.55);
+        rule->master_count = (int)settings_get_number(monitor_block, "nmaster", 1);
         rule->scale = (float)settings_get_number(monitor_block, "scale", 1);
-        rule->lt = settings_layout_by_symbol(settings_get_string(monitor_block, "layout", nullptr));
-        if (!rule->lt)
-            rule->lt = layouts;
-        rule->rr = (enum wl_output_transform)settings_get_enum(
+        rule->layout =
+            settings_layout_by_symbol(settings_get_string(monitor_block, "layout", nullptr));
+        if (!rule->layout)
+            rule->layout = layouts;
+        rule->transform = (enum wl_output_transform)settings_get_enum(
             monitor_block, "transform", settings_transforms, WL_OUTPUT_TRANSFORM_NORMAL,
             "transform");
         rule->x = (int)settings_get_number(monitor_block, "x", -1);
         rule->y = (int)settings_get_number(monitor_block, "y", -1);
         rule->width = (int)settings_get_number(monitor_block, "width", 0);
         rule->height = (int)settings_get_number(monitor_block, "height", 0);
-        rule->refresh = (int)settings_get_number(monitor_block, "refresh", 0);
+        rule->refresh_hz = (int)settings_get_number(monitor_block, "refresh", 0);
         count++;
     }
     monitor_rules = parsed_rules;
@@ -657,102 +664,104 @@ static void settings_apply_autostart(const struct scfg_block* block)
 
 static void settings_apply_keys(const struct scfg_block* block)
 {
-    Key* parsed_keys =
+    KeyBinding* parsed_keys =
         util_calloc(settings_count_directives(block, "key") + 1, sizeof *parsed_keys);
     size_t count = 0;
     for (size_t i = 0; i < block->directives_len; i++) {
         const struct scfg_directive* directive = &block->directives[i];
         settings_line = directive->lineno;
-        const Action* action;
+        const ActionEntry* action;
         if (strcmp(directive->name, "key") ||
             !(action = settings_action_by_name(settings_param_at(directive, 1))))
             continue;
         const char* key_name =
-            settings_split_mods(settings_param_at(directive, 0), &parsed_keys[count].mod);
+            settings_split_mods(settings_param_at(directive, 0), &parsed_keys[count].modifiers);
         const xkb_keysym_t keysym = xkb_keysym_from_name(key_name, XKB_KEYSYM_NO_FLAGS);
         if (keysym == XKB_KEY_NoSymbol) {
             settings_warn("%s is not a key", key_name);
             continue;
         }
         parsed_keys[count].keysym = keysym;
-        parsed_keys[count].func = action->func;
-        parsed_keys[count].arg = settings_get_arg(action->arg, directive, 2);
+        parsed_keys[count].callback = action->callback;
+        parsed_keys[count].argument = settings_get_arg(action->argument_kind, directive, 2);
         count++;
     }
-    keys = parsed_keys;
-    key_count = count;
+    key_bindings = parsed_keys;
+    key_binding_count = count;
 }
 
 static void settings_apply_buttons(const struct scfg_block* block)
 {
-    Button* parsed_buttons =
+    MouseBinding* parsed_buttons =
         util_calloc(settings_count_directives(block, "button") + 1, sizeof *parsed_buttons);
     size_t count = 0;
     for (size_t i = 0; i < block->directives_len; i++) {
         const struct scfg_directive* directive = &block->directives[i];
         settings_line = directive->lineno;
-        const Action* action;
+        const ActionEntry* action;
         if (strcmp(directive->name, "button") ||
             !(action = settings_action_by_name(settings_param_at(directive, 2))))
             continue;
-        Button* button = &parsed_buttons[count];
-        button->click = (unsigned int)settings_enum_value(
-            settings_click_areas, settings_param_at(directive, 0), ClkClient, "click area");
+        MouseBinding* button = &parsed_buttons[count];
+        button->click_area = (unsigned int)settings_enum_value(
+            settings_click_areas, settings_param_at(directive, 0), CLICK_AREA_CLIENT, "click area");
         button->button = (unsigned int)settings_enum_value(
             settings_mouse_buttons,
-            settings_split_mods(settings_param_at(directive, 1), &button->mod), BTN_LEFT, "button");
-        button->func = action->func;
-        button->arg = settings_get_arg(action->arg, directive, 3);
+            settings_split_mods(settings_param_at(directive, 1), &button->modifiers), BTN_LEFT,
+            "button");
+        button->callback = action->callback;
+        button->argument = settings_get_arg(action->argument_kind, directive, 3);
         count++;
     }
-    buttons = parsed_buttons;
-    button_count = count;
+    mouse_bindings = parsed_buttons;
+    mouse_binding_count = count;
 }
 
 static void settings_apply_gestures(const struct scfg_block* block)
 {
-    Gesture* parsed_gestures =
+    GestureBinding* parsed_gestures =
         util_calloc(settings_count_directives(block, "gesture") + 1, sizeof *parsed_gestures);
     size_t count = 0;
     for (size_t i = 0; i < block->directives_len; i++) {
         const struct scfg_directive* directive = &block->directives[i];
         settings_line = directive->lineno;
-        const Action* action;
+        const ActionEntry* action;
         if (strcmp(directive->name, "gesture") ||
             !(action = settings_action_by_name(settings_param_at(directive, 2))))
             continue;
-        Gesture* gesture = &parsed_gestures[count];
-        gesture->motion = (unsigned int)settings_enum_value(
-            settings_gesture_motions, settings_param_at(directive, 0), SwipeLeft, "gesture motion");
-        gesture->fingers = settings_uint_value(settings_param_at(directive, 1), 3);
-        gesture->func = action->func;
-        gesture->arg = settings_get_arg(action->arg, directive, 3);
+        GestureBinding* gesture = &parsed_gestures[count];
+        gesture->direction = (unsigned int)settings_enum_value(
+            settings_gesture_motions, settings_param_at(directive, 0), GESTURE_SWIPE_LEFT,
+            "gesture motion");
+        gesture->finger_count = settings_uint_value(settings_param_at(directive, 1), 3);
+        gesture->callback = action->callback;
+        gesture->argument = settings_get_arg(action->argument_kind, directive, 3);
         count++;
     }
-    gestures = parsed_gestures;
-    gesture_count = count;
+    gesture_bindings = parsed_gestures;
+    gesture_binding_count = count;
 }
 
 static void settings_apply_pad_buttons(const struct scfg_block* block)
 {
-    PadButton* parsed_pad_buttons =
+    TabletPadBinding* parsed_pad_buttons =
         util_calloc(settings_count_directives(block, "padbutton") + 1, sizeof *parsed_pad_buttons);
     size_t count = 0;
     for (size_t i = 0; i < block->directives_len; i++) {
         const struct scfg_directive* directive = &block->directives[i];
         settings_line = directive->lineno;
-        const Action* action;
+        const ActionEntry* action;
         if (strcmp(directive->name, "padbutton") ||
             !(action = settings_action_by_name(settings_param_at(directive, 1))))
             continue;
-        PadButton* pad_button = &parsed_pad_buttons[count];
+        TabletPadBinding* pad_button = &parsed_pad_buttons[count];
         pad_button->button = settings_uint_value(settings_param_at(directive, 0), 0);
-        pad_button->func = action->func;
-        pad_button->arg = settings_get_arg(action->arg, directive, 2);
+        pad_button->callback = action->callback;
+        pad_button->argument = settings_get_arg(action->argument_kind, directive, 2);
         count++;
     }
-    pad_buttons = parsed_pad_buttons;
-    pad_button_count = count;
+    tablet_pad_bindings = parsed_pad_buttons;
+    tablet_pad_binding_count = count;
 }
 
 void settings_load_builtin(void)

@@ -46,7 +46,7 @@
 #include "window/toplevel.h"
 
 /* function declarations */
-static void settings_reload(const Arg*);
+static void settings_reload(const ActionArg*);
 
 /* the only file that includes it: these are the definitions */
 #include "config.h"
@@ -54,86 +54,98 @@ static void settings_reload(const Arg*);
 /* variables */
 /* tables end on { 0, nullptr }; a real zero value is listed before it */
 /* in combo order: logo+shift+q */
-const Enum settings_modifier_names[] = {
+const EnumEntry settings_modifier_names[] = {
     { WLR_MODIFIER_LOGO, "logo" },   { WLR_MODIFIER_CTRL, "ctrl" }, { WLR_MODIFIER_ALT, "alt" },
     { WLR_MODIFIER_SHIFT, "shift" }, { WLR_MODIFIER_CAPS, "caps" }, { WLR_MODIFIER_MOD2, "mod2" },
     { WLR_MODIFIER_MOD3, "mod3" },   { WLR_MODIFIER_MOD5, "mod5" }, { 0, nullptr }
 };
-const Enum settings_drag_modes[] = { { CurMove, "move" }, { CurResize, "resize" }, { 0, nullptr } };
-const Enum settings_click_areas[] = {
-    { ClkTagBar, "tagbar" }, { ClkLtSymbol, "ltsymbol" }, { ClkStatus, "status" },
-    { ClkTitle, "title" },   { ClkClient, "client" },     { ClkRoot, "root" },
-    { ClkTray, "tray" },     { ClkWinTitle, "wintitle" }, { 0, nullptr },
-};
-const Enum settings_mouse_buttons[] = { { BTN_LEFT, "left" },        { BTN_MIDDLE, "middle" },
-                                        { BTN_RIGHT, "right" },      { WheelUp, "wheel-up" },
-                                        { WheelDown, "wheel-down" }, { 0, nullptr } };
-const Enum settings_gesture_motions[] = { { SwipeLeft, "swipe-left" },
-                                          { SwipeRight, "swipe-right" },
-                                          { SwipeUp, "swipe-up" },
-                                          { SwipeDown, "swipe-down" },
-                                          { PinchIn, "pinch-in" },
-                                          { PinchOut, "pinch-out" },
+const EnumEntry settings_drag_modes[] = { { CURSOR_MODE_MOVE, "move" },
+                                          { CURSOR_MODE_RESIZE, "resize" },
                                           { 0, nullptr } };
-const Enum settings_runner_icons[] = { { RunnerIconsNone, "none" },
-                                       { RunnerIconsSelected, "selected" },
-                                       { RunnerIconsAll, "all" },
-                                       { 0, nullptr } };
-const Enum settings_bar_statuses[] = { { BarStatusFocus, "focus" },
-                                       { BarStatusAll, "all" },
-                                       { BarStatusMain, "main" },
-                                       { 0, nullptr } };
-const Enum settings_notification_dots[] = { { NotifyDotLeft, "left" },
-                                            { NotifyDotRight, "right" },
+const EnumEntry settings_click_areas[] = {
+    { CLICK_AREA_TAGS, "tagbar" },
+    { CLICK_AREA_LAYOUT_SYMBOL, "ltsymbol" },
+    { CLICK_AREA_STATUS, "status" },
+    { CLICK_AREA_BAR_TITLE, "title" },
+    { CLICK_AREA_CLIENT, "client" },
+    { CLICK_AREA_ROOT, "root" },
+    { CLICK_AREA_TRAY, "tray" },
+    { CLICK_AREA_WINDOW_TITLE, "wintitle" },
+    { 0, nullptr },
+};
+const EnumEntry settings_mouse_buttons[] = {
+    { BTN_LEFT, "left" },           { BTN_MIDDLE, "middle" },           { BTN_RIGHT, "right" },
+    { MOUSE_WHEEL_UP, "wheel-up" }, { MOUSE_WHEEL_DOWN, "wheel-down" }, { 0, nullptr }
+};
+const EnumEntry settings_gesture_motions[] = { { GESTURE_SWIPE_LEFT, "swipe-left" },
+                                               { GESTURE_SWIPE_RIGHT, "swipe-right" },
+                                               { GESTURE_SWIPE_UP, "swipe-up" },
+                                               { GESTURE_SWIPE_DOWN, "swipe-down" },
+                                               { GESTURE_PINCH_IN, "pinch-in" },
+                                               { GESTURE_PINCH_OUT, "pinch-out" },
+                                               { 0, nullptr } };
+const EnumEntry settings_runner_icons[] = { { RUNNER_ICONS_NONE, "none" },
+                                            { RUNNER_ICONS_SELECTED, "selected" },
+                                            { RUNNER_ICONS_ALL, "all" },
                                             { 0, nullptr } };
-const Enum settings_corner_styles[] = { { CornerNormal, "normal" },
-                                        { CornerSquircle, "squircle" },
-                                        { 0, nullptr } };
+const EnumEntry settings_bar_statuses[] = { { BAR_STATUS_FOCUSED, "focus" },
+                                            { BAR_STATUS_ALL, "all" },
+                                            { BAR_STATUS_MAIN, "main" },
+                                            { 0, nullptr } };
+const EnumEntry settings_notification_dots[] = { { NOTIFICATION_DOT_LEFT, "left" },
+                                                 { NOTIFICATION_DOT_RIGHT, "right" },
+                                                 { 0, nullptr } };
+const EnumEntry settings_corner_styles[] = { { CORNER_STYLE_NORMAL, "normal" },
+                                             { CORNER_STYLE_SQUIRCLE, "squircle" },
+                                             { 0, nullptr } };
 #ifdef INTEGRATED_BACKGROUND
-const Enum settings_opacity_kinds[] = { { OpacityNormal, "normal" },
-                                        { OpacityBlur, "blur" },
-                                        { 0, nullptr } };
+const EnumEntry settings_opacity_kinds[] = { { OPACITY_MODE_NORMAL, "normal" },
+                                             { OPACITY_MODE_BLUR, "blur" },
+                                             { 0, nullptr } };
 #endif
-const Enum settings_transforms[] = { { WL_OUTPUT_TRANSFORM_NORMAL, "normal" },
-                                     { WL_OUTPUT_TRANSFORM_90, "90" },
-                                     { WL_OUTPUT_TRANSFORM_180, "180" },
-                                     { WL_OUTPUT_TRANSFORM_270, "270" },
-                                     { WL_OUTPUT_TRANSFORM_FLIPPED, "flipped" },
-                                     { WL_OUTPUT_TRANSFORM_FLIPPED_90, "flipped-90" },
-                                     { WL_OUTPUT_TRANSFORM_FLIPPED_180, "flipped-180" },
-                                     { WL_OUTPUT_TRANSFORM_FLIPPED_270, "flipped-270" },
-                                     { 0, nullptr } };
-const Enum settings_scroll_methods[] = { { LIBINPUT_CONFIG_SCROLL_NO_SCROLL, "none" },
-                                         { LIBINPUT_CONFIG_SCROLL_2FG, "2fg" },
-                                         { LIBINPUT_CONFIG_SCROLL_EDGE, "edge" },
-                                         { LIBINPUT_CONFIG_SCROLL_ON_BUTTON_DOWN,
-                                           "on-button-down" },
-                                         { 0, nullptr } };
-const Enum settings_click_methods[] = { { LIBINPUT_CONFIG_CLICK_METHOD_NONE, "none" },
-                                        { LIBINPUT_CONFIG_CLICK_METHOD_BUTTON_AREAS,
-                                          "button-areas" },
-                                        { LIBINPUT_CONFIG_CLICK_METHOD_CLICKFINGER, "clickfinger" },
-                                        { 0, nullptr } };
-const Enum settings_send_events[] = { { LIBINPUT_CONFIG_SEND_EVENTS_ENABLED, "enabled" },
-                                      { LIBINPUT_CONFIG_SEND_EVENTS_DISABLED, "disabled" },
-                                      { LIBINPUT_CONFIG_SEND_EVENTS_DISABLED_ON_EXTERNAL_MOUSE,
-                                        "disabled-on-external-mouse" },
-                                      { 0, nullptr } };
-const Enum settings_accel_profiles[] = { { LIBINPUT_CONFIG_ACCEL_PROFILE_NONE, "none" },
-                                         { LIBINPUT_CONFIG_ACCEL_PROFILE_FLAT, "flat" },
-                                         { LIBINPUT_CONFIG_ACCEL_PROFILE_ADAPTIVE, "adaptive" },
-                                         { 0, nullptr } };
-const Enum settings_button_maps[] = { { LIBINPUT_CONFIG_TAP_MAP_LRM, "lrm" },
-                                      { LIBINPUT_CONFIG_TAP_MAP_LMR, "lmr" },
-                                      { 0, nullptr } };
-const Enum settings_log_levels[] = { { WLR_SILENT, "silent" },
-                                     { WLR_ERROR, "error" },
-                                     { WLR_INFO, "info" },
-                                     { WLR_DEBUG, "debug" },
-                                     { 0, nullptr } };
-const Arrange settings_arranges[] = { { "tile", layout_tile }, { "tabbed", layout_tabbed } };
+const EnumEntry settings_transforms[] = { { WL_OUTPUT_TRANSFORM_NORMAL, "normal" },
+                                          { WL_OUTPUT_TRANSFORM_90, "90" },
+                                          { WL_OUTPUT_TRANSFORM_180, "180" },
+                                          { WL_OUTPUT_TRANSFORM_270, "270" },
+                                          { WL_OUTPUT_TRANSFORM_FLIPPED, "flipped" },
+                                          { WL_OUTPUT_TRANSFORM_FLIPPED_90, "flipped-90" },
+                                          { WL_OUTPUT_TRANSFORM_FLIPPED_180, "flipped-180" },
+                                          { WL_OUTPUT_TRANSFORM_FLIPPED_270, "flipped-270" },
+                                          { 0, nullptr } };
+const EnumEntry settings_scroll_methods[] = { { LIBINPUT_CONFIG_SCROLL_NO_SCROLL, "none" },
+                                              { LIBINPUT_CONFIG_SCROLL_2FG, "2fg" },
+                                              { LIBINPUT_CONFIG_SCROLL_EDGE, "edge" },
+                                              { LIBINPUT_CONFIG_SCROLL_ON_BUTTON_DOWN,
+                                                "on-button-down" },
+                                              { 0, nullptr } };
+const EnumEntry settings_click_methods[] = {
+    { LIBINPUT_CONFIG_CLICK_METHOD_NONE, "none" },
+    { LIBINPUT_CONFIG_CLICK_METHOD_BUTTON_AREAS, "button-areas" },
+    { LIBINPUT_CONFIG_CLICK_METHOD_CLICKFINGER, "clickfinger" },
+    { 0, nullptr }
+};
+const EnumEntry settings_send_events[] = { { LIBINPUT_CONFIG_SEND_EVENTS_ENABLED, "enabled" },
+                                           { LIBINPUT_CONFIG_SEND_EVENTS_DISABLED, "disabled" },
+                                           { LIBINPUT_CONFIG_SEND_EVENTS_DISABLED_ON_EXTERNAL_MOUSE,
+                                             "disabled-on-external-mouse" },
+                                           { 0, nullptr } };
+const EnumEntry settings_accel_profiles[] = { { LIBINPUT_CONFIG_ACCEL_PROFILE_NONE, "none" },
+                                              { LIBINPUT_CONFIG_ACCEL_PROFILE_FLAT, "flat" },
+                                              { LIBINPUT_CONFIG_ACCEL_PROFILE_ADAPTIVE,
+                                                "adaptive" },
+                                              { 0, nullptr } };
+const EnumEntry settings_button_maps[] = { { LIBINPUT_CONFIG_TAP_MAP_LRM, "lrm" },
+                                           { LIBINPUT_CONFIG_TAP_MAP_LMR, "lmr" },
+                                           { 0, nullptr } };
+const EnumEntry settings_log_levels[] = { { WLR_SILENT, "silent" },
+                                          { WLR_ERROR, "error" },
+                                          { WLR_INFO, "info" },
+                                          { WLR_DEBUG, "debug" },
+                                          { 0, nullptr } };
+const LayoutAlgorithmEntry settings_arranges[] = { { "tile", layout_tile },
+                                                   { "tabbed", layout_tabbed } };
 const size_t settings_arrange_count = LENGTH(settings_arranges);
-const Action settings_actions[] = {
+const ActionEntry settings_actions[] = {
     { change_virtual_console, "chvt", 'u' },
     { monitor_focus, "focusmon", 'i' },
     { layout_focus_stack, "focusstack", 'i' },
@@ -183,35 +195,35 @@ const Action settings_actions[] = {
 const size_t settings_action_count = LENGTH(settings_actions);
 /* the holes keep every name on its Scheme* index */
 const char* const settings_scheme_names[] = {
-    [SchemeNorm] = "norm",
-    [SchemeSel] = "sel",
-    [SchemeUrg] = "urg",
-    [SchemeTitle] = "title",
-    [SchemeTitleSel] = "titlesel",
-    [SchemeStatus] = "status",
-    [SchemeNotify] = "notify",
-    [SchemeNotifyLow] = "notifylow",
-    [SchemeNotifyCrit] = "notifycrit",
-    [SchemeRunner] = "runner",
-    [SchemeRunnerSuggest] = "runnersuggest",
-    [SchemeRunnerSel] = "runnersel",
-    [SchemeRunnerIcon] = "runnericon",
+    [COLOR_SCHEME_NORMAL] = "norm",
+    [COLOR_SCHEME_SELECTED] = "sel",
+    [COLOR_SCHEME_URGENT] = "urg",
+    [COLOR_SCHEME_TITLE] = "title",
+    [COLOR_SCHEME_TITLE_SELECTED] = "titlesel",
+    [COLOR_SCHEME_STATUS] = "status",
+    [COLOR_SCHEME_NOTIFICATION] = "notify",
+    [COLOR_SCHEME_NOTIFICATION_LOW] = "notifylow",
+    [COLOR_SCHEME_NOTIFICATION_CRITICAL] = "notifycrit",
+    [COLOR_SCHEME_RUNNER] = "runner",
+    [COLOR_SCHEME_RUNNER_SUGGESTION] = "runnersuggest",
+    [COLOR_SCHEME_RUNNER_SELECTED] = "runnersel",
+    [COLOR_SCHEME_RUNNER_ICON] = "runnericon",
 };
-static_assert(LENGTH(settings_scheme_names) == NumSchemes);
+static_assert(LENGTH(settings_scheme_names) == COLOR_SCHEME_COUNT);
 /* config.h's settings, read back: what the file is checked against and what
  * fills in for what it leaves out */
 const struct scfg_block* settings_builtin;
 
 /* Settings borrow strings from every loaded tree, including across reloads. */
-static struct SettingsTree {
+static struct SettingsBlockOwner {
     struct scfg_block block;
-    struct SettingsTree* next;
+    struct SettingsBlockOwner* next;
 }* settings_trees;
 
 static void settings_free_trees(void)
 {
     while (settings_trees) {
-        struct SettingsTree* tree = settings_trees;
+        struct SettingsBlockOwner* tree = settings_trees;
         settings_trees = tree->next;
         scfg_block_finish(&tree->block);
         free(tree);
@@ -318,7 +330,7 @@ void settings_load(void)
         fprintf(stderr, "g0wm: no settings in %s, run 'g0wm -c' to write them\n", path);
         return;
     }
-    struct SettingsTree* owner = util_calloc(1, sizeof *owner);
+    struct SettingsBlockOwner* owner = util_calloc(1, sizeof *owner);
     struct scfg_block* tree = &owner->block;
     if (scfg_load_file(tree, path) < 0) {
         fprintf(stderr, "g0wm: cannot read %s\n", path);
@@ -361,7 +373,7 @@ static void settings_reload_keyboard(void)
     wlr_keyboard_set_repeat_info(&keyboard_group->wlr_group->keyboard, repeat_rate, repeat_delay);
 }
 
-static void settings_reload(const Arg*)
+static void settings_reload(const ActionArg*)
 {
     const int was_private = always_private;
     const int was_private_notify = private_notifications;
@@ -371,22 +383,22 @@ static void settings_reload(const Arg*)
     /* fewer tags than before would leave windows on bits nothing shows */
     Monitor* monitor;
     wl_list_for_each(monitor, &monitors, link) {
-        if (!(monitor->tagset[monitor->seltags] & TAGMASK))
-            monitor->tagset[monitor->seltags] = 1;
-        wlr_scene_rect_set_color(monitor->fullscreen_bg, fullscreen_color);
+        if (!(monitor->tagsets[monitor->selected_tagset_index] & TAGMASK))
+            monitor->tagsets[monitor->selected_tagset_index] = 1;
+        wlr_scene_rect_set_color(monitor->fullscreen_background, fullscreen_color);
     }
     /* what a client copied out of the settings when it was mapped: its
      * border, its own opacity and the title shown when private */
-    Client* client;
+    WindowClient* client;
     wl_list_for_each(client, &clients, link) {
         if (!(client->tags & TAGMASK))
             client->tags = 1;
-        client->opacity = client->opacity_unfocus = opacity_unfocus;
-        client->opacity_focus = opacity_focus;
-        if (!client->isfullscreen)
-            client->bw = client_is_unmanaged(client) ? 0 : corner_border_width();
+        client->opacity = client->unfocused_opacity = opacity_unfocus;
+        client->focused_opacity = opacity_focus;
+        if (!client->is_fullscreen)
+            client->border_width = client_is_unmanaged(client) ? 0 : corner_border_width();
         if (always_private != was_private)
-            client->isprivate = always_private;
+            client->is_private = always_private;
         toplevel_update(client);
     }
     privacy_reload();
@@ -403,8 +415,8 @@ static void settings_reload(const Arg*)
     /* a floating client keeps its own geometry, so a new border or title bar
      * only reaches it through client_resize() */
     wl_list_for_each(client, &clients, link) {
-        if (client->mon && client->isfloating && !client->isfullscreen)
-            client_resize(client, client->geom, 1);
+        if (client->monitor && client->is_floating && !client->is_fullscreen)
+            client_resize(client, client->geometry, 1);
     }
 
     opacity_reload();

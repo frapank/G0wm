@@ -39,7 +39,7 @@ static const struct wlr_buffer_impl buffer_impl = {
 /* function implementations */
 static void buffer_destroy(struct wlr_buffer* wlr_buffer)
 {
-    Buffer* buffer = wl_container_of(wlr_buffer, buffer, base);
+    RenderBuffer* buffer = wl_container_of(wlr_buffer, buffer, base);
     if (buffer->busy)
         wl_list_remove(&buffer->release.link);
     drwl_image_destroy(buffer->image);
@@ -52,12 +52,12 @@ static bool buffer_begin_data_access(struct wlr_buffer* wlr_buffer,
                                      uint32_t* format,
                                      size_t* stride)
 {
-    Buffer* buffer = wl_container_of(wlr_buffer, buffer, base);
+    RenderBuffer* buffer = wl_container_of(wlr_buffer, buffer, base);
 
     if (flags & WLR_BUFFER_DATA_PTR_ACCESS_WRITE)
         return false;
 
-    *data = buffer->data;
+    *data = buffer->pixels;
     *stride = wlr_buffer->width * 4;
     *format = DRM_FORMAT_ARGB8888;
 
@@ -68,9 +68,9 @@ static void buffer_end_data_access(struct wlr_buffer*) {}
 
 /* Grabs a free width*height buffer from pool, allocating it on first use. The
  * bar and every client's title bar own a pool, as their sizes differ. */
-Buffer* buffer_get(Buffer** pool, size_t pool_length, int width, int height)
+RenderBuffer* buffer_get(RenderBuffer** pool, size_t pool_length, int width, int height)
 {
-    Buffer* buffer = nullptr;
+    RenderBuffer* buffer = nullptr;
 
     for (size_t i = 0; i < pool_length; i++) {
         if (pool[i]) {
@@ -82,10 +82,11 @@ Buffer* buffer_get(Buffer** pool, size_t pool_length, int width, int height)
 
         size_t byte_size;
         if (ckd_mul(&byte_size, (size_t)width, (size_t)height) ||
-            ckd_mul(&byte_size, byte_size, 4) || ckd_add(&byte_size, byte_size, sizeof(Buffer)))
+            ckd_mul(&byte_size, byte_size, 4) ||
+            ckd_add(&byte_size, byte_size, sizeof(RenderBuffer)))
             return nullptr;
         buffer = util_calloc(1, byte_size);
-        buffer->image = drwl_image_create(nullptr, width, height, buffer->data);
+        buffer->image = drwl_image_create(nullptr, width, height, buffer->pixels);
         wlr_buffer_init(&buffer->base, &buffer_impl, width, height);
         pool[i] = buffer;
         break;
@@ -99,7 +100,7 @@ Buffer* buffer_get(Buffer** pool, size_t pool_length, int width, int height)
     return buffer;
 }
 
-void buffer_pool_drop(Buffer** pool, size_t pool_length)
+void buffer_pool_drop(RenderBuffer** pool, size_t pool_length)
 {
     for (size_t i = 0; i < pool_length; i++)
         if (pool[i]) {
@@ -110,7 +111,7 @@ void buffer_pool_drop(Buffer** pool, size_t pool_length)
 
 static void buffer_handle_release(struct wl_listener* listener, void*)
 {
-    Buffer* buffer = wl_container_of(listener, buffer, release);
+    RenderBuffer* buffer = wl_container_of(listener, buffer, release);
     buffer->busy = false;
     wl_list_remove(&buffer->release.link);
 }

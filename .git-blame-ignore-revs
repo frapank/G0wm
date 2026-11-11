@@ -24,3 +24,6 @@ b296089b11000a5a383322a6681970c43d5b893d
 
 # Run clang-format
 dd02148602582a30744ca43cf109eb2c28ca048d
+
+# Clarify type, field and variable names
+225f48577efeab0a90b086dcc23db2ebfd8fab38

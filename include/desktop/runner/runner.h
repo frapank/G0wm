@@ -26,11 +26,11 @@ extern int runner_repeating; /* the armed repeat belongs to the prompt */
 const char* runner_candidate(int i);
 int runner_candidate_count(void);
 int runner_has_icons(void);
-Icon* runner_icon(int match_index);
+RasterIcon* runner_icon(int match_index);
 void runner_key(xkb_keysym_t sym, uint32_t mods, uint32_t codepoint);
 int runner_query(void);
 int runner_selected(void);
 const char* runner_suggest(void);
-void runner_toggle(const Arg*);
+void runner_toggle(const ActionArg*);
 
 #endif

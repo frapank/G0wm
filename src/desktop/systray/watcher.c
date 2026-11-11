@@ -78,7 +78,7 @@ static const char* const watcher_xml =
     "    </interface>\n"
     "</node>\n";
 
-static void watcher_unregister_item(Watcher* watcher, Item* item)
+static void watcher_unregister_item(TrayWatcher* watcher, TrayItem* item)
 {
     wl_list_remove(&item->link);
     item_destroy(item);
@@ -86,21 +86,21 @@ static void watcher_unregister_item(Watcher* watcher, Item* item)
     watcher_update_trays(watcher);
 }
 
-static Item* watcher_find_item(const Watcher* watcher, const char* busname)
+static TrayItem* watcher_find_item(const TrayWatcher* watcher, const char* bus_name)
 {
-    Item* item;
+    TrayItem* item;
 
     wl_list_for_each(item, &watcher->items, link) {
-        if (!item || !item->busname)
+        if (!item || !item->bus_name)
             return nullptr;
-        if (strcmp(item->busname, busname) == 0)
+        if (strcmp(item->bus_name, bus_name) == 0)
             return item;
     }
 
     return nullptr;
 }
 
-static DBusHandlerResult watcher_handle_name_owner_changed(Watcher* watcher,
+static DBusHandlerResult watcher_handle_name_owner_changed(TrayWatcher* watcher,
                                                            DBusConnection*,
                                                            DBusMessage* message)
 {
@@ -116,7 +116,7 @@ static DBusHandlerResult watcher_handle_name_owner_changed(Watcher* watcher,
     if (*new_owner != '\0' || *name == '\0')
         return DBUS_HANDLER_RESULT_HANDLED;
 
-    Item* item = watcher_find_item(watcher, name);
+    TrayItem* item = watcher_find_item(watcher, name);
     if (!item)
         return DBUS_HANDLER_RESULT_HANDLED;
 
@@ -129,7 +129,7 @@ static DBusHandlerResult watcher_filter_bus(DBusConnection* connection,
                                             DBusMessage* message,
                                             void* data)
 {
-    Watcher* watcher = data;
+    TrayWatcher* watcher = data;
 
     if (dbus_message_is_signal(message, DBUS_INTERFACE_DBUS, "NameOwnerChanged"))
         return watcher_handle_name_owner_changed(watcher, connection, message);
@@ -138,17 +138,17 @@ static DBusHandlerResult watcher_filter_bus(DBusConnection* connection,
         return DBUS_HANDLER_RESULT_NOT_YET_HANDLED;
 }
 
-static DBusHandlerResult watcher_respond_register_item(Watcher* watcher,
+static DBusHandlerResult watcher_respond_register_item(TrayWatcher* watcher,
                                                        DBusConnection* connection,
                                                        DBusMessage* msg)
 {
     DBusHandlerResult res = DBUS_HANDLER_RESULT_HANDLED;
 
     DBusMessage* reply = nullptr;
-    Item* item;
+    TrayItem* item;
     const char* sender;
     const char* param;
-    const char* busobj;
+    const char* object_path;
     const char* registree_name;
 
     if (!(sender = dbus_message_get_sender(msg)) ||
@@ -160,17 +160,17 @@ static DBusHandlerResult watcher_respond_register_item(Watcher* watcher,
     switch (*param) {
         case '/':
             registree_name = sender;
-            busobj = param;
+            object_path = param;
             break;
         case ':':
             registree_name = param;
-            busobj = SNI_OPATH;
+            object_path = SNI_OPATH;
             break;
         default:
             /* KStatusNotifierItem registers under its well-known name
              * rather than a unique one or an object path */
             registree_name = param;
-            busobj = SNI_OPATH;
+            object_path = SNI_OPATH;
             break;
     }
 
@@ -186,7 +186,7 @@ static DBusHandlerResult watcher_respond_register_item(Watcher* watcher,
         goto send;
     }
 
-    if (!(item = item_create(registree_name, busobj, watcher))) {
+    if (!(item = item_create(registree_name, object_path, watcher))) {
         reply = dbus_message_new_error_printf(msg, DBUS_ERROR_FAILED, "Cannot track %s",
                                               registree_name);
         goto send;
@@ -205,10 +205,10 @@ send:
     return res;
 }
 
-static int watcher_get_registered_items(const Watcher* watcher, DBusMessageIter* iter)
+static int watcher_get_registered_items(const TrayWatcher* watcher, DBusMessageIter* iter)
 {
     DBusMessageIter names = DBUS_MESSAGE_ITER_INIT_CLOSED;
-    Item* item;
+    TrayItem* item;
     int result;
 
     if (!dbus_message_iter_open_container(iter, DBUS_TYPE_ARRAY, DBUS_TYPE_STRING_AS_STRING,
@@ -218,7 +218,7 @@ static int watcher_get_registered_items(const Watcher* watcher, DBusMessageIter*
     }
 
     wl_list_for_each(item, &watcher->items, link) {
-        if (!dbus_message_iter_append_basic(&names, DBUS_TYPE_STRING, &item->busname)) {
+        if (!dbus_message_iter_append_basic(&names, DBUS_TYPE_STRING, &item->bus_name)) {
             result = -ENOMEM;
             goto fail;
         }
@@ -232,7 +232,7 @@ fail:
     return result;
 }
 
-static int watcher_get_registered_items_variant(const Watcher* watcher, DBusMessageIter* iter)
+static int watcher_get_registered_items_variant(const TrayWatcher* watcher, DBusMessageIter* iter)
 {
     DBusMessageIter variant = DBUS_MESSAGE_ITER_INIT_CLOSED;
     int result;
@@ -293,7 +293,7 @@ fail:
     return result;
 }
 
-static DBusHandlerResult watcher_respond_get_prop(Watcher* watcher,
+static DBusHandlerResult watcher_respond_get_prop(TrayWatcher* watcher,
                                                   DBusConnection* connection,
                                                   DBusMessage* message)
 {
@@ -355,7 +355,7 @@ fail:
     return DBUS_HANDLER_RESULT_NEED_MEMORY;
 }
 
-static DBusHandlerResult watcher_respond_all_props(Watcher* watcher,
+static DBusHandlerResult watcher_respond_all_props(TrayWatcher* watcher,
                                                    DBusConnection* connection,
                                                    DBusMessage* message)
 {
@@ -438,7 +438,7 @@ static DBusHandlerResult watcher_handle_message(DBusConnection* connection,
                                                 DBusMessage* message,
                                                 void* data)
 {
-    Watcher* watcher = data;
+    TrayWatcher* watcher = data;
 
     if (dbus_message_is_method_call(message, DBUS_INTERFACE_INTROSPECTABLE, "Introspect"))
         return watcher_respond_introspect(connection, message);
@@ -458,14 +458,14 @@ static DBusHandlerResult watcher_handle_message(DBusConnection* connection,
 
 static const DBusObjectPathVTable watcher_vtable = { .message_function = watcher_handle_message };
 
-void watcher_start(Watcher* watcher, DBusConnection* connection, struct wl_event_loop* loop)
+void watcher_start(TrayWatcher* watcher, DBusConnection* connection, struct wl_event_loop* loop)
 {
     DBusError err = DBUS_ERROR_INIT;
 
     wl_list_init(&watcher->items);
     wl_list_init(&watcher->trays);
-    watcher->conn = connection;
-    watcher->loop = loop;
+    watcher->connection = connection;
+    watcher->event_loop = loop;
 
     const int flags = DBUS_NAME_FLAG_REPLACE_EXISTING | DBUS_NAME_FLAG_DO_NOT_QUEUE;
     const int reply = dbus_bus_request_name(connection, SNW_NAME, flags, nullptr);
@@ -500,26 +500,26 @@ fail:
     return;
 }
 
-void watcher_stop(Watcher* watcher)
+void watcher_stop(TrayWatcher* watcher)
 {
-    dbus_connection_unregister_object_path(watcher->conn, SNW_OPATH);
-    dbus_bus_remove_match(watcher->conn, watcher_match_rule, nullptr);
-    dbus_connection_remove_filter(watcher->conn, watcher_filter_bus, watcher);
-    dbus_bus_release_name(watcher->conn, SNW_NAME, nullptr);
+    dbus_connection_unregister_object_path(watcher->connection, SNW_OPATH);
+    dbus_bus_remove_match(watcher->connection, watcher_match_rule, nullptr);
+    dbus_connection_remove_filter(watcher->connection, watcher_filter_bus, watcher);
+    dbus_bus_release_name(watcher->connection, SNW_NAME, nullptr);
     watcher->running = 0;
 }
 
-int watcher_get_item_count(const Watcher* watcher)
+int watcher_get_item_count(const TrayWatcher* watcher)
 {
     return wl_list_length(&watcher->items);
 }
 
 /* The largest size any tray draws icons at, as one Icon serves them all. */
-int watcher_get_icon_size(const Watcher* watcher)
+int watcher_get_icon_size(const TrayWatcher* watcher)
 {
     int size = 0;
 
-    Tray* tray;
+    SystemTray* tray;
     if (watcher)
         wl_list_for_each(tray, &watcher->trays, link)
             size = MAX(size, tray_get_icon_width(tray));
@@ -528,9 +528,9 @@ int watcher_get_icon_size(const Watcher* watcher)
     return size > 0 ? size : 24;
 }
 
-void watcher_update_trays(Watcher* watcher)
+void watcher_update_trays(TrayWatcher* watcher)
 {
-    Tray* tray;
+    SystemTray* tray;
 
     wl_list_for_each(tray, &watcher->trays, link)
         tray_update(tray);

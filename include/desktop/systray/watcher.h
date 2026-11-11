@@ -27,16 +27,16 @@
 typedef struct {
     struct wl_list items;
     struct wl_list trays;
-    struct wl_event_loop* loop;
-    DBusConnection* conn;
+    struct wl_event_loop* event_loop;
+    DBusConnection* connection;
     int running;
-} Watcher;
+} TrayWatcher;
 
-void watcher_start(Watcher* watcher, DBusConnection* connection, struct wl_event_loop* loop);
-void watcher_stop(Watcher* watcher);
+void watcher_start(TrayWatcher* watcher, DBusConnection* connection, struct wl_event_loop* loop);
+void watcher_stop(TrayWatcher* watcher);
 
-int watcher_get_item_count(const Watcher* watcher);
-int watcher_get_icon_size(const Watcher* watcher);
-void watcher_update_trays(Watcher* watcher);
+int watcher_get_item_count(const TrayWatcher* watcher);
+int watcher_get_icon_size(const TrayWatcher* watcher);
+void watcher_update_trays(TrayWatcher* watcher);
 
 #endif

@@ -40,7 +40,7 @@ static void corner_draw(uint32_t* pixels,
  * circular arc, a larger n eases the curvature into the turn (squircle). */
 static double corner_exponent(void)
 {
-    return corner_style == CornerSquircle ? 4.0 : 2.0;
+    return corner_style == CORNER_STYLE_SQUIRCLE ? 4.0 : 2.0;
 }
 
 /* The contents stay square, so the border has to be at least as thick as the
@@ -57,11 +57,12 @@ unsigned int corner_border_width(void)
 
 /* Radius c is drawn with: none without a border (fullscreen, unmanaged),
  * never more than half the box. */
-int corner_client_radius(Client* client)
+int corner_client_radius(WindowClient* client)
 {
-    if (!corner_radius || !client->bw || !client->corner[0])
+    if (!corner_radius || !client->border_width || !client->corner_buffers[0])
         return 0;
-    return MAX(0, MIN((int)corner_radius, MIN(client->geom.width, client->geom.height) / 2));
+    return MAX(0,
+               MIN((int)corner_radius, MIN(client->geometry.width, client->geometry.height) / 2));
 }
 
 /* Radius the bar is cut to, in layout coordinates. */
@@ -69,7 +70,9 @@ int corner_bar_radius(Monitor* monitor)
 {
     if (!corner_radius)
         return 0;
-    return MAX(0, MIN((int)corner_radius, MIN(monitor->b.real_width, monitor->b.real_height) / 2));
+    return MAX(
+        0, MIN((int)corner_radius,
+               MIN(monitor->bar_metrics.logical_width, monitor->bar_metrics.logical_height) / 2));
 }
 
 /* Clear the four corner squares before drawing into a buffer: buffer_get()
@@ -179,58 +182,59 @@ static void corner_draw(uint32_t* pixels,
 
 /* Size, place and paint the four corners. Called on every resize and colour
  * change, so redraw only when the radius, border or colour changed. */
-void corner_draw_all(Client* client)
+void corner_draw_all(WindowClient* client)
 {
-    Monitor* monitor = client->mon;
+    Monitor* monitor = client->monitor;
     const int radius = corner_client_radius(client);
     int pos[4][2];
 
-    if (!client->corner[0])
+    if (!client->corner_buffers[0])
         return;
     if (!radius || !monitor) {
         for (int i = 0; i < 4; i++)
-            wlr_scene_node_set_enabled(&client->corner[i]->node, 0);
+            wlr_scene_node_set_enabled(&client->corner_buffers[i]->node, 0);
         return;
     }
 
     pos[0][0] = 0;
     pos[0][1] = 0;
-    pos[1][0] = client->geom.width - radius;
+    pos[1][0] = client->geometry.width - radius;
     pos[1][1] = 0;
     pos[2][0] = 0;
-    pos[2][1] = client->geom.height - radius;
-    pos[3][0] = client->geom.width - radius;
-    pos[3][1] = client->geom.height - radius;
+    pos[2][1] = client->geometry.height - radius;
+    pos[3][0] = client->geometry.width - radius;
+    pos[3][1] = client->geometry.height - radius;
     for (int i = 0; i < 4; i++) {
-        wlr_scene_node_set_position(&client->corner[i]->node, pos[i][0], pos[i][1]);
-        wlr_scene_buffer_set_dest_size(client->corner[i], radius, radius);
-        wlr_scene_node_set_enabled(&client->corner[i]->node, 1);
+        wlr_scene_node_set_position(&client->corner_buffers[i]->node, pos[i][0], pos[i][1]);
+        wlr_scene_buffer_set_dest_size(client->corner_buffers[i], radius, radius);
+        wlr_scene_node_set_enabled(&client->corner_buffers[i]->node, 1);
     }
 
     /* drawn at output scale, like the bar */
     const int scaled_radius = (int)roundf((float)radius * monitor->wlr_output->scale);
-    const int scaled_border = (int)roundf((float)client->bw * monitor->wlr_output->scale);
-    uint32_t color = corner_color(client->borderscheme);
-    if (scaled_radius <= 0 ||
-        (scaled_radius == client->cornerbufr && scaled_border == client->cornerbufbw &&
-         color == client->cornercolor))
+    const int scaled_border = (int)roundf((float)client->border_width * monitor->wlr_output->scale);
+    uint32_t color = corner_color(client->border_scheme);
+    if (scaled_radius <= 0 || (scaled_radius == client->cached_corner_radius &&
+                               scaled_border == client->cached_corner_border_width &&
+                               color == client->cached_corner_color))
         return;
 
-    if (scaled_radius != client->cornerbufr)
+    if (scaled_radius != client->cached_corner_radius)
         for (int i = 0; i < 4; i++)
-            buffer_pool_drop(client->cornerpool[i], LENGTH(client->cornerpool[i]));
-    client->cornerbufr = scaled_radius;
-    client->cornerbufbw = scaled_border;
-    client->cornercolor = color;
+            buffer_pool_drop(client->corner_buffer_pool[i], LENGTH(client->corner_buffer_pool[i]));
+    client->cached_corner_radius = scaled_radius;
+    client->cached_corner_border_width = scaled_border;
+    client->cached_corner_color = color;
 
     uint8_t* cov = corner_coverage(scaled_radius, scaled_border);
     for (int i = 0; i < 4; i++) {
-        Buffer* buffer = buffer_get(client->cornerpool[i], LENGTH(client->cornerpool[i]),
-                                    scaled_radius, scaled_radius);
+        RenderBuffer* buffer =
+            buffer_get(client->corner_buffer_pool[i], LENGTH(client->corner_buffer_pool[i]),
+                       scaled_radius, scaled_radius);
         if (!buffer)
             continue;
-        corner_draw(buffer->data, cov, scaled_radius, i, color);
-        wlr_scene_buffer_set_buffer(client->corner[i], &buffer->base);
+        corner_draw(buffer->pixels, cov, scaled_radius, i, color);
+        wlr_scene_buffer_set_buffer(client->corner_buffers[i], &buffer->base);
         wlr_buffer_unlock(&buffer->base);
     }
     free(cov);

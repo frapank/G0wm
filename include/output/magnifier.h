@@ -13,6 +13,6 @@
 void magnifier_drop(Monitor* monitor);
 int magnifier_frame(Monitor* monitor, struct wlr_output_state* state);
 void magnifier_zoom(Monitor* monitor, float zoom_level);
-void magnifier_magnify(const Arg* arg);
+void magnifier_magnify(const ActionArg* argument);
 
 #endif

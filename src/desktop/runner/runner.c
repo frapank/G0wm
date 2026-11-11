@@ -39,7 +39,7 @@ int runner_command_count;
 const char** runner_source; /* what the candidates are picked from */
 int* runner_matches;
 int runner_match_count;
-Client** runner_window_clients;
+WindowClient** runner_window_clients;
 int runner_selection;
 static int runner_cycling;
 int* runner_use;
@@ -48,9 +48,9 @@ int runner_history_pos = -1;
 static struct timespec runner_stamp; /* newest PATH mtime the cache was built
                                         from */
 static char* runner_cache_path;
-RunnerApp* runner_apps; /* sorted by name */
+RunnerApplication* runner_apps; /* sorted by name */
 char** runner_app_names;
-char** runner_app_generic_names;
+char** runner_app_untranslated_names;
 int runner_app_count;
 int* runner_app_use;
 static struct timespec runner_app_stamp;
@@ -111,16 +111,16 @@ int runner_has_icons(void)
 }
 
 /* the icon of candidate i, read the first time it's asked for */
-Icon* runner_icon(int match_index)
+RasterIcon* runner_icon(int match_index)
 {
     if (!runner_has_icons() || match_index < 0 || match_index >= runner_match_count)
         return nullptr;
-    RunnerApp* app = &runner_apps[runner_matches[match_index]];
-    if (!app->imgread) {
-        app->imgread = 1;
-        app->img = icon_create_from_name(app->icon, nullptr, 64);
+    RunnerApplication* application = &runner_apps[runner_matches[match_index]];
+    if (!application->icon_load_attempted) {
+        application->icon_load_attempted = 1;
+        application->icon_image = icon_create_from_name(application->icon_name, nullptr, 64);
     }
-    return app->img;
+    return application->icon_image;
 }
 
 /* runner_buffer holds UTF-8, so the cursor steps over whole codepoints: it
@@ -177,7 +177,7 @@ static void runner_exec(const char* cmd, int term)
         argv[4] = (char*)cmd;
         argv[5] = nullptr;
     }
-    const Arg spawn_arg = { .v = argv };
+    const ActionArg spawn_arg = { .pointer = argv };
     /* only the child gets the wider PATH */
     if (runner_paths && *runner_paths) {
         path = runner_search_path();
@@ -201,7 +201,7 @@ static void runner_open(const char* what)
 {
     char* argv[] = { "xdg-open", (char*)what, nullptr };
 
-    spawn(&(Arg){ .v = argv });
+    spawn(&(ActionArg){ .pointer = argv });
 }
 
 /* runner_search_url with q in place of its %s, or after it without one */
@@ -228,10 +228,10 @@ static void runner_search(const char* query)
     free(result);
 }
 
-static void runner_focus(Client* client)
+static void runner_focus(WindowClient* client)
 {
     /* it may have closed while the prompt was up */
-    Client* candidate;
+    WindowClient* candidate;
     wl_list_for_each(candidate, &clients, link) {
         if (candidate == client) {
             client_activate(client);
@@ -248,47 +248,48 @@ static void runner_enter(void)
     runner_active = 0;
     const char* cmd = sug ? sug : runner_buffer + off;
     char line[sizeof runner_buffer];
-    RunnerApp* app;
+    RunnerApplication* application;
     char* exec;
     char* path;
     switch (mode) {
-        case ModeApp:
+        case RUNNER_MODE_APPLICATION:
             /* nothing to open, or a bare expression that Tab turns into
              * its result */
             if (!sug)
                 return;
-            app = &runner_apps[runner_matches[runner_selection]];
-            exec = runner_app_exec(app->exec);
-            runner_exec(exec, app->term);
+            application = &runner_apps[runner_matches[runner_selection]];
+            exec = runner_app_exec(application->exec_command);
+            runner_exec(exec, application->run_in_terminal);
             free(exec);
             break;
-        case ModeRun:
+        case RUNNER_MODE_COMMAND:
             if (!*cmd)
                 return;
             runner_exec(cmd, 0);
             break;
-        case ModeTerm:
+        case RUNNER_MODE_TERMINAL:
             runner_exec(cmd, 1);
             break;
-        case ModeCalc:
+        case RUNNER_MODE_CALCULATOR:
             /* stays open to go on from the result, or to fix a typo */
             if (runner_calc_fill() || runner_length > off)
                 runner_active = 1;
             return;
-        case ModeSearch:
+        case RUNNER_MODE_SEARCH:
             if (!*cmd)
                 return;
             runner_search(cmd);
             break;
-        case ModeWindow:
+        case RUNNER_MODE_WINDOW:
             if (sug)
                 runner_focus(runner_window_clients[runner_matches[runner_selection]]);
             return;
-        case ModeTag:
+        case RUNNER_MODE_TAG:
             if (sug)
-                layout_view(&(Arg){ .ui = 1u << runner_matches[runner_selection] });
+                layout_view(
+                    &(ActionArg){ .unsigned_integer = 1u << runner_matches[runner_selection] });
             return;
-        case ModeFile:
+        case RUNNER_MODE_FILE:
             snprintf(line, sizeof line, "%.*s%s", off, runner_buffer, cmd);
             path = runner_expand(line, strlen(line));
             runner_open(path);
@@ -300,7 +301,7 @@ static void runner_enter(void)
     runner_record(line);
 }
 
-void runner_toggle(const Arg*)
+void runner_toggle(const ActionArg*)
 {
     if (!selected_monitor)
         return;

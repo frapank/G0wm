@@ -108,13 +108,13 @@ static void notify_actions(DBusMessage* message, Notification* notification)
         dbus_message_iter_get_basic(&arr, &label);
         dbus_message_iter_next(&arr);
         if (!strcmp(key, "default")) {
-            notification->hasdefault = 1;
-        } else if (notification->nact < NOTIFY_ACTMAX &&
-                   strlen(key) < sizeof(notification->act[0].key)) {
-            memcpy(notification->act[notification->nact].key, key, strlen(key) + 1);
-            notify_sanitize(notification->act[notification->nact].label,
-                            sizeof(notification->act[0].label), *label ? label : key);
-            notification->nact++;
+            notification->has_default_action = 1;
+        } else if (notification->action_count < NOTIFY_ACTMAX &&
+                   strlen(key) < sizeof(notification->actions[0].key)) {
+            memcpy(notification->actions[notification->action_count].key, key, strlen(key) + 1);
+            notify_sanitize(notification->actions[notification->action_count].label,
+                            sizeof(notification->actions[0].label), *label ? label : key);
+            notification->action_count++;
         }
     }
 }
@@ -204,7 +204,7 @@ static int notify_value(DBusMessage* message)
  * spec allows are dropped (<br> becomes a space), any other < is kept. */
 static void notify_demarkup(char* dst, size_t dstsz, const char* src)
 {
-    static const struct {
+    static const struct MarkupEntity {
         const char* name;
         char character;
     } entities[] = {
@@ -271,15 +271,15 @@ static int notify_urgency(DBusMessage* message)
     DBusMessageIter var;
 
     if (!notify_hint(message, "urgency", DBUS_TYPE_BYTE, &var))
-        return UrgencyNormal;
+        return NOTIFICATION_URGENCY_NORMAL;
     unsigned char level;
     dbus_message_iter_get_basic(&var, &level);
-    return level <= UrgencyCritical ? level : UrgencyNormal;
+    return level <= NOTIFICATION_URGENCY_CRITICAL ? level : NOTIFICATION_URGENCY_NORMAL;
 }
 
 /* (iiibiiay): width, height, rowstride, has_alpha, bits_per_sample,
  * channels, data. Validated before any byte is read. */
-static Icon* notify_image_data(DBusMessage* message, const char* name)
+static RasterIcon* notify_image_data(DBusMessage* message, const char* name)
 {
     DBusMessageIter var;
 
@@ -329,7 +329,7 @@ static Icon* notify_image_data(DBusMessage* message, const char* name)
 }
 
 /* a path, a file:// URI or an icon name */
-static Icon* notify_image_named(const char* name)
+static RasterIcon* notify_image_named(const char* name)
 {
     if (!name || !*name)
         return nullptr;
@@ -339,9 +339,9 @@ static Icon* notify_image_named(const char* name)
 }
 
 /* in the spec's order of precedence */
-static Icon* notify_icon(DBusMessage* message, const char* app_icon)
+static RasterIcon* notify_icon(DBusMessage* message, const char* app_icon)
 {
-    Icon* icon;
+    RasterIcon* icon;
 
     if ((icon = notify_image_data(message, "image-data")) ||
         (icon = notify_image_data(message, "image_data")))
@@ -403,7 +403,7 @@ static DBusHandlerResult notify_handle_notify(DBusConnection* connection, DBusMe
         timeout_ms = NOTIFY_TIMEOUT_MAX;
     notification.urgency = notify_urgency(message);
     notification.timeout_ms =
-        notification.urgency == UrgencyCritical ? 0 : (unsigned int)timeout_ms;
+        notification.urgency == NOTIFICATION_URGENCY_CRITICAL ? 0 : (unsigned int)timeout_ms;
     notification.transient = notify_bool_hint(message, "transient");
     notification.resident = notify_bool_hint(message, "resident");
     notify_actions(message, &notification);
@@ -418,65 +418,65 @@ static DBusHandlerResult notify_handle_notify(DBusConnection* connection, DBusMe
     else
         snprintf(notification.text, sizeof(notification.text), "%s: %s", capp,
                  *csummary ? csummary : cbody);
-    snprintf(notification.app, sizeof(notification.app), "%s", capp);
-    notify_desktop_entry(message, notification.desktop, sizeof(notification.desktop));
-    notify_stack_tag(message, notification.tag, sizeof(notification.tag));
-    notification.value = notify_value(message);
+    snprintf(notification.app_name, sizeof(notification.app_name), "%s", capp);
+    notify_desktop_entry(message, notification.desktop_entry, sizeof(notification.desktop_entry));
+    notify_stack_tag(message, notification.stack_tag, sizeof(notification.stack_tag));
+    notification.progress_percent = notify_value(message);
     notification.icon = notify_icon(message, app_icon);
 
     /* Updates, by id or by stack tag, keep their place on screen or in the
      * queue. */
     id = replaces_id;
-    if (!id && *notification.tag) {
-        if (notify_state.active && notify_same_slot(&notify_state.cur, &notification))
-            id = notify_state.cur.id;
-        for (size_t queue_index = 0; !id && queue_index < notify_state.nqueue; queue_index++)
+    if (!id && *notification.stack_tag) {
+        if (notify_state.has_current && notify_same_slot(&notify_state.current, &notification))
+            id = notify_state.current.id;
+        for (size_t queue_index = 0; !id && queue_index < notify_state.queue_count; queue_index++)
             if (notify_same_slot(&notify_state.queue[queue_index], &notification))
                 id = notify_state.queue[queue_index].id;
     }
     if (!id)
-        id = ++notify_state.seq;
+        id = ++notify_state.next_notification_id;
     if (!id) /* the counter wrapped; 0 means "no notification" */
-        id = ++notify_state.seq;
+        id = ++notify_state.next_notification_id;
     notification.id = id;
 
     size_t queue_index = 0;
-    while (queue_index < notify_state.nqueue && notify_state.queue[queue_index].id != id)
+    while (queue_index < notify_state.queue_count && notify_state.queue[queue_index].id != id)
         queue_index++;
-    if (notify_state.active && notify_state.cur.id == id) {
-        notify_release(&notify_state.cur);
-        notify_state.cur = notification;
+    if (notify_state.has_current && notify_state.current.id == id) {
+        notify_release(&notify_state.current);
+        notify_state.current = notification;
         if (!notify_show()) {
-            notify_closed(id, ClosedUndefined);
-            notify_history_push(&notify_state.cur);
+            notify_closed(id, NOTIFICATION_CLOSED_UNDEFINED);
+            notify_history_push(&notify_state.current);
             notify_show_next();
         }
-    } else if (queue_index < notify_state.nqueue) {
+    } else if (queue_index < notify_state.queue_count) {
         notify_release(&notify_state.queue[queue_index]);
         notify_state.queue[queue_index] = notification;
-    } else if (notify_state.held) {
+    } else if (notify_state.is_paused) {
         /* the user is picking an action: nothing takes the box */
-        notify_enqueue(&notification, notification.urgency == UrgencyCritical);
-    } else if (!notify_state.active || !notify_state.cur.timeout_ms ||
-               notification.urgency == UrgencyCritical) {
+        notify_enqueue(&notification, notification.urgency == NOTIFICATION_URGENCY_CRITICAL);
+    } else if (!notify_state.has_current || !notify_state.current.timeout_ms ||
+               notification.urgency == NOTIFICATION_URGENCY_CRITICAL) {
         /* shown now if the box is free, sticky, or this one is critical;
          * what it covers goes back to the front of the queue */
-        if (notify_state.active) {
+        if (notify_state.has_current) {
             notify_arm(0);
-            notify_state.active = 0;
-            notify_enqueue(&notify_state.cur, 1);
+            notify_state.has_current = 0;
+            notify_enqueue(&notify_state.current, 1);
         }
-        notify_state.cur = notification;
+        notify_state.current = notification;
         if (!notify_show()) {
-            notify_closed(id, ClosedUndefined);
-            notify_history_push(&notify_state.cur);
+            notify_closed(id, NOTIFICATION_CLOSED_UNDEFINED);
+            notify_history_push(&notify_state.current);
             notify_show_next();
         }
     } else {
         notify_enqueue(&notification, 0);
     }
-    if (notify_state.redraw)
-        notify_state.redraw();
+    if (notify_state.redraw_callback)
+        notify_state.redraw_callback();
 
     reply = dbus_message_new_method_return(message);
     if (reply)
@@ -499,17 +499,17 @@ static DBusHandlerResult notify_handle_close(DBusConnection* connection, DBusMes
     if (!dbus_message_get_args(message, nullptr, DBUS_TYPE_UINT32, &id, DBUS_TYPE_INVALID))
         return notify_reply_empty(connection, message);
     size_t queue_index = 0;
-    while (queue_index < notify_state.nqueue && notify_state.queue[queue_index].id != id)
+    while (queue_index < notify_state.queue_count && notify_state.queue[queue_index].id != id)
         queue_index++;
-    if (notify_state.active && id == notify_state.cur.id) {
-        notify_clear(ClosedByCall);
-    } else if (id && queue_index < notify_state.nqueue) {
+    if (notify_state.has_current && id == notify_state.current.id) {
+        notify_clear(NOTIFICATION_CLOSED_BY_REQUEST);
+    } else if (id && queue_index < notify_state.queue_count) {
         Notification closed;
         notify_unqueue(queue_index, &closed);
         notify_release(&closed);
-        notify_closed(id, ClosedByCall);
-        if (notify_state.redraw)
-            notify_state.redraw();
+        notify_closed(id, NOTIFICATION_CLOSED_BY_REQUEST);
+        if (notify_state.redraw_callback)
+            notify_state.redraw_callback();
     }
 
     return notify_reply_empty(connection, message);

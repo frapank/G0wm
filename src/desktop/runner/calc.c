@@ -19,29 +19,29 @@
 /* +, -, *, /, %, parens, a decimal point and whitespace: nothing here can
  * reach a shell or a file, so a malformed expression can only fail to
  * parse, never do anything. */
-struct RunnerCalcState {
+struct CalculatorParser {
     const char* cursor;
-    int depth;
-    int failed;
+    int recursion_depth;
+    int has_error;
 };
 
 /* function declarations */
-static double runner_calc_expr(struct RunnerCalcState* state);
+static double runner_calc_expr(struct CalculatorParser* state);
 
 /* function implementations */
 /* Every recursive call goes through here first, so one depth check bounds
  * atom, term and expr together; runner_buffer is 256 bytes, so even fully
  * parenthesized input like "(((((1)))))" cannot come close to this limit. */
-static int runner_calc_enter(struct RunnerCalcState* state)
+static int runner_calc_enter(struct CalculatorParser* state)
 {
-    if (++state->depth > 64) {
-        state->failed = 1;
+    if (++state->recursion_depth > 64) {
+        state->has_error = 1;
         return 0;
     }
     return 1;
 }
 
-static double runner_calc_number(struct RunnerCalcState* state)
+static double runner_calc_number(struct CalculatorParser* state)
 {
     double value = 0;
     double frac = 0.1;
@@ -62,11 +62,11 @@ static double runner_calc_number(struct RunnerCalcState* state)
         }
     }
     if (!has_digits)
-        state->failed = 1;
+        state->has_error = 1;
     return value;
 }
 
-static double runner_calc_atom(struct RunnerCalcState* state)
+static double runner_calc_atom(struct CalculatorParser* state)
 {
     if (!runner_calc_enter(state))
         return 0;
@@ -85,17 +85,17 @@ static double runner_calc_atom(struct RunnerCalcState* state)
         while (*state->cursor == ' ' || *state->cursor == '\t')
             state->cursor++;
         if (*state->cursor != ')')
-            state->failed = 1;
+            state->has_error = 1;
         else
             state->cursor++;
     } else {
         value = runner_calc_number(state);
     }
-    state->depth--;
+    state->recursion_depth--;
     return value;
 }
 
-static double runner_calc_term(struct RunnerCalcState* state)
+static double runner_calc_term(struct CalculatorParser* state)
 {
     double value = runner_calc_atom(state);
 
@@ -109,7 +109,7 @@ static double runner_calc_term(struct RunnerCalcState* state)
             state->cursor++;
             const double rhs = runner_calc_atom(state);
             if (rhs == 0.0) {
-                state->failed = 1;
+                state->has_error = 1;
                 return 0;
             }
             value /= rhs;
@@ -117,7 +117,7 @@ static double runner_calc_term(struct RunnerCalcState* state)
             state->cursor++;
             const double rhs = runner_calc_atom(state);
             if (rhs == 0.0) {
-                state->failed = 1;
+                state->has_error = 1;
                 return 0;
             }
             value = fmod(value, rhs);
@@ -128,7 +128,7 @@ static double runner_calc_term(struct RunnerCalcState* state)
     return value;
 }
 
-static double runner_calc_expr(struct RunnerCalcState* state)
+static double runner_calc_expr(struct CalculatorParser* state)
 {
     double value = runner_calc_term(state);
 
@@ -180,14 +180,15 @@ int runner_calc(double* out)
 {
     int offset;
     const int mode = runner_mode(runner_buffer, &offset);
-    struct RunnerCalcState state = { runner_buffer + offset, 0, 0 };
+    struct CalculatorParser state = { runner_buffer + offset, 0, 0 };
 
-    if ((mode != ModeApp && mode != ModeCalc) || !runner_is_expr(state.cursor, mode == ModeApp))
+    if ((mode != RUNNER_MODE_APPLICATION && mode != RUNNER_MODE_CALCULATOR) ||
+        !runner_is_expr(state.cursor, mode == RUNNER_MODE_APPLICATION))
         return 0;
     double value = runner_calc_expr(&state);
     while (*state.cursor == ' ' || *state.cursor == '\t')
         state.cursor++;
-    if (state.failed || *state.cursor != '\0' || !isfinite(value))
+    if (state.has_error || *state.cursor != '\0' || !isfinite(value))
         return 0;
     *out = value;
     return 1;

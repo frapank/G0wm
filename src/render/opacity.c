@@ -35,7 +35,7 @@ constexpr float OPACITY_MIN = 0.1f; /* floor for the opacity keybindings */
 
 /* function declarations */
 #ifdef INTEGRATED_BACKGROUND
-static void opacity_blur_box(Client* client,
+static void opacity_blur_box(WindowClient* client,
                              struct wlr_scene_buffer* node,
                              struct wlr_buffer** last,
                              int box_x,
@@ -80,34 +80,37 @@ void opacity_blur_bar(Monitor* monitor)
     /* the backdrop is square, keep it off the corners a rounded bar drops */
     const int bar_rounding = corner_bar_radius(monitor);
 
-    if (!monitor->barblur)
+    if (!monitor->bar_blur_scene_buffer)
         return;
 
-    Buffer* buffer = monitor->blurpool[0];
+    RenderBuffer* buffer = monitor->blur_buffer_pool[0];
     int x = (int)bar_padding + bar_rounding;
-    int y =
-        bar_top ? (int)bar_padding : monitor->m.height - monitor->b.real_height - (int)bar_padding;
-    int width = MIN(monitor->b.real_width - 2 * bar_rounding, monitor->wallpaperw - x);
-    int height = MIN(monitor->b.real_height, monitor->wallpaperh - y);
-    if (!buffer || !monitor->scene_buffer->node.enabled || !opacity_enabled ||
+    int y = bar_top
+                ? (int)bar_padding
+                : monitor->geometry.height - monitor->bar_metrics.logical_height - (int)bar_padding;
+    int width =
+        MIN(monitor->bar_metrics.logical_width - 2 * bar_rounding, monitor->wallpaper_width_px - x);
+    int height = MIN(monitor->bar_metrics.logical_height, monitor->wallpaper_height_px - y);
+    if (!buffer || !monitor->bar_scene_buffer->node.enabled || !opacity_enabled ||
         !opacity_decorations_translucent() || y < 0 || width <= 0 || height <= 0) {
-        wlr_scene_node_set_enabled(&monitor->barblur->node, 0);
+        wlr_scene_node_set_enabled(&monitor->bar_blur_scene_buffer->node, 0);
         return;
     }
 
     struct wlr_fbox source_box;
     opacity_blur_source_box(monitor, &source_box, x, y, width, height);
-    wlr_scene_node_set_position(&monitor->barblur->node, monitor->m.x + x, monitor->m.y + y);
-    wlr_scene_buffer_set_dest_size(monitor->barblur, width, height);
-    wlr_scene_buffer_set_source_box(monitor->barblur, &source_box);
-    wlr_scene_node_set_enabled(&monitor->barblur->node, 1);
+    wlr_scene_node_set_position(&monitor->bar_blur_scene_buffer->node, monitor->geometry.x + x,
+                                monitor->geometry.y + y);
+    wlr_scene_buffer_set_dest_size(monitor->bar_blur_scene_buffer, width, height);
+    wlr_scene_buffer_set_source_box(monitor->bar_blur_scene_buffer, &source_box);
+    wlr_scene_node_set_enabled(&monitor->bar_blur_scene_buffer->node, 1);
 }
 
 /* Points one of a client's backdrop nodes at the frosted wallpaper under the
  * box it covers, in the coordinates of the client's own tree. last is what the
  * node already holds: set_buffer drops the texture and damages the node, so
  * handing it the same buffer every frame never stops asking for another. */
-static void opacity_blur_box(Client* client,
+static void opacity_blur_box(WindowClient* client,
                              struct wlr_scene_buffer* node,
                              struct wlr_buffer** last,
                              int box_x,
@@ -115,8 +118,8 @@ static void opacity_blur_box(Client* client,
                              int box_width,
                              int box_height)
 {
-    Monitor* monitor = client->mon;
-    Buffer* buffer = monitor ? monitor->blurpool[0] : nullptr;
+    Monitor* monitor = client->monitor;
+    RenderBuffer* buffer = monitor ? monitor->blur_buffer_pool[0] : nullptr;
 
     if (!node || !monitor)
         return;
@@ -124,10 +127,12 @@ static void opacity_blur_box(Client* client,
     /* same for a rounded client: shrink the box to the contents, or the
      * square backdrop fills the corners back in */
     if (corner_client_radius(client)) {
-        const int right = MIN(box_x + box_width, client->geom.width - (int)client->bw);
-        const int bottom = MIN(box_y + box_height, client->geom.height - (int)client->bw);
-        box_x = MAX(box_x, (int)client->bw);
-        box_y = MAX(box_y, (int)client->bw);
+        const int right =
+            MIN(box_x + box_width, client->geometry.width - (int)client->border_width);
+        const int bottom =
+            MIN(box_y + box_height, client->geometry.height - (int)client->border_width);
+        box_x = MAX(box_x, (int)client->border_width);
+        box_y = MAX(box_y, (int)client->border_width);
         box_width = right - box_x;
         box_height = bottom - box_y;
         if (box_width <= 0 || box_height <= 0) {
@@ -138,10 +143,14 @@ static void opacity_blur_box(Client* client,
 
     /* the wallpaper covers the monitor pixel for pixel, so the crop is just
      * the box in monitor-local coordinates, clipped to it */
-    int x = MAX(0, client->geom.x - monitor->m.x + box_x);
-    int y = MAX(0, client->geom.y - monitor->m.y + box_y);
-    int width = MIN(client->geom.x - monitor->m.x + box_x + box_width, monitor->wallpaperw) - x;
-    int height = MIN(client->geom.y - monitor->m.y + box_y + box_height, monitor->wallpaperh) - y;
+    int x = MAX(0, client->geometry.x - monitor->geometry.x + box_x);
+    int y = MAX(0, client->geometry.y - monitor->geometry.y + box_y);
+    int width = MIN(client->geometry.x - monitor->geometry.x + box_x + box_width,
+                    monitor->wallpaper_width_px) -
+                x;
+    int height = MIN(client->geometry.y - monitor->geometry.y + box_y + box_height,
+                     monitor->wallpaper_height_px) -
+                 y;
     if (!buffer || width <= 0 || height <= 0) {
         wlr_scene_node_set_enabled(&node->node, 0);
         return;
@@ -150,8 +159,8 @@ static void opacity_blur_box(Client* client,
     struct wlr_fbox source_box;
     opacity_blur_source_box(monitor, &source_box, x, y, width, height);
     /* the node hangs off the client's tree, hence the offset back into it */
-    wlr_scene_node_set_position(&node->node, x - (client->geom.x - monitor->m.x),
-                                y - (client->geom.y - monitor->m.y));
+    wlr_scene_node_set_position(&node->node, x - (client->geometry.x - monitor->geometry.x),
+                                y - (client->geometry.y - monitor->geometry.y));
     wlr_scene_buffer_set_dest_size(node, width, height);
     wlr_scene_buffer_set_source_box(node, &source_box);
     if (*last != &buffer->base) {
@@ -163,54 +172,56 @@ static void opacity_blur_box(Client* client,
 
 /* Points a client's backdrop at the frosted wallpaper it covers. Done while
  * rendering, so nothing that moves a window has to keep the two in step. */
-void opacity_blur_client(Client* client)
+void opacity_blur_client(WindowClient* client)
 {
-    Monitor* monitor = client->mon;
+    Monitor* monitor = client->monitor;
 
-    if (!client->blur)
+    if (!client->blur_scene_buffer)
         return;
 
     /* the box covers the decorations too, so either letting light through is
      * enough; a fullscreen client is drawn opaque and never does */
-    if (!monitor || !monitor->blurpool[0] || client->isfullscreen || !opacity_enabled ||
+    if (!monitor || !monitor->blur_buffer_pool[0] || client->is_fullscreen || !opacity_enabled ||
         (client->opacity >= 1.0f && !opacity_decorations_translucent())) {
-        wlr_scene_node_set_enabled(&client->blur->node, 0);
-        if (client->titleblur)
-            wlr_scene_node_set_enabled(&client->titleblur->node, 0);
+        wlr_scene_node_set_enabled(&client->blur_scene_buffer->node, 0);
+        if (client->title_blur_scene_buffer)
+            wlr_scene_node_set_enabled(&client->title_blur_scene_buffer->node, 0);
         return;
     }
 
     int title_height = bar_title_height(client);
-    int border = (int)client->bw;
+    int border = (int)client->border_width;
 
-    if (!title_height || monitor->lt[monitor->sellt]->arrange != layout_tabbed ||
-        client->isfloating) {
-        opacity_blur_box(client, client->blur, &client->blurbuf, 0, 0, client->geom.width,
-                         client->geom.height);
-        if (client->titleblur)
-            wlr_scene_node_set_enabled(&client->titleblur->node, 0);
+    if (!title_height ||
+        monitor->layouts[monitor->selected_layout_index]->arrange != layout_tabbed ||
+        client->is_floating) {
+        opacity_blur_box(client, client->blur_scene_buffer, &client->blur_buffer, 0, 0,
+                         client->geometry.width, client->geometry.height);
+        if (client->title_blur_scene_buffer)
+            wlr_scene_node_set_enabled(&client->title_blur_scene_buffer->node, 0);
         return;
     }
 
     /* Tabs share one box and the ones under the top are drawn in lower trees,
      * so a backdrop over the whole box buries their title bars. Each tab backs
      * its own slice of the row, the top one backs the body below it. */
-    int x = border + client->titlex;
-    int tab_width = client->titlew;
-    if (client->titlex == 0) { /* first tab, take the corner in */
+    int x = border + client->title_x;
+    int tab_width = client->title_width;
+    if (client->title_x == 0) { /* first tab, take the corner in */
         x = 0;
         tab_width += border;
     }
-    if (client->titlex + client->titlew == client->geom.width - 2 * border)
+    if (client->title_x + client->title_width == client->geometry.width - 2 * border)
         tab_width += border; /* last tab, same */
-    opacity_blur_box(client, client->titleblur, &client->titleblurbuf, x, 0, tab_width,
-                     border + title_height);
+    opacity_blur_box(client, client->title_blur_scene_buffer, &client->title_blur_buffer, x, 0,
+                     tab_width, border + title_height);
 
     if (client == layout_tab_top(monitor))
-        opacity_blur_box(client, client->blur, &client->blurbuf, 0, border + title_height,
-                         client->geom.width, client->geom.height - border - title_height);
+        opacity_blur_box(client, client->blur_scene_buffer, &client->blur_buffer, 0,
+                         border + title_height, client->geometry.width,
+                         client->geometry.height - border - title_height);
     else
-        wlr_scene_node_set_enabled(&client->blur->node, 0);
+        wlr_scene_node_set_enabled(&client->blur_scene_buffer->node, 0);
 }
 
 /* One box blur along the rows: a 2r+1 window slides on a running sum, so a
@@ -293,8 +304,8 @@ static void opacity_blur_source_box(Monitor* monitor,
                                     int width,
                                     int height)
 {
-    double scale_x = (double)monitor->blurw / (double)monitor->wallpaperw;
-    double scale_y = (double)monitor->blurh / (double)monitor->wallpaperh;
+    double scale_x = (double)monitor->blur_width_px / (double)monitor->wallpaper_width_px;
+    double scale_y = (double)monitor->blur_height_px / (double)monitor->wallpaper_height_px;
 
     source_box->x = x * scale_x;
     source_box->y = y * scale_y;
@@ -340,24 +351,25 @@ static void opacity_blur_transpose(uint32_t* dst, const uint32_t* src, int width
  * full-size copy would cross the bus on every frame anything moved. */
 static void opacity_blur_wallpaper(Monitor* monitor)
 {
-    int width = monitor->wallpaperw;
-    int height = monitor->wallpaperh;
+    int width = monitor->wallpaper_width_px;
+    int height = monitor->wallpaper_height_px;
 
-    Buffer* buffer;
+    RenderBuffer* buffer;
     /* the bar's node is what owns the buffer, so it lets go of it first */
-    if (monitor->barblur)
-        wlr_scene_buffer_set_buffer(monitor->barblur, nullptr);
-    buffer_pool_drop(monitor->blurpool, LENGTH(monitor->blurpool));
-    monitor->blurw = monitor->blurh = 0;
+    if (monitor->bar_blur_scene_buffer)
+        wlr_scene_buffer_set_buffer(monitor->bar_blur_scene_buffer, nullptr);
+    buffer_pool_drop(monitor->blur_buffer_pool, LENGTH(monitor->blur_buffer_pool));
+    monitor->blur_width_px = monitor->blur_height_px = 0;
 
     /* the nodes pick the new buffer up next frame; the pointer they compare
      * against has to go now, or a reused address would read as unchanged */
-    Client* client;
+    WindowClient* client;
     wl_list_for_each(client, &clients, link)
-        if (client->mon == monitor)
-            client->blurbuf = client->titleblurbuf = nullptr;
+        if (client->monitor == monitor)
+            client->blur_buffer = client->title_blur_buffer = nullptr;
 
-    if (opacity_type != OpacityBlur || !monitor->wallpaperpool[0] || width <= 0 || height <= 0)
+    if (opacity_type != OPACITY_MODE_BLUR || !monitor->wallpaper_buffer_pool[0] || width <= 0 ||
+        height <= 0)
         return;
 
     /* the shrink blurs by itself, so the radius shrinks with the image; never
@@ -367,14 +379,15 @@ static void opacity_blur_wallpaper(Monitor* monitor)
     int small_height = MAX(1, height / block_size);
     int pass_radius = MAX(1, (int)blur_radius / block_size);
 
-    if (!(buffer =
-              buffer_get(monitor->blurpool, LENGTH(monitor->blurpool), small_width, small_height)))
+    if (!(buffer = buffer_get(monitor->blur_buffer_pool, LENGTH(monitor->blur_buffer_pool),
+                              small_width, small_height)))
         return;
     uint32_t* current;
     current = util_calloc((size_t)small_width * (size_t)small_height, sizeof(*current));
     uint32_t* scratch = util_calloc((size_t)small_width * (size_t)small_height, sizeof(*scratch));
 
-    opacity_blur_shrink(current, monitor->wallpaperpool[0]->data, width, height, block_size);
+    opacity_blur_shrink(current, monitor->wallpaper_buffer_pool[0]->pixels, width, height,
+                        block_size);
     uint32_t* swap;
     for (unsigned int i = 0; i < blur_passes; i++) {
         opacity_blur_rows(scratch, current, small_width, small_height, pass_radius);
@@ -390,18 +403,18 @@ static void opacity_blur_wallpaper(Monitor* monitor)
     swap = current, current = scratch, scratch = swap;
 
     opacity_blur_tint(current, (size_t)small_width * (size_t)small_height);
-    memcpy(buffer->data, current, (size_t)small_width * (size_t)small_height * sizeof(*current));
+    memcpy(buffer->pixels, current, (size_t)small_width * (size_t)small_height * sizeof(*current));
     free(current);
     free(scratch);
 
     /* what opacity_blur_bar() and opacity_blur_client() scale their crops by */
-    monitor->blurw = small_width;
-    monitor->blurh = small_height;
+    monitor->blur_width_px = small_width;
+    monitor->blur_height_px = small_height;
 
     /* the pool keeps no reference of its own: the bar's node is what holds
      * the buffer up, and the clients take their own lock as they pick it up */
-    if (monitor->barblur)
-        wlr_scene_buffer_set_buffer(monitor->barblur, &buffer->base);
+    if (monitor->bar_blur_scene_buffer)
+        wlr_scene_buffer_set_buffer(monitor->bar_blur_scene_buffer, &buffer->base);
     wlr_buffer_unlock(&buffer->base);
     opacity_blur_bar(monitor);
 }
@@ -432,31 +445,34 @@ static int opacity_decorations_translucent(void)
 void opacity_set_wallpaper(Monitor* monitor)
 {
     GError* error = nullptr;
-    int monitor_width = monitor->m.width;
-    int monitor_height = monitor->m.height;
+    int monitor_width = monitor->geometry.width;
+    int monitor_height = monitor->geometry.height;
 
     if (!wallpaper || !*wallpaper || monitor_width <= 0 || monitor_height <= 0) {
-        wlr_scene_buffer_set_buffer(monitor->wallpaper, nullptr);
-        monitor->wallpaperbuf = nullptr;
-        buffer_pool_drop(monitor->wallpaperpool, LENGTH(monitor->wallpaperpool));
-        monitor->wallpaperw = monitor->wallpaperh = 0;
+        wlr_scene_buffer_set_buffer(monitor->wallpaper_scene_buffer, nullptr);
+        monitor->wallpaper_buffer = nullptr;
+        buffer_pool_drop(monitor->wallpaper_buffer_pool, LENGTH(monitor->wallpaper_buffer_pool));
+        monitor->wallpaper_width_px = monitor->wallpaper_height_px = 0;
         opacity_blur_wallpaper(monitor);
         return;
     }
 
-    if (monitor->wallpaperpool[0] && monitor_width == monitor->wallpaperw &&
-        monitor_height == monitor->wallpaperh) {
-        wlr_scene_buffer_set_dest_size(monitor->wallpaper, monitor_width, monitor_height);
-        wlr_scene_node_set_position(&monitor->wallpaper->node, monitor->m.x, monitor->m.y);
+    if (monitor->wallpaper_buffer_pool[0] && monitor_width == monitor->wallpaper_width_px &&
+        monitor_height == monitor->wallpaper_height_px) {
+        wlr_scene_buffer_set_dest_size(monitor->wallpaper_scene_buffer, monitor_width,
+                                       monitor_height);
+        wlr_scene_node_set_position(&monitor->wallpaper_scene_buffer->node, monitor->geometry.x,
+                                    monitor->geometry.y);
         /* guarded like opacity_blur_client()'s: set_buffer throws the texture
          * away, and this path runs on every monitor layout change */
-        if (monitor->wallpaperbuf != &monitor->wallpaperpool[0]->base) {
-            wlr_scene_buffer_set_buffer(monitor->wallpaper, &monitor->wallpaperpool[0]->base);
-            monitor->wallpaperbuf = &monitor->wallpaperpool[0]->base;
+        if (monitor->wallpaper_buffer != &monitor->wallpaper_buffer_pool[0]->base) {
+            wlr_scene_buffer_set_buffer(monitor->wallpaper_scene_buffer,
+                                        &monitor->wallpaper_buffer_pool[0]->base);
+            monitor->wallpaper_buffer = &monitor->wallpaper_buffer_pool[0]->base;
         }
         /* the frosted copy is the same size and survives with it, unless the
          * monitor went away and took it along */
-        if (!monitor->blurpool[0])
+        if (!monitor->blur_buffer_pool[0])
             opacity_blur_wallpaper(monitor);
         else
             opacity_blur_bar(monitor);
@@ -488,10 +504,11 @@ void opacity_set_wallpaper(Monitor* monitor)
     int offset_x = MIN(scaled_width - monitor_width, (scaled_width - monitor_width) / 2);
     int offset_y = MIN(scaled_height - monitor_height, (scaled_height - monitor_height) / 2);
 
-    buffer_pool_drop(monitor->wallpaperpool, LENGTH(monitor->wallpaperpool));
-    Buffer* buffer;
-    if (!(buffer = buffer_get(monitor->wallpaperpool, LENGTH(monitor->wallpaperpool), monitor_width,
-                              monitor_height))) {
+    buffer_pool_drop(monitor->wallpaper_buffer_pool, LENGTH(monitor->wallpaper_buffer_pool));
+    RenderBuffer* buffer;
+    if (!(buffer =
+              buffer_get(monitor->wallpaper_buffer_pool, LENGTH(monitor->wallpaper_buffer_pool),
+                         monitor_width, monitor_height))) {
         g_object_unref(scaled);
         return;
     }
@@ -499,7 +516,7 @@ void opacity_set_wallpaper(Monitor* monitor)
     guchar* pixels = gdk_pixbuf_get_pixels(scaled);
     int rowstride = gdk_pixbuf_get_rowstride(scaled);
     int channels = gdk_pixbuf_get_n_channels(scaled);
-    uint32_t* dest = buffer->data;
+    uint32_t* dest = buffer->pixels;
     int x;
     for (int y = 0; y < monitor_height; y++) {
         guchar* source_row =
@@ -509,13 +526,14 @@ void opacity_set_wallpaper(Monitor* monitor)
                     ((uint32_t)source_row[1] << 8) | (uint32_t)source_row[2];
     }
     g_object_unref(scaled);
-    monitor->wallpaperw = monitor_width;
-    monitor->wallpaperh = monitor_height;
+    monitor->wallpaper_width_px = monitor_width;
+    monitor->wallpaper_height_px = monitor_height;
 
-    wlr_scene_buffer_set_dest_size(monitor->wallpaper, monitor_width, monitor_height);
-    wlr_scene_node_set_position(&monitor->wallpaper->node, monitor->m.x, monitor->m.y);
-    wlr_scene_buffer_set_buffer(monitor->wallpaper, &buffer->base);
-    monitor->wallpaperbuf = &buffer->base;
+    wlr_scene_buffer_set_dest_size(monitor->wallpaper_scene_buffer, monitor_width, monitor_height);
+    wlr_scene_node_set_position(&monitor->wallpaper_scene_buffer->node, monitor->geometry.x,
+                                monitor->geometry.y);
+    wlr_scene_buffer_set_buffer(monitor->wallpaper_scene_buffer, &buffer->base);
+    monitor->wallpaper_buffer = &buffer->base;
     wlr_buffer_unlock(&buffer->base);
     opacity_blur_wallpaper(monitor);
 }
@@ -525,12 +543,12 @@ void opacity_set_wallpaper(Monitor* monitor)
  * itself, so a frame has to be asked for everywhere */
 static void opacity_refresh(void)
 {
-    Client* client;
+    WindowClient* client;
 
     /* a decoration is drawn by g0wm, not by a client, so nothing would come
      * back to redraw it: the bar and the title bars follow bar_draw_all() */
     wl_list_for_each(client, &clients, link)
-        opacity_set_border_color(client, client->borderscheme);
+        opacity_set_border_color(client, client->border_scheme);
     bar_draw_all();
 
     Monitor* monitor;
@@ -542,22 +560,22 @@ static void opacity_refresh(void)
 
 void opacity_set_scene_buffer(struct wlr_scene_buffer* buffer, int, int, void* data)
 {
-    Client* client = data;
-    /* xdg-popups hang off Client.scene, not Client.scene_surface, so this
+    WindowClient* client = data;
+    /* xdg-popups hang off WindowClient.scene, not WindowClient.scene_surface, so this
      * never touches them */
-    wlr_scene_buffer_set_opacity(buffer,
-                                 client->isfullscreen || !opacity_enabled ? 1.0f : client->opacity);
+    wlr_scene_buffer_set_opacity(
+        buffer, client->is_fullscreen || !opacity_enabled ? 1.0f : client->opacity);
 }
 
 /* Colours a client's border, remembering the scheme so the opacity toggle can
  * put it back on. wlroots wants a premultiplied colour, so the alpha scales
  * the other three channels with it. */
-void opacity_set_border_color(Client* client, int scheme)
+void opacity_set_border_color(WindowClient* client, int scheme)
 {
     float color[4] = COLOR(colors[scheme][ColBorder]);
     float alpha = color[3] * opacity_decorations_current();
 
-    client->borderscheme = scheme;
+    client->border_scheme = scheme;
     color[0] *= alpha;
     color[1] *= alpha;
     color[2] *= alpha;
@@ -567,25 +585,27 @@ void opacity_set_border_color(Client* client, int scheme)
 }
 
 /* arg->f is added to the opacity the focused client uses while focused */
-void opacity_change_focused(const Arg* arg)
+void opacity_change_focused(const ActionArg* argument)
 {
-    Client* sel = client_top(selected_monitor);
+    WindowClient* selected_client = client_top(selected_monitor);
 
-    if (!sel)
+    if (!selected_client)
         return;
-    sel->opacity_focus = MIN(MAX(sel->opacity_focus + arg->f, OPACITY_MIN), 1.0f);
-    sel->opacity = sel->opacity_focus;
+    selected_client->focused_opacity =
+        MIN(MAX(selected_client->focused_opacity + argument->floating, OPACITY_MIN), 1.0f);
+    selected_client->opacity = selected_client->focused_opacity;
     opacity_refresh();
 }
 
 /* the same for the opacity it falls back to once it loses focus */
-void opacity_change_unfocused(const Arg* arg)
+void opacity_change_unfocused(const ActionArg* argument)
 {
-    Client* sel = client_top(selected_monitor);
+    WindowClient* selected_client = client_top(selected_monitor);
 
-    if (!sel)
+    if (!selected_client)
         return;
-    sel->opacity_unfocus = MIN(MAX(sel->opacity_unfocus + arg->f, OPACITY_MIN), 1.0f);
+    selected_client->unfocused_opacity =
+        MIN(MAX(selected_client->unfocused_opacity + argument->floating, OPACITY_MIN), 1.0f);
 }
 
 /* the wallpaper is decoded once and the frosted copy cached with it, so a
@@ -601,18 +621,18 @@ void opacity_reload(void)
     opacity_wallpaper_failed = 0;
     Monitor* monitor;
     wl_list_for_each(monitor, &monitors, link) {
-        buffer_pool_drop(monitor->wallpaperpool, LENGTH(monitor->wallpaperpool));
-        buffer_pool_drop(monitor->blurpool, LENGTH(monitor->blurpool));
-        monitor->wallpaperbuf = nullptr;
-        monitor->wallpaperw = monitor->wallpaperh = 0;
-        monitor->blurw = monitor->blurh = 0;
+        buffer_pool_drop(monitor->wallpaper_buffer_pool, LENGTH(monitor->wallpaper_buffer_pool));
+        buffer_pool_drop(monitor->blur_buffer_pool, LENGTH(monitor->blur_buffer_pool));
+        monitor->wallpaper_buffer = nullptr;
+        monitor->wallpaper_width_px = monitor->wallpaper_height_px = 0;
+        monitor->blur_width_px = monitor->blur_height_px = 0;
         opacity_set_wallpaper(monitor);
     }
 #endif
     opacity_refresh();
 }
 
-void opacity_toggle(const Arg*)
+void opacity_toggle(const ActionArg*)
 {
     opacity_enabled = !opacity_enabled;
     opacity_refresh();

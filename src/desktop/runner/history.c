@@ -121,7 +121,7 @@ void runner_weigh(void)
         int offset;
         const int mode = runner_mode(runner_history[i], &offset);
         const char* line = runner_history[i] + offset;
-        if (mode == ModeApp && runner_app_count) {
+        if (mode == RUNNER_MODE_APPLICATION && runner_app_count) {
             key = line;
             char** hit =
                 bsearch(&key, runner_app_names, runner_app_count, sizeof(char*), runner_compare);
@@ -129,7 +129,7 @@ void runner_weigh(void)
                 runner_app_use[hit - runner_app_names] += weight;
             key = word;
         }
-        if ((mode != ModeRun && mode != ModeTerm) || !runner_command_count)
+        if ((mode != RUNNER_MODE_COMMAND && mode != RUNNER_MODE_TERMINAL) || !runner_command_count)
             continue;
         const size_t word_length = strcspn(line, " \t");
         if (word_length >= sizeof word)

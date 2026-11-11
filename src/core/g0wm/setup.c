@@ -211,7 +211,7 @@ size_t autostart_len;
 void* exclusive_focus;
 struct wl_event_loop* event_loop;
 struct wlr_scene* scene;
-struct wlr_scene_tree* layers[NUM_LAYERS];
+struct wlr_scene_tree* layers[SCENE_LAYER_COUNT];
 struct wlr_scene_tree* drag_icon;
 struct wlr_renderer* renderer;
 struct wlr_allocator* allocator;
@@ -241,7 +241,7 @@ struct wlr_output_layout* output_layout;
 struct wlr_box screen_geometry;
 struct wl_list monitors;
 struct wl_event_source* status_event_source;
-Watcher tray_watcher = { .running = 0 };
+TrayWatcher tray_watcher = { .running = 0 };
 #ifdef XWAYLAND
 struct wlr_xwayland* xwayland;
 #endif
@@ -463,7 +463,7 @@ static void handle_gpu_reset(struct wl_listener*, void*)
 
 /* Scene buffers cache the texture made from our own (shm) buffers, and it dies
  * with the old renderer. Re-handing the same buffer drops it, so the next
- * frame re-uploads. Client buffers carry their texture themselves. */
+ * frame re-uploads. WindowClient buffers carry their texture themselves. */
 static void drop_texture(struct wlr_scene_buffer* scene_buffer, int, int, void*)
 {
     struct wlr_buffer* buffer = scene_buffer->buffer;
@@ -531,10 +531,10 @@ void setup(void)
     /* Initialize the scene graph used to lay out windows */
     scene = wlr_scene_create();
     root_background = wlr_scene_rect_create(&scene->tree, 0, 0, root_color);
-    for (int layer = 0; layer < NUM_LAYERS; layer++)
+    for (int layer = 0; layer < SCENE_LAYER_COUNT; layer++)
         layers[layer] = wlr_scene_tree_create(&scene->tree);
     drag_icon = wlr_scene_tree_create(&scene->tree);
-    wlr_scene_node_place_below(&drag_icon->node, &layers[LyrBlock]->node);
+    wlr_scene_node_place_below(&drag_icon->node, &layers[SCENE_LAYER_LOCK]->node);
 
     /* Autocreates a renderer, either Pixman, GLES2 or Vulkan for us. The user
      * can also specify a renderer using the WLR_RENDERER env var.
@@ -653,8 +653,8 @@ void setup(void)
     session_lock_manager = wlr_session_lock_manager_v1_create(display);
     wl_signal_add(&session_lock_manager->events.new_lock, &new_session_lock);
     locked_background =
-        wlr_scene_rect_create(layers[LyrBlock], screen_geometry.width, screen_geometry.height,
-                              (float[4]){ 0.1f, 0.1f, 0.1f, 1.0f });
+        wlr_scene_rect_create(layers[SCENE_LAYER_LOCK], screen_geometry.width,
+                              screen_geometry.height, (float[4]){ 0.1f, 0.1f, 0.1f, 1.0f });
     wlr_scene_node_set_enabled(&locked_background->node, false);
 
     /* Use decoration protocols to negotiate server-side decorations */
@@ -680,7 +680,7 @@ void setup(void)
 
     /* Initialize the input_last_cursor destroy listener link so it's safe to
      * remove later */
-    wl_list_init(&input_last_cursor.destroy.link);
+    wl_list_init(&input_last_cursor.surface_destroy.link);
 
     /* Creates an xcursor manager, another wlroots utility which loads up
      * Xcursor themes to source cursor images from and makes sure that cursor

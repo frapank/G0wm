@@ -11,20 +11,20 @@
 
 #define SHCMD(cmd)                                                                                 \
     {                                                                                              \
-        .v = (const char*[])                                                                       \
+        .pointer = (const char*[])                                                                       \
         {                                                                                          \
             "/bin/sh", "-c", cmd, nullptr                                                          \
         }                                                                                          \
     }
 
 #define TAGKEYS(KEY, SKEY, TAG)                                                                    \
-    { MODKEY, KEY, layout_view, { .ui = 1 << TAG } },                                              \
-        { MODKEY | WLR_MODIFIER_CTRL, KEY, layout_toggle_view, { .ui = 1 << TAG } },               \
-        { MODKEY | WLR_MODIFIER_SHIFT, SKEY, layout_tag, { .ui = 1 << TAG } },                     \
+    { MODKEY, KEY, layout_view, { .unsigned_integer = 1 << TAG } },                                              \
+        { MODKEY | WLR_MODIFIER_CTRL, KEY, layout_toggle_view, { .unsigned_integer = 1 << TAG } },               \
+        { MODKEY | WLR_MODIFIER_SHIFT, SKEY, layout_tag, { .unsigned_integer = 1 << TAG } },                     \
     {                                                                                              \
         MODKEY | WLR_MODIFIER_CTRL | WLR_MODIFIER_SHIFT, SKEY, layout_toggle_tag,                  \
         {                                                                                          \
-            .ui = 1 << TAG                                                                         \
+            .unsigned_integer = 1 << TAG                                                                         \
         }                                                                                          \
     }
 
@@ -32,7 +32,7 @@
     {                                                                                              \
         WLR_MODIFIER_CTRL | WLR_MODIFIER_ALT, XKB_KEY_XF86Switch_VT_##n, change_virtual_console,   \
         {                                                                                          \
-            .ui = (n)                                                                              \
+            .unsigned_integer = (n)                                                                              \
         }                                                                                          \
     }
 
@@ -41,25 +41,25 @@ const char** fonts = default_fonts;
 size_t font_count = LENGTH(default_fonts);
 
 /* fg, bg, border */
-uint32_t colors[NumSchemes][3] = {
-    [SchemeNorm] = { 0xffffffff, 0x000000ff, 0x000000ff },
-    [SchemeSel] = { 0xffffffff, 0x000000ff, 0x000000ff },
-    [SchemeUrg] = { 0xffffffff, 0x000000ff, 0xff0000ff },
+uint32_t colors[COLOR_SCHEME_COUNT][3] = {
+    [COLOR_SCHEME_NORMAL] = { 0xffffffff, 0x000000ff, 0x000000ff },
+    [COLOR_SCHEME_SELECTED] = { 0xffffffff, 0x000000ff, 0x000000ff },
+    [COLOR_SCHEME_URGENT] = { 0xffffffff, 0x000000ff, 0xff0000ff },
 
-    [SchemeTitle] = { 0x888888ff, 0x000000ff, 0x000000ff },
-    [SchemeTitleSel] = { 0xffffffff, 0x000000ff, 0x000000ff },
+    [COLOR_SCHEME_TITLE] = { 0x888888ff, 0x000000ff, 0x000000ff },
+    [COLOR_SCHEME_TITLE_SELECTED] = { 0xffffffff, 0x000000ff, 0x000000ff },
 
-    [SchemeStatus] = { 0xffffffff, 0x000000ff, 0x000000ff },
+    [COLOR_SCHEME_STATUS] = { 0xffffffff, 0x000000ff, 0x000000ff },
     /* the border color is the urgency line */
-    [SchemeNotify] = { 0x000000ff, 0xffffffff, 0xe5a50aff },
-    [SchemeNotifyLow] = { 0x000000ff, 0xffffffff, 0x2ec27eff },
-    [SchemeNotifyCrit] = { 0x000000ff, 0xffffffff, 0xe01b24ff },
+    [COLOR_SCHEME_NOTIFICATION] = { 0x000000ff, 0xffffffff, 0xe5a50aff },
+    [COLOR_SCHEME_NOTIFICATION_LOW] = { 0x000000ff, 0xffffffff, 0x2ec27eff },
+    [COLOR_SCHEME_NOTIFICATION_CRITICAL] = { 0x000000ff, 0xffffffff, 0xe01b24ff },
 
-    [SchemeRunner] = { 0xffffffff, 0x000000ff, 0x000000ff },
-    [SchemeRunnerSuggest] = { 0xaaaaaaff, 0x000000ff, 0x000000ff },
-    [SchemeRunnerSel] = { 0x000000ff, 0xffffffff, 0x000000ff },
+    [COLOR_SCHEME_RUNNER] = { 0xffffffff, 0x000000ff, 0x000000ff },
+    [COLOR_SCHEME_RUNNER_SUGGESTION] = { 0xaaaaaaff, 0x000000ff, 0x000000ff },
+    [COLOR_SCHEME_RUNNER_SELECTED] = { 0x000000ff, 0xffffffff, 0x000000ff },
     /* the stand in for a missing icon */
-    [SchemeRunnerIcon] = { 0xffffffff, 0x2e2e2eff, 0x4a4a4aff },
+    [COLOR_SCHEME_RUNNER_ICON] = { 0xffffffff, 0x2e2e2eff, 0x4a4a4aff },
 };
 
 float root_color[] = COLOR(0x000000ff);
@@ -75,7 +75,7 @@ size_t tag_count = LENGTH(default_tags);
 
 unsigned int border_width = 1;
 
-int corner_style = CornerNormal; // or CornerSquircle
+int corner_style = CORNER_STYLE_NORMAL; // or CornerSquircle
 unsigned int corner_radius = 0;
 
 int gaps = 1;
@@ -99,26 +99,26 @@ float private_text_scale = 1.2f;
 uint32_t private_background = 0x000000ff;
 uint32_t private_foreground = 0xffffffff;
 
-static Layout default_layouts[] = {
+static WindowLayout default_layouts[] = {
     { "[ ]", layout_tile },
     { "|||", layout_tabbed },
 };
-Layout* layouts = default_layouts;
+WindowLayout* layouts = default_layouts;
 size_t layout_count = LENGTH(default_layouts);
 
 /* opacity 0 and private -1 keep the default, monitor -1 is the focused one */
-static Rule default_rules[] = {
-    { .id = "Placeholder",
+static ClientRule default_rules[] = {
+    { .app_id = "Placeholder",
       .title = nullptr,
       .tags = 0,
-      .isfloating = 1,
-      .isprivate = 1,
-      .opacity_focus = 0,
-      .opacity_unfocus = 0,
-      .monitor = -1 },
+      .is_floating = 1,
+      .is_private = 1,
+      .focused_opacity = 0,
+      .unfocused_opacity = 0,
+      .monitor_index = -1 },
 };
-Rule* rules = default_rules;
-size_t rule_count = LENGTH(default_rules);
+ClientRule* client_rules = default_rules;
+size_t client_rule_count = LENGTH(default_rules);
 
 int bar_enabled = 1;
 int bar_top = 1;
@@ -137,7 +137,7 @@ unsigned int bar_padding = 0;
 float bar_height = 1.1f; // times the font height, 0 for automatic
 
 int bar_single_monitor = 0;
-int bar_status = BarStatusMain;
+int bar_status = BAR_STATUS_MAIN;
 
 int systray_enabled = 1;
 unsigned int systray_spacing = 2;
@@ -155,7 +155,7 @@ const char* notification_action_sign = "[r]";
 /* {app} for application name */
 const char* notification_private_text = "G0wm is hiding this notification";
 int notification_private_hide = 0;       /* left out of screen sharing, no placeholder */
-int notification_dot = NotifyDotRight;   /* or NotifyDotLeft */
+int notification_dot = NOTIFICATION_DOT_RIGHT;   /* or NotifyDotLeft */
 uint32_t notification_private_color = 0; /* 0 follows private_color */
 uint32_t notification_public_color = 0;  /* 0 follows public_color */
 
@@ -165,7 +165,7 @@ unsigned int runner_pill_height = 1;
 unsigned int runner_pill_padding = 1;
 float runner_pill_round = -1.0f;
 int runner_fuzzy = 1;
-int runner_icons = RunnerIconsSelected;
+int runner_icons = RUNNER_ICONS_SELECTED;
 unsigned int runner_icon_size = 0;
 float runner_icon_round = 0.4f;
 unsigned int runner_icon_border = 1;
@@ -190,7 +190,7 @@ float opacity_unfocus = 1.00f;
 float opacity_decorations = 1.00f; // bar, title bars and borders
 
 #ifdef INTEGRATED_BACKGROUND
-int opacity_type = OpacityNormal; // or OpacityBlur
+int opacity_type = OPACITY_MODE_NORMAL; // or OpacityBlur
 
 unsigned int blur_radius = 15;
 unsigned int blur_passes = 1;
@@ -201,16 +201,16 @@ float blur_brightness = 1.00f;
 /* the first matching name wins, keep the nullptr one last */
 static MonitorRule default_monitor_rules[] = {
     { .name = nullptr,
-      .mfact = 0.55f,
-      .nmaster = 1,
+      .master_factor = 0.55f,
+      .master_count = 1,
       .scale = 1,
-      .lt = &default_layouts[0],
-      .rr = WL_OUTPUT_TRANSFORM_NORMAL,
+      .layout = &default_layouts[0],
+      .transform = WL_OUTPUT_TRANSFORM_NORMAL,
       .x = -1,
       .y = -1,
       .width = 0,
       .height = 0,
-      .refresh = 0 },
+      .refresh_hz = 0 },
 };
 MonitorRule* monitor_rules = default_monitor_rules;
 size_t monitor_rule_count = LENGTH(default_monitor_rules);
@@ -271,10 +271,10 @@ static const char* default_autostart[] = {
 };
 const char** autostart = default_autostart;
 
-static Key default_keys[] = {
-    { MODKEY, XKB_KEY_q, spawn, { .v = terminal_command } },
-    { MODKEY, XKB_KEY_f, spawn, { .v = file_manager_command } },
-    { MODKEY, XKB_KEY_b, spawn, { .v = browser_command } },
+static KeyBinding default_keys[] = {
+    { MODKEY, XKB_KEY_q, spawn, { .pointer = terminal_command } },
+    { MODKEY, XKB_KEY_f, spawn, { .pointer = file_manager_command } },
+    { MODKEY, XKB_KEY_b, spawn, { .pointer = browser_command } },
     { 0, XKB_KEY_Print, spawn, SHCMD("grim -g \"$(slurp)\" - | swappy -f -") },
     { MODKEY, XKB_KEY_c, client_kill, {} },
     { MODKEY | WLR_MODIFIER_SHIFT, XKB_KEY_v, client_toggle_floating, {} },
@@ -283,7 +283,7 @@ static Key default_keys[] = {
     { MODKEY | WLR_MODIFIER_SHIFT, XKB_KEY_g, layout_toggle_gaps, {} },
     { MODKEY | WLR_MODIFIER_SHIFT, XKB_KEY_b, bar_toggle, {} },
     { MODKEY | WLR_MODIFIER_SHIFT, XKB_KEY_t, bar_toggle_title_bars, {} },
-    { MODKEY, XKB_KEY_t, layout_toggle_tabbed, { .v = &default_layouts[1] } },
+    { MODKEY, XKB_KEY_t, layout_toggle_tabbed, { .pointer = &default_layouts[1] } },
     { MODKEY | WLR_MODIFIER_SHIFT, XKB_KEY_f, client_toggle_fullscreen, {} },
     { MODKEY | WLR_MODIFIER_SHIFT, XKB_KEY_r, settings_reload, {} },
 
@@ -299,33 +299,33 @@ static Key default_keys[] = {
       {} },
     { MODKEY, XKB_KEY_a, bar_notification_actions, {} },
 
-    { MODKEY, XKB_KEY_h, layout_focus_stack, { .i = -1 } },
-    { MODKEY, XKB_KEY_j, layout_focus_stack, { .i = +1 } },
-    { MODKEY, XKB_KEY_k, layout_focus_stack, { .i = -1 } },
-    { MODKEY, XKB_KEY_l, layout_focus_stack, { .i = +1 } },
+    { MODKEY, XKB_KEY_h, layout_focus_stack, { .integer = -1 } },
+    { MODKEY, XKB_KEY_j, layout_focus_stack, { .integer = +1 } },
+    { MODKEY, XKB_KEY_k, layout_focus_stack, { .integer = -1 } },
+    { MODKEY, XKB_KEY_l, layout_focus_stack, { .integer = +1 } },
 
-    { MODKEY | WLR_MODIFIER_SHIFT, XKB_KEY_h, layout_move_stack, { .i = -1 } },
-    { MODKEY | WLR_MODIFIER_SHIFT, XKB_KEY_j, layout_move_stack, { .i = +1 } },
-    { MODKEY | WLR_MODIFIER_SHIFT, XKB_KEY_k, layout_move_stack, { .i = -1 } },
-    { MODKEY | WLR_MODIFIER_SHIFT, XKB_KEY_l, layout_move_stack, { .i = +1 } },
+    { MODKEY | WLR_MODIFIER_SHIFT, XKB_KEY_h, layout_move_stack, { .integer = -1 } },
+    { MODKEY | WLR_MODIFIER_SHIFT, XKB_KEY_j, layout_move_stack, { .integer = +1 } },
+    { MODKEY | WLR_MODIFIER_SHIFT, XKB_KEY_k, layout_move_stack, { .integer = -1 } },
+    { MODKEY | WLR_MODIFIER_SHIFT, XKB_KEY_l, layout_move_stack, { .integer = +1 } },
 
-    { MODKEY | WLR_MODIFIER_CTRL, XKB_KEY_h, layout_resize_width, { .i = -50 } },
-    { MODKEY | WLR_MODIFIER_CTRL, XKB_KEY_l, layout_resize_width, { .i = +50 } },
-    { MODKEY | WLR_MODIFIER_CTRL, XKB_KEY_k, layout_resize_height, { .i = -50 } },
-    { MODKEY | WLR_MODIFIER_CTRL, XKB_KEY_j, layout_resize_height, { .i = +50 } },
+    { MODKEY | WLR_MODIFIER_CTRL, XKB_KEY_h, layout_resize_width, { .integer = -50 } },
+    { MODKEY | WLR_MODIFIER_CTRL, XKB_KEY_l, layout_resize_width, { .integer = +50 } },
+    { MODKEY | WLR_MODIFIER_CTRL, XKB_KEY_k, layout_resize_height, { .integer = -50 } },
+    { MODKEY | WLR_MODIFIER_CTRL, XKB_KEY_j, layout_resize_height, { .integer = +50 } },
 
-    { MODKEY, XKB_KEY_o, opacity_change_focused, { .f = +0.05f } },
-    { MODKEY | WLR_MODIFIER_ALT, XKB_KEY_o, opacity_change_focused, { .f = -0.05f } },
-    { MODKEY | WLR_MODIFIER_CTRL, XKB_KEY_o, opacity_change_unfocused, { .f = +0.05f } },
+    { MODKEY, XKB_KEY_o, opacity_change_focused, { .floating = +0.05f } },
+    { MODKEY | WLR_MODIFIER_ALT, XKB_KEY_o, opacity_change_focused, { .floating = -0.05f } },
+    { MODKEY | WLR_MODIFIER_CTRL, XKB_KEY_o, opacity_change_unfocused, { .floating = +0.05f } },
     { MODKEY | WLR_MODIFIER_CTRL | WLR_MODIFIER_ALT,
       XKB_KEY_o,
       opacity_change_unfocused,
-      { .f = -0.05f } },
+      { .floating = -0.05f } },
     { MODKEY | WLR_MODIFIER_SHIFT, XKB_KEY_o, opacity_toggle, {} },
 
-    { MODKEY | WLR_MODIFIER_ALT, XKB_KEY_equal, magnifier_magnify, { .f = +0.25f } },
-    { MODKEY | WLR_MODIFIER_ALT, XKB_KEY_minus, magnifier_magnify, { .f = -0.25f } },
-    { MODKEY | WLR_MODIFIER_ALT, XKB_KEY_0, magnifier_magnify, { .f = 0 } },
+    { MODKEY | WLR_MODIFIER_ALT, XKB_KEY_equal, magnifier_magnify, { .floating = +0.25f } },
+    { MODKEY | WLR_MODIFIER_ALT, XKB_KEY_minus, magnifier_magnify, { .floating = -0.25f } },
+    { MODKEY | WLR_MODIFIER_ALT, XKB_KEY_0, magnifier_magnify, { .floating = 0 } },
 
     { 0, XKB_KEY_XF86AudioRaiseVolume, spawn, SHCMD("wpctl set-volume @DEFAULT_AUDIO_SINK@ 5%+") },
     { 0, XKB_KEY_XF86AudioLowerVolume, spawn, SHCMD("wpctl set-volume @DEFAULT_AUDIO_SINK@ 5%-") },
@@ -338,20 +338,20 @@ static Key default_keys[] = {
     { 0, XKB_KEY_XF86AudioPlay, spawn, SHCMD("playerctl play-pause") },
     { 0, XKB_KEY_XF86AudioPrev, spawn, SHCMD("playerctl previous") },
 
-    { MODKEY, XKB_KEY_i, layout_inc_master, { .i = +1 } },
-    { MODKEY, XKB_KEY_d, layout_inc_master, { .i = -1 } },
+    { MODKEY, XKB_KEY_i, layout_inc_master, { .integer = +1 } },
+    { MODKEY, XKB_KEY_d, layout_inc_master, { .integer = -1 } },
     { MODKEY, XKB_KEY_Return, layout_zoom, {} },
     { MODKEY, XKB_KEY_Tab, layout_view, {} },
     { MODKEY, XKB_KEY_space, layout_set, {} },
-    { MODKEY, XKB_KEY_0, layout_view, { .ui = ~0 } },
-    { MODKEY | WLR_MODIFIER_SHIFT, XKB_KEY_parenright, layout_tag, { .ui = ~0 } },
-    { MODKEY, XKB_KEY_comma, monitor_focus, { .i = WLR_DIRECTION_LEFT } },
-    { MODKEY, XKB_KEY_period, monitor_focus, { .i = WLR_DIRECTION_RIGHT } },
-    { MODKEY | WLR_MODIFIER_SHIFT, XKB_KEY_less, monitor_send_client, { .i = WLR_DIRECTION_LEFT } },
+    { MODKEY, XKB_KEY_0, layout_view, { .unsigned_integer = ~0 } },
+    { MODKEY | WLR_MODIFIER_SHIFT, XKB_KEY_parenright, layout_tag, { .unsigned_integer = ~0 } },
+    { MODKEY, XKB_KEY_comma, monitor_focus, { .integer = WLR_DIRECTION_LEFT } },
+    { MODKEY, XKB_KEY_period, monitor_focus, { .integer = WLR_DIRECTION_RIGHT } },
+    { MODKEY | WLR_MODIFIER_SHIFT, XKB_KEY_less, monitor_send_client, { .integer = WLR_DIRECTION_LEFT } },
     { MODKEY | WLR_MODIFIER_SHIFT,
       XKB_KEY_greater,
       monitor_send_client,
-      { .i = WLR_DIRECTION_RIGHT } },
+      { .integer = WLR_DIRECTION_RIGHT } },
     TAGKEYS(XKB_KEY_1, XKB_KEY_exclam, 0),
     TAGKEYS(XKB_KEY_2, XKB_KEY_at, 1),
     TAGKEYS(XKB_KEY_3, XKB_KEY_numbersign, 2),
@@ -378,59 +378,59 @@ static Key default_keys[] = {
     CHVT(11),
     CHVT(12),
 };
-Key* keys = default_keys;
-size_t key_count = LENGTH(default_keys);
+KeyBinding* key_bindings = default_keys;
+size_t key_binding_count = LENGTH(default_keys);
 
-static Button default_buttons[] = {
-    { ClkLtSymbol, 0, BTN_LEFT, layout_set, { .v = &default_layouts[0] } },
-    { ClkLtSymbol, 0, BTN_RIGHT, layout_set, { .v = &default_layouts[1] } },
+static MouseBinding default_buttons[] = {
+    { CLICK_AREA_LAYOUT_SYMBOL, 0, BTN_LEFT, layout_set, { .pointer = &default_layouts[0] } },
+    { CLICK_AREA_LAYOUT_SYMBOL, 0, BTN_RIGHT, layout_set, { .pointer = &default_layouts[1] } },
 
-    { ClkTitle, 0, BTN_MIDDLE, layout_zoom, {} },
-    { ClkTitle, 0, BTN_LEFT, bar_notification_open, {} },
-    { ClkTitle, 0, BTN_RIGHT, bar_notification_dismiss, {} },
+    { CLICK_AREA_BAR_TITLE, 0, BTN_MIDDLE, layout_zoom, {} },
+    { CLICK_AREA_BAR_TITLE, 0, BTN_LEFT, bar_notification_open, {} },
+    { CLICK_AREA_BAR_TITLE, 0, BTN_RIGHT, bar_notification_dismiss, {} },
 
-    { ClkStatus, 0, BTN_MIDDLE, spawn, { .v = terminal_command } },
+    { CLICK_AREA_STATUS, 0, BTN_MIDDLE, spawn, { .pointer = terminal_command } },
 
-    { ClkTray, 0, BTN_LEFT, bar_tray_activate, {} },
-    { ClkTray, 0, BTN_RIGHT, bar_tray_menu, {} },
+    { CLICK_AREA_TRAY, 0, BTN_LEFT, bar_tray_activate, {} },
+    { CLICK_AREA_TRAY, 0, BTN_RIGHT, bar_tray_menu, {} },
 
-    { ClkTagBar, 0, BTN_LEFT, layout_view, {} },
-    { ClkTagBar, 0, BTN_RIGHT, layout_toggle_view, {} },
-    { ClkTagBar, MODKEY, BTN_LEFT, layout_tag, {} },
-    { ClkTagBar, MODKEY, BTN_RIGHT, layout_toggle_tag, {} },
-    { ClkTagBar, 0, WheelUp, layout_shift_view, { .i = -1 } },
-    { ClkTagBar, 0, WheelDown, layout_shift_view, { .i = +1 } },
+    { CLICK_AREA_TAGS, 0, BTN_LEFT, layout_view, {} },
+    { CLICK_AREA_TAGS, 0, BTN_RIGHT, layout_toggle_view, {} },
+    { CLICK_AREA_TAGS, MODKEY, BTN_LEFT, layout_tag, {} },
+    { CLICK_AREA_TAGS, MODKEY, BTN_RIGHT, layout_toggle_tag, {} },
+    { CLICK_AREA_TAGS, 0, MOUSE_WHEEL_UP, layout_shift_view, { .integer = -1 } },
+    { CLICK_AREA_TAGS, 0, MOUSE_WHEEL_DOWN, layout_shift_view, { .integer = +1 } },
 
-    { ClkWinTitle, 0, WheelUp, layout_focus_stack, { .i = -1 } },
-    { ClkWinTitle, 0, WheelDown, layout_focus_stack, { .i = +1 } },
+    { CLICK_AREA_WINDOW_TITLE, 0, MOUSE_WHEEL_UP, layout_focus_stack, { .integer = -1 } },
+    { CLICK_AREA_WINDOW_TITLE, 0, MOUSE_WHEEL_DOWN, layout_focus_stack, { .integer = +1 } },
 
-    { ClkClient, MODKEY, BTN_LEFT, input_move_resize, { .ui = CurMove } },
-    { ClkClient, MODKEY, BTN_MIDDLE, client_toggle_floating, {} },
-    { ClkClient, MODKEY, BTN_RIGHT, input_move_resize, { .ui = CurResize } },
+    { CLICK_AREA_CLIENT, MODKEY, BTN_LEFT, input_move_resize, { .unsigned_integer = CURSOR_MODE_MOVE } },
+    { CLICK_AREA_CLIENT, MODKEY, BTN_MIDDLE, client_toggle_floating, {} },
+    { CLICK_AREA_CLIENT, MODKEY, BTN_RIGHT, input_move_resize, { .unsigned_integer = CURSOR_MODE_RESIZE } },
 
-    { ClkClient, MODKEY, WheelUp, magnifier_magnify, { .f = +0.25f } },
-    { ClkClient, MODKEY, WheelDown, magnifier_magnify, { .f = -0.25f } },
-    { ClkRoot, MODKEY, WheelUp, magnifier_magnify, { .f = +0.25f } },
-    { ClkRoot, MODKEY, WheelDown, magnifier_magnify, { .f = -0.25f } },
+    { CLICK_AREA_CLIENT, MODKEY, MOUSE_WHEEL_UP, magnifier_magnify, { .floating = +0.25f } },
+    { CLICK_AREA_CLIENT, MODKEY, MOUSE_WHEEL_DOWN, magnifier_magnify, { .floating = -0.25f } },
+    { CLICK_AREA_ROOT, MODKEY, MOUSE_WHEEL_UP, magnifier_magnify, { .floating = +0.25f } },
+    { CLICK_AREA_ROOT, MODKEY, MOUSE_WHEEL_DOWN, magnifier_magnify, { .floating = -0.25f } },
 };
-Button* buttons = default_buttons;
-size_t button_count = LENGTH(default_buttons);
+MouseBinding* mouse_bindings = default_buttons;
+size_t mouse_binding_count = LENGTH(default_buttons);
 
 /* a finger count used here is taken from the apps */
-static Gesture default_gestures[] = {
-    { SwipeLeft, 3, layout_shift_view, { .i = +1 } },
-    { SwipeRight, 3, layout_shift_view, { .i = -1 } },
+static GestureBinding default_gestures[] = {
+    { GESTURE_SWIPE_LEFT, 3, layout_shift_view, { .integer = +1 } },
+    { GESTURE_SWIPE_RIGHT, 3, layout_shift_view, { .integer = -1 } },
 };
-Gesture* gestures = default_gestures;
-size_t gesture_count = LENGTH(default_gestures);
+GestureBinding* gesture_bindings = default_gestures;
+size_t gesture_binding_count = LENGTH(default_gestures);
 
 /* held while pinching on a touchpad to zoom the magnifier, 0 for off */
 unsigned int pinch_zoom_modifier = MODKEY;
 
 /* tablet pad buttons, counted from 0: a bound one is not sent to the app.
  * e.g. { 0, spawn, SHCMD("wtype -M ctrl z -m ctrl") } */
-PadButton* pad_buttons = nullptr;
-size_t pad_button_count = 0;
+TabletPadBinding* tablet_pad_bindings = nullptr;
+size_t tablet_pad_binding_count = 0;
 
 int log_level = WLR_ERROR;
 

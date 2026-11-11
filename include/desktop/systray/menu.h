@@ -12,18 +12,18 @@
 /* Longest label a menu entry is shown under, affixes included */
 constexpr int MENU_LABEL_MAX = 64;
 
-typedef struct Menu Menu;
+typedef struct TrayMenu TrayMenu;
 
 /* Shows a level. The labels only live for the call, and it owes one pick. */
-typedef void (*MenuPresentFn)(const char* const* labels, int n, Menu* menu);
+typedef void (*TrayMenuPresentCallback)(const char* const* labels, int n, TrayMenu* menu);
 
 /* The menu is built on demand and not kept around */
 void menu_show(DBusConnection* connection,
-               const char* busname,
-               const char* busobj,
-               MenuPresentFn present);
+               const char* bus_name,
+               const char* object_path,
+               TrayMenuPresentCallback present);
 
 /* Takes the entry chosen or opens its submenu, a negative index cancels. */
-void menu_pick(Menu* menu, int index);
+void menu_pick(TrayMenu* menu, int index);
 
 #endif

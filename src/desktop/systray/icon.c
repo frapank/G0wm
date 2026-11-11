@@ -63,43 +63,44 @@ static uint32_t* icon_to_pixman(const uint8_t* src, int n_pixels, size_t* pix_si
     return dest;
 }
 
-Icon* icon_create(const uint8_t* buf, int width, int height, int size)
+RasterIcon* icon_create(const uint8_t* buf, int width, int height, int size)
 {
-    Icon* icon = nullptr;
+    RasterIcon* icon = nullptr;
 
     int n_pixels;
-    pixman_image_t* img = nullptr;
+    pixman_image_t* image = nullptr;
     size_t pixbuf_size;
-    uint32_t* buf_pixman = nullptr;
-    uint8_t* buf_orig = nullptr;
+    uint32_t* premultiplied_pixels = nullptr;
+    uint8_t* original_pixels = nullptr;
 
     n_pixels = size / 4;
 
-    icon = calloc(1, sizeof(Icon));
-    buf_orig = malloc(size);
-    buf_pixman = icon_to_pixman(buf, n_pixels, &pixbuf_size);
-    if (!icon || !buf_orig || !buf_pixman)
+    icon = calloc(1, sizeof(RasterIcon));
+    original_pixels = malloc(size);
+    premultiplied_pixels = icon_to_pixman(buf, n_pixels, &pixbuf_size);
+    if (!icon || !original_pixels || !premultiplied_pixels)
         goto fail;
 
-    img = pixman_image_create_bits(PIXMAN_a8r8g8b8, width, height, buf_pixman, width * 4);
-    if (!img)
+    image =
+        pixman_image_create_bits(PIXMAN_a8r8g8b8, width, height, premultiplied_pixels, width * 4);
+    if (!image)
         goto fail;
 
-    memcpy(buf_orig, buf, size);
+    memcpy(original_pixels, buf, size);
 
-    icon->buf_orig = buf_orig;
-    icon->buf_pixman = buf_pixman;
-    icon->img = img;
-    icon->size_orig = size;
-    icon->size_pixman = pixbuf_size;
+    icon->original_pixels = original_pixels;
+    icon->premultiplied_pixels = premultiplied_pixels;
+    icon->image = image;
+    icon->original_size_bytes = size;
+    icon->premultiplied_size_bytes = pixbuf_size;
 
     return icon;
 
 fail:
-    free(buf_orig);
-    if (img)
-        pixman_image_unref(img);
-    free(buf_pixman);
+    free(original_pixels);
+    if (image)
+        pixman_image_unref(image);
+    free(premultiplied_pixels);
     free(icon);
     return nullptr;
 }
@@ -122,7 +123,7 @@ constexpr int icon_sizes[] = { 24, 32, 22, 48, 64, 16, 128, 256 };
  * Finds the file behind an IconName, there being no icon theme library here.
  * ponytail: hicolor only, add the index.theme walk if an item needs it.
  */
-static int icon_file(char* out, size_t outsz, const char* name, const char* themepath)
+static int icon_file(char* out, size_t outsz, const char* name, const char* theme_path)
 {
     const char* datahome = getenv("XDG_DATA_HOME");
     const char* datadirs = getenv("XDG_DATA_DIRS");
@@ -132,14 +133,14 @@ static int icon_file(char* out, size_t outsz, const char* name, const char* them
     if (*name == '/')
         return icon_try(out, outsz, "%s", name);
 
-    if (themepath && *themepath) {
+    if (theme_path && *theme_path) {
         for (size_t i = 0; i < LENGTH(icon_sizes); i++)
-            if (icon_try(out, outsz, "%s/hicolor/%dx%d/apps/%s.png", themepath, icon_sizes[i],
+            if (icon_try(out, outsz, "%s/hicolor/%dx%d/apps/%s.png", theme_path, icon_sizes[i],
                          icon_sizes[i], name))
                 return 1;
-        if (icon_try(out, outsz, "%s/%s.png", themepath, name) ||
-            icon_try(out, outsz, "%s/%s.svg", themepath, name) ||
-            icon_try(out, outsz, "%s/%s.xpm", themepath, name))
+        if (icon_try(out, outsz, "%s/%s.png", theme_path, name) ||
+            icon_try(out, outsz, "%s/%s.svg", theme_path, name) ||
+            icon_try(out, outsz, "%s/%s.xpm", theme_path, name))
             return 1;
     }
 
@@ -175,7 +176,7 @@ static int icon_file(char* out, size_t outsz, const char* name, const char* them
     return 0;
 }
 
-static Icon* icon_from_pixbuf(GdkPixbuf* pixbuf)
+static RasterIcon* icon_from_pixbuf(GdkPixbuf* pixbuf)
 {
     const int width = gdk_pixbuf_get_width(pixbuf);
     const int height = gdk_pixbuf_get_height(pixbuf);
@@ -202,18 +203,18 @@ static Icon* icon_from_pixbuf(GdkPixbuf* pixbuf)
         }
     }
 
-    Icon* icon = icon_create(argb, width, height, size);
+    RasterIcon* icon = icon_create(argb, width, height, size);
     free(argb);
     return icon;
 }
 
 /* Builds an icon from IconName (or a path). */
-Icon* icon_create_from_name(const char* name, const char* themepath, int size)
+RasterIcon* icon_create_from_name(const char* name, const char* theme_path, int size)
 {
     GError* error = nullptr;
     char path[PATH_MAX];
 
-    if (!name || !*name || !icon_file(path, sizeof(path), name, themepath))
+    if (!name || !*name || !icon_file(path, sizeof(path), name, theme_path))
         return nullptr;
 
     GdkPixbuf* pixbuf;
@@ -229,18 +230,18 @@ Icon* icon_create_from_name(const char* name, const char* themepath, int size)
         return nullptr;
     }
 
-    Icon* icon = icon_from_pixbuf(pixbuf);
+    RasterIcon* icon = icon_from_pixbuf(pixbuf);
     g_object_unref(pixbuf);
     return icon;
 }
 
 /* 8 bit rgb(a) rows, scaled down to fit size (0 keeps it) */
-Icon* icon_create_from_data(const uint8_t* data,
-                            int width,
-                            int height,
-                            int rowstride,
-                            int alpha,
-                            int size)
+RasterIcon* icon_create_from_data(const uint8_t* data,
+                                  int width,
+                                  int height,
+                                  int rowstride,
+                                  int alpha,
+                                  int size)
 {
     int scaled_width = width;
     int scaled_height = height;
@@ -266,21 +267,21 @@ Icon* icon_create_from_data(const uint8_t* data,
             return nullptr;
     }
 
-    Icon* icon = icon_from_pixbuf(pixbuf);
+    RasterIcon* icon = icon_from_pixbuf(pixbuf);
     g_object_unref(pixbuf);
     return icon;
 }
 
-void icon_destroy(Icon* icon)
+void icon_destroy(RasterIcon* icon)
 {
-    if (icon->img)
-        pixman_image_unref(icon->img);
-    free(icon->buf_orig);
-    free(icon->buf_pixman);
+    if (icon->image)
+        pixman_image_unref(icon->image);
+    free(icon->original_pixels);
+    free(icon->premultiplied_pixels);
     free(icon);
 }
 
-FallbackIcon* icon_create_fallback(const char* appname, int, struct fcft_font* font)
+FallbackIconGlyph* icon_create_fallback(const char* appname, int, struct fcft_font* font)
 {
     char initial;
 
