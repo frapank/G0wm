@@ -654,7 +654,7 @@ static void bar_draw_contents(Monitor* monitor, bool draw_titles)
             (settings->bar.top ? (int)settings->bar.padding
                                : monitor->geometry.height - monitor->bar_metrics.logical_height -
                                      (int)settings->bar.padding));
-    wlr_scene_buffer_set_buffer(monitor->bar_scene_buffer, &buffer->base);
+    buffer_apply(monitor->bar_scene_buffer, buffer);
     wlr_buffer_unlock(&buffer->base);
 #ifdef INTEGRATED_BACKGROUND
     opacity_blur_bar(monitor);

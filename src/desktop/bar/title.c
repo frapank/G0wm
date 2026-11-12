@@ -149,7 +149,7 @@ void bar_draw_title_bar(WindowClient* client)
 
     wlr_scene_node_set_enabled(&client->title_scene_buffer->node, 1);
     wlr_scene_buffer_set_opacity(client->title_scene_buffer, opacity_decorations_current());
-    wlr_scene_buffer_set_buffer(client->title_scene_buffer, &buffer->base);
+    buffer_apply(client->title_scene_buffer, buffer);
     wlr_buffer_unlock(&buffer->base);
 }
 

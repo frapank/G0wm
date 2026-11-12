@@ -267,7 +267,7 @@ void corner_draw_all(WindowClient* client)
         if (!buffer)
             continue;
         corner_draw(buffer->pixels, cov, scaled_radius, i, color);
-        wlr_scene_buffer_set_buffer(client->corner_buffers[i], &buffer->base);
+        buffer_apply(client->corner_buffers[i], buffer);
         wlr_buffer_unlock(&buffer->base);
     }
 }

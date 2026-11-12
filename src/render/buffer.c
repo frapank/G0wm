@@ -11,6 +11,7 @@
 #include <stddef.h>
 #include <stdint.h>
 #include <stdlib.h>
+#include <string.h>
 #include <wayland-server-core.h>
 #include <wlr/interfaces/wlr_buffer.h>
 #include <wlr/types/wlr_buffer.h>
@@ -98,6 +99,21 @@ RenderBuffer* buffer_get(RenderBuffer** pool, size_t pool_length, int width, int
     LISTEN(&buffer->base.events.release, &buffer->release, buffer_handle_release);
     wlr_buffer_lock(&buffer->base);
     return buffer;
+}
+
+/* Keep the current texture when a redraw produced the same pixels. The scene
+ * holds the old buffer locked even when its pool has been resized or dropped. */
+void buffer_apply(struct wlr_scene_buffer* scene_buffer, RenderBuffer* buffer)
+{
+    struct wlr_buffer* current = scene_buffer->buffer;
+    if (current && current->impl == &buffer_impl && current->width == buffer->base.width &&
+        current->height == buffer->base.height) {
+        RenderBuffer* previous = wl_container_of(current, previous, base);
+        const size_t bytes = (size_t)current->width * (size_t)current->height * sizeof(uint32_t);
+        if (!memcmp(previous->pixels, buffer->pixels, bytes))
+            return;
+    }
+    wlr_scene_buffer_set_buffer(scene_buffer, &buffer->base);
 }
 
 void buffer_pool_drop(RenderBuffer** pool, size_t pool_length)

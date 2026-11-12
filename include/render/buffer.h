@@ -12,6 +12,7 @@
 #include <stdint.h>
 #include <wayland-server-core.h>
 #include <wlr/types/wlr_buffer.h>
+#include <wlr/types/wlr_scene.h>
 
 typedef struct {
     struct wlr_buffer base;
@@ -25,6 +26,7 @@ typedef struct {
                                        size_t pool_length,
                                        int width,
                                        int height);
+void buffer_apply(struct wlr_scene_buffer* scene_buffer, RenderBuffer* buffer);
 void buffer_pool_drop(RenderBuffer** pool, size_t pool_length);
 
 #endif
