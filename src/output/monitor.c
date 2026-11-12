@@ -164,6 +164,7 @@ static void monitor_handle_destroy(struct wl_listener* listener, void*)
     if (monitor->tray)
         tray_destroy(monitor->tray);
 
+    bar_destroy_monitor(monitor);
     magnifier_drop(monitor);
 
     drwl_setimage(monitor->draw_context, nullptr);

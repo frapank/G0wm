@@ -46,6 +46,13 @@ struct Monitor {
     struct wlr_output* wlr_output;
     struct wlr_scene_output* scene_output;
     struct wlr_scene_buffer* bar_scene_buffer; /* bar buffer */
+    struct wlr_scene_tree* bar_urgent_tree;
+    struct {
+        struct wlr_scene_buffer* scene;
+        RenderBuffer* buffers[2];
+    } bar_urgent[32];
+    bool bar_pulsing;
+    bool bar_pulse_redraw;
 #ifdef INTEGRATED_BACKGROUND
     struct wlr_scene_buffer* wallpaper_scene_buffer; /* wallpaper buffer */
     struct wlr_buffer* wallpaper_buffer;            /* buffer last attached to the wallpaper node */
