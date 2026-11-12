@@ -42,7 +42,6 @@ constexpr int PULSE_FRAME_MS = 40;
 char bar_status_text[STATUS_MAX];
 /* updates the opacity of urgent tag indicators */
 static struct wl_event_source* bar_pulse_timer;
-static struct wl_event_source* bar_title_update_source;
 struct PillMask {
     int width, height;
     double radius;
@@ -312,40 +311,30 @@ static void bar_pulse_arm(void)
         wl_event_source_timer_update(bar_pulse_timer, PULSE_FRAME_MS);
 }
 
-static void bar_flush_title_updates(void*)
+void bar_flush_title_updates(Monitor* monitor)
 {
-    bar_title_update_source = nullptr;
-    Monitor* monitor;
-    wl_list_for_each(monitor, &monitors, link) {
-        if (!monitor->title_update_pending)
-            continue;
-        monitor->title_update_pending = false;
-        WindowClient* client;
-        wl_list_for_each(client, &clients, link)
-            if (client->monitor == monitor && client->title_update_pending)
-                bar_draw_title_bar(client);
-        if (settings->bar.window_title || runner_active)
-            bar_draw_contents(monitor, false);
-    }
+    if (!monitor->title_update_pending)
+        return;
+    monitor->title_update_pending = false;
+    WindowClient* client;
+    wl_list_for_each(client, &clients, link)
+        if (client->monitor == monitor && client->title_update_pending)
+            bar_draw_title_bar(client);
+    if (settings->bar.window_title || runner_active)
+        bar_draw_contents(monitor, false);
 }
 
 void bar_schedule_title_update(Monitor* monitor)
 {
-    if (!monitor)
+    if (!monitor || monitor->title_update_pending)
         return;
     monitor->title_update_pending = true;
-    if (!bar_title_update_source)
-        bar_title_update_source =
-            wl_event_loop_add_idle(event_loop, bar_flush_title_updates, nullptr);
-    if (!bar_title_update_source)
-        bar_flush_title_updates(nullptr);
+    if (monitor->wlr_output->enabled)
+        wlr_output_schedule_frame(monitor->wlr_output);
 }
 
 void bar_finish(void)
 {
-    if (bar_title_update_source)
-        wl_event_source_remove(bar_title_update_source);
-    bar_title_update_source = nullptr;
     for (size_t i = 0; i < LENGTH(pill_masks); i++) {
         if (pill_masks[i].image)
             pixman_image_unref(pill_masks[i].image);

@@ -793,6 +793,8 @@ void client_handle_set_title(struct wl_listener* listener, void*)
     free(client->last_title);
     client->last_title = copy;
     toplevel_update(client);
+    if (!client->scene || !client->scene->node.enabled)
+        return;
     client->title_update_pending = true;
     bar_schedule_title_update(client->monitor);
     if (settings->bar.single_monitor && client->monitor == selected_monitor &&

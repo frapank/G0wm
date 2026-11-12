@@ -673,6 +673,7 @@ static void monitor_handle_frame(struct wl_listener* listener, void*)
     struct wlr_output_state pending;
     struct timespec now;
 
+    bar_flush_title_updates(monitor);
     wlr_output_state_init(&pending);
 
     /* Render if no XDG clients have an outstanding resize and are visible on

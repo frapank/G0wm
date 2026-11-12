@@ -28,6 +28,7 @@ void bar_finish(void);
 void bar_destroy_monitor(Monitor* monitor);
 void bar_draw(Monitor* monitor);
 void bar_schedule_title_update(Monitor* monitor);
+void bar_flush_title_updates(Monitor* monitor);
 Monitor* bar_monitor(void);
 void bar_draw_all(void);
 void bar_draw_selected(void);
