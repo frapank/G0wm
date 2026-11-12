@@ -5,6 +5,10 @@
  * the candidates for what is typed, and their ranking
  */
 
+#ifndef _DEFAULT_SOURCE
+#define _DEFAULT_SOURCE
+#endif
+
 #include <dirent.h>
 #include <stddef.h>
 #include <stdio.h>
@@ -192,6 +196,20 @@ void runner_free_entries(void)
     runner_entry_dir = nullptr;
 }
 
+/* Follow symlinks as before; filesystems without d_type still use stat. */
+static bool runner_entry_directory(DIR* directory, const struct dirent* entry)
+{
+#ifdef _DIRENT_HAVE_D_TYPE
+    if (entry->d_type == DT_DIR)
+        return true;
+    if (entry->d_type != DT_UNKNOWN && entry->d_type != DT_LNK)
+        return false;
+#endif
+    struct stat file_info;
+    return fstatat(dirfd(directory), entry->d_name, &file_info, 0) == 0 &&
+           S_ISDIR(file_info.st_mode);
+}
+
 /* what is in the typed directory, dot files only once the name starts with a
  * dot, and a slash after each directory */
 static void runner_read_entries(int offset)
@@ -222,9 +240,7 @@ static void runner_read_entries(int offset)
         const size_t name_length = strlen(entry->d_name);
         runner_entries[runner_entry_count] = util_calloc(1, name_length + 2);
         memcpy(runner_entries[runner_entry_count], entry->d_name, name_length);
-        struct stat file_info;
-        if (fstatat(dirfd(directory), entry->d_name, &file_info, 0) == 0 &&
-            S_ISDIR(file_info.st_mode))
+        if (runner_entry_directory(directory, entry))
             runner_entries[runner_entry_count][name_length] = '/';
         runner_entry_count++;
     }
