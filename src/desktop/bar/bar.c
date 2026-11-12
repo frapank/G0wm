@@ -320,14 +320,12 @@ static void bar_flush_title_updates(void*)
         if (!monitor->title_update_pending)
             continue;
         monitor->title_update_pending = false;
-        if (settings->bar.window_title || runner_active) {
-            bar_draw(monitor);
-        } else {
-            WindowClient* client;
-            wl_list_for_each(client, &clients, link)
-                if (client->monitor == monitor)
-                    bar_draw_title_bar(client);
-        }
+        WindowClient* client;
+        wl_list_for_each(client, &clients, link)
+            if (client->monitor == monitor && client->title_update_pending)
+                bar_draw_title_bar(client);
+        if (settings->bar.window_title || runner_active)
+            bar_draw_contents(monitor, false);
     }
 }
 

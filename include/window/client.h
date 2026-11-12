@@ -71,6 +71,7 @@ struct WindowClient {
     struct wl_listener destroy;
     struct wl_listener set_title;
     char* last_title;
+    bool title_update_pending;
     struct wl_listener fullscreen;
     struct wl_listener set_decoration_mode;
     struct wl_listener destroy_decoration;
