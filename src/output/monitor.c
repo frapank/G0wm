@@ -164,6 +164,7 @@ static void monitor_handle_destroy(struct wl_listener* listener, void*)
     if (monitor->tray)
         tray_destroy(monitor->tray);
 
+    bar_destroy_monitor(monitor);
     magnifier_drop(monitor);
 
     drwl_setimage(monitor->draw_context, nullptr);
@@ -672,6 +673,7 @@ static void monitor_handle_frame(struct wl_listener* listener, void*)
     struct wlr_output_state pending;
     struct timespec now;
 
+    bar_flush_title_updates(monitor);
     wlr_output_state_init(&pending);
 
     /* Render if no XDG clients have an outstanding resize and are visible on

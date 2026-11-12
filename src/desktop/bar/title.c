@@ -86,9 +86,14 @@ static void bar_paint_title_bar(WindowClient* client, RenderBuffer* buffer, int 
     drwl_setimage(monitor->draw_context, buffer->image);
     drwl_setscheme(monitor->draw_context, for_sharing ? bar_opaque_scheme(scheme_index)
                                                       : settings->look.colors[scheme_index]);
-    drwl_rect(monitor->draw_context, 0, 0, buffer_width, buffer_height, 1, 1);
-    if (close_button_x > text_start)
+    if (close_button_x > text_start) {
         drwl_text(monitor->draw_context, 0, 0, close_button_x, buffer_height, text_start, title, 0);
+        if (close_button_x < buffer_width)
+            drwl_rect(monitor->draw_context, close_button_x, 0, buffer_width - close_button_x,
+                      buffer_height, 1, 1);
+    } else {
+        drwl_rect(monitor->draw_context, 0, 0, buffer_width, buffer_height, 1, 1);
+    }
 
     if (has_private_dot)
         bar_draw_pill(monitor, text_start - dot_size - monitor->horizontal_padding / 3,
@@ -112,6 +117,7 @@ static void bar_paint_title_bar(WindowClient* client, RenderBuffer* buffer, int 
  * group shares one row, so these end up drawn side by side as tabs. */
 void bar_draw_title_bar(WindowClient* client)
 {
+    client->title_update_pending = false;
     if (!client->title_scene_buffer)
         return;
     Monitor* monitor = client->monitor;
@@ -144,7 +150,7 @@ void bar_draw_title_bar(WindowClient* client)
 
     wlr_scene_node_set_enabled(&client->title_scene_buffer->node, 1);
     wlr_scene_buffer_set_opacity(client->title_scene_buffer, opacity_decorations_current());
-    wlr_scene_buffer_set_buffer(client->title_scene_buffer, &buffer->base);
+    buffer_apply(client->title_scene_buffer, buffer);
     wlr_buffer_unlock(&buffer->base);
 }
 

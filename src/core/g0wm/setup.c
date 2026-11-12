@@ -106,6 +106,7 @@
 #include "output/lock.h"
 #include "output/monitor.h"
 #include "output/privacy.h"
+#include "render/corner.h"
 #include "window/client.h"
 #include "window/toplevel.h"
 #include "window/xwayland.h"
@@ -336,6 +337,7 @@ void cleanup(void)
         g_object_unref(wallpaper_source);
 #endif
 
+    corner_finish();
     drwl_fini();
 }
 

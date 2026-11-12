@@ -16,7 +16,6 @@
 #include "render/buffer.h"
 
 Monitor* bar_main_monitor(void);
-Monitor* bar_monitor(void);
 void bar_draw_pill(Monitor* monitor,
                    int x,
                    int y,

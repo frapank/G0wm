@@ -303,7 +303,7 @@ int bar_handle_status_input(int fd, unsigned int event_mask, void*)
         else
             latest_line = line_start;
     }
-    if (latest_line) {
+    if (latest_line && strcmp(bar_status_text, latest_line)) {
         snprintf(bar_status_text, sizeof(bar_status_text), "%s", latest_line);
         bar_draw_all();
     }

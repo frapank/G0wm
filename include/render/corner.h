@@ -10,6 +10,7 @@
 
 #include "core/g0wm.h"
 
+void corner_finish(void);
 int corner_bar_radius(Monitor* monitor);
 unsigned int corner_border_width(void);
 void corner_clear(uint32_t* pixels, int width, int height, int radius);

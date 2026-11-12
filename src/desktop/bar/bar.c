@@ -40,8 +40,19 @@ constexpr int PULSE_FRAME_MS = 40;
 
 /* variables */
 char bar_status_text[STATUS_MAX];
-/* redraws the bars while an urgent dot pulses */
+/* updates the opacity of urgent tag indicators */
 static struct wl_event_source* bar_pulse_timer;
+struct PillMask {
+    int width, height;
+    double radius;
+    bool hollow;
+    pixman_image_t* image;
+};
+static struct PillMask pill_masks[16];
+static size_t pill_mask_next;
+
+static void bar_pulse_arm(void);
+static void bar_draw_contents(Monitor* monitor, bool draw_titles);
 
 /* function implementations */
 bool bar_accepts_input(struct wlr_scene_buffer*, double*, double*)
@@ -108,29 +119,44 @@ void bar_draw_pill(Monitor* monitor,
 {
     if (width <= 0 || height <= 0)
         return;
-    pixman_image_t* mask = pixman_image_create_bits(PIXMAN_a8, width, height, nullptr, 0);
-    if (!mask)
-        return;
     radius = fmin(fmax(radius, 0), fmin(width, height) / 2.0);
-    uint8_t* data = (uint8_t*)pixman_image_get_data(mask);
-    const int stride = pixman_image_get_stride(mask);
-
-    /* 4x4 supersampling */
-    for (int py = 0; py < height; py++)
-        for (int px = 0; px < width; px++) {
-            int coverage = 0;
-            for (int sub_y = 0; sub_y < 4; sub_y++)
-                for (int sub_x = 0; sub_x < 4; sub_x++) {
-                    const double sample_x = px + (sub_x + 0.5) / 4;
-                    const double sample_y = py + (sub_y + 0.5) / 4;
-                    coverage += bar_in_pill(sample_x, sample_y, width, height, radius) &&
-                                !(hollow && sample_x > 1 && sample_y > 1 &&
-                                  bar_in_pill(sample_x - 1, sample_y - 1, width - 2, height - 2,
-                                              radius - 1));
-                }
-            data[py * stride + px] = (uint8_t)(coverage * 255 / 16);
+    pixman_image_t* mask = nullptr;
+    for (size_t i = 0; i < LENGTH(pill_masks); i++) {
+        const struct PillMask* entry = &pill_masks[i];
+        if (entry->image && entry->width == width && entry->height == height &&
+            entry->radius == radius && entry->hollow == hollow) {
+            mask = entry->image;
+            break;
         }
+    }
+    if (!mask) {
+        mask = pixman_image_create_bits(PIXMAN_a8, width, height, nullptr, 0);
+        if (!mask)
+            return;
+        uint8_t* data = (uint8_t*)pixman_image_get_data(mask);
+        const int stride = pixman_image_get_stride(mask);
 
+        /* 4x4 supersampling */
+        for (int py = 0; py < height; py++)
+            for (int px = 0; px < width; px++) {
+                int coverage = 0;
+                for (int sub_y = 0; sub_y < 4; sub_y++)
+                    for (int sub_x = 0; sub_x < 4; sub_x++) {
+                        const double sample_x = px + (sub_x + 0.5) / 4;
+                        const double sample_y = py + (sub_y + 0.5) / 4;
+                        coverage += bar_in_pill(sample_x, sample_y, width, height, radius) &&
+                                    !(hollow && sample_x > 1 && sample_y > 1 &&
+                                      bar_in_pill(sample_x - 1, sample_y - 1, width - 2, height - 2,
+                                                  radius - 1));
+                    }
+                data[py * stride + px] = (uint8_t)(coverage * 255 / 16);
+            }
+
+        struct PillMask* entry = &pill_masks[pill_mask_next++ % LENGTH(pill_masks)];
+        if (entry->image)
+            pixman_image_unref(entry->image);
+        *entry = (struct PillMask){ width, height, radius, hollow, mask };
+    }
     const pixman_color_t color = convert_color(rgba);
     pixman_image_t* source = pixman_image_create_solid_fill(&color);
     if (source) {
@@ -138,7 +164,6 @@ void bar_draw_pill(Monitor* monitor,
                                  0, 0, x, y, width, height);
         pixman_image_unref(source);
     }
-    pixman_image_unref(mask);
 }
 
 /* the same colour at a third of its alpha */
@@ -182,24 +207,102 @@ RenderBuffer* bar_share_buffer(RenderBuffer** pool, int width, int height)
 }
 
 /* the urgent colour breathing between full and a quarter of its alpha, one
- * cycle every bar.urgent_pulse ms */
-static uint32_t bar_pulse(uint32_t rgba)
+ * cycle every settings->bar.urgent_pulse ms */
+static float bar_pulse(void)
 {
     const double phase =
         (double)(notify_now() % settings->bar.urgent_pulse) / settings->bar.urgent_pulse;
-    const double brightness = 0.25 + 0.75 * (0.5 + 0.5 * cos(2 * 3.14159265358979 * phase));
+    return (float)(0.25 + 0.75 * (0.5 + 0.5 * cos(2 * 3.14159265358979 * phase)));
+}
 
-    return (rgba & ~0xffu) | (uint32_t)((rgba & 0xffu) * brightness);
+static bool bar_urgent_accepts_input(struct wlr_scene_buffer*, double*, double*)
+{
+    return false;
+}
+
+void bar_destroy_monitor(Monitor* monitor)
+{
+    if (monitor->bar_urgent_tree)
+        wlr_scene_node_destroy(&monitor->bar_urgent_tree->node);
+    monitor->bar_urgent_tree = nullptr;
+    monitor->bar_pulsing = false;
+    for (size_t i = 0; i < LENGTH(monitor->bar_urgent); i++) {
+        monitor->bar_urgent[i].scene = nullptr;
+        buffer_pool_drop(monitor->bar_urgent[i].buffers, LENGTH(monitor->bar_urgent[i].buffers));
+    }
+}
+
+static bool bar_draw_urgent(Monitor* monitor,
+                            unsigned int tag,
+                            int x,
+                            int y,
+                            int width,
+                            int height,
+                            uint32_t color)
+{
+    if (!monitor->bar_urgent_tree) {
+        monitor->bar_urgent_tree = wlr_scene_tree_create(monitor->bar_scene_buffer->node.parent);
+        if (!monitor->bar_urgent_tree)
+            return false;
+    }
+    struct wlr_scene_buffer* node = monitor->bar_urgent[tag].scene;
+    if (!node) {
+        node = wlr_scene_buffer_create(monitor->bar_urgent_tree, nullptr);
+        if (!node)
+            return false;
+        node->point_accepts_input = bar_urgent_accepts_input;
+        monitor->bar_urgent[tag].scene = node;
+    }
+    RenderBuffer** pool = monitor->bar_urgent[tag].buffers;
+    if (pool[0] && (pool[0]->base.width != width || pool[0]->base.height != height))
+        buffer_pool_drop(pool, LENGTH(monitor->bar_urgent[tag].buffers));
+    RenderBuffer* buffer =
+        buffer_get(pool, LENGTH(monitor->bar_urgent[tag].buffers), width, height);
+    if (!buffer)
+        return false;
+    Img* previous = monitor->draw_context->image;
+    drwl_setimage(monitor->draw_context, buffer->image);
+    memset(buffer->pixels, 0, (size_t)width * (size_t)height * sizeof(uint32_t));
+    bar_draw_pill(monitor, 0, 0, width, height, height / 2.0 * settings->bar.tag_dot_round, false,
+                  color);
+    drwl_setimage(monitor->draw_context, previous);
+    buffer_apply(node, buffer);
+    wlr_buffer_unlock(&buffer->base);
+    const float scale = monitor->wlr_output->scale;
+    wlr_scene_node_set_position(&node->node, (int)roundf(x / scale), (int)roundf(y / scale));
+    wlr_scene_buffer_set_dest_size(node, MAX((int)roundf(width / scale), 1),
+                                   MAX((int)roundf(height / scale), 1));
+    wlr_scene_buffer_set_opacity(node, opacity_decorations_current() * bar_pulse());
+    wlr_scene_node_set_enabled(&node->node, true);
+    return true;
 }
 
 static int bar_pulse_tick(void*)
 {
-    bar_draw_all();
+    bool pulsing = false;
+    Monitor* monitor;
+    wl_list_for_each(monitor, &monitors, link) {
+        if (!settings->bar.urgent_pulse || !monitor->bar_pulsing ||
+            !monitor->bar_scene_buffer->node.enabled)
+            continue;
+        if (monitor->bar_pulse_redraw) {
+            bar_draw_contents(monitor, false);
+            pulsing |= monitor->bar_pulsing;
+            continue;
+        }
+        const float opacity = opacity_decorations_current() * bar_pulse();
+        for (size_t i = 0; i < LENGTH(monitor->bar_urgent); i++) {
+            struct wlr_scene_buffer* node = monitor->bar_urgent[i].scene;
+            if (node && node->node.enabled)
+                wlr_scene_buffer_set_opacity(node, opacity);
+        }
+        pulsing = true;
+    }
+    if (pulsing)
+        bar_pulse_arm();
     return 0;
 }
 
-/* One shot: each bar_draw() that still shows an urgent dot asks for the next
- * frame, so the timer dies with the last urgent window. */
 static void bar_pulse_arm(void)
 {
     if (!bar_pulse_timer)
@@ -208,8 +311,36 @@ static void bar_pulse_arm(void)
         wl_event_source_timer_update(bar_pulse_timer, PULSE_FRAME_MS);
 }
 
+void bar_flush_title_updates(Monitor* monitor)
+{
+    if (!monitor->title_update_pending)
+        return;
+    monitor->title_update_pending = false;
+    WindowClient* client;
+    wl_list_for_each(client, &clients, link)
+        if (client->monitor == monitor && client->title_update_pending)
+            bar_draw_title_bar(client);
+    if (settings->bar.window_title || runner_active)
+        bar_draw_contents(monitor, false);
+}
+
+void bar_schedule_title_update(Monitor* monitor)
+{
+    if (!monitor || monitor->title_update_pending)
+        return;
+    monitor->title_update_pending = true;
+    if (monitor->wlr_output->enabled)
+        wlr_output_schedule_frame(monitor->wlr_output);
+}
+
 void bar_finish(void)
 {
+    for (size_t i = 0; i < LENGTH(pill_masks); i++) {
+        if (pill_masks[i].image)
+            pixman_image_unref(pill_masks[i].image);
+        pill_masks[i] = (struct PillMask){ 0 };
+    }
+    pill_mask_next = 0;
     if (bar_pulse_timer)
         wl_event_source_remove(bar_pulse_timer);
     bar_pulse_timer = nullptr;
@@ -325,6 +456,13 @@ int bar_tag_width(Monitor* monitor, Monitor* target, uint32_t tag)
 
 void bar_draw(Monitor* monitor)
 {
+    bar_draw_contents(monitor, true);
+}
+
+static void bar_draw_contents(Monitor* monitor, bool draw_titles)
+{
+    if (draw_titles)
+        monitor->title_update_pending = false;
     /* what the bar reports on: its own monitor, or the focused one when
      * bar.single_monitor leaves a single bar standing in for the lot */
     Monitor* target = settings->bar.single_monitor && selected_monitor ? selected_monitor : monitor;
@@ -333,10 +471,19 @@ void bar_draw(Monitor* monitor)
     /* Title bars are refreshed on the same events as the bar */
     WindowClient* client;
     wl_list_for_each(client, &clients, link)
-        if (client->monitor == monitor)
+        if (draw_titles && client->monitor == monitor)
             bar_draw_title_bar(client);
 
     monitor->capture_width = 0;
+    monitor->bar_pulsing = false;
+    monitor->bar_pulse_redraw = false;
+    if (monitor->bar_urgent_tree) {
+        wlr_scene_node_set_enabled(&monitor->bar_urgent_tree->node,
+                                   monitor->bar_scene_buffer->node.enabled);
+        for (size_t i = 0; i < LENGTH(monitor->bar_urgent); i++)
+            if (monitor->bar_urgent[i].scene)
+                wlr_scene_node_set_enabled(&monitor->bar_urgent[i].scene->node, false);
+    }
     if (!monitor->bar_scene_buffer->node.enabled) {
 #ifdef INTEGRATED_BACKGROUND
         /* a hidden bar has no backdrop either, and bar_toggle() comes through
@@ -392,20 +539,36 @@ void bar_draw(Monitor* monitor)
         drwl_rect(monitor->draw_context, cur_x, 0, tag_w, monitor->bar_metrics.height_px, 1, 1);
         if (urgent & tag_bit) {
             color = settings->look.colors[COLOR_SCHEME_URGENT][ColBorder];
-            if (settings->bar.urgent_pulse) {
-                color = bar_pulse(color);
-                pulsing = true;
-            }
         } else if (target->tagsets[target->selected_tagset_index] & tag_bit)
             color = settings->look.colors[COLOR_SCHEME_SELECTED][ColFg];
         else if (occupied & tag_bit)
             color = settings->look.colors[COLOR_SCHEME_NORMAL][ColFg];
         else /* empty */
             color = bar_fade(settings->look.colors[COLOR_SCHEME_NORMAL][ColFg]);
-        bar_draw_pill(monitor, cur_x + dot_lead, (monitor->bar_metrics.height_px - dot_size) / 2,
-                      dot_width, dot_size, dot_size / 2.0 * settings->bar.tag_dot_round, 0, color);
+        const int dot_x = cur_x + dot_lead;
+        const int dot_y = (monitor->bar_metrics.height_px - dot_size) / 2;
+        bool overlay = false;
+        if ((urgent & tag_bit) && settings->bar.urgent_pulse) {
+            /* Separate nodes cannot reproduce group opacity or a clipped corner. */
+            const bool clipped =
+                corner_r > 0 &&
+                (dot_x < corner_r ||
+                 dot_x + dot_width > monitor->bar_metrics.width_px - corner_r) &&
+                (dot_y < corner_r || dot_y + dot_size > monitor->bar_metrics.height_px - corner_r);
+            if (opacity_decorations_current() == 1.0f && !clipped)
+                overlay = bar_draw_urgent(monitor, i, dot_x, dot_y, dot_width, dot_size, color);
+            if (!overlay) {
+                color = (color & ~0xffu) | (uint32_t)((color & 0xffu) * bar_pulse());
+                monitor->bar_pulse_redraw = true;
+            }
+            pulsing = true;
+        }
+        if (!overlay)
+            bar_draw_pill(monitor, dot_x, dot_y, dot_width, dot_size,
+                          dot_size / 2.0 * settings->bar.tag_dot_round, false, color);
         cur_x += tag_w;
     }
+    monitor->bar_pulsing = pulsing;
     if (pulsing)
         bar_pulse_arm();
 
@@ -587,7 +750,14 @@ void bar_draw(Monitor* monitor)
             (settings->bar.top ? (int)settings->bar.padding
                                : monitor->geometry.height - monitor->bar_metrics.logical_height -
                                      (int)settings->bar.padding));
-    wlr_scene_buffer_set_buffer(monitor->bar_scene_buffer, &buffer->base);
+    if (monitor->bar_urgent_tree) {
+        wlr_scene_node_set_position(&monitor->bar_urgent_tree->node,
+                                    monitor->bar_scene_buffer->node.x,
+                                    monitor->bar_scene_buffer->node.y);
+        wlr_scene_node_place_above(&monitor->bar_urgent_tree->node,
+                                   &monitor->bar_scene_buffer->node);
+    }
+    buffer_apply(monitor->bar_scene_buffer, buffer);
     wlr_buffer_unlock(&buffer->base);
 #ifdef INTEGRATED_BACKGROUND
     opacity_blur_bar(monitor);
