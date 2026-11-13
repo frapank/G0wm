@@ -74,6 +74,11 @@ void client_activate(WindowClient* client)
 
 static void client_apply_bounds(WindowClient* client, struct wlr_box* bbox)
 {
+    /* the title bar and the masks are drawn at this size */
+    if (screen_geometry.width > 0 && screen_geometry.height > 0) {
+        client->geometry.width = MIN(client->geometry.width, screen_geometry.width);
+        client->geometry.height = MIN(client->geometry.height, screen_geometry.height);
+    }
     /* set minimum possible */
     client->geometry.width = MAX(1 + 2 * (int)client->border_width, client->geometry.width);
     client->geometry.height = MAX(1 + 2 * (int)client->border_width, client->geometry.height);
