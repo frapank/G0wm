@@ -188,6 +188,7 @@ static void monitor_handle_destroy(struct wl_listener* listener, void*)
     wlr_scene_node_destroy(&monitor->bar_blur_scene_buffer->node);
 #endif
     free(monitor);
+    lock_check_outputs();
 }
 
 static void monitor_close(Monitor* monitor)
@@ -632,6 +633,7 @@ static void monitor_apply_or_test_config(struct wlr_output_configuration_v1* con
 
     /* https://codeberg.org/dwl/dwl/issues/577 */
     monitor_update_layout(nullptr, nullptr);
+    lock_check_outputs();
 }
 
 void monitor_handle_config_test(struct wl_listener*, void* data)
@@ -662,6 +664,7 @@ void monitor_handle_power_set_mode(struct wl_listener*, void* data)
     if (monitor->wlr_output->enabled)
         wlr_output_schedule_frame(monitor->wlr_output);
     monitor_update_layout(nullptr, nullptr);
+    lock_check_outputs();
 }
 
 static void monitor_handle_frame(struct wl_listener* listener, void*)
@@ -706,9 +709,14 @@ static void monitor_handle_frame(struct wl_listener* listener, void*)
 
     if (!privacy_before_commit(monitor, &pending))
         goto skip;
-    if (wlr_output_commit_state(monitor->wlr_output, &pending) &&
-        (pending.committed & WLR_OUTPUT_STATE_ADAPTIVE_SYNC_ENABLED))
-        monitor->auto_vrr_state = pending.adaptive_sync_enabled;
+    if (wlr_output_commit_state(monitor->wlr_output, &pending)) {
+        if (pending.committed & WLR_OUTPUT_STATE_ADAPTIVE_SYNC_ENABLED)
+            monitor->auto_vrr_state = pending.adaptive_sync_enabled;
+        if (lock_active && !monitor->lock_rendered) {
+            monitor->lock_rendered = 1;
+            lock_check_outputs();
+        }
+    }
     privacy_after_commit(monitor);
 
 skip:

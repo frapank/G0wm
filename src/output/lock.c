@@ -26,6 +26,7 @@ typedef struct {
     struct wl_listener new_surface;
     struct wl_listener unlock;
     struct wl_listener destroy;
+    int locked_sent;
 } SessionLock;
 
 /* function declarations */
@@ -108,6 +109,21 @@ static void lock_handle_destroy(struct wl_listener* listener, void*)
     lock_destroy(lock, false);
 }
 
+/* locked only once every output shows the lock, one that is off already does */
+void lock_check_outputs(void)
+{
+    Monitor* monitor;
+    SessionLock* lock = lock_current ? lock_current->data : nullptr;
+
+    if (!lock || lock->locked_sent)
+        return;
+    wl_list_for_each(monitor, &monitors, link)
+        if (monitor->wlr_output->enabled && !monitor->asleep && !monitor->lock_rendered)
+            return;
+    lock->locked_sent = 1;
+    wlr_session_lock_v1_send_locked(lock_current);
+}
+
 void lock_handle_new_lock(struct wl_listener*, void* data)
 {
     struct wlr_session_lock_v1* session_lock = data;
@@ -133,7 +149,13 @@ void lock_handle_new_lock(struct wl_listener*, void* data)
     LISTEN(&session_lock->events.destroy, &lock->destroy, lock_handle_destroy);
     LISTEN(&session_lock->events.unlock, &lock->unlock, lock_handle_unlock);
 
-    wlr_session_lock_v1_send_locked(session_lock);
+    Monitor* monitor;
+    wl_list_for_each(monitor, &monitors, link) {
+        monitor->lock_rendered = 0;
+        if (monitor->wlr_output->enabled)
+            wlr_output_schedule_frame(monitor->wlr_output);
+    }
+    lock_check_outputs();
 }
 
 static void lock_handle_unlock(struct wl_listener* listener, void*)
