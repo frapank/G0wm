@@ -176,8 +176,8 @@ static void input_handle_key(struct wl_listener* listener, void* data)
      * that would have disarmed: the keystroke that opened the prompt counted
      * as handled and left a repeat armed, which would replay the binding and
      * toggle the prompt straight back off. */
-    if (runner_active) {
-        if (!lock_active && keysym_count > 0 && event->state == WL_KEYBOARD_KEY_STATE_PRESSED) {
+    if (!lock_active && runner_active) {
+        if (keysym_count > 0 && event->state == WL_KEYBOARD_KEY_STATE_PRESSED) {
             /* only the primary keysym: the codepoint belongs to the key, not
              * to each of the syms it can produce, so looping would type it
              * once per sym */
