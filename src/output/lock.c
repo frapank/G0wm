@@ -124,6 +124,10 @@ void lock_handle_new_lock(struct wl_listener*, void* data)
     lock->scene = wlr_scene_tree_create(layers[SCENE_LAYER_LOCK]);
     lock_current = lock->lock = session_lock;
     lock_active = 1;
+    /* clicks and motion must stop reaching the window under the lock */
+    input_release_constraint();
+    input_reset_cursor();
+    input_motion(0, nullptr, 0, 0, 0, 0);
 
     LISTEN(&session_lock->events.new_surface, &lock->new_surface, lock_handle_new_surface);
     LISTEN(&session_lock->events.destroy, &lock->destroy, lock_handle_destroy);
