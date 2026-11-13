@@ -825,8 +825,10 @@ void input_node_at(double x,
     struct wlr_scene_surface* scene_surface = nullptr;
     WindowClient* client = nullptr;
     LayerSurface* layer_surface = nullptr;
+    /* the lock hides the rest, where it has no surface nothing is under the pointer */
+    const int lowest = lock_active ? SCENE_LAYER_LOCK : 0;
 
-    for (int layer = SCENE_LAYER_COUNT - 1; !surface && layer >= 0; layer--) {
+    for (int layer = SCENE_LAYER_COUNT - 1; !surface && layer >= lowest; layer--) {
         struct wlr_scene_node* node = wlr_scene_node_at(&layers[layer]->node, x, y, node_x, node_y);
         if (!node)
             continue;
