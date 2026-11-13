@@ -251,6 +251,7 @@ static void client_handle_decoration_destroy(struct wl_listener* listener, void*
 
     wl_list_remove(&client->destroy_decoration.link);
     wl_list_remove(&client->set_decoration_mode.link);
+    client->decoration = nullptr;
 }
 
 void client_handle_destroy(struct wl_listener* listener, void*)
@@ -275,6 +276,11 @@ void client_handle_destroy(struct wl_listener* listener, void*)
         wl_list_remove(&client->map.link);
         wl_list_remove(&client->unmap.link);
         wl_list_remove(&client->maximize.link);
+        client->surface.xdg->data = nullptr;
+        if (client->decoration) {
+            wl_list_remove(&client->destroy_decoration.link);
+            wl_list_remove(&client->set_decoration_mode.link);
+        }
     }
     free(client->private_text);
     free(client->last_title);
