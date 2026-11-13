@@ -689,8 +689,8 @@ static void monitor_handle_frame(struct wl_listener* listener, void*)
         opacity_blur_client(client);
 #endif
         /* a tab below the top one is not drawn and gets no frame callbacks,
-         * so it never acks */
-        if (client->pending_resize_serial && !client->is_floating &&
+         * so it never acks. The lock screen never waits for a client */
+        if (!lock_active && client->pending_resize_serial && !client->is_floating &&
             client->scene_surface->node.enabled && !client_is_stopped(client))
             goto skip;
     }
