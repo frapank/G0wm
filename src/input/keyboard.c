@@ -269,7 +269,8 @@ static void input_handle_modifiers(struct wl_listener* listener, void*)
 static int input_key_repeat(void* data)
 {
     KeyboardGroup* group = data;
-    if (!group->keysym_count || group->wlr_group->keyboard.repeat_info.rate <= 0)
+    /* a binding held down as the lock comes up must not keep running under it */
+    if (lock_active || !group->keysym_count || group->wlr_group->keyboard.repeat_info.rate <= 0)
         return 0;
     /* the repeat of the key that opened the picker would close it */
     if (bar_notification_picking())
