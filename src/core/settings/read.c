@@ -204,9 +204,9 @@ static const char* settings_get_string(const struct scfg_block* block,
                                        const char* key,
                                        const char* fallback)
 {
-    const struct scfg_directive* directive = settings_find_directive(block, key);
+    const char* value = settings_param_at(settings_find_directive(block, key), 0);
 
-    return directive ? settings_param_at(directive, 0) : fallback;
+    return value ? value : fallback;
 }
 
 static int settings_get_enum(const struct scfg_block* block,
@@ -351,10 +351,12 @@ static void settings_apply_look(LoadedSettings* loaded, const struct scfg_block*
 
     if (!block)
         return;
-    const char** font_list = settings_collect_params(
-        loaded, settings_find_directive(block, "fonts"), 0, &loaded->values.look.font_count);
-    if (font_list) {
+    size_t font_count;
+    const char** font_list =
+        settings_collect_params(loaded, settings_find_directive(block, "fonts"), 0, &font_count);
+    if (font_list && font_count) {
         loaded->values.look.fonts = font_list;
+        loaded->values.look.font_count = font_count;
     }
     settings_apply_colors(loaded, settings_find_section(block, "colors"));
     settings_get_rgba(loaded->values.look.root_color, block, "rootcolor");
@@ -363,10 +365,12 @@ static void settings_apply_look(LoadedSettings* loaded, const struct scfg_block*
     loaded->values.look.wallpaper =
         settings_get_string(block, "wallpaper", loaded->values.look.wallpaper);
 #endif
-    const char** tag_list = settings_collect_params(loaded, settings_find_directive(block, "tags"),
-                                                    0, &loaded->values.look.tag_count);
-    if (tag_list) {
+    size_t tag_count;
+    const char** tag_list =
+        settings_collect_params(loaded, settings_find_directive(block, "tags"), 0, &tag_count);
+    if (tag_list && tag_count) {
         loaded->values.look.tags = (char**)tag_list;
+        loaded->values.look.tag_count = tag_count;
         if (loaded->values.look.tag_count > 31) { /* TAGMASK has to fit in a uint32_t */
             settings_warn("only the first 31 tags are used");
             loaded->values.look.tag_count = 31;
