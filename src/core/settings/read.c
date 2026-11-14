@@ -762,6 +762,11 @@ static void settings_apply_monitors(LoadedSettings* loaded, const struct scfg_bl
         rule->master_factor = (float)settings_get_bounded(monitor_block, "mfact", 0.1, 0.9, 0.55);
         rule->master_count = settings_get_int(monitor_block, "nmaster", 1);
         rule->scale = (float)settings_get_number(monitor_block, "scale", 1);
+        if (rule->scale <= 0) {
+            settings_line = block->directives[i].lineno;
+            settings_warn("monitor scale must be above 0");
+            rule->scale = 1;
+        }
         rule->layout = settings_layout_by_symbol(
             loaded, settings_get_string(monitor_block, "layout", nullptr));
         if (!rule->layout)
@@ -774,6 +779,12 @@ static void settings_apply_monitors(LoadedSettings* loaded, const struct scfg_bl
         rule->width = settings_get_int(monitor_block, "width", 0);
         rule->height = settings_get_int(monitor_block, "height", 0);
         rule->refresh_hz = settings_get_int(monitor_block, "refresh", 0);
+        /* in mHz it has to fit an int32_t */
+        if (rule->refresh_hz < 0 || rule->refresh_hz > INT32_MAX / 1000) {
+            settings_line = block->directives[i].lineno;
+            settings_warn("monitor refresh is out of range");
+            rule->refresh_hz = 0;
+        }
         count++;
     }
     loaded->values.rules.monitor_rules = parsed_rules;
