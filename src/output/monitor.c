@@ -861,8 +861,7 @@ void monitor_update_layout(struct wl_listener*, void*)
         }
         client_focus(client_top(selected_monitor), 1);
         if (selected_monitor->lock_surface) {
-            client_notify_enter(selected_monitor->lock_surface->surface,
-                                wlr_seat_get_keyboard(seat));
+            lock_focus(selected_monitor->lock_surface->surface);
             client_activate_surface(selected_monitor->lock_surface->surface, 1);
         }
     }

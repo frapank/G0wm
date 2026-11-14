@@ -40,6 +40,18 @@ int lock_active;
 static struct wlr_session_lock_v1* lock_current;
 
 /* function implementations */
+/* the grab of an open menu would keep the keyboard where it is */
+void lock_focus(struct wlr_surface* surface)
+{
+    wlr_seat_keyboard_end_grab(seat);
+    wlr_seat_pointer_end_grab(seat);
+    wlr_seat_touch_end_grab(seat);
+    if (surface)
+        client_notify_enter(surface, wlr_seat_get_keyboard(seat));
+    else
+        wlr_seat_keyboard_notify_clear_focus(seat);
+}
+
 static void lock_handle_new_surface(struct wl_listener* listener, void* data)
 {
     SessionLock* lock = wl_container_of(listener, lock, new_surface);
@@ -57,7 +69,7 @@ static void lock_handle_new_surface(struct wl_listener* listener, void* data)
            lock_handle_surface_destroy);
 
     if (monitor == selected_monitor)
-        client_notify_enter(lock_surface->surface, wlr_seat_get_keyboard(seat));
+        lock_focus(lock_surface->surface);
 }
 
 static void lock_destroy(SessionLock* lock, bool unlocked)
@@ -95,7 +107,7 @@ void lock_handle_surface_destroy(struct wl_listener* listener, void*)
     if (lock_active && lock_current && !wl_list_empty(&lock_current->surfaces)) {
         struct wlr_session_lock_surface_v1* focus_candidate =
             wl_container_of(lock_current->surfaces.next, focus_candidate, link);
-        client_notify_enter(focus_candidate->surface, wlr_seat_get_keyboard(seat));
+        lock_focus(focus_candidate->surface);
     } else if (!lock_active) {
         client_focus(client_top(selected_monitor), 1);
     } else {
@@ -134,6 +146,8 @@ void lock_handle_new_lock(struct wl_listener*, void* data)
     }
     SessionLock* lock = session_lock->data = util_calloc(1, sizeof(*lock));
     client_focus(nullptr, 0);
+    /* client_focus() leaves it to a launcher or an X11 menu that holds it */
+    lock_focus(nullptr);
     /* an open menu would keep taking clicks under the lock surface */
     traypopup_dismiss();
 
