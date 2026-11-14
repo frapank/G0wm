@@ -200,6 +200,23 @@ static unsigned int settings_get_uint(const struct scfg_block* block,
     return settings_uint_value(settings_param_at(settings_find_directive(block, key), 0), fallback);
 }
 
+/* a number outside low..high is reported and the fallback kept */
+static double settings_get_bounded(const struct scfg_block* block,
+                                   const char* key,
+                                   double low,
+                                   double high,
+                                   double fallback)
+{
+    const struct scfg_directive* directive = settings_find_directive(block, key);
+    const double value = settings_get_number(block, key, fallback);
+
+    if (value >= low && value <= high)
+        return value;
+    settings_line = directive ? directive->lineno : settings_line;
+    settings_warn("%s must be between %g and %g", key, low, high);
+    return fallback;
+}
+
 static const char* settings_get_string(const struct scfg_block* block,
                                        const char* key,
                                        const char* fallback)
@@ -556,11 +573,11 @@ static void settings_apply_opacity(LoadedSettings* loaded, const struct scfg_blo
     loaded->values.opacity.enabled =
         settings_get_bool(block, "opacity_enabled", loaded->values.opacity.enabled);
     loaded->values.opacity.focus =
-        (float)settings_get_number(block, "opacity_focus", loaded->values.opacity.focus);
+        (float)settings_get_bounded(block, "opacity_focus", 0, 1, loaded->values.opacity.focus);
     loaded->values.opacity.unfocus =
-        (float)settings_get_number(block, "opacity_unfocus", loaded->values.opacity.unfocus);
-    loaded->values.opacity.decorations =
-        (float)settings_get_number(block, "opacity_deco", loaded->values.opacity.decorations);
+        (float)settings_get_bounded(block, "opacity_unfocus", 0, 1, loaded->values.opacity.unfocus);
+    loaded->values.opacity.decorations = (float)settings_get_bounded(
+        block, "opacity_deco", 0, 1, loaded->values.opacity.decorations);
 #ifdef INTEGRATED_BACKGROUND
     loaded->values.opacity.type = settings_get_enum(block, "opacity_type", settings_opacity_kinds,
                                                     loaded->values.opacity.type, "kind of opacity");
@@ -718,8 +735,9 @@ static void settings_apply_rules(LoadedSettings* loaded, const struct scfg_block
         rule->private_text = settings_get_string(rule_block, "privatetext", nullptr);
         rule->private_background = settings_get_hex(rule_block, "privatecolor", 0);
         rule->private_foreground = settings_get_hex(rule_block, "privatetextcolor", 0);
-        rule->focused_opacity = (float)settings_get_number(rule_block, "opacity_focus", 0);
-        rule->unfocused_opacity = (float)settings_get_number(rule_block, "opacity_unfocus", 0);
+        rule->focused_opacity = (float)settings_get_bounded(rule_block, "opacity_focus", 0, 1, 0);
+        rule->unfocused_opacity =
+            (float)settings_get_bounded(rule_block, "opacity_unfocus", 0, 1, 0);
         rule->monitor_index = settings_get_int(rule_block, "monitor", -1);
         count++;
     }
@@ -740,7 +758,8 @@ static void settings_apply_monitors(LoadedSettings* loaded, const struct scfg_bl
         const struct scfg_block* monitor_block = &block->directives[i].children;
         MonitorRule* rule = &parsed_rules[count];
         rule->name = settings_get_string(monitor_block, "name", nullptr);
-        rule->master_factor = (float)settings_get_number(monitor_block, "mfact", 0.55);
+        /* the range setmfact keeps it in */
+        rule->master_factor = (float)settings_get_bounded(monitor_block, "mfact", 0.1, 0.9, 0.55);
         rule->master_count = settings_get_int(monitor_block, "nmaster", 1);
         rule->scale = (float)settings_get_number(monitor_block, "scale", 1);
         rule->layout = settings_layout_by_symbol(
