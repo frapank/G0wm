@@ -91,6 +91,7 @@ struct Monitor {
     int master_count;
     char layout_symbol[16];
     int asleep;
+    int lock_rendered;
     int auto_vrr_state;                   /* 1 turned on by monitor_game_mode(), -1 refused */
     float zoom_factor;                    /* magnifier level, 1 is off */
     struct wlr_swapchain* zoom_swapchain; /* the frames, rendered unzoomed */

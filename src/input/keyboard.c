@@ -176,8 +176,8 @@ static void input_handle_key(struct wl_listener* listener, void* data)
      * that would have disarmed: the keystroke that opened the prompt counted
      * as handled and left a repeat armed, which would replay the binding and
      * toggle the prompt straight back off. */
-    if (runner_active) {
-        if (!lock_active && keysym_count > 0 && event->state == WL_KEYBOARD_KEY_STATE_PRESSED) {
+    if (!lock_active && runner_active) {
+        if (keysym_count > 0 && event->state == WL_KEYBOARD_KEY_STATE_PRESSED) {
             /* only the primary keysym: the codepoint belongs to the key, not
              * to each of the syms it can produce, so looping would type it
              * once per sym */
@@ -269,7 +269,8 @@ static void input_handle_modifiers(struct wl_listener* listener, void*)
 static int input_key_repeat(void* data)
 {
     KeyboardGroup* group = data;
-    if (!group->keysym_count || group->wlr_group->keyboard.repeat_info.rate <= 0)
+    /* a binding held down as the lock comes up must not keep running under it */
+    if (lock_active || !group->keysym_count || group->wlr_group->keyboard.repeat_info.rate <= 0)
         return 0;
     /* the repeat of the key that opened the picker would close it */
     if (bar_notification_picking())

@@ -269,11 +269,10 @@ void check_idle_inhibitor(struct wlr_surface* exclude)
 
         /* An unmapped surface owns no scene tree (client_handle_unmap() clears
          * surface->data), so it cannot be visible and must not keep the
-         * session awake. */
-        if (exclude != surface &&
-            (settings->misc.bypass_surface_visibility ||
-             (surface->mapped &&
-              (!tree || wlr_scene_node_coords(&tree->node, &unused_lx, &unused_ly))))) {
+         * session awake. Neither can one that never had a tree, like a cursor. */
+        if (exclude != surface && (settings->misc.bypass_surface_visibility ||
+                                   (surface->mapped && tree &&
+                                    wlr_scene_node_coords(&tree->node, &unused_lx, &unused_ly)))) {
             inhibited = 1;
             break;
         }

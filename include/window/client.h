@@ -212,7 +212,9 @@ static inline int client_from_surface(struct wlr_surface* surface,
                 xdg_surface = tmp_xdg_surface;
                 break;
             case WLR_XDG_SURFACE_ROLE_TOPLEVEL:
-                client = xdg_surface->data;
+                /* the role outlives the toplevel and its client */
+                if (!(client = xdg_surface->data))
+                    return -1;
                 type = client->type;
                 goto end;
             case WLR_XDG_SURFACE_ROLE_NONE:

@@ -74,8 +74,11 @@ The config lives in `~/.config/g0wm/config` ([all settings](docs/settings.md)).
 Start g0wm from your display manager or a TTY. The status text is read from stdin:
 
 ```sh
-your-status-script | g0wm
+exec sh -c 'your-status-script | g0wm'
 ```
+
+Keep the `exec` when starting from a TTY, so a crash logs you out instead of
+leaving an unlocked shell behind the lock screen.
 
 If the session doesn't show up or something won't start, see
 [Troubleshooting][Troubleshooting].

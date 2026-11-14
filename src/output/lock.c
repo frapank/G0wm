@@ -26,6 +26,7 @@ typedef struct {
     struct wl_listener new_surface;
     struct wl_listener unlock;
     struct wl_listener destroy;
+    int locked_sent;
 } SessionLock;
 
 /* function declarations */
@@ -39,6 +40,18 @@ int lock_active;
 static struct wlr_session_lock_v1* lock_current;
 
 /* function implementations */
+/* the grab of an open menu would keep the keyboard where it is */
+void lock_focus(struct wlr_surface* surface)
+{
+    wlr_seat_keyboard_end_grab(seat);
+    wlr_seat_pointer_end_grab(seat);
+    wlr_seat_touch_end_grab(seat);
+    if (surface)
+        client_notify_enter(surface, wlr_seat_get_keyboard(seat));
+    else
+        wlr_seat_keyboard_notify_clear_focus(seat);
+}
+
 static void lock_handle_new_surface(struct wl_listener* listener, void* data)
 {
     SessionLock* lock = wl_container_of(listener, lock, new_surface);
@@ -56,7 +69,7 @@ static void lock_handle_new_surface(struct wl_listener* listener, void* data)
            lock_handle_surface_destroy);
 
     if (monitor == selected_monitor)
-        client_notify_enter(lock_surface->surface, wlr_seat_get_keyboard(seat));
+        lock_focus(lock_surface->surface);
 }
 
 static void lock_destroy(SessionLock* lock, bool unlocked)
@@ -94,7 +107,7 @@ void lock_handle_surface_destroy(struct wl_listener* listener, void*)
     if (lock_active && lock_current && !wl_list_empty(&lock_current->surfaces)) {
         struct wlr_session_lock_surface_v1* focus_candidate =
             wl_container_of(lock_current->surfaces.next, focus_candidate, link);
-        client_notify_enter(focus_candidate->surface, wlr_seat_get_keyboard(seat));
+        lock_focus(focus_candidate->surface);
     } else if (!lock_active) {
         client_focus(client_top(selected_monitor), 1);
     } else {
@@ -108,6 +121,21 @@ static void lock_handle_destroy(struct wl_listener* listener, void*)
     lock_destroy(lock, false);
 }
 
+/* locked only once every output shows the lock, one that is off already does */
+void lock_check_outputs(void)
+{
+    Monitor* monitor;
+    SessionLock* lock = lock_current ? lock_current->data : nullptr;
+
+    if (!lock || lock->locked_sent)
+        return;
+    wl_list_for_each(monitor, &monitors, link)
+        if (monitor->wlr_output->enabled && !monitor->asleep && !monitor->lock_rendered)
+            return;
+    lock->locked_sent = 1;
+    wlr_session_lock_v1_send_locked(lock_current);
+}
+
 void lock_handle_new_lock(struct wl_listener*, void* data)
 {
     struct wlr_session_lock_v1* session_lock = data;
@@ -118,18 +146,30 @@ void lock_handle_new_lock(struct wl_listener*, void* data)
     }
     SessionLock* lock = session_lock->data = util_calloc(1, sizeof(*lock));
     client_focus(nullptr, 0);
+    /* client_focus() leaves it to a launcher or an X11 menu that holds it */
+    lock_focus(nullptr);
     /* an open menu would keep taking clicks under the lock surface */
     traypopup_dismiss();
 
     lock->scene = wlr_scene_tree_create(layers[SCENE_LAYER_LOCK]);
     lock_current = lock->lock = session_lock;
     lock_active = 1;
+    /* clicks and motion must stop reaching the window under the lock */
+    input_release_constraint();
+    input_reset_cursor();
+    input_motion(0, nullptr, 0, 0, 0, 0);
 
     LISTEN(&session_lock->events.new_surface, &lock->new_surface, lock_handle_new_surface);
     LISTEN(&session_lock->events.destroy, &lock->destroy, lock_handle_destroy);
     LISTEN(&session_lock->events.unlock, &lock->unlock, lock_handle_unlock);
 
-    wlr_session_lock_v1_send_locked(session_lock);
+    Monitor* monitor;
+    wl_list_for_each(monitor, &monitors, link) {
+        monitor->lock_rendered = 0;
+        if (monitor->wlr_output->enabled)
+            wlr_output_schedule_frame(monitor->wlr_output);
+    }
+    lock_check_outputs();
 }
 
 static void lock_handle_unlock(struct wl_listener* listener, void*)
