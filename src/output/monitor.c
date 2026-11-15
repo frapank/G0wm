@@ -297,47 +297,55 @@ static void monitor_apply_rules(Monitor* monitor, struct wlr_output_state* state
     struct wlr_output* wlr_output = monitor->wlr_output;
     struct wlr_output_mode* mode = nullptr;
 
+    /* the defaults of a rule, for an output no rule names */
+    const MonitorRule fallback = { .master_factor = 0.55f,
+                                   .master_count = 1,
+                                   .scale = 1,
+                                   .layout = settings->rules.layouts,
+                                   .x = -1,
+                                   .y = -1 };
+    const MonitorRule* rule = settings->rules.monitor_rules;
+    const MonitorRule* last = rule + settings->rules.monitor_rule_count;
+
     monitor->gaps_enabled = settings->windows.gaps;
-    for (const MonitorRule* rule = settings->rules.monitor_rules;
-         rule < settings->rules.monitor_rules + settings->rules.monitor_rule_count; rule++) {
-        if (rule->name && !strstr(wlr_output->name, rule->name))
-            continue;
-        monitor->geometry.x = rule->x;
-        monitor->geometry.y = rule->y;
-        monitor->master_factor = rule->master_factor;
-        monitor->master_count = rule->master_count;
-        monitor->layouts[0] = rule->layout;
-        monitor->layouts[1] = &settings->rules.layouts[settings->rules.layout_count > 1 &&
-                                                       rule->layout != &settings->rules.layouts[1]];
-        snprintf(monitor->layout_symbol, LENGTH(monitor->layout_symbol), "%s",
-                 monitor->layouts[monitor->selected_layout_index]->symbol);
-        for (size_t i = 0; i < LENGTH(monitor->tag_layouts); i++) {
-            monitor->tag_layouts[i][0] = monitor->layouts[0];
-            monitor->tag_layouts[i][1] = monitor->layouts[1];
-        }
-        wlr_output_state_set_scale(state, rule->scale);
-        wlr_output_state_set_transform(state, rule->transform);
-        /* Load (or reuse, if already cached) the xcursor theme at this
-         * monitor's scale so the cursor renders crisp and sized
-         * relative to cursor_size * scale, not just cursor_size. */
-        wlr_xcursor_manager_load(cursor_manager, rule->scale);
-        if (rule->width && rule->height) {
-            struct wlr_output_mode* candidate_mode;
-            int32_t wanted_refresh = rule->refresh_hz * 1000;
-            int32_t best_diff = INT32_MAX;
-            wl_list_for_each(candidate_mode, &wlr_output->modes, link) {
-                int32_t diff = abs(candidate_mode->refresh - wanted_refresh);
-                if (candidate_mode->width == rule->width &&
-                    candidate_mode->height == rule->height && diff < best_diff) {
-                    mode = candidate_mode;
-                    best_diff = diff;
-                }
+    while (rule < last && rule->name && !strstr(wlr_output->name, rule->name))
+        rule++;
+    if (rule == last)
+        rule = &fallback;
+    monitor->geometry.x = rule->x;
+    monitor->geometry.y = rule->y;
+    monitor->master_factor = rule->master_factor;
+    monitor->master_count = rule->master_count;
+    monitor->layouts[0] = rule->layout;
+    monitor->layouts[1] = &settings->rules.layouts[settings->rules.layout_count > 1 &&
+                                                   rule->layout != &settings->rules.layouts[1]];
+    snprintf(monitor->layout_symbol, LENGTH(monitor->layout_symbol), "%s",
+             monitor->layouts[monitor->selected_layout_index]->symbol);
+    for (size_t i = 0; i < LENGTH(monitor->tag_layouts); i++) {
+        monitor->tag_layouts[i][0] = monitor->layouts[0];
+        monitor->tag_layouts[i][1] = monitor->layouts[1];
+    }
+    wlr_output_state_set_scale(state, rule->scale);
+    wlr_output_state_set_transform(state, rule->transform);
+    /* Load (or reuse, if already cached) the xcursor theme at this
+     * monitor's scale so the cursor renders crisp and sized
+     * relative to cursor_size * scale, not just cursor_size. */
+    wlr_xcursor_manager_load(cursor_manager, rule->scale);
+    if (rule->width && rule->height) {
+        struct wlr_output_mode* candidate_mode;
+        int32_t wanted_refresh = rule->refresh_hz * 1000;
+        int32_t best_diff = INT32_MAX;
+        wl_list_for_each(candidate_mode, &wlr_output->modes, link) {
+            int32_t diff = abs(candidate_mode->refresh - wanted_refresh);
+            if (candidate_mode->width == rule->width && candidate_mode->height == rule->height &&
+                diff < best_diff) {
+                mode = candidate_mode;
+                best_diff = diff;
             }
-            if (!mode)
-                wlr_log(WLR_ERROR, "no %dx%d mode found on %s, using preferred mode", rule->width,
-                        rule->height, wlr_output->name);
         }
-        break;
+        if (!mode)
+            wlr_log(WLR_ERROR, "no %dx%d mode found on %s, using preferred mode", rule->width,
+                    rule->height, wlr_output->name);
     }
 
     /* The mode is a tuple of (width, height, refresh rate), and each
@@ -587,10 +595,19 @@ static void monitor_apply_or_test_config(struct wlr_output_configuration_v1* con
         Monitor* monitor = wlr_output->data;
         struct wlr_output_state state;
 
+        /* a scale this far out would only load fonts at absurd sizes */
+        if (config_head->state.enabled &&
+            (config_head->state.scale < 0.25f || config_head->state.scale > 10)) {
+            ok = 0;
+            continue;
+        }
+
         /* Ensure displays previously disabled by wlr-output-power-management-v1
-         * are properly handled*/
-        monitor->asleep = 0;
-        monitor->auto_vrr_state = 0;
+         * are properly handled. A test changes nothing. */
+        if (!test) {
+            monitor->asleep = 0;
+            monitor->auto_vrr_state = 0;
+        }
 
         wlr_output_state_init(&state);
         wlr_output_state_set_enabled(&state, config_head->state.enabled);

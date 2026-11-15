@@ -38,7 +38,9 @@ static void run_autostart(void)
         while (*++argv) {}
     }
 
-    autostart_pids = calloc(autostart_len, sizeof(pid_t));
+    if (!autostart_len)
+        return;
+    autostart_pids = util_calloc(autostart_len, sizeof(pid_t));
 
     size_t index = 0;
     for (const char* const* argv = settings->bindings.autostart; *argv; index++, argv++) {

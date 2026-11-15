@@ -200,13 +200,30 @@ static unsigned int settings_get_uint(const struct scfg_block* block,
     return settings_uint_value(settings_param_at(settings_find_directive(block, key), 0), fallback);
 }
 
+/* a number outside low..high is reported and the fallback kept */
+static double settings_get_bounded(const struct scfg_block* block,
+                                   const char* key,
+                                   double low,
+                                   double high,
+                                   double fallback)
+{
+    const struct scfg_directive* directive = settings_find_directive(block, key);
+    const double value = settings_get_number(block, key, fallback);
+
+    if (value >= low && value <= high)
+        return value;
+    settings_line = directive ? directive->lineno : settings_line;
+    settings_warn("%s must be between %g and %g", key, low, high);
+    return fallback;
+}
+
 static const char* settings_get_string(const struct scfg_block* block,
                                        const char* key,
                                        const char* fallback)
 {
-    const struct scfg_directive* directive = settings_find_directive(block, key);
+    const char* value = settings_param_at(settings_find_directive(block, key), 0);
 
-    return directive ? settings_param_at(directive, 0) : fallback;
+    return value ? value : fallback;
 }
 
 static int settings_get_enum(const struct scfg_block* block,
@@ -351,10 +368,12 @@ static void settings_apply_look(LoadedSettings* loaded, const struct scfg_block*
 
     if (!block)
         return;
-    const char** font_list = settings_collect_params(
-        loaded, settings_find_directive(block, "fonts"), 0, &loaded->values.look.font_count);
-    if (font_list) {
+    size_t font_count;
+    const char** font_list =
+        settings_collect_params(loaded, settings_find_directive(block, "fonts"), 0, &font_count);
+    if (font_list && font_count) {
         loaded->values.look.fonts = font_list;
+        loaded->values.look.font_count = font_count;
     }
     settings_apply_colors(loaded, settings_find_section(block, "colors"));
     settings_get_rgba(loaded->values.look.root_color, block, "rootcolor");
@@ -363,10 +382,12 @@ static void settings_apply_look(LoadedSettings* loaded, const struct scfg_block*
     loaded->values.look.wallpaper =
         settings_get_string(block, "wallpaper", loaded->values.look.wallpaper);
 #endif
-    const char** tag_list = settings_collect_params(loaded, settings_find_directive(block, "tags"),
-                                                    0, &loaded->values.look.tag_count);
-    if (tag_list) {
+    size_t tag_count;
+    const char** tag_list =
+        settings_collect_params(loaded, settings_find_directive(block, "tags"), 0, &tag_count);
+    if (tag_list && tag_count) {
         loaded->values.look.tags = (char**)tag_list;
+        loaded->values.look.tag_count = tag_count;
         if (loaded->values.look.tag_count > 31) { /* TAGMASK has to fit in a uint32_t */
             settings_warn("only the first 31 tags are used");
             loaded->values.look.tag_count = 31;
@@ -552,11 +573,11 @@ static void settings_apply_opacity(LoadedSettings* loaded, const struct scfg_blo
     loaded->values.opacity.enabled =
         settings_get_bool(block, "opacity_enabled", loaded->values.opacity.enabled);
     loaded->values.opacity.focus =
-        (float)settings_get_number(block, "opacity_focus", loaded->values.opacity.focus);
+        (float)settings_get_bounded(block, "opacity_focus", 0, 1, loaded->values.opacity.focus);
     loaded->values.opacity.unfocus =
-        (float)settings_get_number(block, "opacity_unfocus", loaded->values.opacity.unfocus);
-    loaded->values.opacity.decorations =
-        (float)settings_get_number(block, "opacity_deco", loaded->values.opacity.decorations);
+        (float)settings_get_bounded(block, "opacity_unfocus", 0, 1, loaded->values.opacity.unfocus);
+    loaded->values.opacity.decorations = (float)settings_get_bounded(
+        block, "opacity_deco", 0, 1, loaded->values.opacity.decorations);
 #ifdef INTEGRATED_BACKGROUND
     loaded->values.opacity.type = settings_get_enum(block, "opacity_type", settings_opacity_kinds,
                                                     loaded->values.opacity.type, "kind of opacity");
@@ -714,8 +735,9 @@ static void settings_apply_rules(LoadedSettings* loaded, const struct scfg_block
         rule->private_text = settings_get_string(rule_block, "privatetext", nullptr);
         rule->private_background = settings_get_hex(rule_block, "privatecolor", 0);
         rule->private_foreground = settings_get_hex(rule_block, "privatetextcolor", 0);
-        rule->focused_opacity = (float)settings_get_number(rule_block, "opacity_focus", 0);
-        rule->unfocused_opacity = (float)settings_get_number(rule_block, "opacity_unfocus", 0);
+        rule->focused_opacity = (float)settings_get_bounded(rule_block, "opacity_focus", 0, 1, 0);
+        rule->unfocused_opacity =
+            (float)settings_get_bounded(rule_block, "opacity_unfocus", 0, 1, 0);
         rule->monitor_index = settings_get_int(rule_block, "monitor", -1);
         count++;
     }
@@ -736,9 +758,15 @@ static void settings_apply_monitors(LoadedSettings* loaded, const struct scfg_bl
         const struct scfg_block* monitor_block = &block->directives[i].children;
         MonitorRule* rule = &parsed_rules[count];
         rule->name = settings_get_string(monitor_block, "name", nullptr);
-        rule->master_factor = (float)settings_get_number(monitor_block, "mfact", 0.55);
+        /* the range setmfact keeps it in */
+        rule->master_factor = (float)settings_get_bounded(monitor_block, "mfact", 0.1, 0.9, 0.55);
         rule->master_count = settings_get_int(monitor_block, "nmaster", 1);
         rule->scale = (float)settings_get_number(monitor_block, "scale", 1);
+        if (rule->scale <= 0) {
+            settings_line = block->directives[i].lineno;
+            settings_warn("monitor scale must be above 0");
+            rule->scale = 1;
+        }
         rule->layout = settings_layout_by_symbol(
             loaded, settings_get_string(monitor_block, "layout", nullptr));
         if (!rule->layout)
@@ -751,6 +779,12 @@ static void settings_apply_monitors(LoadedSettings* loaded, const struct scfg_bl
         rule->width = settings_get_int(monitor_block, "width", 0);
         rule->height = settings_get_int(monitor_block, "height", 0);
         rule->refresh_hz = settings_get_int(monitor_block, "refresh", 0);
+        /* in mHz it has to fit an int32_t */
+        if (rule->refresh_hz < 0 || rule->refresh_hz > INT32_MAX / 1000) {
+            settings_line = block->directives[i].lineno;
+            settings_warn("monitor refresh is out of range");
+            rule->refresh_hz = 0;
+        }
         count++;
     }
     loaded->values.rules.monitor_rules = parsed_rules;

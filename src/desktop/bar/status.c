@@ -269,9 +269,10 @@ int bar_handle_status_input(int fd, unsigned int event_mask, void*)
     /* in a line too long for input_buffer, up to its newline */
     static int skipping_long_line;
 
-    if (event_mask & WL_EVENT_ERROR)
-        util_die("status in event error");
-    if (event_mask & WL_EVENT_HANGUP) {
+    /* a broken status source only costs the status text, not the session */
+    if (event_mask & (WL_EVENT_ERROR | WL_EVENT_HANGUP)) {
+        if (event_mask & WL_EVENT_ERROR)
+            fprintf(stderr, "g0wm: status input failed, the status text stops\n");
         bar_status_stop();
         return 0;
     }
@@ -281,7 +282,9 @@ int bar_handle_status_input(int fd, unsigned int event_mask, void*)
     if (bytes_read < 0) {
         if (errno == EWOULDBLOCK || errno == EAGAIN || errno == EINTR)
             return 0;
-        util_die("read:");
+        perror("g0wm: status input");
+        bar_status_stop();
+        return 0;
     }
     /* EOF: the status process is gone. The fd stays readable forever, so
      * keeping the source alive would spin the event loop at full speed and
