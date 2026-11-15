@@ -594,10 +594,19 @@ static void monitor_apply_or_test_config(struct wlr_output_configuration_v1* con
         Monitor* monitor = wlr_output->data;
         struct wlr_output_state state;
 
+        /* a scale this far out would only load fonts at absurd sizes */
+        if (config_head->state.enabled &&
+            (config_head->state.scale < 0.25f || config_head->state.scale > 10)) {
+            ok = 0;
+            continue;
+        }
+
         /* Ensure displays previously disabled by wlr-output-power-management-v1
-         * are properly handled*/
-        monitor->asleep = 0;
-        monitor->auto_vrr_state = 0;
+         * are properly handled. A test changes nothing. */
+        if (!test) {
+            monitor->asleep = 0;
+            monitor->auto_vrr_state = 0;
+        }
 
         wlr_output_state_init(&state);
         wlr_output_state_set_enabled(&state, config_head->state.enabled);
