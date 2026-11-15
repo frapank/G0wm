@@ -9,6 +9,7 @@
  */
 
 #include <stdint.h>
+#include <stdio.h>
 #include <stdlib.h>
 #include <wayland-server-core.h>
 #include <wayland-server-protocol.h>
@@ -64,9 +65,13 @@ KeyboardGroup* input_create_keyboard_group(void)
     struct xkb_keymap* keymap;
     /* Prepare an XKB keymap and assign it to the keyboard group. */
     struct xkb_context* context = xkb_context_new(XKB_CONTEXT_NO_FLAGS);
+    /* a typo in xkb_rules, at startup or since a reload, falls back to the default */
     if (!(keymap = xkb_keymap_new_from_names(context, &settings->input.xkb_rules,
-                                             XKB_KEYMAP_COMPILE_NO_FLAGS)))
-        util_die("failed to compile keymap");
+                                             XKB_KEYMAP_COMPILE_NO_FLAGS))) {
+        fprintf(stderr, "g0wm: cannot compile the xkb_rules keymap, using the default one\n");
+        if (!(keymap = xkb_keymap_new_from_names(context, nullptr, XKB_KEYMAP_COMPILE_NO_FLAGS)))
+            util_die("failed to compile keymap");
+    }
 
     wlr_keyboard_set_keymap(&group->wlr_group->keyboard, keymap);
     xkb_keymap_unref(keymap);
