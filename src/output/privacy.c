@@ -63,6 +63,8 @@ typedef struct {
     struct wlr_screencopy_frame_v1* frame;
     struct wlr_buffer* buffer;
     struct wlr_box buffer_box;
+    struct wl_client* client;
+    int unmasked;
 } ScreencopyFrame;
 
 /* function declarations */
@@ -81,7 +83,7 @@ static void privacy_shield(struct wlr_ext_image_capture_source_v1* source,
                            struct wlr_output* output,
                            WindowClient* client);
 static void privacy_handle_shield_destroy(struct wl_listener* listener, void*);
-static void privacy_wipe(struct wlr_buffer* buffer);
+static int privacy_wipe(struct wlr_buffer* buffer);
 
 /* variables */
 static struct wl_array privacy_copies;
@@ -257,10 +259,22 @@ void privacy_after_commit(Monitor* monitor)
                 patches[i].buffer_box.x -= capture_frame->buffer_box.x;
                 patches[i].buffer_box.y -= capture_frame->buffer_box.y;
             }
-            if (!privacy_black_out(capture_frame->buffer, patches, privacy_mask_count))
-                privacy_wipe(capture_frame->buffer);
+            capture_frame->unmasked =
+                !privacy_black_out(capture_frame->buffer, patches, privacy_mask_count) &&
+                !privacy_wipe(capture_frame->buffer);
         }
         wlr_buffer_unlock(capture_frame->buffer);
+    }
+    /* the ready is still queued, so drop a client whose frame stayed unmasked */
+    ScreencopyFrame* other;
+    wl_array_for_each(capture_frame, &privacy_copies) {
+        struct wl_client* client = capture_frame->unmasked ? capture_frame->client : nullptr;
+        if (!client)
+            continue;
+        wl_array_for_each(other, &privacy_copies)
+            if (other->client == client)
+                other->unmasked = 0;
+        wl_client_destroy(client);
     }
     privacy_copies.size = 0;
 }
@@ -282,8 +296,10 @@ int privacy_before_commit(Monitor* monitor, struct wlr_output_state* state)
             return 0;
         }
         /* ready must not be flushed before privacy_after_commit() */
-        wl_client_flush(wl_resource_get_client(frame->resource));
-        *capture_frame = (ScreencopyFrame){ frame, wlr_buffer_lock(frame->buffer), frame->box };
+        struct wl_client* client = wl_resource_get_client(frame->resource);
+        wl_client_flush(client);
+        *capture_frame =
+            (ScreencopyFrame){ frame, wlr_buffer_lock(frame->buffer), frame->box, client, 0 };
     }
     return 1;
 }
@@ -595,7 +611,7 @@ void privacy_toggle(const ActionArg*)
     bar_draw_all();
 }
 
-static void privacy_wipe(struct wlr_buffer* buffer)
+static int privacy_wipe(struct wlr_buffer* buffer)
 {
     uint32_t format;
     size_t stride;
@@ -605,16 +621,16 @@ static void privacy_wipe(struct wlr_buffer* buffer)
                                          &stride)) {
         memset(data, 0, stride * (size_t)buffer->height);
         wlr_buffer_end_data_ptr_access(buffer);
-        return;
+        return 1;
     }
     struct wlr_render_pass* pass;
-    if (!(pass = wlr_renderer_begin_buffer_pass(renderer, buffer, nullptr))) {
-        wlr_log(WLR_ERROR, "privacy: cannot black out a screencopy frame");
-        return;
+    if ((pass = wlr_renderer_begin_buffer_pass(renderer, buffer, nullptr))) {
+        wlr_render_pass_add_rect(
+            pass, &(struct wlr_render_rect_options){ .box = { 0, 0, buffer->width, buffer->height },
+                                                     .color = { 0, 0, 0, 1 } });
+        if (wlr_render_pass_submit(pass))
+            return 1;
     }
-    wlr_render_pass_add_rect(
-        pass, &(struct wlr_render_rect_options){ .box = { 0, 0, buffer->width, buffer->height },
-                                                 .color = { 0, 0, 0, 1 } });
-    if (!wlr_render_pass_submit(pass))
-        wlr_log(WLR_ERROR, "privacy: cannot black out a screencopy frame");
+    wlr_log(WLR_ERROR, "privacy: cannot black out a screencopy frame, dropping its client");
+    return 0;
 }
