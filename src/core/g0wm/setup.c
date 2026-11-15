@@ -31,7 +31,6 @@
 #include <wlr/types/wlr_data_control_v1.h>
 #include <wlr/types/wlr_data_device.h>
 #include <wlr/types/wlr_drm.h>
-#include <wlr/types/wlr_export_dmabuf_v1.h>
 #include <wlr/types/wlr_ext_data_control_v1.h>
 #include <wlr/types/wlr_ext_foreign_toplevel_list_v1.h>
 #include <wlr/types/wlr_ext_image_capture_source_v1.h>
@@ -434,7 +433,6 @@ static bool filter_global(const struct wl_client* client, const struct wl_global
         "ext_session_lock_manager_v1",
         "wp_security_context_manager_v1",
         "zwlr_data_control_manager_v1",
-        "zwlr_export_dmabuf_manager_v1",
         "zwlr_foreign_toplevel_manager_v1",
         "zwlr_gamma_control_manager_v1",
         "zwlr_layer_shell_v1",
@@ -580,7 +578,6 @@ void setup(void)
     compositor = wlr_compositor_create(display, 6, renderer);
     wlr_subcompositor_create(display);
     wlr_data_device_manager_create(display);
-    wlr_export_dmabuf_manager_v1_create(display);
     screencopy_manager = wlr_screencopy_manager_v1_create(display);
     wl_signal_add(&wlr_ext_image_copy_capture_manager_v1_create(display, 1)->events.new_session,
                   &new_capture_session);
