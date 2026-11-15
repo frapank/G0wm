@@ -48,6 +48,8 @@ void input_handle_new_pointer_constraint(struct wl_listener*, void* data);
 void input_handle_frame(struct wl_listener*, void*);
 void input_cursor_moved(void);
 void input_handle_motion_absolute(struct wl_listener*, void* data);
+void input_release_constraint(void);
+void input_reset_cursor(void);
 void input_motion(uint32_t time,
                   struct wlr_input_device* device,
                   double delta_x,

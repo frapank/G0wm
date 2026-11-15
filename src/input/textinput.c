@@ -325,10 +325,11 @@ static void textinput_handle_destroy(struct wl_listener* listener, void*)
 }
 
 /* text inputs follow the keyboard focus while an input method is connected,
- * and only enter a surface of their own client */
+ * and only enter a surface of their own client. The lock screen gets none, the
+ * input method would read and type into the password field. */
 static void textinput_sync(struct wlr_surface* focus)
 {
-    struct wlr_surface* surface = textinput_im ? focus : nullptr;
+    struct wlr_surface* surface = textinput_im && !lock_active ? focus : nullptr;
 
     if (textinput_served && (!textinput_served->text_input->focused_surface ||
                              textinput_served->text_input->focused_surface != surface))

@@ -188,6 +188,7 @@ static void monitor_handle_destroy(struct wl_listener* listener, void*)
     wlr_scene_node_destroy(&monitor->bar_blur_scene_buffer->node);
 #endif
     free(monitor);
+    lock_check_outputs();
 }
 
 static void monitor_close(Monitor* monitor)
@@ -649,6 +650,7 @@ static void monitor_apply_or_test_config(struct wlr_output_configuration_v1* con
 
     /* https://codeberg.org/dwl/dwl/issues/577 */
     monitor_update_layout(nullptr, nullptr);
+    lock_check_outputs();
 }
 
 void monitor_handle_config_test(struct wl_listener*, void* data)
@@ -679,6 +681,7 @@ void monitor_handle_power_set_mode(struct wl_listener*, void* data)
     if (monitor->wlr_output->enabled)
         wlr_output_schedule_frame(monitor->wlr_output);
     monitor_update_layout(nullptr, nullptr);
+    lock_check_outputs();
 }
 
 static void monitor_handle_frame(struct wl_listener* listener, void*)
@@ -706,8 +709,8 @@ static void monitor_handle_frame(struct wl_listener* listener, void*)
         opacity_blur_client(client);
 #endif
         /* a tab below the top one is not drawn and gets no frame callbacks,
-         * so it never acks */
-        if (client->pending_resize_serial && !client->is_floating &&
+         * so it never acks. The lock screen never waits for a client */
+        if (!lock_active && client->pending_resize_serial && !client->is_floating &&
             client->scene_surface->node.enabled && !client_is_stopped(client))
             goto skip;
     }
@@ -723,9 +726,14 @@ static void monitor_handle_frame(struct wl_listener* listener, void*)
 
     if (!privacy_before_commit(monitor, &pending))
         goto skip;
-    if (wlr_output_commit_state(monitor->wlr_output, &pending) &&
-        (pending.committed & WLR_OUTPUT_STATE_ADAPTIVE_SYNC_ENABLED))
-        monitor->auto_vrr_state = pending.adaptive_sync_enabled;
+    if (wlr_output_commit_state(monitor->wlr_output, &pending)) {
+        if (pending.committed & WLR_OUTPUT_STATE_ADAPTIVE_SYNC_ENABLED)
+            monitor->auto_vrr_state = pending.adaptive_sync_enabled;
+        if (lock_active && !monitor->lock_rendered) {
+            monitor->lock_rendered = 1;
+            lock_check_outputs();
+        }
+    }
     privacy_after_commit(monitor);
 
 skip:
@@ -870,8 +878,7 @@ void monitor_update_layout(struct wl_listener*, void*)
         }
         client_focus(client_top(selected_monitor), 1);
         if (selected_monitor->lock_surface) {
-            client_notify_enter(selected_monitor->lock_surface->surface,
-                                wlr_seat_get_keyboard(seat));
+            lock_focus(selected_monitor->lock_surface->surface);
             client_activate_surface(selected_monitor->lock_surface->surface, 1);
         }
     }

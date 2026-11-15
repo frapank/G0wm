@@ -310,6 +310,15 @@ static void input_cursor_warp_to_hint(void)
     }
 }
 
+/* the lock takes the pointer back from a game holding it */
+void input_release_constraint(void)
+{
+    if (!input_active_constraint)
+        return;
+    wlr_pointer_constraint_v1_send_deactivated(input_active_constraint);
+    input_active_constraint = nullptr;
+}
+
 static void input_handle_pointer_constraint_destroy(struct wl_listener* listener, void*)
 {
     PointerConstraint* pointer_constraint = wl_container_of(listener, pointer_constraint, destroy);
@@ -426,8 +435,9 @@ void input_motion(uint32_t time,
             delta_x_unaccel, delta_y_unaccel);
 
         struct wlr_pointer_constraint_v1* constraint;
-        wl_list_for_each(constraint, &pointer_constraints->constraints, link)
-            input_cursor_constrain(constraint);
+        if (!lock_active)
+            wl_list_for_each(constraint, &pointer_constraints->constraints, link)
+                input_cursor_constrain(constraint);
 
         if (input_active_constraint && input_cursor_mode != CURSOR_MODE_RESIZE &&
             input_cursor_mode != CURSOR_MODE_MOVE) {
@@ -622,6 +632,18 @@ static void input_handle_last_cursor_destroy(struct wl_listener*, void*)
     wl_list_init(&input_last_cursor.surface_destroy.link);
 }
 
+/* drop the cursor a client set, it must not stay drawn over the lock */
+void input_reset_cursor(void)
+{
+    input_last_cursor.shape = 0;
+    input_last_cursor.surface = nullptr;
+    input_last_cursor.has_client_cursor = false;
+    wl_list_remove(&input_last_cursor.surface_destroy.link);
+    wl_list_init(&input_last_cursor.surface_destroy.link);
+    if (!input_cursor_hidden)
+        wlr_cursor_set_xcursor(cursor, cursor_manager, "default");
+}
+
 void input_handle_request_cursor(struct wl_listener*, void* data)
 {
     /* This event is raised by the seat when a client provides a cursor image */
@@ -803,8 +825,10 @@ void input_node_at(double x,
     struct wlr_scene_surface* scene_surface = nullptr;
     WindowClient* client = nullptr;
     LayerSurface* layer_surface = nullptr;
+    /* the lock hides the rest, where it has no surface nothing is under the pointer */
+    const int lowest = lock_active ? SCENE_LAYER_LOCK : 0;
 
-    for (int layer = SCENE_LAYER_COUNT - 1; !surface && layer >= 0; layer--) {
+    for (int layer = SCENE_LAYER_COUNT - 1; !surface && layer >= lowest; layer--) {
         struct wlr_scene_node* node = wlr_scene_node_at(&layers[layer]->node, x, y, node_x, node_y);
         if (!node)
             continue;

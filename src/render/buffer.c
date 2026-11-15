@@ -17,7 +17,6 @@
 #include <wlr/types/wlr_buffer.h>
 
 #include "core/g0wm.h"
-#include "core/util.h"
 #include "render/buffer.h"
 
 /* function declarations */
@@ -84,9 +83,9 @@ RenderBuffer* buffer_get(RenderBuffer** pool, size_t pool_length, int width, int
         size_t byte_size;
         if (ckd_mul(&byte_size, (size_t)width, (size_t)height) ||
             ckd_mul(&byte_size, byte_size, 4) ||
-            ckd_add(&byte_size, byte_size, sizeof(RenderBuffer)))
+            ckd_add(&byte_size, byte_size, sizeof(RenderBuffer)) ||
+            !(buffer = calloc(1, byte_size)))
             return nullptr;
-        buffer = util_calloc(1, byte_size);
         buffer->image = drwl_image_create(nullptr, width, height, buffer->pixels);
         wlr_buffer_init(&buffer->base, &buffer_impl, width, height);
         pool[i] = buffer;

@@ -41,11 +41,19 @@
 
 constexpr int MAPWAIT_MS = 200; /* longest a new client may take to fit its tile */
 
+/* a popup is placed on its first commit, or forgotten if it goes first */
+typedef struct {
+    struct wl_listener commit;
+    struct wl_listener destroy;
+} PopupWait;
+
 /* function declarations */
 static void client_apply_bounds(WindowClient* client, struct wlr_box* bbox);
 static void client_apply_rules(WindowClient* client);
 static void client_handle_commit(struct wl_listener* listener, void*);
 static void client_handle_popup_commit(struct wl_listener* listener, void* data);
+static void client_handle_popup_destroy(struct wl_listener* listener, void*);
+static void client_popup_forget(PopupWait* wait);
 static void client_handle_decoration_destroy(struct wl_listener* listener, void*);
 static void client_handle_request_maximize(struct wl_listener* listener, void*);
 static int client_map_wait_done(void* data);
@@ -66,6 +74,11 @@ void client_activate(WindowClient* client)
 
 static void client_apply_bounds(WindowClient* client, struct wlr_box* bbox)
 {
+    /* the title bar and the masks are drawn at this size */
+    if (screen_geometry.width > 0 && screen_geometry.height > 0) {
+        client->geometry.width = MIN(client->geometry.width, screen_geometry.width);
+        client->geometry.height = MIN(client->geometry.height, screen_geometry.height);
+    }
     /* set minimum possible */
     client->geometry.width = MAX(1 + 2 * (int)client->border_width, client->geometry.width);
     client->geometry.height = MAX(1 + 2 * (int)client->border_width, client->geometry.height);
@@ -167,6 +180,7 @@ static void client_handle_commit(struct wl_listener* listener, void*)
 
 static void client_handle_popup_commit(struct wl_listener* listener, void* data)
 {
+    PopupWait* wait = wl_container_of(listener, wait, commit);
     struct wlr_surface* surface = data;
     struct wlr_xdg_popup* popup = wlr_xdg_popup_try_from_wlr_surface(surface);
     LayerSurface* layer_surface = nullptr;
@@ -175,6 +189,8 @@ static void client_handle_popup_commit(struct wl_listener* listener, void* data)
 
     if (!popup->base->initial_commit)
         return;
+    /* the listeners must be gone by the time the surface is */
+    client_popup_forget(wait);
 
     type = client_from_surface(popup->base->surface, &client, &layer_surface);
     if (!popup->parent || type < 0)
@@ -195,8 +211,19 @@ static void client_handle_popup_commit(struct wl_listener* listener, void* data)
     box.x -= (type == SURFACE_TYPE_LAYER_SHELL ? layer_surface->scene->node.x : client->geometry.x);
     box.y -= (type == SURFACE_TYPE_LAYER_SHELL ? layer_surface->scene->node.y : client->geometry.y);
     wlr_xdg_popup_unconstrain_from_box(popup, &box);
-    wl_list_remove(&listener->link);
-    free(listener);
+}
+
+static void client_handle_popup_destroy(struct wl_listener* listener, void*)
+{
+    PopupWait* wait = wl_container_of(listener, wait, destroy);
+    client_popup_forget(wait);
+}
+
+static void client_popup_forget(PopupWait* wait)
+{
+    wl_list_remove(&wait->commit.link);
+    wl_list_remove(&wait->destroy.link);
+    free(wait);
 }
 
 void client_handle_new_decoration(struct wl_listener*, void* data)
@@ -242,7 +269,9 @@ void client_handle_new_popup(struct wl_listener*, void* data)
     /* This event is raised when a client (either xdg-shell or layer-shell)
      * creates a new popup. */
     struct wlr_xdg_popup* popup = data;
-    LISTEN_STATIC(&popup->base->surface->events.commit, client_handle_popup_commit);
+    PopupWait* wait = util_calloc(1, sizeof(*wait));
+    LISTEN(&popup->base->surface->events.commit, &wait->commit, client_handle_popup_commit);
+    LISTEN(&popup->events.destroy, &wait->destroy, client_handle_popup_destroy);
 }
 
 static void client_handle_decoration_destroy(struct wl_listener* listener, void*)
@@ -251,6 +280,7 @@ static void client_handle_decoration_destroy(struct wl_listener* listener, void*
 
     wl_list_remove(&client->destroy_decoration.link);
     wl_list_remove(&client->set_decoration_mode.link);
+    client->decoration = nullptr;
 }
 
 void client_handle_destroy(struct wl_listener* listener, void*)
@@ -275,6 +305,11 @@ void client_handle_destroy(struct wl_listener* listener, void*)
         wl_list_remove(&client->map.link);
         wl_list_remove(&client->unmap.link);
         wl_list_remove(&client->maximize.link);
+        client->surface.xdg->data = nullptr;
+        if (client->decoration) {
+            wl_list_remove(&client->destroy_decoration.link);
+            wl_list_remove(&client->set_decoration_mode.link);
+        }
     }
     free(client->private_text);
     free(client->last_title);
