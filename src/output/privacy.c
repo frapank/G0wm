@@ -7,6 +7,7 @@
 #include <libdrm/drm_fourcc.h>
 #include <math.h>
 #include <pixman.h>
+#include <stdckdint.h>
 #include <stddef.h>
 #include <stdint.h>
 #include <stdio.h>
@@ -15,6 +16,7 @@
 #include <time.h>
 #include <wayland-server-core.h>
 #include <wayland-server-protocol.h>
+#include <wlr/interfaces/wlr_buffer.h>
 #include <wlr/interfaces/wlr_ext_image_capture_source_v1.h>
 #include <wlr/render/pass.h>
 #include <wlr/render/wlr_texture.h>
@@ -64,11 +66,21 @@ typedef struct {
     struct wlr_buffer* buffer;
     struct wlr_box buffer_box;
     struct wl_client* client;
+    struct wlr_buffer* staging;
     int unmasked;
 } ScreencopyFrame;
 
+/* a capture is masked in here before the client's buffer gets it */
+typedef struct {
+    struct wlr_buffer base;
+    uint32_t format;
+    size_t stride;
+    uint8_t data[];
+} PrivacyStaging;
+
 /* function declarations */
 static int privacy_black_out(struct wlr_buffer* buffer, PrivacyMask* patches, int patch_count);
+static int privacy_copy(struct wlr_buffer* dst, struct wlr_buffer* src);
 static void privacy_copy_frame(struct wlr_ext_image_capture_source_v1* source,
                                struct wlr_ext_image_copy_capture_frame_v1* frame,
                                struct wlr_ext_image_capture_source_v1_frame_event* event);
@@ -83,6 +95,14 @@ static void privacy_shield(struct wlr_ext_image_capture_source_v1* source,
                            struct wlr_output* output,
                            WindowClient* client);
 static void privacy_handle_shield_destroy(struct wl_listener* listener, void*);
+static struct wlr_buffer* privacy_staging(struct wlr_buffer* like);
+static bool privacy_staging_access(struct wlr_buffer* buffer,
+                                   uint32_t flags,
+                                   void** data,
+                                   uint32_t* format,
+                                   size_t* stride);
+static void privacy_staging_destroy(struct wlr_buffer* buffer);
+static void privacy_staging_end(struct wlr_buffer* buffer);
 static int privacy_wipe(struct wlr_buffer* buffer);
 
 /* variables */
@@ -93,6 +113,11 @@ static RasterIcon* privacy_icon;
 static int privacy_icon_size = -1;
 static Fnt* privacy_font;
 static float privacy_font_scale;
+static const struct wlr_buffer_impl privacy_staging_impl = {
+    .destroy = privacy_staging_destroy,
+    .begin_data_ptr_access = privacy_staging_access,
+    .end_data_ptr_access = privacy_staging_end,
+};
 
 /* function implementations */
 
@@ -169,6 +194,34 @@ static int privacy_black_out(struct wlr_buffer* buffer, PrivacyMask* patches, in
     return submitted;
 }
 
+/* src into dst, of the same size */
+static int privacy_copy(struct wlr_buffer* dst, struct wlr_buffer* src)
+{
+    struct wlr_texture* texture = wlr_texture_from_buffer(renderer, src);
+    struct wlr_render_pass* pass;
+    uint32_t format;
+    size_t stride;
+    void* data;
+    int copied = 0;
+
+    if (!texture)
+        return 0;
+    if (wlr_buffer_begin_data_ptr_access(dst, WLR_BUFFER_DATA_PTR_ACCESS_WRITE, &data, &format,
+                                         &stride)) {
+        copied = wlr_texture_read_pixels(
+            texture, &(struct wlr_texture_read_pixels_options){
+                         .data = data, .format = format, .stride = (uint32_t)stride });
+        wlr_buffer_end_data_ptr_access(dst);
+    } else if ((pass = wlr_renderer_begin_buffer_pass(renderer, dst, nullptr))) {
+        wlr_render_pass_add_texture(
+            pass, &(struct wlr_render_texture_options){ .texture = texture,
+                                                        .blend_mode = WLR_RENDER_BLEND_MODE_NONE });
+        copied = wlr_render_pass_submit(pass);
+    }
+    wlr_texture_destroy(texture);
+    return copied;
+}
+
 /* fail the frame rather than leak it */
 static void privacy_copy_frame(struct wlr_ext_image_capture_source_v1* source,
                                struct wlr_ext_image_copy_capture_frame_v1* frame,
@@ -202,12 +255,20 @@ static void privacy_copy_frame(struct wlr_ext_image_capture_source_v1* source,
         shield->original_interface->copy_frame(source, frame, event);
         return;
     }
-    if (!monitor->capture_buffer ||
-        !wlr_ext_image_copy_capture_frame_v1_copy_buffer(frame, monitor->capture_buffer,
-                                                         renderer) ||
-        !privacy_black_out(frame->buffer, patches, patch_count))
+    struct wlr_buffer* staging;
+    if (!monitor->capture_buffer || !(staging = privacy_staging(frame->buffer)))
         goto fail;
-    wlr_ext_image_copy_capture_frame_v1_ready(frame, shield->output->transform, &now);
+    /* the client's buffer only ever gets the masked frame */
+    if (!privacy_copy(staging, monitor->capture_buffer) ||
+        !privacy_black_out(staging, patches, patch_count)) {
+        wlr_buffer_drop(staging);
+        goto fail;
+    }
+    const int copied = wlr_ext_image_copy_capture_frame_v1_copy_buffer(frame, staging, renderer);
+    wlr_buffer_drop(staging);
+    /* a failed copy has already failed and freed the frame */
+    if (copied)
+        wlr_ext_image_copy_capture_frame_v1_ready(frame, shield->output->transform, &now);
     return;
 
 fail:
@@ -253,16 +314,30 @@ void privacy_after_commit(Monitor* monitor)
             if (frame == capture_frame->frame)
                 frame_gone = 0;
         }
+        struct wlr_buffer* staging = capture_frame->staging;
+        if (!frame_gone && staging) {
+            /* not copied this time, the frame gets its own buffer back */
+            capture_frame->frame->buffer = capture_frame->buffer;
+            wlr_buffer_unlock(staging);
+            wlr_buffer_drop(staging);
+            continue;
+        }
         if (frame_gone) {
             for (int i = 0; i < privacy_mask_count; i++) {
                 patches[i] = privacy_masks[i];
                 patches[i].buffer_box.x -= capture_frame->buffer_box.x;
                 patches[i].buffer_box.y -= capture_frame->buffer_box.y;
             }
-            capture_frame->unmasked =
-                !privacy_black_out(capture_frame->buffer, patches, privacy_mask_count) &&
-                !privacy_wipe(capture_frame->buffer);
+            if (staging &&
+                (privacy_black_out(staging, patches, privacy_mask_count) || privacy_wipe(staging)))
+                privacy_copy(capture_frame->buffer, staging);
+            else if (!staging)
+                capture_frame->unmasked =
+                    !privacy_black_out(capture_frame->buffer, patches, privacy_mask_count) &&
+                    !privacy_wipe(capture_frame->buffer);
         }
+        if (staging)
+            wlr_buffer_drop(staging);
         wlr_buffer_unlock(capture_frame->buffer);
     }
     /* the ready is still queued, so drop a client whose frame stayed unmasked */
@@ -271,6 +346,7 @@ void privacy_after_commit(Monitor* monitor)
         struct wl_client* client = capture_frame->unmasked ? capture_frame->client : nullptr;
         if (!client)
             continue;
+        wlr_log(WLR_ERROR, "privacy: cannot black out a screencopy frame, dropping its client");
         wl_array_for_each(other, &privacy_copies)
             if (other->client == client)
                 other->unmasked = 0;
@@ -295,11 +371,17 @@ int privacy_before_commit(Monitor* monitor, struct wlr_output_state* state)
             privacy_after_commit(monitor);
             return 0;
         }
-        /* ready must not be flushed before privacy_after_commit() */
         struct wl_client* client = wl_resource_get_client(frame->resource);
+        /* wlroots copies into a buffer of ours, the client's gets it masked */
+        struct wlr_buffer* staging = privacy_staging(frame->buffer);
+        *capture_frame = (ScreencopyFrame){ frame, frame->buffer, frame->box, client, staging, 0 };
+        if (staging) {
+            frame->buffer = wlr_buffer_lock(staging);
+            continue;
+        }
+        /* ready must not be flushed before privacy_after_commit() */
         wl_client_flush(client);
-        *capture_frame =
-            (ScreencopyFrame){ frame, wlr_buffer_lock(frame->buffer), frame->box, client, 0 };
+        wlr_buffer_lock(frame->buffer);
     }
     return 1;
 }
@@ -631,6 +713,53 @@ static int privacy_wipe(struct wlr_buffer* buffer)
         if (wlr_render_pass_submit(pass))
             return 1;
     }
-    wlr_log(WLR_ERROR, "privacy: cannot black out a screencopy frame, dropping its client");
     return 0;
 }
+
+/* a buffer like the client's, for a capture to be masked in first */
+static struct wlr_buffer* privacy_staging(struct wlr_buffer* like)
+{
+    struct wlr_dmabuf_attributes dmabuf;
+    struct wlr_shm_attributes shm;
+    PrivacyStaging* staging;
+    size_t size;
+
+    if (wlr_buffer_get_dmabuf(like, &dmabuf)) {
+        uint64_t modifier = DRM_FORMAT_MOD_INVALID;
+        return wlr_allocator_create_buffer(
+            allocator, like->width, like->height,
+            &(struct wlr_drm_format){
+                .format = dmabuf.format, .len = 1, .capacity = 1, .modifiers = &modifier });
+    }
+    if (!wlr_buffer_get_shm(like, &shm) || shm.stride <= 0 ||
+        ckd_mul(&size, (size_t)shm.stride, (size_t)like->height) ||
+        ckd_add(&size, size, sizeof(*staging)) || !(staging = calloc(1, size)))
+        return nullptr;
+    wlr_buffer_init(&staging->base, &privacy_staging_impl, like->width, like->height);
+    staging->format = shm.format;
+    staging->stride = (size_t)shm.stride;
+    return &staging->base;
+}
+
+static bool privacy_staging_access(struct wlr_buffer* buffer,
+                                   uint32_t,
+                                   void** data,
+                                   uint32_t* format,
+                                   size_t* stride)
+{
+    PrivacyStaging* staging = wl_container_of(buffer, staging, base);
+
+    *data = staging->data;
+    *format = staging->format;
+    *stride = staging->stride;
+    return true;
+}
+
+static void privacy_staging_destroy(struct wlr_buffer* buffer)
+{
+    PrivacyStaging* staging = wl_container_of(buffer, staging, base);
+
+    free(staging);
+}
+
+static void privacy_staging_end(struct wlr_buffer*) {}
