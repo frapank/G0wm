@@ -802,6 +802,7 @@ void privacy_toggle(const ActionArg*)
     if (!selected_client)
         return;
     selected_client->is_private = !selected_client->is_private;
+    selected_client->private_explicit = 1;
     toplevel_update(selected_client);
     privacy_damage();
     bar_draw_all();

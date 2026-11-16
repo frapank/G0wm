@@ -486,8 +486,10 @@ static void settings_reload(const ActionArg*)
         client->focused_opacity = settings->opacity.focus;
         if (!client->is_fullscreen)
             client->border_width = client_is_unmanaged(client) ? 0 : corner_border_width();
-        if (settings->windows.always_private != was_private)
+        if (settings->windows.always_private != was_private && !client->private_explicit)
             client->is_private = settings->windows.always_private;
+        /* a rule added in the reload can make an open window private */
+        client_apply_private_rules(client);
         toplevel_update(client);
     }
     privacy_reload();

@@ -104,6 +104,8 @@ struct WindowClient {
     unsigned int border_width;
     uint32_t tags;
     int is_floating, is_urgent, is_fullscreen, is_private;
+    /* set by a rule or by hand, a change of always_private leaves it alone */
+    int private_explicit;
     char* private_text;
     uint32_t private_background, private_foreground;
     float opacity;                          /* the one in effect, focused or not */
@@ -121,6 +123,7 @@ struct WindowClient {
 };
 
 void client_activate(WindowClient* client);
+void client_apply_private_rules(WindowClient* client);
 void client_handle_new_decoration(struct wl_listener*, void* data);
 void client_handle_new_toplevel(struct wl_listener*, void* data);
 void client_handle_new_popup(struct wl_listener*, void* data);

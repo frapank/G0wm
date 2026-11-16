@@ -98,8 +98,10 @@ static void client_apply_rules(WindowClient* client)
         if ((!rule->title || strstr(title, rule->title)) &&
             (!rule->app_id || strstr(app_id, rule->app_id))) {
             client->is_floating = rule->is_floating;
-            if (rule->is_private >= 0)
+            if (rule->is_private >= 0) {
                 client->is_private = rule->is_private;
+                client->private_explicit = 1;
+            }
             if (rule->private_text) {
                 char* text = strdup(rule->private_text);
                 if (!text)
@@ -130,7 +132,7 @@ static void client_apply_rules(WindowClient* client)
 }
 
 /* a title taken after the map can still make a window private, never public */
-static void client_apply_private_rules(WindowClient* client)
+void client_apply_private_rules(WindowClient* client)
 {
     const char* app_id = client_get_app_id(client);
     const char* title = client_get_title(client);
@@ -142,7 +144,7 @@ static void client_apply_private_rules(WindowClient* client)
         if (rule->is_private != 1 || (rule->title && !strstr(title, rule->title)) ||
             (rule->app_id && !strstr(app_id, rule->app_id)))
             continue;
-        client->is_private = 1;
+        client->is_private = client->private_explicit = 1;
         if (rule->private_text) {
             char* text = strdup(rule->private_text);
             if (!text)
