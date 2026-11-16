@@ -157,8 +157,10 @@ void client_apply_private_rules(WindowClient* client)
         if (rule->private_foreground)
             client->private_foreground = rule->private_foreground;
     }
-    if (client->is_private)
+    if (client->is_private) {
+        privacy_follow(client);
         privacy_damage();
+    }
 }
 
 static void client_handle_commit(struct wl_listener* listener, void*)
@@ -525,6 +527,8 @@ void client_handle_map(struct wl_listener* listener, void*)
      * If there is no parent, apply rules */
     if ((parent = client_get_parent(client))) {
         client->is_floating = 1;
+        if (parent->is_private)
+            client->is_private = client->private_explicit = 1;
         client_set_monitor(client, parent->monitor, parent->tags);
     } else {
         client_apply_rules(client);

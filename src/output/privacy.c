@@ -795,6 +795,21 @@ static int privacy_to_buffer(Monitor* monitor, struct wlr_box box, struct wlr_bo
     return -1;
 }
 
+/* dialogs show what their window holds, so they follow it */
+void privacy_follow(WindowClient* parent)
+{
+    WindowClient* client;
+
+    wl_list_for_each(client, &clients, link) {
+        if (client_get_parent(client) != parent || client->is_private == parent->is_private)
+            continue;
+        client->is_private = parent->is_private;
+        client->private_explicit = 1;
+        toplevel_update(client);
+        privacy_follow(client);
+    }
+}
+
 void privacy_toggle(const ActionArg*)
 {
     WindowClient* selected_client = client_top(selected_monitor);
@@ -804,6 +819,7 @@ void privacy_toggle(const ActionArg*)
     selected_client->is_private = !selected_client->is_private;
     selected_client->private_explicit = 1;
     toplevel_update(selected_client);
+    privacy_follow(selected_client);
     privacy_damage();
     bar_draw_all();
 }
