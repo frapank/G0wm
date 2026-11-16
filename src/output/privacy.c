@@ -678,10 +678,10 @@ static int privacy_private_boxes(Monitor* monitor, PrivacyMask* masks)
     }
 
     RenderBuffer* share_buffer = monitor->capture_buffer_pool[0];
-    if (monitor->capture_width && share_buffer &&
-        share_buffer->base.width == monitor->capture_width &&
-        share_buffer->base.height == monitor->bar_metrics.height_px &&
-        monitor->bar_scene_buffer->node.enabled) {
+    if (share_buffer && (share_buffer->base.width != monitor->capture_width ||
+                         share_buffer->base.height != monitor->bar_metrics.height_px))
+        share_buffer = nullptr;
+    if (monitor->capture_width && monitor->bar_scene_buffer->node.enabled) {
         if (patch_count == MAXBOXES)
             goto full;
         const double scale =

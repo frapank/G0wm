@@ -702,28 +702,31 @@ static void bar_draw_contents(Monitor* monitor, bool draw_titles)
             RenderBuffer* share_buf;
             if (notification) {
                 bar_draw_notification(monitor, cur_x, free_w, notification, history_index, false);
-                if (bar_notification_private() &&
-                    (share_buf = bar_share_buffer(monitor->capture_buffer_pool, free_w,
-                                                  monitor->bar_metrics.height_px))) {
-                    drwl_setimage(monitor->draw_context, share_buf->image);
-                    bar_draw_shared_notification(monitor, focused, notification, history_index,
-                                                 free_w, is_selected);
-                    drwl_setimage(monitor->draw_context, buffer->image);
-                    wlr_buffer_unlock(&share_buf->base);
+                /* hidden even without a shared copy, which then shows as black */
+                if (bar_notification_private()) {
                     monitor->capture_x = cur_x;
                     monitor->capture_width = free_w;
+                    if ((share_buf = bar_share_buffer(monitor->capture_buffer_pool, free_w,
+                                                      monitor->bar_metrics.height_px))) {
+                        drwl_setimage(monitor->draw_context, share_buf->image);
+                        bar_draw_shared_notification(monitor, focused, notification, history_index,
+                                                     free_w, is_selected);
+                        drwl_setimage(monitor->draw_context, buffer->image);
+                        wlr_buffer_unlock(&share_buf->base);
+                    }
                 }
             } else if (settings->bar.window_title && focused) {
                 bar_draw_window_title(monitor, focused, cur_x, free_w, is_selected, false);
-                if (focused->is_private &&
-                    (share_buf = bar_share_buffer(monitor->capture_buffer_pool, free_w,
-                                                  monitor->bar_metrics.height_px))) {
-                    drwl_setimage(monitor->draw_context, share_buf->image);
-                    bar_draw_window_title(monitor, focused, 0, free_w, is_selected, true);
-                    drwl_setimage(monitor->draw_context, buffer->image);
-                    wlr_buffer_unlock(&share_buf->base);
+                if (focused->is_private) {
                     monitor->capture_x = cur_x;
                     monitor->capture_width = free_w;
+                    if ((share_buf = bar_share_buffer(monitor->capture_buffer_pool, free_w,
+                                                      monitor->bar_metrics.height_px))) {
+                        drwl_setimage(monitor->draw_context, share_buf->image);
+                        bar_draw_window_title(monitor, focused, 0, free_w, is_selected, true);
+                        drwl_setimage(monitor->draw_context, buffer->image);
+                        wlr_buffer_unlock(&share_buf->base);
+                    }
                 }
             } else {
                 drwl_setscheme(monitor->draw_context, settings->look.colors[COLOR_SCHEME_NORMAL]);
