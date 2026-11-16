@@ -376,6 +376,17 @@ void client_focus(WindowClient* client, int lift)
     toplevel_focus(client);
 }
 
+/* the focus the user asked for, an unmanaged window holding it lets go */
+void client_pick(WindowClient* client)
+{
+    WindowClient* unmanaged;
+
+    wl_list_for_each(unmanaged, &unmanaged_clients, unmanaged_link)
+        if (unmanaged == exclusive_focus && unmanaged != client)
+            exclusive_focus = nullptr;
+    client_focus(client, 1);
+}
+
 /* the last focused client visible on m */
 WindowClient* client_top(Monitor* monitor)
 {

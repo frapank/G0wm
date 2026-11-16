@@ -96,7 +96,7 @@ void layout_focus_stack(const ActionArg* argument)
         }
     }
     /* If only one client is visible on selected_monitor, then client == sel */
-    client_focus(client, 1);
+    client_pick(client);
 }
 
 void layout_inc_master(const ActionArg* argument)

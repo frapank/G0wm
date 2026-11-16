@@ -125,6 +125,7 @@ void client_handle_new_toplevel(struct wl_listener*, void* data);
 void client_handle_new_popup(struct wl_listener*, void* data);
 void client_handle_destroy(struct wl_listener* listener, void*);
 void client_focus(WindowClient* client, int lift);
+void client_pick(WindowClient* client);
 WindowClient* client_top(Monitor* monitor);
 void client_handle_request_fullscreen(struct wl_listener* listener, void*);
 void client_kill(const ActionArg*);

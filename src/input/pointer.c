@@ -213,7 +213,7 @@ void input_handle_button(struct wl_listener*, void* data)
             input_node_at(cursor->x, cursor->y, nullptr, &client, nullptr, nullptr, nullptr);
             if (click == CLICK_AREA_CLIENT &&
                 (!client_is_unmanaged(client) || client_wants_focus(client)))
-                client_focus(client, 1);
+                client_pick(client);
 
             if (click == CLICK_AREA_STATUS && bar_status_click(pointer_monitor, argument.integer,
                                                                event->button == BTN_LEFT     ? 1
