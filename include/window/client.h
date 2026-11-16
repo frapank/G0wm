@@ -72,6 +72,7 @@ struct WindowClient {
     struct wl_listener unmap;
     struct wl_listener destroy;
     struct wl_listener set_title;
+    struct wl_listener set_app_id;
     char* last_title;
     bool title_update_pending;
     struct wl_listener fullscreen;
@@ -139,6 +140,7 @@ void client_toggle_floating(const ActionArg*);
 void client_toggle_fullscreen(const ActionArg*);
 void client_handle_unmap(struct wl_listener* listener, void*);
 void client_handle_set_title(struct wl_listener* listener, void*);
+void client_handle_set_app_id(struct wl_listener* listener, void*);
 void client_handle_request_activate(struct wl_listener*, void* data);
 
 /*

@@ -127,6 +127,7 @@ void xwayland_handle_new_surface(struct wl_listener*, void* data)
     LISTEN(&xsurface->events.set_hints, &client->set_hints, xwayland_handle_set_hints);
     LISTEN(&xsurface->events.request_minimize, &client->minimize, xwayland_handle_request_minimize);
     LISTEN(&xsurface->events.set_title, &client->set_title, client_handle_set_title);
+    LISTEN(&xsurface->events.set_class, &client->set_app_id, client_handle_set_app_id);
 }
 
 static void xwayland_handle_dissociate(struct wl_listener* listener, void*)
