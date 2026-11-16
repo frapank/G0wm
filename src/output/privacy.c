@@ -7,6 +7,7 @@
 #include <libdrm/drm_fourcc.h>
 #include <math.h>
 #include <pixman.h>
+#include <stdckdint.h>
 #include <stddef.h>
 #include <stdint.h>
 #include <stdio.h>
@@ -15,16 +16,19 @@
 #include <time.h>
 #include <wayland-server-core.h>
 #include <wayland-server-protocol.h>
+#include <wlr/interfaces/wlr_buffer.h>
 #include <wlr/interfaces/wlr_ext_image_capture_source_v1.h>
 #include <wlr/render/pass.h>
 #include <wlr/render/wlr_texture.h>
 #include <wlr/types/wlr_buffer.h>
 #include <wlr/types/wlr_damage_ring.h>
+#include <wlr/types/wlr_data_device.h>
 #include <wlr/types/wlr_ext_image_capture_source_v1.h>
 #include <wlr/types/wlr_ext_image_copy_capture_v1.h>
 #include <wlr/types/wlr_output.h>
 #include <wlr/types/wlr_scene.h>
 #include <wlr/types/wlr_screencopy_v1.h>
+#include <wlr/types/wlr_seat.h>
 #include <wlr/util/box.h>
 #include <wlr/util/log.h>
 #include <wlr/util/transform.h>
@@ -35,6 +39,7 @@
 #include "desktop/bar/bar.h"
 #include "desktop/bar/title.h"
 #include "desktop/systray/icon.h"
+#include "input/textinput.h"
 #include "output/monitor.h"
 #include "output/privacy.h"
 #include "render/buffer.h"
@@ -63,10 +68,22 @@ typedef struct {
     struct wlr_screencopy_frame_v1* frame;
     struct wlr_buffer* buffer;
     struct wlr_box buffer_box;
+    struct wl_client* client;
+    struct wlr_buffer* staging;
+    int unmasked;
 } ScreencopyFrame;
+
+/* a capture is masked in here before the client's buffer gets it */
+typedef struct {
+    struct wlr_buffer base;
+    uint32_t format;
+    size_t stride;
+    uint8_t data[];
+} PrivacyStaging;
 
 /* function declarations */
 static int privacy_black_out(struct wlr_buffer* buffer, PrivacyMask* patches, int patch_count);
+static int privacy_copy(struct wlr_buffer* dst, struct wlr_buffer* src);
 static void privacy_copy_frame(struct wlr_ext_image_capture_source_v1* source,
                                struct wlr_ext_image_copy_capture_frame_v1* frame,
                                struct wlr_ext_image_capture_source_v1_frame_event* event);
@@ -81,16 +98,31 @@ static void privacy_shield(struct wlr_ext_image_capture_source_v1* source,
                            struct wlr_output* output,
                            WindowClient* client);
 static void privacy_handle_shield_destroy(struct wl_listener* listener, void*);
-static void privacy_wipe(struct wlr_buffer* buffer);
+static struct wlr_buffer* privacy_staging(struct wlr_buffer* like);
+static bool privacy_staging_access(struct wlr_buffer* buffer,
+                                   uint32_t flags,
+                                   void** data,
+                                   uint32_t* format,
+                                   size_t* stride);
+static void privacy_staging_destroy(struct wlr_buffer* buffer);
+static void privacy_staging_end(struct wlr_buffer* buffer);
+static void privacy_widen_damage(Monitor* monitor, struct wlr_output_state* state);
+static int privacy_wipe(struct wlr_buffer* buffer);
 
 /* variables */
 static struct wl_array privacy_copies;
 static PrivacyMask privacy_masks[MAXBOXES];
 static int privacy_mask_count;
+static int privacy_output_shields;
 static RasterIcon* privacy_icon;
 static int privacy_icon_size = -1;
 static Fnt* privacy_font;
 static float privacy_font_scale;
+static const struct wlr_buffer_impl privacy_staging_impl = {
+    .destroy = privacy_staging_destroy,
+    .begin_data_ptr_access = privacy_staging_access,
+    .end_data_ptr_access = privacy_staging_end,
+};
 
 /* function implementations */
 
@@ -167,6 +199,34 @@ static int privacy_black_out(struct wlr_buffer* buffer, PrivacyMask* patches, in
     return submitted;
 }
 
+/* src into dst, of the same size */
+static int privacy_copy(struct wlr_buffer* dst, struct wlr_buffer* src)
+{
+    struct wlr_texture* texture = wlr_texture_from_buffer(renderer, src);
+    struct wlr_render_pass* pass;
+    uint32_t format;
+    size_t stride;
+    void* data;
+    int copied = 0;
+
+    if (!texture)
+        return 0;
+    if (wlr_buffer_begin_data_ptr_access(dst, WLR_BUFFER_DATA_PTR_ACCESS_WRITE, &data, &format,
+                                         &stride)) {
+        copied = wlr_texture_read_pixels(
+            texture, &(struct wlr_texture_read_pixels_options){
+                         .data = data, .format = format, .stride = (uint32_t)stride });
+        wlr_buffer_end_data_ptr_access(dst);
+    } else if ((pass = wlr_renderer_begin_buffer_pass(renderer, dst, nullptr))) {
+        wlr_render_pass_add_texture(
+            pass, &(struct wlr_render_texture_options){ .texture = texture,
+                                                        .blend_mode = WLR_RENDER_BLEND_MODE_NONE });
+        copied = wlr_render_pass_submit(pass);
+    }
+    wlr_texture_destroy(texture);
+    return copied;
+}
+
 /* fail the frame rather than leak it */
 static void privacy_copy_frame(struct wlr_ext_image_capture_source_v1* source,
                                struct wlr_ext_image_copy_capture_frame_v1* frame,
@@ -200,12 +260,20 @@ static void privacy_copy_frame(struct wlr_ext_image_capture_source_v1* source,
         shield->original_interface->copy_frame(source, frame, event);
         return;
     }
-    if (!monitor->capture_buffer ||
-        !wlr_ext_image_copy_capture_frame_v1_copy_buffer(frame, monitor->capture_buffer,
-                                                         renderer) ||
-        !privacy_black_out(frame->buffer, patches, patch_count))
+    struct wlr_buffer* staging;
+    if (!monitor->capture_buffer || !(staging = privacy_staging(frame->buffer)))
         goto fail;
-    wlr_ext_image_copy_capture_frame_v1_ready(frame, shield->output->transform, &now);
+    /* the client's buffer only ever gets the masked frame */
+    if (!privacy_copy(staging, monitor->capture_buffer) ||
+        !privacy_black_out(staging, patches, patch_count)) {
+        wlr_buffer_drop(staging);
+        goto fail;
+    }
+    const int copied = wlr_ext_image_copy_capture_frame_v1_copy_buffer(frame, staging, renderer);
+    wlr_buffer_drop(staging);
+    /* a failed copy has already failed and freed the frame */
+    if (copied)
+        wlr_ext_image_copy_capture_frame_v1_ready(frame, shield->output->transform, &now);
     return;
 
 fail:
@@ -251,26 +319,58 @@ void privacy_after_commit(Monitor* monitor)
             if (frame == capture_frame->frame)
                 frame_gone = 0;
         }
+        struct wlr_buffer* staging = capture_frame->staging;
+        if (!frame_gone && staging) {
+            /* not copied this time, the frame gets its own buffer back */
+            capture_frame->frame->buffer = capture_frame->buffer;
+            wlr_buffer_unlock(staging);
+            wlr_buffer_drop(staging);
+            continue;
+        }
         if (frame_gone) {
             for (int i = 0; i < privacy_mask_count; i++) {
                 patches[i] = privacy_masks[i];
                 patches[i].buffer_box.x -= capture_frame->buffer_box.x;
                 patches[i].buffer_box.y -= capture_frame->buffer_box.y;
             }
-            if (!privacy_black_out(capture_frame->buffer, patches, privacy_mask_count))
-                privacy_wipe(capture_frame->buffer);
+            if (staging &&
+                (privacy_black_out(staging, patches, privacy_mask_count) || privacy_wipe(staging)))
+                privacy_copy(capture_frame->buffer, staging);
+            else if (!staging)
+                capture_frame->unmasked =
+                    !privacy_black_out(capture_frame->buffer, patches, privacy_mask_count) &&
+                    !privacy_wipe(capture_frame->buffer);
         }
+        if (staging)
+            wlr_buffer_drop(staging);
         wlr_buffer_unlock(capture_frame->buffer);
+    }
+    /* the ready is still queued, so drop a client whose frame stayed unmasked */
+    ScreencopyFrame* other;
+    wl_array_for_each(capture_frame, &privacy_copies) {
+        struct wl_client* client = capture_frame->unmasked ? capture_frame->client : nullptr;
+        if (!client)
+            continue;
+        wlr_log(WLR_ERROR, "privacy: cannot black out a screencopy frame, dropping its client");
+        wl_array_for_each(other, &privacy_copies)
+            if (other->client == client)
+                other->unmasked = 0;
+        wl_client_destroy(client);
     }
     privacy_copies.size = 0;
 }
 
 int privacy_before_commit(Monitor* monitor, struct wlr_output_state* state)
 {
+    const int screencopy = screencopy_manager && !wl_list_empty(&screencopy_manager->frames);
+
     monitor->capture_buffer = state->buffer;
     privacy_copies.size = 0;
-    if (!screencopy_manager || wl_list_empty(&screencopy_manager->frames) ||
+    if ((!screencopy && !privacy_output_shields) ||
         !(privacy_mask_count = privacy_private_boxes(monitor, privacy_masks)))
+        return 1;
+    privacy_widen_damage(monitor, state);
+    if (!screencopy)
         return 1;
     struct wlr_screencopy_frame_v1* frame;
     wl_list_for_each(frame, &screencopy_manager->frames, link) {
@@ -281,9 +381,17 @@ int privacy_before_commit(Monitor* monitor, struct wlr_output_state* state)
             privacy_after_commit(monitor);
             return 0;
         }
+        struct wl_client* client = wl_resource_get_client(frame->resource);
+        /* wlroots copies into a buffer of ours, the client's gets it masked */
+        struct wlr_buffer* staging = privacy_staging(frame->buffer);
+        *capture_frame = (ScreencopyFrame){ frame, frame->buffer, frame->box, client, staging, 0 };
+        if (staging) {
+            frame->buffer = wlr_buffer_lock(staging);
+            continue;
+        }
         /* ready must not be flushed before privacy_after_commit() */
-        wl_client_flush(wl_resource_get_client(frame->resource));
-        *capture_frame = (ScreencopyFrame){ frame, wlr_buffer_lock(frame->buffer), frame->box };
+        wl_client_flush(client);
+        wlr_buffer_lock(frame->buffer);
     }
     return 1;
 }
@@ -416,6 +524,72 @@ static RenderBuffer* privacy_draw_placeholder(WindowClient* client,
     return buffer;
 }
 
+/* popups and subsurfaces can reach past the window, the mask grows to them */
+static void privacy_extend_box(struct wlr_scene_buffer* scene_buffer, int, int, void* data)
+{
+    struct wlr_box* box = data;
+    int x;
+    int y;
+    const int width = scene_buffer->dst_width ? scene_buffer->dst_width
+                      : scene_buffer->buffer  ? scene_buffer->buffer->width
+                                              : 0;
+    const int height = scene_buffer->dst_height ? scene_buffer->dst_height
+                       : scene_buffer->buffer   ? scene_buffer->buffer->height
+                                                : 0;
+
+    if (width <= 0 || height <= 0 || !wlr_scene_node_coords(&scene_buffer->node, &x, &y))
+        return;
+    const int right = MAX(box->x + box->width, x + width);
+    const int bottom = MAX(box->y + box->height, y + height);
+    box->x = MIN(box->x, x);
+    box->y = MIN(box->y, y);
+    box->width = right - box->x;
+    box->height = bottom - box->y;
+}
+
+/* an X11 menu is a window of its own, it follows the windows of its process */
+static int privacy_client_private(WindowClient* client)
+{
+    if (client->is_private)
+        return 1;
+#ifdef XWAYLAND
+    WindowClient* other;
+    if (!client_is_x11(client) || !client->surface.xwayland->pid)
+        return 0;
+    wl_list_for_each(other, &clients, link)
+        if (other->is_private && client_is_x11(other) &&
+            other->surface.xwayland->pid == client->surface.xwayland->pid)
+            return 1;
+#endif
+    return 0;
+}
+
+/* a drag shows whatever the app that started it draws */
+static int privacy_drag_private(void)
+{
+    WindowClient* client;
+
+    if (!seat->drag || !seat->drag->icon)
+        return 0;
+    const struct wl_client* owner = wl_resource_get_client(seat->drag->icon->surface->resource);
+    wl_list_for_each(client, &clients, link)
+        if (client->is_private && client_surface(client) &&
+            wl_resource_get_client(client_surface(client)->resource) == owner)
+            return 1;
+    return 0;
+}
+
+/* a tree outside the clients, in buffer pixels */
+static int privacy_tree_box(Monitor* monitor, struct wlr_scene_tree* tree, struct wlr_box* out_box)
+{
+    struct wlr_box box = {};
+
+    if (!wlr_scene_node_coords(&tree->node, &box.x, &box.y))
+        return 0;
+    wlr_scene_node_for_each_buffer(&tree->node, privacy_extend_box, &box);
+    return box.width > 0 && box.height > 0 && privacy_to_buffer(monitor, box, out_box);
+}
+
 /* areas of m hidden from screen sharing, in buffer pixels */
 static int privacy_private_boxes(Monitor* monitor, PrivacyMask* masks)
 {
@@ -431,6 +605,8 @@ static int privacy_private_boxes(Monitor* monitor, PrivacyMask* masks)
         const int title_height = bar_title_height(client);
         if (client->scene_surface->node.enabled) {
             boxes[box_count] = client->geometry;
+            wlr_scene_node_for_each_buffer(&client->scene->node, privacy_extend_box,
+                                           &boxes[box_count]);
             shared_buffers[box_count++] = nullptr;
         }
         int x;
@@ -452,12 +628,20 @@ static int privacy_private_boxes(Monitor* monitor, PrivacyMask* masks)
                 goto full;
             switch (privacy_to_buffer(monitor, boxes[i], &masks[patch_count].buffer_box)) {
                 case 1:
-                    if (!i && client->scene_surface->node.enabled)
+                    /* popups can make the box any size, past the screen it stays black */
+                    if (!i && client->scene_surface->node.enabled &&
+                        masks[patch_count].buffer_box.width <=
+                            (int)ceilf((float)screen_geometry.width * monitor->wlr_output->scale) &&
+                        masks[patch_count].buffer_box.height <=
+                            (int)ceilf((float)screen_geometry.height * monitor->wlr_output->scale))
+                        /* rounded like the window, unless popups made it larger */
                         shared_buffers[i] = privacy_draw_placeholder(
                             client, masks[patch_count].buffer_box.width,
                             masks[patch_count].buffer_box.height,
-                            (int)roundf((float)corner_client_radius(client) *
-                                        monitor->wlr_output->scale));
+                            wlr_box_equal(&boxes[0], &client->geometry)
+                                ? (int)roundf((float)corner_client_radius(client) *
+                                              monitor->wlr_output->scale)
+                                : 0);
                     masks[patch_count++].placeholder_buffer = shared_buffers[i];
                     break;
                 case -1:
@@ -466,12 +650,38 @@ static int privacy_private_boxes(Monitor* monitor, PrivacyMask* masks)
             }
         }
     }
+    /* menus and tooltips of a private X11 app are not in clients */
+    wl_list_for_each(client, &unmanaged_clients, unmanaged_link) {
+        if (!privacy_client_private(client) || !client->scene->node.enabled)
+            continue;
+        if (patch_count == MAXBOXES)
+            goto full;
+        boxes[0] = client->geometry;
+        wlr_scene_node_for_each_buffer(&client->scene->node, privacy_extend_box, &boxes[0]);
+        if (privacy_to_buffer(monitor, boxes[0], &masks[patch_count].buffer_box))
+            masks[patch_count++].placeholder_buffer = nullptr;
+    }
+
+    /* the input method popup and the drag icon are not in the client tree */
+    struct wlr_scene_tree* trees[MAXBOXES];
+    int tree_count = 0;
+    for (struct wlr_scene_tree* tree;
+         tree_count < MAXBOXES - 1 && (tree = textinput_private_popup(tree_count));)
+        trees[tree_count++] = tree;
+    if (privacy_drag_private())
+        trees[tree_count++] = drag_icon;
+    for (int i = 0; i < tree_count; i++) {
+        if (patch_count == MAXBOXES)
+            goto full;
+        if (privacy_tree_box(monitor, trees[i], &masks[patch_count].buffer_box))
+            masks[patch_count++].placeholder_buffer = nullptr;
+    }
 
     RenderBuffer* share_buffer = monitor->capture_buffer_pool[0];
-    if (monitor->capture_width && share_buffer &&
-        share_buffer->base.width == monitor->capture_width &&
-        share_buffer->base.height == monitor->bar_metrics.height_px &&
-        monitor->bar_scene_buffer->node.enabled) {
+    if (share_buffer && (share_buffer->base.width != monitor->capture_width ||
+                         share_buffer->base.height != monitor->bar_metrics.height_px))
+        share_buffer = nullptr;
+    if (monitor->capture_width && monitor->bar_scene_buffer->node.enabled) {
         if (patch_count == MAXBOXES)
             goto full;
         const double scale =
@@ -513,6 +723,7 @@ static void privacy_shield(struct wlr_ext_image_capture_source_v1* source,
     shield->source = source;
     shield->output = output;
     shield->client = client;
+    privacy_output_shields += !!output;
     source->impl = &shield->wrapped_interface;
     LISTEN(&source->events.destroy, &shield->destroy, privacy_handle_shield_destroy);
 }
@@ -529,6 +740,7 @@ static void privacy_handle_shield_destroy(struct wl_listener* listener, void*)
     PrivacyCaptureSource* shield = wl_container_of(listener, shield, destroy);
 
     shield->source->impl = shield->original_interface;
+    privacy_output_shields -= !!shield->output;
     wl_list_remove(&shield->destroy.link);
     free(shield);
 }
@@ -583,6 +795,21 @@ static int privacy_to_buffer(Monitor* monitor, struct wlr_box box, struct wlr_bo
     return -1;
 }
 
+/* dialogs show what their window holds, so they follow it */
+void privacy_follow(WindowClient* parent)
+{
+    WindowClient* client;
+
+    wl_list_for_each(client, &clients, link) {
+        if (client_get_parent(client) != parent || client->is_private == parent->is_private)
+            continue;
+        client->is_private = parent->is_private;
+        client->private_explicit = 1;
+        toplevel_update(client);
+        privacy_follow(client);
+    }
+}
+
 void privacy_toggle(const ActionArg*)
 {
     WindowClient* selected_client = client_top(selected_monitor);
@@ -590,12 +817,32 @@ void privacy_toggle(const ActionArg*)
     if (!selected_client)
         return;
     selected_client->is_private = !selected_client->is_private;
+    selected_client->private_explicit = 1;
     toplevel_update(selected_client);
+    privacy_follow(selected_client);
     privacy_damage();
     bar_draw_all();
 }
 
-static void privacy_wipe(struct wlr_buffer* buffer)
+/* captures report damage too, a change inside a mask shows as all of it */
+static void privacy_widen_damage(Monitor* monitor, struct wlr_output_state* state)
+{
+    if (!(state->committed & WLR_OUTPUT_STATE_DAMAGE))
+        return;
+    for (int i = 0; i < privacy_mask_count; i++) {
+        const struct wlr_box* box = &privacy_masks[i].buffer_box;
+        if (pixman_region32_contains_rectangle(
+                &state->damage, &(pixman_box32_t){ box->x, box->y, box->x + box->width,
+                                                   box->y + box->height }) != PIXMAN_REGION_OUT)
+            pixman_region32_union_rect(&state->damage, &state->damage, box->x, box->y,
+                                       (unsigned int)box->width, (unsigned int)box->height);
+    }
+    pixman_region32_intersect_rect(&state->damage, &state->damage, 0, 0,
+                                   (unsigned int)monitor->wlr_output->width,
+                                   (unsigned int)monitor->wlr_output->height);
+}
+
+static int privacy_wipe(struct wlr_buffer* buffer)
 {
     uint32_t format;
     size_t stride;
@@ -605,16 +852,63 @@ static void privacy_wipe(struct wlr_buffer* buffer)
                                          &stride)) {
         memset(data, 0, stride * (size_t)buffer->height);
         wlr_buffer_end_data_ptr_access(buffer);
-        return;
+        return 1;
     }
     struct wlr_render_pass* pass;
-    if (!(pass = wlr_renderer_begin_buffer_pass(renderer, buffer, nullptr))) {
-        wlr_log(WLR_ERROR, "privacy: cannot black out a screencopy frame");
-        return;
+    if ((pass = wlr_renderer_begin_buffer_pass(renderer, buffer, nullptr))) {
+        wlr_render_pass_add_rect(
+            pass, &(struct wlr_render_rect_options){ .box = { 0, 0, buffer->width, buffer->height },
+                                                     .color = { 0, 0, 0, 1 } });
+        if (wlr_render_pass_submit(pass))
+            return 1;
     }
-    wlr_render_pass_add_rect(
-        pass, &(struct wlr_render_rect_options){ .box = { 0, 0, buffer->width, buffer->height },
-                                                 .color = { 0, 0, 0, 1 } });
-    if (!wlr_render_pass_submit(pass))
-        wlr_log(WLR_ERROR, "privacy: cannot black out a screencopy frame");
+    return 0;
 }
+
+/* a buffer like the client's, for a capture to be masked in first */
+static struct wlr_buffer* privacy_staging(struct wlr_buffer* like)
+{
+    struct wlr_dmabuf_attributes dmabuf;
+    struct wlr_shm_attributes shm;
+    PrivacyStaging* staging;
+    size_t size;
+
+    if (wlr_buffer_get_dmabuf(like, &dmabuf)) {
+        uint64_t modifier = DRM_FORMAT_MOD_INVALID;
+        return wlr_allocator_create_buffer(
+            allocator, like->width, like->height,
+            &(struct wlr_drm_format){
+                .format = dmabuf.format, .len = 1, .capacity = 1, .modifiers = &modifier });
+    }
+    if (!wlr_buffer_get_shm(like, &shm) || shm.stride <= 0 ||
+        ckd_mul(&size, (size_t)shm.stride, (size_t)like->height) ||
+        ckd_add(&size, size, sizeof(*staging)) || !(staging = calloc(1, size)))
+        return nullptr;
+    wlr_buffer_init(&staging->base, &privacy_staging_impl, like->width, like->height);
+    staging->format = shm.format;
+    staging->stride = (size_t)shm.stride;
+    return &staging->base;
+}
+
+static bool privacy_staging_access(struct wlr_buffer* buffer,
+                                   uint32_t,
+                                   void** data,
+                                   uint32_t* format,
+                                   size_t* stride)
+{
+    PrivacyStaging* staging = wl_container_of(buffer, staging, base);
+
+    *data = staging->data;
+    *format = staging->format;
+    *stride = staging->stride;
+    return true;
+}
+
+static void privacy_staging_destroy(struct wlr_buffer* buffer)
+{
+    PrivacyStaging* staging = wl_container_of(buffer, staging, base);
+
+    free(staging);
+}
+
+static void privacy_staging_end(struct wlr_buffer*) {}

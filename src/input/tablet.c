@@ -459,7 +459,7 @@ void tablet_handle_tip(struct wl_listener*, void* data)
         selected_monitor = monitor_at(cursor->x, cursor->y);
         input_node_at(cursor->x, cursor->y, nullptr, &client, nullptr, nullptr, nullptr);
         if (!lock_active && client && (!client_is_unmanaged(client) || client_wants_focus(client)))
-            client_focus(client, 1);
+            client_pick(client);
         wlr_tablet_v2_tablet_tool_notify_down(tool->protocol_tool);
         wlr_tablet_tool_v2_start_implicit_grab(tool->protocol_tool);
         return;
@@ -633,7 +633,7 @@ void tablet_handle_touch_down(struct wl_listener*, void* data)
         tablet_touch_points[event->touch_id & 15].surface_layout_y = layout_y - surface_y;
         selected_monitor = monitor_at(layout_x, layout_y);
         if (!lock_active && client && (!client_is_unmanaged(client) || client_wants_focus(client)))
-            client_focus(client, 1);
+            client_pick(client);
         return;
     }
     /* no touch support there: emulate a click, one finger at a time */

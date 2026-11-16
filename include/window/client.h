@@ -56,6 +56,8 @@ struct WindowClient {
     struct wlr_scene_tree* scene_surface;
     struct wl_list link;
     struct wl_list focus_link;
+    /* in unmanaged_clients while mapped as unmanaged, not in clients */
+    struct wl_list unmanaged_link;
     struct wlr_box geometry;         /* layout-relative, includes border */
     struct wlr_box restore_geometry; /* layout-relative, includes border */
     struct wlr_box bounds;           /* only width and height are used */
@@ -70,6 +72,7 @@ struct WindowClient {
     struct wl_listener unmap;
     struct wl_listener destroy;
     struct wl_listener set_title;
+    struct wl_listener set_app_id;
     char* last_title;
     bool title_update_pending;
     struct wl_listener fullscreen;
@@ -101,6 +104,8 @@ struct WindowClient {
     unsigned int border_width;
     uint32_t tags;
     int is_floating, is_urgent, is_fullscreen, is_private;
+    /* set by a rule or by hand, a change of always_private leaves it alone */
+    int private_explicit;
     char* private_text;
     uint32_t private_background, private_foreground;
     float opacity;                          /* the one in effect, focused or not */
@@ -118,11 +123,13 @@ struct WindowClient {
 };
 
 void client_activate(WindowClient* client);
+void client_apply_private_rules(WindowClient* client);
 void client_handle_new_decoration(struct wl_listener*, void* data);
 void client_handle_new_toplevel(struct wl_listener*, void* data);
 void client_handle_new_popup(struct wl_listener*, void* data);
 void client_handle_destroy(struct wl_listener* listener, void*);
 void client_focus(WindowClient* client, int lift);
+void client_pick(WindowClient* client);
 WindowClient* client_top(Monitor* monitor);
 void client_handle_request_fullscreen(struct wl_listener* listener, void*);
 void client_kill(const ActionArg*);
@@ -136,6 +143,7 @@ void client_toggle_floating(const ActionArg*);
 void client_toggle_fullscreen(const ActionArg*);
 void client_handle_unmap(struct wl_listener* listener, void*);
 void client_handle_set_title(struct wl_listener* listener, void*);
+void client_handle_set_app_id(struct wl_listener* listener, void*);
 void client_handle_request_activate(struct wl_listener*, void* data);
 
 /*

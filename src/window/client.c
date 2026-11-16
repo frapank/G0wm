@@ -31,6 +31,7 @@
 #include "input/textinput.h"
 #include "output/lock.h"
 #include "output/monitor.h"
+#include "output/privacy.h"
 #include "render/buffer.h"
 #include "render/corner.h"
 #include "render/opacity.h"
@@ -110,8 +111,10 @@ static void client_apply_rules(WindowClient* client)
         if ((!rule->title || strstr(title, rule->title)) &&
             (!rule->app_id || strstr(app_id, rule->app_id))) {
             client->is_floating = rule->is_floating;
-            if (rule->is_private >= 0)
+            if (rule->is_private >= 0) {
                 client->is_private = rule->is_private;
+                client->private_explicit = 1;
+            }
             if (rule->private_text) {
                 char* text = strdup(rule->private_text);
                 if (!text)
@@ -139,6 +142,38 @@ static void client_apply_rules(WindowClient* client)
 
     client->is_floating |= client_is_float_type(client);
     client_set_monitor(client, monitor, newtags);
+}
+
+/* a title taken after the map can still make a window private, never public */
+void client_apply_private_rules(WindowClient* client)
+{
+    const char* app_id = client_get_app_id(client);
+    const char* title = client_get_title(client);
+
+    if (client->is_private)
+        return;
+    for (const ClientRule* rule = settings->rules.client_rules;
+         rule < settings->rules.client_rules + settings->rules.client_rule_count; rule++) {
+        if (rule->is_private != 1 || (rule->title && !strstr(title, rule->title)) ||
+            (rule->app_id && !strstr(app_id, rule->app_id)))
+            continue;
+        client->is_private = client->private_explicit = 1;
+        if (rule->private_text) {
+            char* text = strdup(rule->private_text);
+            if (!text)
+                util_die("cannot copy private text");
+            free(client->private_text);
+            client->private_text = text;
+        }
+        if (rule->private_background)
+            client->private_background = rule->private_background;
+        if (rule->private_foreground)
+            client->private_foreground = rule->private_foreground;
+    }
+    if (client->is_private) {
+        privacy_follow(client);
+        privacy_damage();
+    }
 }
 
 static void client_handle_commit(struct wl_listener* listener, void*)
@@ -262,6 +297,7 @@ void client_handle_new_toplevel(struct wl_listener*, void* data)
            client_handle_request_fullscreen);
     LISTEN(&toplevel->events.request_maximize, &client->maximize, client_handle_request_maximize);
     LISTEN(&toplevel->events.set_title, &client->set_title, client_handle_set_title);
+    LISTEN(&toplevel->events.set_app_id, &client->set_app_id, client_handle_set_app_id);
 }
 
 void client_handle_new_popup(struct wl_listener*, void* data)
@@ -289,6 +325,7 @@ void client_handle_destroy(struct wl_listener* listener, void*)
     WindowClient* client = wl_container_of(listener, client, destroy);
     wl_list_remove(&client->destroy.link);
     wl_list_remove(&client->set_title.link);
+    wl_list_remove(&client->set_app_id.link);
     wl_list_remove(&client->fullscreen.link);
 #ifdef XWAYLAND
     if (client->type != SURFACE_TYPE_XDG_SHELL) {
@@ -411,6 +448,17 @@ void client_focus(WindowClient* client, int lift)
     toplevel_focus(client);
 }
 
+/* the focus the user asked for, an unmanaged window holding it lets go */
+void client_pick(WindowClient* client)
+{
+    WindowClient* unmanaged;
+
+    wl_list_for_each(unmanaged, &unmanaged_clients, unmanaged_link)
+        if (unmanaged == exclusive_focus && unmanaged != client)
+            exclusive_focus = nullptr;
+    client_focus(client, 1);
+}
+
 /* the last focused client visible on m */
 WindowClient* client_top(Monitor* monitor)
 {
@@ -455,6 +503,7 @@ void client_handle_map(struct wl_listener* listener, void*)
 
     /* Handle unmanaged clients first so we can return prior create borders */
     if (client_is_unmanaged(client)) {
+        wl_list_insert(&unmanaged_clients, &client->unmanaged_link);
         /* Unmanaged clients always are floating */
         wlr_scene_node_reparent(&client->scene->node, layers[SCENE_LAYER_FLOATING]);
         wlr_scene_node_set_position(&client->scene->node, client->geometry.x, client->geometry.y);
@@ -513,6 +562,8 @@ void client_handle_map(struct wl_listener* listener, void*)
      * If there is no parent, apply rules */
     if ((parent = client_get_parent(client))) {
         client->is_floating = 1;
+        if (parent->is_private)
+            client->is_private = client->private_explicit = 1;
         client_set_monitor(client, parent->monitor, parent->tags);
     } else {
         client_apply_rules(client);
@@ -778,6 +829,10 @@ void client_handle_unmap(struct wl_listener* listener, void*)
         input_grab_client = nullptr;
     }
 
+    if (client->unmanaged_link.next) {
+        wl_list_remove(&client->unmanaged_link);
+        client->unmanaged_link = (struct wl_list){};
+    }
     if (client_is_unmanaged(client)) {
         if (client == exclusive_focus) {
             exclusive_focus = nullptr;
@@ -827,6 +882,15 @@ void client_handle_set_title(struct wl_listener* listener, void*)
         util_die("failed to copy window title");
     free(client->last_title);
     client->last_title = copy;
+    client_handle_set_app_id(&client->set_app_id, nullptr);
+}
+
+/* an id taken after the map can still match a private rule, like a title */
+void client_handle_set_app_id(struct wl_listener* listener, void*)
+{
+    WindowClient* client = wl_container_of(listener, client, set_app_id);
+
+    client_apply_private_rules(client);
     toplevel_update(client);
     if (!client->scene || !client->scene->node.enabled)
         return;

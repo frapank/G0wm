@@ -348,7 +348,8 @@ static void bar_notification_box(Monitor* monitor,
         box->count_x = end - box->count_width;
         end = box->count_x - pad;
     }
-    int picking = hist < 0 && bar_notification_pick_selected >= 0 &&
+    /* the action labels can say as much as the text, sharing never gets them */
+    int picking = !shared && hist < 0 && bar_notification_pick_selected >= 0 &&
                   notification->id == bar_notification_pick_id;
     if (hist < 0 && notification->action_count && !picking &&
         *settings->notifications.action_sign) {

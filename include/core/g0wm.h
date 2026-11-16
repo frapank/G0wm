@@ -95,6 +95,7 @@ extern struct wlr_content_type_manager_v1* content_type_manager;
 extern struct wlr_tearing_control_manager_v1* tearing_manager;
 extern struct wl_list clients;     /* tiling order */
 extern struct wl_list focus_stack; /* focus order */
+extern struct wl_list unmanaged_clients;
 extern struct wlr_ext_foreign_toplevel_list_v1* ext_toplevel_list;
 extern struct wlr_foreign_toplevel_manager_v1* foreign_toplevel_manager;
 extern struct wlr_screencopy_manager_v1* screencopy_manager;
