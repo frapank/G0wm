@@ -24,6 +24,7 @@
 #include "input/textinput.h"
 #include "output/lock.h"
 #include "output/monitor.h"
+#include "window/client.h"
 
 typedef struct {
     struct wlr_text_input_v3* text_input;
@@ -234,6 +235,22 @@ static void textinput_handle_new_popup(struct wl_listener*, void* data)
     LISTEN(&input_popup->events.destroy, &popup->destroy, textinput_handle_popup_destroy);
     wl_list_insert(&textinput_popups, &popup->link);
     textinput_popup_place(popup);
+}
+
+/* the index-th popup on screen when it types into a private window */
+struct wlr_scene_tree* textinput_private_popup(int index)
+{
+    WindowClient* client = nullptr;
+    InputMethodPopup* popup;
+
+    if (!textinput_served ||
+        client_from_surface(textinput_served->text_input->focused_surface, &client, nullptr) < 0 ||
+        !client || !client->is_private)
+        return nullptr;
+    wl_list_for_each(popup, &textinput_popups, link)
+        if (popup->scene_tree->node.enabled && !index--)
+            return popup->scene_tree;
+    return nullptr;
 }
 
 static void textinput_send_state(TextInputContext* text_input)

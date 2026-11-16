@@ -22,11 +22,13 @@
 #include <wlr/render/wlr_texture.h>
 #include <wlr/types/wlr_buffer.h>
 #include <wlr/types/wlr_damage_ring.h>
+#include <wlr/types/wlr_data_device.h>
 #include <wlr/types/wlr_ext_image_capture_source_v1.h>
 #include <wlr/types/wlr_ext_image_copy_capture_v1.h>
 #include <wlr/types/wlr_output.h>
 #include <wlr/types/wlr_scene.h>
 #include <wlr/types/wlr_screencopy_v1.h>
+#include <wlr/types/wlr_seat.h>
 #include <wlr/util/box.h>
 #include <wlr/util/log.h>
 #include <wlr/util/transform.h>
@@ -37,6 +39,7 @@
 #include "desktop/bar/bar.h"
 #include "desktop/bar/title.h"
 #include "desktop/systray/icon.h"
+#include "input/textinput.h"
 #include "output/monitor.h"
 #include "output/privacy.h"
 #include "render/buffer.h"
@@ -561,6 +564,32 @@ static int privacy_client_private(WindowClient* client)
     return 0;
 }
 
+/* a drag shows whatever the app that started it draws */
+static int privacy_drag_private(void)
+{
+    WindowClient* client;
+
+    if (!seat->drag || !seat->drag->icon)
+        return 0;
+    const struct wl_client* owner = wl_resource_get_client(seat->drag->icon->surface->resource);
+    wl_list_for_each(client, &clients, link)
+        if (client->is_private && client_surface(client) &&
+            wl_resource_get_client(client_surface(client)->resource) == owner)
+            return 1;
+    return 0;
+}
+
+/* a tree outside the clients, in buffer pixels */
+static int privacy_tree_box(Monitor* monitor, struct wlr_scene_tree* tree, struct wlr_box* out_box)
+{
+    struct wlr_box box = {};
+
+    if (!wlr_scene_node_coords(&tree->node, &box.x, &box.y))
+        return 0;
+    wlr_scene_node_for_each_buffer(&tree->node, privacy_extend_box, &box);
+    return box.width > 0 && box.height > 0 && privacy_to_buffer(monitor, box, out_box);
+}
+
 /* areas of m hidden from screen sharing, in buffer pixels */
 static int privacy_private_boxes(Monitor* monitor, PrivacyMask* masks)
 {
@@ -630,6 +659,21 @@ static int privacy_private_boxes(Monitor* monitor, PrivacyMask* masks)
         boxes[0] = client->geometry;
         wlr_scene_node_for_each_buffer(&client->scene->node, privacy_extend_box, &boxes[0]);
         if (privacy_to_buffer(monitor, boxes[0], &masks[patch_count].buffer_box))
+            masks[patch_count++].placeholder_buffer = nullptr;
+    }
+
+    /* the input method popup and the drag icon are not in the client tree */
+    struct wlr_scene_tree* trees[MAXBOXES];
+    int tree_count = 0;
+    for (struct wlr_scene_tree* tree;
+         tree_count < MAXBOXES - 1 && (tree = textinput_private_popup(tree_count));)
+        trees[tree_count++] = tree;
+    if (privacy_drag_private())
+        trees[tree_count++] = drag_icon;
+    for (int i = 0; i < tree_count; i++) {
+        if (patch_count == MAXBOXES)
+            goto full;
+        if (privacy_tree_box(monitor, trees[i], &masks[patch_count].buffer_box))
             masks[patch_count++].placeholder_buffer = nullptr;
     }
 
