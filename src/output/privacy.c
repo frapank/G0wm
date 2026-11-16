@@ -521,6 +521,29 @@ static RenderBuffer* privacy_draw_placeholder(WindowClient* client,
     return buffer;
 }
 
+/* popups and subsurfaces can reach past the window, the mask grows to them */
+static void privacy_extend_box(struct wlr_scene_buffer* scene_buffer, int, int, void* data)
+{
+    struct wlr_box* box = data;
+    int x;
+    int y;
+    const int width = scene_buffer->dst_width ? scene_buffer->dst_width
+                      : scene_buffer->buffer  ? scene_buffer->buffer->width
+                                              : 0;
+    const int height = scene_buffer->dst_height ? scene_buffer->dst_height
+                       : scene_buffer->buffer   ? scene_buffer->buffer->height
+                                                : 0;
+
+    if (width <= 0 || height <= 0 || !wlr_scene_node_coords(&scene_buffer->node, &x, &y))
+        return;
+    const int right = MAX(box->x + box->width, x + width);
+    const int bottom = MAX(box->y + box->height, y + height);
+    box->x = MIN(box->x, x);
+    box->y = MIN(box->y, y);
+    box->width = right - box->x;
+    box->height = bottom - box->y;
+}
+
 /* areas of m hidden from screen sharing, in buffer pixels */
 static int privacy_private_boxes(Monitor* monitor, PrivacyMask* masks)
 {
@@ -536,6 +559,8 @@ static int privacy_private_boxes(Monitor* monitor, PrivacyMask* masks)
         const int title_height = bar_title_height(client);
         if (client->scene_surface->node.enabled) {
             boxes[box_count] = client->geometry;
+            wlr_scene_node_for_each_buffer(&client->scene->node, privacy_extend_box,
+                                           &boxes[box_count]);
             shared_buffers[box_count++] = nullptr;
         }
         int x;
@@ -557,12 +582,20 @@ static int privacy_private_boxes(Monitor* monitor, PrivacyMask* masks)
                 goto full;
             switch (privacy_to_buffer(monitor, boxes[i], &masks[patch_count].buffer_box)) {
                 case 1:
-                    if (!i && client->scene_surface->node.enabled)
+                    /* popups can make the box any size, past the screen it stays black */
+                    if (!i && client->scene_surface->node.enabled &&
+                        masks[patch_count].buffer_box.width <=
+                            (int)ceilf((float)screen_geometry.width * monitor->wlr_output->scale) &&
+                        masks[patch_count].buffer_box.height <=
+                            (int)ceilf((float)screen_geometry.height * monitor->wlr_output->scale))
+                        /* rounded like the window, unless popups made it larger */
                         shared_buffers[i] = privacy_draw_placeholder(
                             client, masks[patch_count].buffer_box.width,
                             masks[patch_count].buffer_box.height,
-                            (int)roundf((float)corner_client_radius(client) *
-                                        monitor->wlr_output->scale));
+                            wlr_box_equal(&boxes[0], &client->geometry)
+                                ? (int)roundf((float)corner_client_radius(client) *
+                                              monitor->wlr_output->scale)
+                                : 0);
                     masks[patch_count++].placeholder_buffer = shared_buffers[i];
                     break;
                 case -1:
