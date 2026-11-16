@@ -219,6 +219,7 @@ struct wlr_content_type_manager_v1* content_type_manager;
 struct wlr_tearing_control_manager_v1* tearing_manager;
 struct wl_list clients;     /* tiling order */
 struct wl_list focus_stack; /* focus order */
+struct wl_list unmanaged_clients;
 struct wlr_ext_foreign_toplevel_list_v1* ext_toplevel_list;
 struct wlr_foreign_toplevel_manager_v1* foreign_toplevel_manager;
 struct wlr_screencopy_manager_v1* screencopy_manager;
@@ -636,6 +637,7 @@ void setup(void)
      * https://drewdevault.com/2018/07/29/Wayland-shells.html
      */
     wl_list_init(&clients);
+    wl_list_init(&unmanaged_clients);
     wl_list_init(&focus_stack);
 
     xdg_shell = wlr_xdg_shell_create(display, 6);

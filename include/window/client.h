@@ -56,6 +56,8 @@ struct WindowClient {
     struct wlr_scene_tree* scene_surface;
     struct wl_list link;
     struct wl_list focus_link;
+    /* in unmanaged_clients while mapped as unmanaged, not in clients */
+    struct wl_list unmanaged_link;
     struct wlr_box geometry;         /* layout-relative, includes border */
     struct wlr_box restore_geometry; /* layout-relative, includes border */
     struct wlr_box bounds;           /* only width and height are used */

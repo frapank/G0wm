@@ -420,6 +420,7 @@ void client_handle_map(struct wl_listener* listener, void*)
 
     /* Handle unmanaged clients first so we can return prior create borders */
     if (client_is_unmanaged(client)) {
+        wl_list_insert(&unmanaged_clients, &client->unmanaged_link);
         /* Unmanaged clients always are floating */
         wlr_scene_node_reparent(&client->scene->node, layers[SCENE_LAYER_FLOATING]);
         wlr_scene_node_set_position(&client->scene->node, client->geometry.x, client->geometry.y);
@@ -743,6 +744,10 @@ void client_handle_unmap(struct wl_listener* listener, void*)
         input_grab_client = nullptr;
     }
 
+    if (client->unmanaged_link.next) {
+        wl_list_remove(&client->unmanaged_link);
+        client->unmanaged_link = (struct wl_list){};
+    }
     if (client_is_unmanaged(client)) {
         if (client == exclusive_focus) {
             exclusive_focus = nullptr;

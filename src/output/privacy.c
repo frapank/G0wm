@@ -544,6 +544,23 @@ static void privacy_extend_box(struct wlr_scene_buffer* scene_buffer, int, int, 
     box->height = bottom - box->y;
 }
 
+/* an X11 menu is a window of its own, it follows the windows of its process */
+static int privacy_client_private(WindowClient* client)
+{
+    if (client->is_private)
+        return 1;
+#ifdef XWAYLAND
+    WindowClient* other;
+    if (!client_is_x11(client) || !client->surface.xwayland->pid)
+        return 0;
+    wl_list_for_each(other, &clients, link)
+        if (other->is_private && client_is_x11(other) &&
+            other->surface.xwayland->pid == client->surface.xwayland->pid)
+            return 1;
+#endif
+    return 0;
+}
+
 /* areas of m hidden from screen sharing, in buffer pixels */
 static int privacy_private_boxes(Monitor* monitor, PrivacyMask* masks)
 {
@@ -603,6 +620,17 @@ static int privacy_private_boxes(Monitor* monitor, PrivacyMask* masks)
                     break;
             }
         }
+    }
+    /* menus and tooltips of a private X11 app are not in clients */
+    wl_list_for_each(client, &unmanaged_clients, unmanaged_link) {
+        if (!privacy_client_private(client) || !client->scene->node.enabled)
+            continue;
+        if (patch_count == MAXBOXES)
+            goto full;
+        boxes[0] = client->geometry;
+        wlr_scene_node_for_each_buffer(&client->scene->node, privacy_extend_box, &boxes[0]);
+        if (privacy_to_buffer(monitor, boxes[0], &masks[patch_count].buffer_box))
+            masks[patch_count++].placeholder_buffer = nullptr;
     }
 
     RenderBuffer* share_buffer = monitor->capture_buffer_pool[0];
