@@ -103,12 +103,14 @@ static bool privacy_staging_access(struct wlr_buffer* buffer,
                                    size_t* stride);
 static void privacy_staging_destroy(struct wlr_buffer* buffer);
 static void privacy_staging_end(struct wlr_buffer* buffer);
+static void privacy_widen_damage(Monitor* monitor, struct wlr_output_state* state);
 static int privacy_wipe(struct wlr_buffer* buffer);
 
 /* variables */
 static struct wl_array privacy_copies;
 static PrivacyMask privacy_masks[MAXBOXES];
 static int privacy_mask_count;
+static int privacy_output_shields;
 static RasterIcon* privacy_icon;
 static int privacy_icon_size = -1;
 static Fnt* privacy_font;
@@ -357,10 +359,15 @@ void privacy_after_commit(Monitor* monitor)
 
 int privacy_before_commit(Monitor* monitor, struct wlr_output_state* state)
 {
+    const int screencopy = screencopy_manager && !wl_list_empty(&screencopy_manager->frames);
+
     monitor->capture_buffer = state->buffer;
     privacy_copies.size = 0;
-    if (!screencopy_manager || wl_list_empty(&screencopy_manager->frames) ||
+    if ((!screencopy && !privacy_output_shields) ||
         !(privacy_mask_count = privacy_private_boxes(monitor, privacy_masks)))
+        return 1;
+    privacy_widen_damage(monitor, state);
+    if (!screencopy)
         return 1;
     struct wlr_screencopy_frame_v1* frame;
     wl_list_for_each(frame, &screencopy_manager->frames, link) {
@@ -611,6 +618,7 @@ static void privacy_shield(struct wlr_ext_image_capture_source_v1* source,
     shield->source = source;
     shield->output = output;
     shield->client = client;
+    privacy_output_shields += !!output;
     source->impl = &shield->wrapped_interface;
     LISTEN(&source->events.destroy, &shield->destroy, privacy_handle_shield_destroy);
 }
@@ -627,6 +635,7 @@ static void privacy_handle_shield_destroy(struct wl_listener* listener, void*)
     PrivacyCaptureSource* shield = wl_container_of(listener, shield, destroy);
 
     shield->source->impl = shield->original_interface;
+    privacy_output_shields -= !!shield->output;
     wl_list_remove(&shield->destroy.link);
     free(shield);
 }
@@ -691,6 +700,24 @@ void privacy_toggle(const ActionArg*)
     toplevel_update(selected_client);
     privacy_damage();
     bar_draw_all();
+}
+
+/* captures report damage too, a change inside a mask shows as all of it */
+static void privacy_widen_damage(Monitor* monitor, struct wlr_output_state* state)
+{
+    if (!(state->committed & WLR_OUTPUT_STATE_DAMAGE))
+        return;
+    for (int i = 0; i < privacy_mask_count; i++) {
+        const struct wlr_box* box = &privacy_masks[i].buffer_box;
+        if (pixman_region32_contains_rectangle(
+                &state->damage, &(pixman_box32_t){ box->x, box->y, box->x + box->width,
+                                                   box->y + box->height }) != PIXMAN_REGION_OUT)
+            pixman_region32_union_rect(&state->damage, &state->damage, box->x, box->y,
+                                       (unsigned int)box->width, (unsigned int)box->height);
+    }
+    pixman_region32_intersect_rect(&state->damage, &state->damage, 0, 0,
+                                   (unsigned int)monitor->wlr_output->width,
+                                   (unsigned int)monitor->wlr_output->height);
 }
 
 static int privacy_wipe(struct wlr_buffer* buffer)
