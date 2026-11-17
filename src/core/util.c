@@ -80,3 +80,45 @@ size_t util_put_codepoint(char* out, size_t capacity, unsigned long codepoint)
     }
     return 0;
 }
+
+/* Copies src into dst keeping only whole, well-formed UTF-8 codepoints:
+ * control characters become spaces, invalid bytes are dropped and a sequence
+ * that doesn't fit is left out entirely. Anything on this path comes straight
+ * from an arbitrary bus client, and half a codepoint renders as garbage. */
+void util_sanitize(char* dst, size_t dstsz, const char* src)
+{
+    size_t written = 0;
+
+    if (!dstsz)
+        return;
+    size_t sequence_length;
+    for (unsigned char byte; src && (byte = (unsigned char)*src); src += sequence_length) {
+        sequence_length = byte < 0x80   ? 1
+                          : byte < 0xC2 ? 0 /* continuation byte or overlong lead */
+                          : byte < 0xE0 ? 2
+                          : byte < 0xF0 ? 3
+                          : byte < 0xF5 ? 4
+                                        : 0;
+        if (!sequence_length) {
+            sequence_length = 1;
+            continue;
+        }
+        size_t valid_length = 1;
+        while (valid_length < sequence_length && ((unsigned char)src[valid_length] & 0xC0) == 0x80)
+            valid_length++;
+        if (valid_length <
+            sequence_length) { /* truncated sequence: drop the lead byte and resync */
+            sequence_length = 1;
+            continue;
+        }
+        if (written + sequence_length >= dstsz)
+            break;
+        if (byte < ' ' || byte == 0x7f) {
+            dst[written++] = ' '; /* sequence_length is 1 here */
+            continue;
+        }
+        for (size_t offset = 0; offset < sequence_length; offset++)
+            dst[written++] = (char)src[offset];
+    }
+    dst[written] = '\0';
+}

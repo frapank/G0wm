@@ -15,6 +15,8 @@
 #include <string.h>
 #include <time.h>
 
+#include "core/util.h"
+
 // IWYU pragma: no_include "dbus/dbus-protocol.h"
 // IWYU pragma: no_include "dbus/dbus-shared.h"
 
@@ -179,12 +181,16 @@ static void menu_item_create(TrayMenuItem* item,
     else
         strcpy(item->label, "  ");
 
-    /* Remove "mnemonics" (underscores which mark keyboard shortcuts) */
-    char* out = item->label + strlen(item->label);
-    for (; *label; label++)
+    /* Remove "mnemonics" (underscores which mark keyboard shortcuts), then
+     * whatever else the app sent that the font should not get */
+    char plain[LABEL_MAX];
+    size_t length = 0;
+    for (; *label && length + 1 < sizeof(plain); label++)
         if (*label != '_')
-            *out++ = *label;
-    *out = '\0';
+            plain[length++] = *label;
+    plain[length] = '\0';
+    const size_t prefix = strlen(item->label);
+    util_sanitize(item->label + prefix, sizeof(item->label) - prefix, plain);
 
     if (has_submenu) {
         item->has_submenu = 1;
