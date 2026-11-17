@@ -38,6 +38,8 @@ typedef struct TrayItem {
     FallbackIconGlyph* fallback_icon;
 
     TrayWatcher* watcher;
+    /* DBusPendingCall* still to be answered */
+    struct wl_array pending;
 
     int foreground_color;
 

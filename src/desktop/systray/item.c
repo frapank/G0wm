@@ -44,6 +44,41 @@ static DBusConnection* item_get_connection(const TrayItem* item)
     return item->watcher->connection;
 }
 
+/* the item may go before the answers do, so it keeps the calls to cancel */
+static void item_request(TrayItem* item, const char* property, PropHandler handler)
+{
+    DBusPendingCall** slot;
+    DBusPendingCall* pending =
+        helpers_request_property(item_get_connection(item), item->bus_name, item->object_path,
+                                 property, SNI_IFACE, handler, item);
+
+    if (!pending)
+        return;
+    if (!(slot = wl_array_add(&item->pending, sizeof(*slot)))) {
+        dbus_pending_call_cancel(pending);
+        dbus_pending_call_unref(pending);
+        return;
+    }
+    *slot = pending;
+}
+
+static void item_forget(TrayItem* item, DBusPendingCall* pending)
+{
+    DBusPendingCall** slot;
+    DBusPendingCall** last;
+
+    if (!item->pending.size)
+        return;
+    last = (DBusPendingCall**)((char*)item->pending.data + item->pending.size) - 1;
+    wl_array_for_each(slot, &item->pending) {
+        if (*slot == pending) {
+            *slot = *last;
+            item->pending.size -= sizeof(*slot);
+            return;
+        }
+    }
+}
+
 static const uint8_t* item_extract_image(DBusMessageIter* iter,
                                          dbus_int32_t* width,
                                          dbus_int32_t* height,
@@ -150,6 +185,8 @@ static void item_handle_menu_path_ready(DBusPendingCall* pending, void* data)
 {
     TrayItem* item = data;
 
+    item_forget(item, pending);
+
     free(item->menu_object_path);
     item->menu_object_path = item_take_string_property(pending, "menupath");
     /* sent back as a path, where libdbus aborts on a bad one */
@@ -163,6 +200,8 @@ static void item_handle_menu_path_ready(DBusPendingCall* pending, void* data)
 static void item_handle_icon_name_ready(DBusPendingCall* pending, void* data)
 {
     TrayItem* item = data;
+
+    item_forget(item, pending);
 
     char* name = item_take_string_property(pending, nullptr);
     if (!name)
@@ -185,11 +224,12 @@ static void item_handle_theme_path_ready(DBusPendingCall* pending, void* data)
 {
     TrayItem* item = data;
 
+    item_forget(item, pending);
+
     free(item->icon_theme_path);
     item->icon_theme_path = item_take_string_property(pending, nullptr);
 
-    helpers_request_property(item_get_connection(item), item->bus_name, item->object_path,
-                             "IconName", SNI_IFACE, item_handle_icon_name_ready, item);
+    item_request(item, "IconName", item_handle_icon_name_ready);
 }
 
 /*
@@ -200,6 +240,8 @@ static void item_handle_theme_path_ready(DBusPendingCall* pending, void* data)
 static void item_handle_id_ready(DBusPendingCall* pending, void* data)
 {
     TrayItem* item = data;
+
+    item_forget(item, pending);
 
     char* id = item_take_string_property(pending, "appid");
     if (!id)
@@ -216,6 +258,8 @@ static void item_handle_id_ready(DBusPendingCall* pending, void* data)
 static void item_handle_pixmap_ready(DBusPendingCall* pending, void* data)
 {
     TrayItem* item = data;
+
+    item_forget(item, pending);
 
     DBusMessage* reply = nullptr;
     DBusMessageIter iter;
@@ -293,19 +337,15 @@ fail:
         dbus_pending_call_unref(pending);
 
     /* no pixmap, but the item may still name a themed icon like Steam does */
-    helpers_request_property(item_get_connection(item), item->bus_name, item->object_path,
-                             "IconThemePath", SNI_IFACE, item_handle_theme_path_ready, item);
+    item_request(item, "IconThemePath", item_handle_theme_path_ready);
 }
 
-static DBusHandlerResult item_handle_new_icon(TrayItem* item,
-                                              DBusConnection* connection,
-                                              DBusMessage* message)
+static DBusHandlerResult item_handle_new_icon(TrayItem* item, DBusMessage* message)
 {
     const char* sender = dbus_message_get_sender(message);
 
     if (sender && strcmp(sender, item->bus_name) == 0) {
-        helpers_request_property(connection, item->bus_name, item->object_path, "IconPixmap",
-                                 SNI_IFACE, item_handle_pixmap_ready, item);
+        item_request(item, "IconPixmap", item_handle_pixmap_ready);
 
         return DBUS_HANDLER_RESULT_HANDLED;
 
@@ -314,14 +354,12 @@ static DBusHandlerResult item_handle_new_icon(TrayItem* item,
     }
 }
 
-static DBusHandlerResult item_filter_bus(DBusConnection* connection,
-                                         DBusMessage* message,
-                                         void* data)
+static DBusHandlerResult item_filter_bus(DBusConnection*, DBusMessage* message, void* data)
 {
     TrayItem* item = data;
 
     if (dbus_message_is_signal(message, SNI_IFACE, "NewIcon"))
-        return item_handle_new_icon(item, connection, message);
+        return item_handle_new_icon(item, message);
     else
         return DBUS_HANDLER_RESULT_NOT_YET_HANDLED;
 }
@@ -347,19 +385,15 @@ TrayItem* item_create(const char* bus_name, const char* object_path, TrayWatcher
     item->bus_name = bus_name_copy;
     item->object_path = object_path_copy;
     item->watcher = watcher;
+    wl_array_init(&item->pending);
 
     if (!dbus_connection_add_filter(connection, item_filter_bus, item, nullptr))
         goto fail;
     dbus_bus_add_match(connection, match_rule, nullptr);
 
-    helpers_request_property(connection, bus_name, object_path, "IconPixmap", SNI_IFACE,
-                             item_handle_pixmap_ready, item);
-
-    helpers_request_property(connection, bus_name, object_path, "Id", SNI_IFACE,
-                             item_handle_id_ready, item);
-
-    helpers_request_property(connection, bus_name, object_path, "Menu", SNI_IFACE,
-                             item_handle_menu_path_ready, item);
+    item_request(item, "IconPixmap", item_handle_pixmap_ready);
+    item_request(item, "Id", item_handle_id_ready);
+    item_request(item, "Menu", item_handle_menu_path_ready);
 
     return item;
 
@@ -372,8 +406,14 @@ fail:
 
 void item_destroy(TrayItem* item)
 {
-
     DBusConnection* connection = item_get_connection(item);
+    DBusPendingCall** pending;
+
+    wl_array_for_each(pending, &item->pending) {
+        dbus_pending_call_cancel(*pending);
+        dbus_pending_call_unref(*pending);
+    }
+    wl_array_release(&item->pending);
 
     char match_rule[RULEBSIZE];
     if (snprintf(match_rule, sizeof(match_rule), item_match_string, item->bus_name) < RULEBSIZE) {
