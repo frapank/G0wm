@@ -593,8 +593,10 @@ void menu_show(DBusConnection* connection,
     return;
 
 fail:
-    if (pending)
+    if (pending) {
+        dbus_pending_call_cancel(pending);
         dbus_pending_call_unref(pending);
+    }
     if (message)
         dbus_message_unref(message);
     free(bus_name_copy);
