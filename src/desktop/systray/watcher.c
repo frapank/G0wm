@@ -533,6 +533,14 @@ fail:
 
 void watcher_stop(TrayWatcher* watcher)
 {
+    TrayItem* item;
+    TrayItem* next;
+
+    /* no tray redraw here, the bars may already be gone */
+    wl_list_for_each_safe(item, next, &watcher->items, link) {
+        wl_list_remove(&item->link);
+        item_destroy(item);
+    }
     dbus_connection_unregister_object_path(watcher->connection, SNW_OPATH);
     dbus_bus_remove_match(watcher->connection, watcher_match_rule, nullptr);
     dbus_connection_remove_filter(watcher->connection, watcher_filter_bus, watcher);
