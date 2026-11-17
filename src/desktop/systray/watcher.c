@@ -337,7 +337,7 @@ static DBusHandlerResult watcher_respond_get_prop(TrayWatcher* watcher,
 
     } else {
         dbus_message_unref(reply);
-        reply = dbus_message_new_error_printf(reply, DBUS_ERROR_UNKNOWN_PROPERTY,
+        reply = dbus_message_new_error_printf(message, DBUS_ERROR_UNKNOWN_PROPERTY,
                                               "Property \"%s\" does not exist", prop);
     }
 
