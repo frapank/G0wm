@@ -28,6 +28,8 @@
 typedef struct TrayItem {
     struct wl_list icons;
     char* bus_name;
+    /* unique name of the client that registered it */
+    char* owner;
     char* object_path;
     char* menu_object_path;
     char* app_id;

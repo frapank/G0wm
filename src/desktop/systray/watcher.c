@@ -20,6 +20,10 @@
 
 #define MAX(A, B) ((A) > (B) ? (A) : (B))
 
+/* how many items one client and all of them together may register */
+constexpr int WATCHER_CLIENT_ITEMS = 8;
+constexpr int WATCHER_ITEMS = 64;
+
 static const char* const watcher_match_rule = "type='signal',"
                                               "interface='" DBUS_INTERFACE_DBUS "',"
                                               "member='NameOwnerChanged'";
@@ -116,11 +120,12 @@ static DBusHandlerResult watcher_handle_name_owner_changed(TrayWatcher* watcher,
     if (*new_owner != '\0' || *name == '\0')
         return DBUS_HANDLER_RESULT_HANDLED;
 
-    TrayItem* item = watcher_find_item(watcher, name);
-    if (!item)
-        return DBUS_HANDLER_RESULT_HANDLED;
-
-    watcher_unregister_item(watcher, item);
+    /* the items under that name and those the gone client registered */
+    TrayItem* item;
+    TrayItem* next;
+    wl_list_for_each_safe(item, next, &watcher->items, link)
+        if (!strcmp(item->bus_name, name) || (item->owner && !strcmp(item->owner, name)))
+            watcher_unregister_item(watcher, item);
 
     return DBUS_HANDLER_RESULT_HANDLED;
 }
@@ -169,6 +174,12 @@ static DBusHandlerResult watcher_respond_register_item(TrayWatcher* watcher,
             object_path = param;
             break;
         case ':':
+            /* another client's unique name is not ours to register */
+            if (strcmp(param, sender)) {
+                reply = dbus_message_new_error(msg, DBUS_ERROR_ACCESS_DENIED,
+                                               "Cannot register another client");
+                goto send;
+            }
             registree_name = param;
             object_path = SNI_OPATH;
             break;
@@ -192,7 +203,21 @@ static DBusHandlerResult watcher_respond_register_item(TrayWatcher* watcher,
         goto send;
     }
 
-    if (!(item = item_create(registree_name, object_path, watcher))) {
+    int count = 0;
+    int client_count = 0;
+    wl_list_for_each(item, &watcher->items, link) {
+        count++;
+        client_count += item->owner && !strcmp(item->owner, sender);
+    }
+    if (count >= WATCHER_ITEMS || client_count >= WATCHER_CLIENT_ITEMS) {
+        reply = dbus_message_new_error(msg, DBUS_ERROR_LIMITS_EXCEEDED, "Too many items");
+        goto send;
+    }
+
+    if (!(item = item_create(registree_name, object_path, watcher)) ||
+        !(item->owner = strdup(sender))) {
+        if (item)
+            item_destroy(item);
         reply = dbus_message_new_error_printf(msg, DBUS_ERROR_FAILED, "Cannot track %s",
                                               registree_name);
         goto send;

@@ -384,6 +384,7 @@ void item_destroy(TrayItem* item)
         icon_destroy(item->icon);
     free(item->menu_object_path);
     free(item->bus_name);
+    free(item->owner);
     free(item->object_path);
     free(item->app_id);
     free(item->icon_theme_path);
