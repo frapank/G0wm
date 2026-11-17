@@ -159,6 +159,12 @@ static DBusHandlerResult watcher_respond_register_item(TrayWatcher* watcher,
 
     switch (*param) {
         case '/':
+            /* libdbus aborts on a bad path instead of failing the call */
+            if (!dbus_validate_path(param, nullptr)) {
+                reply = dbus_message_new_error_printf(msg, DBUS_ERROR_INVALID_ARGS,
+                                                      "Invalid object path %s", param);
+                goto send;
+            }
             registree_name = sender;
             object_path = param;
             break;

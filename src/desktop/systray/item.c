@@ -152,6 +152,11 @@ static void item_handle_menu_path_ready(DBusPendingCall* pending, void* data)
 
     free(item->menu_object_path);
     item->menu_object_path = item_take_string_property(pending, "menupath");
+    /* sent back as a path, where libdbus aborts on a bad one */
+    if (item->menu_object_path && !dbus_validate_path(item->menu_object_path, nullptr)) {
+        free(item->menu_object_path);
+        item->menu_object_path = nullptr;
+    }
 }
 
 /* Second half of the fallback, where the name becomes a file. */
