@@ -208,8 +208,8 @@ static void item_handle_icon_name_ready(DBusPendingCall* pending, void* data)
     if (!name)
         return;
 
-    RasterIcon* icon = icon_create_from_name(name, item->icon_theme_path,
-                                             watcher_get_icon_size(item_get_watcher(item)));
+    RasterIcon* icon = icon_create_from_client_name(name, item->icon_theme_path,
+                                                    watcher_get_icon_size(item_get_watcher(item)));
     free(name);
     if (!icon)
         return;

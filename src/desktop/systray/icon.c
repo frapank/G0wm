@@ -11,6 +11,8 @@
 #include <pixman.h>
 
 #include <ctype.h>
+#include <errno.h>
+#include <fcntl.h>
 #include <limits.h>
 #include <stdarg.h>
 #include <stdckdint.h>
@@ -18,6 +20,7 @@
 #include <stdio.h>
 #include <stdlib.h>
 #include <string.h>
+#include <sys/stat.h>
 #include <unistd.h>
 
 #define PREMUL_ALPHA(chan, alpha) (chan * alpha + 127) / 255
@@ -104,6 +107,9 @@ fail:
     free(icon);
     return nullptr;
 }
+
+/* no icon is larger than this */
+constexpr off_t ICON_FILEMAX = 16 << 20;
 
 /* Sizes an icon theme keeps raster icons under, best first. */
 constexpr int icon_sizes[] = { 24, 32, 22, 48, 64, 16, 128, 256 };
@@ -208,31 +214,114 @@ static RasterIcon* icon_from_pixbuf(GdkPixbuf* pixbuf)
     return icon;
 }
 
-/* Builds an icon from IconName (or a path). */
-RasterIcon* icon_create_from_name(const char* name, const char* theme_path, int size)
+/* a fifo or a device would block the compositor, only a regular file is read */
+static guchar* icon_read(const char* path, size_t* length)
+{
+    struct stat info;
+    guchar* data = nullptr;
+    size_t done = 0;
+    int fd = open(path, O_RDONLY | O_NONBLOCK | O_NOCTTY | O_CLOEXEC);
+
+    if (fd < 0)
+        return nullptr;
+    if (fstat(fd, &info) || !S_ISREG(info.st_mode) || info.st_size <= 0 ||
+        info.st_size > ICON_FILEMAX || !(data = malloc((size_t)info.st_size)))
+        goto out;
+    while (done < (size_t)info.st_size) {
+        ssize_t got = read(fd, data + done, (size_t)info.st_size - done);
+        if (got < 0 && errno == EINTR)
+            continue;
+        if (got <= 0)
+            break;
+        done += (size_t)got;
+    }
+out:
+    close(fd);
+    if (!done) {
+        free(data);
+        return nullptr;
+    }
+    *length = done;
+    return data;
+}
+
+/* the decoders a client may reach, the others have a long history of bugs */
+static const char* icon_format(const guchar* data, size_t length)
+{
+    if (length >= 8 && !memcmp(data, "\x89PNG\r\n\x1a\n", 8))
+        return "png";
+    if (length >= 3 && !memcmp(data, "\xff\xd8\xff", 3))
+        return "jpeg";
+    if (g_strstr_len((const char*)data, (gssize)MIN(length, 4096), "<svg"))
+        return "svg";
+    return nullptr;
+}
+
+/* scaled to fit size, as gdk_pixbuf_new_from_file_at_scale() does */
+static void icon_size_prepared(GdkPixbufLoader* loader, int width, int height, void* data)
+{
+    const int size = *(int*)data;
+
+    if (size <= 0 || width <= 0 || height <= 0)
+        return;
+    if (width > height)
+        gdk_pixbuf_loader_set_size(loader, size, MAX(1, (int)((double)height * size / width)));
+    else
+        gdk_pixbuf_loader_set_size(loader, MAX(1, (int)((double)width * size / height)), size);
+}
+
+static RasterIcon* icon_load(const char* name, const char* theme_path, int size, int from_client)
 {
     GError* error = nullptr;
+    GdkPixbuf* pixbuf = nullptr;
     char path[PATH_MAX];
+    size_t length;
+    guchar* data;
 
-    if (!name || !*name || !icon_file(path, sizeof(path), name, theme_path))
+    if (!name || !*name || !icon_file(path, sizeof(path), name, theme_path) ||
+        !(data = icon_read(path, &length)))
         return nullptr;
 
-    GdkPixbuf* pixbuf;
-
-    /* decoded at tray size, the pixman filter samples where this averages */
-    if (size > 0)
-        pixbuf = gdk_pixbuf_new_from_file_at_scale(path, size, size, TRUE, &error);
-    else
-        pixbuf = gdk_pixbuf_new_from_file(path, &error);
+    const char* format = icon_format(data, length);
+    if (from_client && !format) {
+        fprintf(stderr, "g0wm: %s: not a png, jpeg or svg icon\n", path);
+        free(data);
+        return nullptr;
+    }
+    GdkPixbufLoader* loader =
+        format ? gdk_pixbuf_loader_new_with_type(format, &error) : gdk_pixbuf_loader_new();
+    if (loader) {
+        /* decoded at tray size, the pixman filter samples where this averages */
+        g_signal_connect(loader, "size-prepared", G_CALLBACK(icon_size_prepared), &size);
+        const int written = gdk_pixbuf_loader_write(loader, data, length, &error);
+        if (gdk_pixbuf_loader_close(loader, written ? &error : nullptr) && written &&
+            (pixbuf = gdk_pixbuf_loader_get_pixbuf(loader)))
+            g_object_ref(pixbuf);
+        g_object_unref(loader);
+    }
+    free(data);
     if (!pixbuf) {
-        fprintf(stderr, "g0wm: %s: %s\n", path, error->message);
-        g_error_free(error);
+        fprintf(stderr, "g0wm: %s: %s\n", path, error ? error->message : "cannot decode");
+        if (error)
+            g_error_free(error);
         return nullptr;
     }
 
     RasterIcon* icon = icon_from_pixbuf(pixbuf);
     g_object_unref(pixbuf);
     return icon;
+}
+
+/* Builds an icon from IconName (or a path). */
+RasterIcon* icon_create_from_name(const char* name, const char* theme_path, int size)
+{
+    return icon_load(name, theme_path, size, 0);
+}
+
+/* the same for a name a client handed over, png, jpeg and svg only */
+RasterIcon* icon_create_from_client_name(const char* name, const char* theme_path, int size)
+{
+    return icon_load(name, theme_path, size, 1);
 }
 
 /* 8 bit rgb(a) rows, scaled down to fit size (0 keeps it) */

@@ -293,7 +293,7 @@ static RasterIcon* notify_image_named(const char* name)
         return nullptr;
     if (!strncmp(name, "file://", 7))
         name += 7;
-    return icon_create_from_name(name, nullptr, NOTIFY_ICONSIZE);
+    return icon_create_from_client_name(name, nullptr, NOTIFY_ICONSIZE);
 }
 
 /* in the spec's order of precedence */
