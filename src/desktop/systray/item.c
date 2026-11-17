@@ -45,7 +45,7 @@ static DBusConnection* item_get_connection(const TrayItem* item)
 }
 
 /* the item may go before the answers do, so it keeps the calls to cancel */
-static void item_request(TrayItem* item, const char* property, PropHandler handler)
+static int item_request(TrayItem* item, const char* property, PropHandler handler)
 {
     DBusPendingCall** slot;
     DBusPendingCall* pending =
@@ -53,13 +53,14 @@ static void item_request(TrayItem* item, const char* property, PropHandler handl
                                  property, SNI_IFACE, handler, item);
 
     if (!pending)
-        return;
+        return 0;
     if (!(slot = wl_array_add(&item->pending, sizeof(*slot)))) {
         dbus_pending_call_cancel(pending);
         dbus_pending_call_unref(pending);
-        return;
+        return 0;
     }
     *slot = pending;
+    return 1;
 }
 
 static void item_forget(TrayItem* item, DBusPendingCall* pending)
@@ -255,11 +256,30 @@ static void item_handle_id_ready(DBusPendingCall* pending, void* data)
         watcher_update_trays(item_get_watcher(item));
 }
 
+static void item_handle_pixmap_ready(DBusPendingCall* pending, void* data);
+
+/* one IconPixmap in flight, a NewIcon meanwhile asks again once it is back */
+static void item_request_pixmap(TrayItem* item)
+{
+    if (item->pixmap_pending) {
+        item->pixmap_stale = 1;
+        return;
+    }
+    item->pixmap_pending = item_request(item, "IconPixmap", item_handle_pixmap_ready);
+}
+
 static void item_handle_pixmap_ready(DBusPendingCall* pending, void* data)
 {
     TrayItem* item = data;
 
     item_forget(item, pending);
+    item->pixmap_pending = 0;
+    if (item->pixmap_stale) {
+        item->pixmap_stale = 0;
+        dbus_pending_call_unref(pending);
+        item_request_pixmap(item);
+        return;
+    }
 
     DBusMessage* reply = nullptr;
     DBusMessageIter iter;
@@ -345,7 +365,7 @@ static DBusHandlerResult item_handle_new_icon(TrayItem* item, DBusMessage* messa
     const char* sender = dbus_message_get_sender(message);
 
     if (sender && strcmp(sender, item->bus_name) == 0) {
-        item_request(item, "IconPixmap", item_handle_pixmap_ready);
+        item_request_pixmap(item);
 
         return DBUS_HANDLER_RESULT_HANDLED;
 
@@ -391,7 +411,7 @@ TrayItem* item_create(const char* bus_name, const char* object_path, TrayWatcher
         goto fail;
     dbus_bus_add_match(connection, match_rule, nullptr);
 
-    item_request(item, "IconPixmap", item_handle_pixmap_ready);
+    item_request_pixmap(item);
     item_request(item, "Id", item_handle_id_ready);
     item_request(item, "Menu", item_handle_menu_path_ready);
 

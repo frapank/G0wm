@@ -40,6 +40,8 @@ typedef struct TrayItem {
     TrayWatcher* watcher;
     /* DBusPendingCall* still to be answered */
     struct wl_array pending;
+    int pixmap_pending;
+    int pixmap_stale;
 
     int foreground_color;
 
