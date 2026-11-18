@@ -412,22 +412,6 @@ void input_motion(uint32_t time,
     LayerSurface* layer_surface = nullptr;
     struct wlr_surface* surface = nullptr;
 
-    /* Find the client under the pointer and send the event along. */
-    input_node_at(cursor->x, cursor->y, &surface, &client, nullptr, &surface_x, &surface_y);
-    bar_title_hover(client, cursor->x, cursor->y);
-
-    if (input_cursor_mode == CURSOR_MODE_PRESSED && !seat->drag &&
-        surface != seat->pointer_state.focused_surface &&
-        client_from_surface(seat->pointer_state.focused_surface, &focused_client, &layer_surface) >=
-            0) {
-        client = focused_client;
-        surface = seat->pointer_state.focused_surface;
-        surface_x =
-            cursor->x - (layer_surface ? layer_surface->scene->node.x : focused_client->geometry.x);
-        surface_y =
-            cursor->y - (layer_surface ? layer_surface->scene->node.y : focused_client->geometry.y);
-    }
-
     /* time is 0 in internal calls meant to restore pointer focus. */
     if (time) {
         wlr_relative_pointer_manager_v1_send_relative_motion(
@@ -467,6 +451,22 @@ void input_motion(uint32_t time,
 
         wlr_cursor_move(cursor, device, delta_x, delta_y);
         input_cursor_moved();
+    }
+
+    /* Find the client under the pointer, where it is now, and send the event along. */
+    input_node_at(cursor->x, cursor->y, &surface, &client, nullptr, &surface_x, &surface_y);
+    bar_title_hover(client, cursor->x, cursor->y);
+
+    if (input_cursor_mode == CURSOR_MODE_PRESSED && !seat->drag &&
+        surface != seat->pointer_state.focused_surface &&
+        client_from_surface(seat->pointer_state.focused_surface, &focused_client, &layer_surface) >=
+            0) {
+        client = focused_client;
+        surface = seat->pointer_state.focused_surface;
+        surface_x =
+            cursor->x - (layer_surface ? layer_surface->scene->node.x : focused_client->geometry.x);
+        surface_y =
+            cursor->y - (layer_surface ? layer_surface->scene->node.y : focused_client->geometry.y);
     }
 
     /* Update drag icon's position */
