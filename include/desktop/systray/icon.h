@@ -25,6 +25,9 @@ typedef struct {
 
 [[nodiscard]] RasterIcon* icon_create(const uint8_t* buf, int width, int height, int size);
 [[nodiscard]] RasterIcon* icon_create_from_name(const char* name, const char* theme_path, int size);
+[[nodiscard]] RasterIcon* icon_create_from_client_name(const char* name,
+                                                       const char* theme_path,
+                                                       int size);
 [[nodiscard]] RasterIcon* icon_create_from_data(const uint8_t* data,
                                                 int width,
                                                 int height,

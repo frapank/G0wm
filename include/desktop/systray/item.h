@@ -28,14 +28,19 @@
 typedef struct TrayItem {
     struct wl_list icons;
     char* bus_name;
+    /* unique name of the client that registered it */
+    char* owner;
     char* object_path;
     char* menu_object_path;
     char* app_id;
     char* icon_theme_path; /* where IconName is looked up first, if set */
     RasterIcon* icon;
-    FallbackIconGlyph* fallback_icon;
 
     TrayWatcher* watcher;
+    /* DBusPendingCall* still to be answered */
+    struct wl_array pending;
+    int pixmap_pending;
+    int pixmap_stale;
 
     int foreground_color;
 

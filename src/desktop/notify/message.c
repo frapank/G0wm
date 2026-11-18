@@ -22,48 +22,6 @@
 constexpr int NOTIFY_IMAGEMAX = 4096;
 
 /* function implementations */
-/* Copies src into dst keeping only whole, well-formed UTF-8 codepoints:
- * control characters become spaces, invalid bytes are dropped and a sequence
- * that doesn't fit is left out entirely. Anything on this path comes straight
- * from an arbitrary bus client, and half a codepoint renders as garbage. */
-static void notify_sanitize(char* dst, size_t dstsz, const char* src)
-{
-    size_t written = 0;
-
-    if (!dstsz)
-        return;
-    size_t sequence_length;
-    for (unsigned char byte; src && (byte = (unsigned char)*src); src += sequence_length) {
-        sequence_length = byte < 0x80   ? 1
-                          : byte < 0xC2 ? 0 /* continuation byte or overlong lead */
-                          : byte < 0xE0 ? 2
-                          : byte < 0xF0 ? 3
-                          : byte < 0xF5 ? 4
-                                        : 0;
-        if (!sequence_length) {
-            sequence_length = 1;
-            continue;
-        }
-        size_t valid_length = 1;
-        while (valid_length < sequence_length && ((unsigned char)src[valid_length] & 0xC0) == 0x80)
-            valid_length++;
-        if (valid_length <
-            sequence_length) { /* truncated sequence: drop the lead byte and resync */
-            sequence_length = 1;
-            continue;
-        }
-        if (written + sequence_length >= dstsz)
-            break;
-        if (byte < ' ' || byte == 0x7f) {
-            dst[written++] = ' '; /* sequence_length is 1 here */
-            continue;
-        }
-        for (size_t offset = 0; offset < sequence_length; offset++)
-            dst[written++] = (char)src[offset];
-    }
-    dst[written] = '\0';
-}
-
 /* Points iter at the n-th Notify argument: actions, hints and
  * notify_expire_timeout sit past containers dbus_message_get_args() won't hand
  * back as is. */
@@ -112,8 +70,8 @@ static void notify_actions(DBusMessage* message, Notification* notification)
         } else if (notification->action_count < NOTIFY_ACTMAX &&
                    strlen(key) < sizeof(notification->actions[0].key)) {
             memcpy(notification->actions[notification->action_count].key, key, strlen(key) + 1);
-            notify_sanitize(notification->actions[notification->action_count].label,
-                            sizeof(notification->actions[0].label), *label ? label : key);
+            util_sanitize(notification->actions[notification->action_count].label,
+                          sizeof(notification->actions[0].label), *label ? label : key);
             notification->action_count++;
         }
     }
@@ -154,7 +112,7 @@ static void notify_desktop_entry(DBusMessage* message, char* dst, size_t dstsz)
         return;
     const char* val;
     dbus_message_iter_get_basic(&var, &val);
-    notify_sanitize(dst, dstsz, val);
+    util_sanitize(dst, dstsz, val);
 }
 
 static int notify_bool_hint(DBusMessage* message, const char* name)
@@ -179,7 +137,7 @@ static void notify_stack_tag(DBusMessage* message, char* dst, size_t dstsz)
         return;
     const char* val;
     dbus_message_iter_get_basic(&var, &val);
-    notify_sanitize(dst, dstsz, val);
+    util_sanitize(dst, dstsz, val);
 }
 
 /* clients send it signed or unsigned */
@@ -335,7 +293,7 @@ static RasterIcon* notify_image_named(const char* name)
         return nullptr;
     if (!strncmp(name, "file://", 7))
         name += 7;
-    return icon_create_from_name(name, nullptr, NOTIFY_ICONSIZE);
+    return icon_create_from_client_name(name, nullptr, NOTIFY_ICONSIZE);
 }
 
 /* in the spec's order of precedence */
@@ -408,10 +366,10 @@ static DBusHandlerResult notify_handle_notify(DBusConnection* connection, DBusMe
     notification.resident = notify_bool_hint(message, "resident");
     notify_actions(message, &notification);
 
-    notify_sanitize(capp, sizeof(capp), *app_name ? app_name : "?");
-    notify_sanitize(csummary, sizeof(csummary), summary);
+    util_sanitize(capp, sizeof(capp), *app_name ? app_name : "?");
+    util_sanitize(csummary, sizeof(csummary), summary);
     notify_demarkup(plain, sizeof(plain), body);
-    notify_sanitize(cbody, sizeof(cbody), plain);
+    util_sanitize(cbody, sizeof(cbody), plain);
     if (*csummary && *cbody)
         snprintf(notification.text, sizeof(notification.text), "%s: %s - %s", capp, csummary,
                  cbody);

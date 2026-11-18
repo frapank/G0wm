@@ -20,6 +20,10 @@
 
 #define MAX(A, B) ((A) > (B) ? (A) : (B))
 
+/* how many items one client and all of them together may register */
+constexpr int WATCHER_CLIENT_ITEMS = 8;
+constexpr int WATCHER_ITEMS = 64;
+
 static const char* const watcher_match_rule = "type='signal',"
                                               "interface='" DBUS_INTERFACE_DBUS "',"
                                               "member='NameOwnerChanged'";
@@ -116,11 +120,12 @@ static DBusHandlerResult watcher_handle_name_owner_changed(TrayWatcher* watcher,
     if (*new_owner != '\0' || *name == '\0')
         return DBUS_HANDLER_RESULT_HANDLED;
 
-    TrayItem* item = watcher_find_item(watcher, name);
-    if (!item)
-        return DBUS_HANDLER_RESULT_HANDLED;
-
-    watcher_unregister_item(watcher, item);
+    /* the items under that name and those the gone client registered */
+    TrayItem* item;
+    TrayItem* next;
+    wl_list_for_each_safe(item, next, &watcher->items, link)
+        if (!strcmp(item->bus_name, name) || (item->owner && !strcmp(item->owner, name)))
+            watcher_unregister_item(watcher, item);
 
     return DBUS_HANDLER_RESULT_HANDLED;
 }
@@ -159,10 +164,22 @@ static DBusHandlerResult watcher_respond_register_item(TrayWatcher* watcher,
 
     switch (*param) {
         case '/':
+            /* libdbus aborts on a bad path instead of failing the call */
+            if (!dbus_validate_path(param, nullptr)) {
+                reply = dbus_message_new_error_printf(msg, DBUS_ERROR_INVALID_ARGS,
+                                                      "Invalid object path %s", param);
+                goto send;
+            }
             registree_name = sender;
             object_path = param;
             break;
         case ':':
+            /* another client's unique name is not ours to register */
+            if (strcmp(param, sender)) {
+                reply = dbus_message_new_error(msg, DBUS_ERROR_ACCESS_DENIED,
+                                               "Cannot register another client");
+                goto send;
+            }
             registree_name = param;
             object_path = SNI_OPATH;
             break;
@@ -186,7 +203,21 @@ static DBusHandlerResult watcher_respond_register_item(TrayWatcher* watcher,
         goto send;
     }
 
-    if (!(item = item_create(registree_name, object_path, watcher))) {
+    int count = 0;
+    int client_count = 0;
+    wl_list_for_each(item, &watcher->items, link) {
+        count++;
+        client_count += item->owner && !strcmp(item->owner, sender);
+    }
+    if (count >= WATCHER_ITEMS || client_count >= WATCHER_CLIENT_ITEMS) {
+        reply = dbus_message_new_error(msg, DBUS_ERROR_LIMITS_EXCEEDED, "Too many items");
+        goto send;
+    }
+
+    if (!(item = item_create(registree_name, object_path, watcher)) ||
+        !(item->owner = strdup(sender))) {
+        if (item)
+            item_destroy(item);
         reply = dbus_message_new_error_printf(msg, DBUS_ERROR_FAILED, "Cannot track %s",
                                               registree_name);
         goto send;
@@ -337,7 +368,7 @@ static DBusHandlerResult watcher_respond_get_prop(TrayWatcher* watcher,
 
     } else {
         dbus_message_unref(reply);
-        reply = dbus_message_new_error_printf(reply, DBUS_ERROR_UNKNOWN_PROPERTY,
+        reply = dbus_message_new_error_printf(message, DBUS_ERROR_UNKNOWN_PROPERTY,
                                               "Property \"%s\" does not exist", prop);
     }
 
@@ -502,6 +533,14 @@ fail:
 
 void watcher_stop(TrayWatcher* watcher)
 {
+    TrayItem* item;
+    TrayItem* next;
+
+    /* no tray redraw here, the bars may already be gone */
+    wl_list_for_each_safe(item, next, &watcher->items, link) {
+        wl_list_remove(&item->link);
+        item_destroy(item);
+    }
     dbus_connection_unregister_object_path(watcher->connection, SNW_OPATH);
     dbus_bus_remove_match(watcher->connection, watcher_match_rule, nullptr);
     dbus_connection_remove_filter(watcher->connection, watcher_filter_bus, watcher);

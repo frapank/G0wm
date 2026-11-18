@@ -13,5 +13,6 @@
 [[nodiscard]] void* util_calloc(size_t count, size_t size);
 [[nodiscard]] int util_set_nonblock(int fd);
 [[nodiscard]] size_t util_put_codepoint(char* out, size_t capacity, unsigned long codepoint);
+void util_sanitize(char* dst, size_t dstsz, const char* src);
 
 #endif

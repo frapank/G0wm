@@ -20,7 +20,7 @@ typedef void (*TrayUpdateCallback)(void* data);
 typedef struct {
     pixman_image_t* image;
     struct fcft_font* font;
-    uint32_t* color_scheme;
+    uint32_t color_scheme[3];
     TrayUpdateCallback on_update;
     TrayWatcher* watcher;
     void* monitor;
@@ -37,7 +37,7 @@ typedef struct {
                                       int icon_size,
                                       int spacing,
                                       int padding,
-                                      uint32_t* color_scheme,
+                                      const uint32_t* color_scheme,
                                       const char** fonts,
                                       const char* font_attributes,
                                       TrayUpdateCallback notify_callback,

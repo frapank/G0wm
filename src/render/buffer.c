@@ -67,7 +67,8 @@ static bool buffer_begin_data_access(struct wlr_buffer* wlr_buffer,
 static void buffer_end_data_access(struct wlr_buffer*) {}
 
 /* Grabs a free width*height buffer from pool, allocating it on first use. The
- * bar and every client's title bar own a pool, as their sizes differ. */
+ * bar and every client's title bar own a pool, as their sizes differ. A free
+ * buffer of another size is replaced, never handed out. */
 RenderBuffer* buffer_get(RenderBuffer** pool, size_t pool_length, int width, int height)
 {
     RenderBuffer* buffer = nullptr;
@@ -76,8 +77,12 @@ RenderBuffer* buffer_get(RenderBuffer** pool, size_t pool_length, int width, int
         if (pool[i]) {
             if (pool[i]->busy)
                 continue;
-            buffer = pool[i];
-            break;
+            if (pool[i]->base.width == width && pool[i]->base.height == height) {
+                buffer = pool[i];
+                break;
+            }
+            wlr_buffer_drop(&pool[i]->base);
+            pool[i] = nullptr;
         }
 
         size_t byte_size;

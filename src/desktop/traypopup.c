@@ -154,7 +154,7 @@ static void traypopup_draw(void)
     int rowh = MAX(1, rowsh / traypopup_state.item_count);
     int rounding = (int)roundf((float)traypopup_corner() * monitor->wlr_output->scale);
 
-    /* buffer_get() ignores the size asked for, so a resize empties the pool */
+    /* a resize drops the old buffers at once, the busy ones too */
     if (buffer_width != traypopup_state.buffer_width_px ||
         buffer_height != traypopup_state.buffer_height_px) {
         buffer_pool_drop(traypopup_state.buffer_pool, LENGTH(traypopup_state.buffer_pool));

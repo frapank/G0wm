@@ -89,6 +89,8 @@ static dbus_bool_t bus_add_watch(DBusWatch* watch, void* data)
     int fd = dbus_watch_get_unix_fd(watch);
     struct wl_event_source* watch_source =
         wl_event_loop_add_fd(loop, fd, mask, bus_handle_watch, watch);
+    if (!watch_source)
+        return FALSE;
 
     dbus_watch_set_data(watch, watch_source, nullptr);
 
@@ -124,6 +126,8 @@ static dbus_bool_t bus_add_timeout(DBusTimeout* timeout, void* data)
 
     struct wl_event_source* timeout_source =
         wl_event_loop_add_timer(loop, bus_handle_timeout, timeout);
+    if (!timeout_source)
+        return FALSE;
 
     const int result = wl_event_source_timer_update(timeout_source, interval);
     if (result < 0) {
@@ -170,8 +174,10 @@ struct wl_event_source* bus_start(DBusConnection* connection, struct wl_event_lo
     int pending = 1;
     int flags;
     struct wl_event_source* bus_source = nullptr;
+    int pipe_handed = 0;
 
     pipefd = util_calloc(2, sizeof(int));
+    pipefd[0] = pipefd[1] = -1;
 
     /*
      * Libdbus forbids calling dbus_connection_dispatch from the
@@ -198,6 +204,7 @@ struct wl_event_source* bus_start(DBusConnection* connection, struct wl_event_lo
 
     dbus_connection_set_dispatch_status_function(connection, bus_dispatch_status, pipefd,
                                                  bus_close_pipe);
+    pipe_handed = 1;
     if (!dbus_connection_set_watch_functions(connection, bus_add_watch, bus_remove_watch, nullptr,
                                              loop, nullptr)) {
         goto fail;
@@ -217,7 +224,15 @@ fail:
         wl_event_source_remove(bus_source);
     dbus_connection_set_timeout_functions(connection, nullptr, nullptr, nullptr, nullptr, nullptr);
     dbus_connection_set_watch_functions(connection, nullptr, nullptr, nullptr, nullptr, nullptr);
+    /* once handed over, libdbus closes the pipe through bus_close_pipe() */
     dbus_connection_set_dispatch_status_function(connection, nullptr, nullptr, nullptr);
+    if (!pipe_handed) {
+        if (pipefd[0] >= 0)
+            close(pipefd[0]);
+        if (pipefd[1] >= 0)
+            close(pipefd[1]);
+        free(pipefd);
+    }
 
     return nullptr;
 }

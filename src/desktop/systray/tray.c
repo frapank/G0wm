@@ -17,6 +17,7 @@
 #include <stdint.h>
 #include <stdio.h>
 #include <stdlib.h>
+#include <string.h>
 
 #define MAX(A, B) ((A) > (B) ? (A) : (B))
 #define MIN(A, B) ((A) < (B) ? (A) : (B))
@@ -102,14 +103,10 @@ void tray_update(SystemTray* tray)
             pixman_color_t fg_color = PIXMAN_COLOR(tray->color_scheme[0]);
             pixman_image_t* foreground;
 
-            if (item->fallback_icon) {
-                glyph = item->fallback_icon;
-            } else {
-                glyph = icon_create_fallback(item->app_id, item->foreground_color, tray->font);
-                if (!glyph)
-                    goto fail;
-                item->fallback_icon = glyph;
-            }
+            /* the glyph belongs to this tray's font, which a reload replaces */
+            glyph = icon_create_fallback(item->app_id, item->foreground_color, tray->font);
+            if (!glyph)
+                goto fail;
 
             pen_x = slot_x_start + (slot_x_width - glyph->width) / 2;
             pen_y = slot_y_start + (slot_y_width - glyph->height) / 2;
@@ -150,7 +147,7 @@ SystemTray* tray_create(void* monitor,
                         int icon_size,
                         int spacing,
                         int padding,
-                        uint32_t* color_scheme,
+                        const uint32_t* color_scheme,
                         const char** fonts,
                         const char* font_attributes,
                         TrayUpdateCallback notify_callback,
@@ -170,7 +167,7 @@ SystemTray* tray_create(void* monitor,
     tray->icon_size = icon_size;
     tray->spacing = spacing;
     tray->padding = padding;
-    tray->color_scheme = color_scheme;
+    memcpy(tray->color_scheme, color_scheme, sizeof(tray->color_scheme));
     tray->on_update = notify_callback;
     tray->watcher = watcher;
     tray->font = font;

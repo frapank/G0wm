@@ -8,18 +8,16 @@
 
 #include <dbus/dbus.h>
 
-#include <errno.h>
-
 // IWYU pragma: no_include "dbus/dbus-protocol.h"
 // IWYU pragma: no_include "dbus/dbus-shared.h"
 
-int helpers_request_property(DBusConnection* connection,
-                             const char* bus_name,
-                             const char* object_path,
-                             const char* property,
-                             const char* interface,
-                             PropHandler handler,
-                             void* data)
+DBusPendingCall* helpers_request_property(DBusConnection* connection,
+                                          const char* bus_name,
+                                          const char* object_path,
+                                          const char* property,
+                                          const char* interface,
+                                          PropHandler handler,
+                                          void* data)
 {
     DBusMessage* message = nullptr;
     DBusPendingCall* pending = nullptr;
@@ -34,7 +32,7 @@ int helpers_request_property(DBusConnection* connection,
     }
 
     dbus_message_unref(message);
-    return 0;
+    return pending;
 
 fail:
     if (pending) {
@@ -43,5 +41,5 @@ fail:
     }
     if (message)
         dbus_message_unref(message);
-    return -ENOMEM;
+    return nullptr;
 }
