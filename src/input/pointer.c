@@ -283,7 +283,8 @@ static void input_cursor_constrain(struct wlr_pointer_constraint_v1* constraint)
         wlr_pointer_constraint_v1_send_deactivated(input_active_constraint);
 
     input_active_constraint = constraint;
-    wlr_pointer_constraint_v1_send_activated(constraint);
+    if (constraint)
+        wlr_pointer_constraint_v1_send_activated(constraint);
 }
 
 void input_handle_frame(struct wl_listener*, void*)
@@ -303,7 +304,8 @@ static void input_cursor_warp_to_hint(void)
     double hint_y = input_active_constraint->current.cursor_hint.y;
 
     client_from_surface(input_active_constraint->surface, &client, nullptr);
-    if (client && input_active_constraint->current.cursor_hint.enabled) {
+    if (client && input_active_constraint->current.cursor_hint.enabled &&
+        input_active_constraint->surface == seat->pointer_state.focused_surface) {
         wlr_cursor_warp(cursor, nullptr, hint_x + client->geometry.x + client->border_width,
                         hint_y + client->geometry.y + client->border_width);
         wlr_seat_pointer_warp(input_active_constraint->seat, hint_x, hint_y);
@@ -418,10 +420,10 @@ void input_motion(uint32_t time,
             relative_pointer_manager, seat, (uint64_t)time * 1000, delta_x, delta_y,
             delta_x_unaccel, delta_y_unaccel);
 
-        struct wlr_pointer_constraint_v1* constraint;
+        /* only the surface under the pointer may hold it */
         if (!lock_active)
-            wl_list_for_each(constraint, &pointer_constraints->constraints, link)
-                input_cursor_constrain(constraint);
+            input_cursor_constrain(wlr_pointer_constraints_v1_constraint_for_surface(
+                pointer_constraints, seat->pointer_state.focused_surface, seat));
 
         if (input_active_constraint && input_cursor_mode != CURSOR_MODE_RESIZE &&
             input_cursor_mode != CURSOR_MODE_MOVE) {
