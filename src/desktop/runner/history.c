@@ -6,11 +6,13 @@
  */
 
 #include <errno.h>
+#include <fcntl.h>
 #include <limits.h>
 #include <stddef.h>
 #include <stdio.h>
 #include <stdlib.h>
 #include <string.h>
+#include <sys/stat.h>
 #include <unistd.h>
 
 #include "core/g0wm.h"
@@ -93,8 +95,15 @@ static void runner_write_history(void)
         *slash = '\0';
     snprintf(tmp, sizeof tmp, "%s.new", path);
     FILE* file = nullptr;
-    if (settings_make_dirs(dir) < 0 || !(file = fopen(tmp, "w"))) {
-        fprintf(stderr, "g0wm: cannot write %s: %s\n", path, strerror(errno));
+    int fd = -1;
+    /* the commands run can hold anything, only the user reads them */
+    if (settings_make_dirs(dir) < 0 ||
+        (fd = open(tmp, O_WRONLY | O_CREAT | O_TRUNC | O_CLOEXEC, 0600)) < 0 ||
+        fchmod(fd, 0600) < 0 || !(file = fdopen(fd, "w"))) {
+        const int error = errno;
+        if (fd >= 0)
+            close(fd);
+        fprintf(stderr, "g0wm: cannot write %s: %s\n", path, strerror(error));
         return;
     }
     for (int i = 0; i < runner_history_count; i++)

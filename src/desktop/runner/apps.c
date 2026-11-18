@@ -192,8 +192,10 @@ static void runner_read_app(const char* path, const char* id, int order)
     int is_application = 0;
     int rank = 0;
     RunnerApplication application = {};
-    char line[4096];
-    while (fgets(line, sizeof line, file)) {
+    /* whole lines, a long value cut in two would start a key of its own */
+    char* line = nullptr;
+    size_t line_capacity = 0;
+    while (getline(&line, &line_capacity, file) > 0) {
         line[strcspn(line, "\r\n")] = '\0';
         if (*line == '[') {
             group = !strcmp(line, "[Desktop Entry]");
@@ -226,6 +228,7 @@ static void runner_read_app(const char* path, const char* id, int order)
         if (!strcmp(key, "Name") && !application.untranslated_name)
             application.untranslated_name = strdup(value);
     }
+    free(line);
     fclose(file);
     if (application.untranslated_name && application.name &&
         !strcmp(application.untranslated_name, application.name)) {
@@ -244,8 +247,21 @@ static void runner_read_app(const char* path, const char* id, int order)
     runner_apps[runner_app_count++] = application;
 }
 
+/* the directories walked down through, so a link back up is not followed */
+typedef struct RunnerScanDir {
+    dev_t device;
+    ino_t inode;
+    const struct RunnerScanDir* up;
+} RunnerScanDir;
+
+constexpr int RUNNER_SCAN_DEPTH = 16;
+
 /* desktop file ids take the path below applications/ with / turned to - */
-static void runner_scan_apps(const char* dir, const char* prefix, int* order)
+static void runner_scan_apps(const char* dir,
+                             const char* prefix,
+                             int* order,
+                             const RunnerScanDir* up,
+                             int depth)
 {
     char path[PATH_MAX], id[PATH_MAX];
 
@@ -262,8 +278,14 @@ static void runner_scan_apps(const char* dir, const char* prefix, int* order)
             continue;
         const size_t id_length = strlen(id);
         if (S_ISDIR(file_info.st_mode) && id_length + 1 < sizeof id) {
+            const RunnerScanDir here = { file_info.st_dev, file_info.st_ino, up };
+            const RunnerScanDir* seen = up;
+            while (seen && (seen->device != here.device || seen->inode != here.inode))
+                seen = seen->up;
+            if (seen || depth >= RUNNER_SCAN_DEPTH)
+                continue;
             strcat(id, "-");
-            runner_scan_apps(path, id, order);
+            runner_scan_apps(path, id, order, &here, depth + 1);
         } else if (id_length > 8 && !strcmp(id + id_length - 8, ".desktop")) {
             runner_read_app(path, id, (*order)++);
         }
@@ -304,7 +326,7 @@ void runner_build_apps(void)
 
     char* saveptr;
     for (char* dir = strtok_r(dirs, ":", &saveptr); dir; dir = strtok_r(nullptr, ":", &saveptr))
-        runner_scan_apps(dir, "", &order);
+        runner_scan_apps(dir, "", &order, nullptr, 0);
     free(dirs);
 
     /* the first of an id wins, then the hidden ones go */
@@ -342,23 +364,62 @@ void runner_free_apps(void)
     runner_selection = 0;
 }
 
-/* Exec with the escapes of the file undone and the field codes dropped,
- * there being no files or urls to hand it */
+/* Exec split into arguments the way the Desktop Entry spec says, each one then
+ * single quoted for the shell. So the shell runs exactly those arguments and
+ * never takes a separator, a pipe or a $ in them as its own syntax. */
 char* runner_app_exec(const char* exec)
 {
-    char *out = util_calloc(1, strlen(exec) + 1), *p = out;
+    char* out = nullptr;
+    size_t out_length = 0;
+    char* argument = util_calloc(1, strlen(exec) + 1);
 
-    for (; *exec; exec++) {
-        if (*exec == '\\' && exec[1]) {
+    while (*exec) {
+        while (*exec == ' ' || *exec == '\t')
             exec++;
-            *p++ = *exec == 's' ? ' ' : *exec == 'n' ? '\n' : *exec == 't' ? '\t' : *exec;
-        } else if (*exec == '%' && exec[1]) {
-            if (*++exec == '%')
-                *p++ = '%';
-        } else {
-            *p++ = *exec;
+        if (!*exec)
+            break;
+        size_t length = 0;
+        int quoted = 0;
+        int field_code_only = 1;
+        for (; *exec && (quoted || (*exec != ' ' && *exec != '\t')); exec++) {
+            if (*exec == '"') {
+                quoted = !quoted;
+                field_code_only = 0;
+            } else if (*exec == '\\' && exec[1]) {
+                /* \s \n \t \r from the key file, \" \` \$ \\ inside quotes */
+                exec++;
+                argument[length++] = *exec == 's'   ? ' '
+                                     : *exec == 'n' ? '\n'
+                                     : *exec == 't' ? '\t'
+                                     : *exec == 'r' ? '\r'
+                                                    : *exec;
+                field_code_only = 0;
+            } else if (*exec == '%' && exec[1]) {
+                /* no files are passed, so every field code but %% goes */
+                if (*++exec == '%') {
+                    argument[length++] = '%';
+                    field_code_only = 0;
+                }
+            } else {
+                argument[length++] = *exec;
+                field_code_only = 0;
+            }
         }
+        if (field_code_only)
+            continue;
+        if (out_length)
+            runner_append(&out, &out_length, " ", 1);
+        runner_append(&out, &out_length, "'", 1);
+        for (size_t i = 0; i < length; i++)
+            if (argument[i] == '\'')
+                runner_append(&out, &out_length, "'\\''", 4);
+            else
+                runner_append(&out, &out_length, &argument[i], 1);
+        runner_append(&out, &out_length, "'", 1);
     }
+    free(argument);
+    if (!out)
+        runner_append(&out, &out_length, "", 0);
     return out;
 }
 
