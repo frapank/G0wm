@@ -103,14 +103,10 @@ void tray_update(SystemTray* tray)
             pixman_color_t fg_color = PIXMAN_COLOR(tray->color_scheme[0]);
             pixman_image_t* foreground;
 
-            if (item->fallback_icon) {
-                glyph = item->fallback_icon;
-            } else {
-                glyph = icon_create_fallback(item->app_id, item->foreground_color, tray->font);
-                if (!glyph)
-                    goto fail;
-                item->fallback_icon = glyph;
-            }
+            /* the glyph belongs to this tray's font, which a reload replaces */
+            glyph = icon_create_fallback(item->app_id, item->foreground_color, tray->font);
+            if (!glyph)
+                goto fail;
 
             pen_x = slot_x_start + (slot_x_width - glyph->width) / 2;
             pen_y = slot_y_start + (slot_y_width - glyph->height) / 2;

@@ -35,7 +35,6 @@ typedef struct TrayItem {
     char* app_id;
     char* icon_theme_path; /* where IconName is looked up first, if set */
     RasterIcon* icon;
-    FallbackIconGlyph* fallback_icon;
 
     TrayWatcher* watcher;
     /* DBusPendingCall* still to be answered */
