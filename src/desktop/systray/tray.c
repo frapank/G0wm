@@ -17,6 +17,7 @@
 #include <stdint.h>
 #include <stdio.h>
 #include <stdlib.h>
+#include <string.h>
 
 #define MAX(A, B) ((A) > (B) ? (A) : (B))
 #define MIN(A, B) ((A) < (B) ? (A) : (B))
@@ -150,7 +151,7 @@ SystemTray* tray_create(void* monitor,
                         int icon_size,
                         int spacing,
                         int padding,
-                        uint32_t* color_scheme,
+                        const uint32_t* color_scheme,
                         const char** fonts,
                         const char* font_attributes,
                         TrayUpdateCallback notify_callback,
@@ -170,7 +171,7 @@ SystemTray* tray_create(void* monitor,
     tray->icon_size = icon_size;
     tray->spacing = spacing;
     tray->padding = padding;
-    tray->color_scheme = color_scheme;
+    memcpy(tray->color_scheme, color_scheme, sizeof(tray->color_scheme));
     tray->on_update = notify_callback;
     tray->watcher = watcher;
     tray->font = font;
