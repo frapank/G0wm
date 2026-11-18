@@ -378,6 +378,8 @@ static DBusHandlerResult notify_handle_notify(DBusConnection* connection, DBusMe
         snprintf(notification.text, sizeof(notification.text), "%s: %s", capp,
                  *csummary ? csummary : cbody);
     snprintf(notification.app_name, sizeof(notification.app_name), "%s", capp);
+    snprintf(notification.sender, sizeof(notification.sender), "%s",
+             dbus_message_get_sender(message) ? dbus_message_get_sender(message) : "");
     notify_desktop_entry(message, notification.desktop_entry, sizeof(notification.desktop_entry));
     notify_stack_tag(message, notification.stack_tag, sizeof(notification.stack_tag));
     notification.progress_percent = notify_value(message);

@@ -233,16 +233,18 @@ void notify_dismiss_all(void)
 }
 
 /* The activation token goes first, as the spec asks, so the client can
- * raise the right window itself. */
+ * raise the right window itself. Only to that client, any other could use it
+ * to take the focus. */
 static void notify_invoke_action(const char* key)
 {
     DBusMessage* sig;
     const char* token;
 
-    if (notify_state.activation_token_callback &&
+    if (notify_state.activation_token_callback && *notify_state.current.sender &&
         (token = notify_state.activation_token_callback()) &&
         (sig = dbus_message_new_signal(NOTIFY_OPATH, NOTIFY_IFACE, "ActivationToken"))) {
-        if (dbus_message_append_args(sig, DBUS_TYPE_UINT32, &notify_state.current.id,
+        if (dbus_message_set_destination(sig, notify_state.current.sender) &&
+            dbus_message_append_args(sig, DBUS_TYPE_UINT32, &notify_state.current.id,
                                      DBUS_TYPE_STRING, &token, DBUS_TYPE_INVALID))
             dbus_connection_send(notify_state.connection, sig, nullptr);
         dbus_message_unref(sig);

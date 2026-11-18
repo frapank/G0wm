@@ -45,6 +45,7 @@ typedef struct {
     uint64_t shown_at_ms;    /* CLOCK_MONOTONIC */
     char text[NOTIFY_TEXTMAX];
     char app_name[64];
+    char sender[256];
     char desktop_entry[64];
     char stack_tag[64];   /* stack tag */
     int progress_percent; /* progress 0-100, -1 without one */
