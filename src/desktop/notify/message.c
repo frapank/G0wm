@@ -93,7 +93,8 @@ static int notify_hint(DBusMessage* message, const char* name, int type, DBusMes
         if (dbus_message_iter_get_arg_type(&entry) != DBUS_TYPE_STRING)
             return 0; /* not the a{sv} the spec asks for */
         dbus_message_iter_get_basic(&entry, &key);
-        if (strcmp(key, name) || !dbus_message_iter_next(&entry))
+        if (strcmp(key, name) || !dbus_message_iter_next(&entry) ||
+            dbus_message_iter_get_arg_type(&entry) != DBUS_TYPE_VARIANT)
             continue;
         dbus_message_iter_recurse(&entry, var);
         return dbus_message_iter_get_arg_type(var) == type;
