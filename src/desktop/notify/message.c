@@ -21,7 +21,53 @@
 /* image-data bigger than this on a side is refused rather than decoded */
 constexpr int NOTIFY_IMAGEMAX = 4096;
 
+/* a client may send this many notifications at once, then one each interval */
+constexpr int NOTIFY_BURST = 10;
+constexpr uint64_t NOTIFY_INTERVAL_MS = 100;
+
+typedef struct {
+    char sender[256];
+    int tokens;
+    uint64_t refilled_ms;
+} NotifyBucket;
+
+/* the senders seen last, the oldest makes room for a new one */
+static NotifyBucket notify_buckets[16];
+
 /* function implementations */
+/* whether sender may notify now, so one client cannot flood the queue or keep
+ * the compositor decoding images */
+static int notify_allowed(const char* sender)
+{
+    const uint64_t now = notify_now();
+    NotifyBucket* bucket = nullptr;
+    NotifyBucket* oldest = &notify_buckets[0];
+
+    for (size_t i = 0; i < sizeof(notify_buckets) / sizeof(*notify_buckets) && !bucket; i++) {
+        if (!strcmp(notify_buckets[i].sender, sender))
+            bucket = &notify_buckets[i];
+        else if (notify_buckets[i].refilled_ms < oldest->refilled_ms)
+            oldest = &notify_buckets[i];
+    }
+    if (!bucket) {
+        bucket = oldest;
+        snprintf(bucket->sender, sizeof(bucket->sender), "%s", sender);
+        bucket->tokens = NOTIFY_BURST;
+        bucket->refilled_ms = now;
+    }
+    const uint64_t refills = (now - bucket->refilled_ms) / NOTIFY_INTERVAL_MS;
+    if (refills) {
+        bucket->tokens = refills >= (uint64_t)(NOTIFY_BURST - bucket->tokens)
+                             ? NOTIFY_BURST
+                             : bucket->tokens + (int)refills;
+        bucket->refilled_ms += refills * NOTIFY_INTERVAL_MS;
+    }
+    if (!bucket->tokens)
+        return 0;
+    bucket->tokens--;
+    return 1;
+}
+
 /* Points iter at the n-th Notify argument: actions, hints and
  * notify_expire_timeout sit past containers dbus_message_get_args() won't hand
  * back as is. */
@@ -93,7 +139,8 @@ static int notify_hint(DBusMessage* message, const char* name, int type, DBusMes
         if (dbus_message_iter_get_arg_type(&entry) != DBUS_TYPE_STRING)
             return 0; /* not the a{sv} the spec asks for */
         dbus_message_iter_get_basic(&entry, &key);
-        if (strcmp(key, name) || !dbus_message_iter_next(&entry))
+        if (strcmp(key, name) || !dbus_message_iter_next(&entry) ||
+            dbus_message_iter_get_arg_type(&entry) != DBUS_TYPE_VARIANT)
             continue;
         dbus_message_iter_recurse(&entry, var);
         return dbus_message_iter_get_arg_type(var) == type;
@@ -350,6 +397,11 @@ static DBusHandlerResult notify_handle_notify(DBusConnection* connection, DBusMe
         dbus_error_free(&err);
         goto send;
     }
+    if (!notify_allowed(dbus_message_get_sender(message) ? dbus_message_get_sender(message) : "")) {
+        reply =
+            dbus_message_new_error(message, DBUS_ERROR_LIMITS_EXCEEDED, "Too many notifications");
+        goto send;
+    }
 
     int timeout_ms = notify_expire_timeout(message);
     /* -1 asks for the server default and 0 for "never expire"; the bar has a
@@ -377,6 +429,8 @@ static DBusHandlerResult notify_handle_notify(DBusConnection* connection, DBusMe
         snprintf(notification.text, sizeof(notification.text), "%s: %s", capp,
                  *csummary ? csummary : cbody);
     snprintf(notification.app_name, sizeof(notification.app_name), "%s", capp);
+    snprintf(notification.sender, sizeof(notification.sender), "%s",
+             dbus_message_get_sender(message) ? dbus_message_get_sender(message) : "");
     notify_desktop_entry(message, notification.desktop_entry, sizeof(notification.desktop_entry));
     notify_stack_tag(message, notification.stack_tag, sizeof(notification.stack_tag));
     notification.progress_percent = notify_value(message);
