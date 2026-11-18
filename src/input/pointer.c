@@ -813,6 +813,12 @@ static int input_wheel_binding(const struct wlr_pointer_axis_event* event)
     return 0;
 }
 
+/* the root has no parent tree, and &NULL->node would be undefined */
+static struct wlr_scene_node* input_parent_node(struct wlr_scene_node* node)
+{
+    return node->parent ? &node->parent->node : nullptr;
+}
+
 void input_node_at(double x,
                    double y,
                    struct wlr_surface** out_surface,
@@ -839,7 +845,7 @@ void input_node_at(double x,
             if (!scene_surface) {
                 /* A title bar carries no surface but knows its client */
                 for (parent_node = node; parent_node && !client;
-                     parent_node = &parent_node->parent->node)
+                     parent_node = input_parent_node(parent_node))
                     client = parent_node->data;
                 if (client && client->type == SURFACE_TYPE_LAYER_SHELL)
                     client = nullptr;
@@ -850,7 +856,8 @@ void input_node_at(double x,
             surface = scene_surface->surface;
         }
         /* Walk the tree to find a node that knows the client */
-        for (parent_node = node; parent_node && !client; parent_node = &parent_node->parent->node)
+        for (parent_node = node; parent_node && !client;
+             parent_node = input_parent_node(parent_node))
             client = parent_node->data;
         if (client && client->type == SURFACE_TYPE_LAYER_SHELL) {
             client = nullptr;
