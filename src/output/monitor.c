@@ -699,6 +699,8 @@ static void monitor_handle_frame(struct wl_listener* listener, void*)
     /* Render if no XDG clients have an outstanding resize and are visible on
      * this monitor. */
     wl_list_for_each(client, &clients, link) {
+        if (!lock_active && VISIBLEON(client, monitor) && client->map_wait_timer)
+            goto skip;
         if (!client_is_rendered_on_monitor(client, monitor))
             continue;
         /* done here rather than on focus changes so that buffers a client
