@@ -22,8 +22,8 @@ struct KeyboardGroup {
     struct wlr_keyboard_group* wlr_group;
 
     int keysym_count;
-    const xkb_keysym_t* keysyms; /* invalid if keysym_count == 0 */
-    uint32_t modifiers_mask;     /* invalid if keysym_count == 0 */
+    xkb_keysym_t keysyms[8]; /* invalid if keysym_count == 0 */
+    uint32_t modifiers_mask; /* invalid if keysym_count == 0 */
     struct wl_event_source* key_repeat_source;
 
     struct wl_listener modifiers;
@@ -35,6 +35,7 @@ struct KeyboardGroup {
 
 static_assert(KEY_CNT % 32 == 0);
 
+int input_has_keyboard(void);
 void input_handle_new_keyboard_inhibitor(struct wl_listener*, void* data);
 KeyboardGroup* input_create_keyboard_group(void);
 void input_handle_keyboard_group_destroy(struct wl_listener* listener, void*);

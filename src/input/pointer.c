@@ -283,7 +283,8 @@ static void input_cursor_constrain(struct wlr_pointer_constraint_v1* constraint)
         wlr_pointer_constraint_v1_send_deactivated(input_active_constraint);
 
     input_active_constraint = constraint;
-    wlr_pointer_constraint_v1_send_activated(constraint);
+    if (constraint)
+        wlr_pointer_constraint_v1_send_activated(constraint);
 }
 
 void input_handle_frame(struct wl_listener*, void*)
@@ -303,7 +304,8 @@ static void input_cursor_warp_to_hint(void)
     double hint_y = input_active_constraint->current.cursor_hint.y;
 
     client_from_surface(input_active_constraint->surface, &client, nullptr);
-    if (client && input_active_constraint->current.cursor_hint.enabled) {
+    if (client && input_active_constraint->current.cursor_hint.enabled &&
+        input_active_constraint->surface == seat->pointer_state.focused_surface) {
         wlr_cursor_warp(cursor, nullptr, hint_x + client->geometry.x + client->border_width,
                         hint_y + client->geometry.y + client->border_width);
         wlr_seat_pointer_warp(input_active_constraint->seat, hint_x, hint_y);
@@ -412,32 +414,16 @@ void input_motion(uint32_t time,
     LayerSurface* layer_surface = nullptr;
     struct wlr_surface* surface = nullptr;
 
-    /* Find the client under the pointer and send the event along. */
-    input_node_at(cursor->x, cursor->y, &surface, &client, nullptr, &surface_x, &surface_y);
-    bar_title_hover(client, cursor->x, cursor->y);
-
-    if (input_cursor_mode == CURSOR_MODE_PRESSED && !seat->drag &&
-        surface != seat->pointer_state.focused_surface &&
-        client_from_surface(seat->pointer_state.focused_surface, &focused_client, &layer_surface) >=
-            0) {
-        client = focused_client;
-        surface = seat->pointer_state.focused_surface;
-        surface_x =
-            cursor->x - (layer_surface ? layer_surface->scene->node.x : focused_client->geometry.x);
-        surface_y =
-            cursor->y - (layer_surface ? layer_surface->scene->node.y : focused_client->geometry.y);
-    }
-
     /* time is 0 in internal calls meant to restore pointer focus. */
     if (time) {
         wlr_relative_pointer_manager_v1_send_relative_motion(
             relative_pointer_manager, seat, (uint64_t)time * 1000, delta_x, delta_y,
             delta_x_unaccel, delta_y_unaccel);
 
-        struct wlr_pointer_constraint_v1* constraint;
+        /* only the surface under the pointer may hold it */
         if (!lock_active)
-            wl_list_for_each(constraint, &pointer_constraints->constraints, link)
-                input_cursor_constrain(constraint);
+            input_cursor_constrain(wlr_pointer_constraints_v1_constraint_for_surface(
+                pointer_constraints, seat->pointer_state.focused_surface, seat));
 
         if (input_active_constraint && input_cursor_mode != CURSOR_MODE_RESIZE &&
             input_cursor_mode != CURSOR_MODE_MOVE) {
@@ -467,6 +453,22 @@ void input_motion(uint32_t time,
 
         wlr_cursor_move(cursor, device, delta_x, delta_y);
         input_cursor_moved();
+    }
+
+    /* Find the client under the pointer, where it is now, and send the event along. */
+    input_node_at(cursor->x, cursor->y, &surface, &client, nullptr, &surface_x, &surface_y);
+    bar_title_hover(client, cursor->x, cursor->y);
+
+    if (input_cursor_mode == CURSOR_MODE_PRESSED && !seat->drag &&
+        surface != seat->pointer_state.focused_surface &&
+        client_from_surface(seat->pointer_state.focused_surface, &focused_client, &layer_surface) >=
+            0) {
+        client = focused_client;
+        surface = seat->pointer_state.focused_surface;
+        surface_x =
+            cursor->x - (layer_surface ? layer_surface->scene->node.x : focused_client->geometry.x);
+        surface_y =
+            cursor->y - (layer_surface ? layer_surface->scene->node.y : focused_client->geometry.y);
     }
 
     /* Update drag icon's position */
@@ -813,6 +815,12 @@ static int input_wheel_binding(const struct wlr_pointer_axis_event* event)
     return 0;
 }
 
+/* the root has no parent tree, and &NULL->node would be undefined */
+static struct wlr_scene_node* input_parent_node(struct wlr_scene_node* node)
+{
+    return node->parent ? &node->parent->node : nullptr;
+}
+
 void input_node_at(double x,
                    double y,
                    struct wlr_surface** out_surface,
@@ -839,7 +847,7 @@ void input_node_at(double x,
             if (!scene_surface) {
                 /* A title bar carries no surface but knows its client */
                 for (parent_node = node; parent_node && !client;
-                     parent_node = &parent_node->parent->node)
+                     parent_node = input_parent_node(parent_node))
                     client = parent_node->data;
                 if (client && client->type == SURFACE_TYPE_LAYER_SHELL)
                     client = nullptr;
@@ -850,7 +858,8 @@ void input_node_at(double x,
             surface = scene_surface->surface;
         }
         /* Walk the tree to find a node that knows the client */
-        for (parent_node = node; parent_node && !client; parent_node = &parent_node->parent->node)
+        for (parent_node = node; parent_node && !client;
+             parent_node = input_parent_node(parent_node))
             client = parent_node->data;
         if (client && client->type == SURFACE_TYPE_LAYER_SHELL) {
             client = nullptr;

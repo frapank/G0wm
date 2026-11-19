@@ -142,7 +142,7 @@ void input_update_seat_caps(void)
     uint32_t caps = WL_SEAT_CAPABILITY_POINTER;
     if (!keyboard_group) /* shutting down */
         return;
-    if (!wl_list_empty(&keyboard_group->wlr_group->devices))
+    if (input_has_keyboard())
         caps |= WL_SEAT_CAPABILITY_KEYBOARD;
     if (tablet_has_touch())
         caps |= WL_SEAT_CAPABILITY_TOUCH;
