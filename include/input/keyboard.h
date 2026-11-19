@@ -35,6 +35,7 @@ struct KeyboardGroup {
 
 static_assert(KEY_CNT % 32 == 0);
 
+int input_has_keyboard(void);
 void input_handle_new_keyboard_inhibitor(struct wl_listener*, void* data);
 KeyboardGroup* input_create_keyboard_group(void);
 void input_handle_keyboard_group_destroy(struct wl_listener* listener, void*);

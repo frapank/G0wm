@@ -31,6 +31,7 @@
 #include "desktop/traypopup.h"
 #include "input/keyboard.h"
 #include "input/pointer.h"
+#include "input/seat.h"
 #include "input/textinput.h"
 #include "internal.h"
 #include "output/lock.h"
@@ -48,6 +49,7 @@ static void input_keep_keysyms(KeyboardGroup* group,
                                int keysym_count);
 
 /* variables */
+static size_t input_virtual_keyboard_count;
 static uint32_t input_runner_repeat_codepoint; /* codepoint the armed key repeat types */
 
 /* function implementations */
@@ -100,6 +102,11 @@ KeyboardGroup* input_create_keyboard_group(void)
     return group;
 }
 
+int input_has_keyboard(void)
+{
+    return input_virtual_keyboard_count || !wl_list_empty(&keyboard_group->wlr_group->devices);
+}
+
 void input_handle_new_keyboard_inhibitor(struct wl_listener*, void* data)
 {
     wlr_keyboard_shortcuts_inhibitor_v1_activate(data);
@@ -113,6 +120,10 @@ void input_handle_keyboard_group_destroy(struct wl_listener* listener, void*)
     wl_list_remove(&group->modifiers.link);
     wl_list_remove(&group->destroy.link);
     wlr_keyboard_group_destroy(group->wlr_group);
+    if (group->virtual_keyboard) {
+        input_virtual_keyboard_count--;
+        input_update_seat_caps();
+    }
     free(group);
 }
 
@@ -342,4 +353,6 @@ void input_handle_new_virtual_keyboard(struct wl_listener*, void* data)
 
     /* Add the new keyboard to the group */
     wlr_keyboard_group_add_keyboard(group->wlr_group, &virtual_keyboard->keyboard);
+    input_virtual_keyboard_count++;
+    input_update_seat_caps();
 }
