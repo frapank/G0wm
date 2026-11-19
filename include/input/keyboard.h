@@ -22,8 +22,8 @@ struct KeyboardGroup {
     struct wlr_keyboard_group* wlr_group;
 
     int keysym_count;
-    const xkb_keysym_t* keysyms; /* invalid if keysym_count == 0 */
-    uint32_t modifiers_mask;     /* invalid if keysym_count == 0 */
+    xkb_keysym_t keysyms[8]; /* invalid if keysym_count == 0 */
+    uint32_t modifiers_mask; /* invalid if keysym_count == 0 */
     struct wl_event_source* key_repeat_source;
 
     struct wl_listener modifiers;

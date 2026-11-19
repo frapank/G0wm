@@ -11,6 +11,7 @@
 #include <stdint.h>
 #include <stdio.h>
 #include <stdlib.h>
+#include <string.h>
 #include <wayland-server-core.h>
 #include <wayland-server-protocol.h>
 #include <wlr/types/wlr_cursor.h>
@@ -41,6 +42,10 @@ static int input_key_binding(uint32_t mods, xkb_keysym_t sym);
 static void input_handle_key(struct wl_listener* listener, void* data);
 static void input_handle_modifiers(struct wl_listener* listener, void*);
 static int input_key_repeat(void* data);
+static void input_keep_keysyms(KeyboardGroup* group,
+                               uint32_t mods,
+                               const xkb_keysym_t* keysyms,
+                               int keysym_count);
 
 /* variables */
 static uint32_t input_runner_repeat_codepoint; /* codepoint the armed key repeat types */
@@ -194,9 +199,7 @@ static void input_handle_key(struct wl_listener* listener, void* data)
              * Escape close the prompt from inside runner_key(), and there is
              * nothing left to repeat into once they have. */
             if (runner_active && group->wlr_group->keyboard.repeat_info.delay > 0) {
-                group->modifiers_mask = mods;
-                group->keysyms = keysyms;
-                group->keysym_count = keysym_count;
+                input_keep_keysyms(group, mods, keysyms, keysym_count);
                 input_runner_repeat_codepoint = codepoint;
                 runner_repeating = 1;
                 wl_event_source_timer_update(group->key_repeat_source,
@@ -236,9 +239,7 @@ static void input_handle_key(struct wl_listener* listener, void* data)
     }
 
     if (handled && group->wlr_group->keyboard.repeat_info.delay > 0) {
-        group->modifiers_mask = mods;
-        group->keysyms = keysyms;
-        group->keysym_count = keysym_count;
+        input_keep_keysyms(group, mods, keysyms, keysym_count);
         wl_event_source_timer_update(group->key_repeat_source,
                                      group->wlr_group->keyboard.repeat_info.delay);
     } else {
@@ -269,6 +270,17 @@ static void input_handle_modifiers(struct wl_listener* listener, void*)
     wlr_seat_set_keyboard(seat, &group->wlr_group->keyboard);
     /* Send modifiers to the client. */
     wlr_seat_keyboard_notify_modifiers(seat, &group->wlr_group->keyboard.modifiers);
+}
+
+/* copied, as xkb hands out syms that a new keymap frees */
+static void input_keep_keysyms(KeyboardGroup* group,
+                               uint32_t mods,
+                               const xkb_keysym_t* keysyms,
+                               int keysym_count)
+{
+    group->modifiers_mask = mods;
+    group->keysym_count = MIN(keysym_count, (int)LENGTH(group->keysyms));
+    memcpy(group->keysyms, keysyms, (size_t)group->keysym_count * sizeof(*keysyms));
 }
 
 static int input_key_repeat(void* data)
