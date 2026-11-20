@@ -1,5 +1,5 @@
 <div align="center">
-  <img src=".github/assets/logo.png" alt="G0wm Logo" width="120"/>
+  <img src=".github/assets/logo.webp" alt="G0wm Logo" width="120"/>
 
 # G0 Window Manager
 
@@ -28,36 +28,24 @@ you share your screen (on Discord, for example) the others can't see their conte
 or title. Same goes for notifications.
 
 **Bar:** the built-in bar handles workspaces, status, notifications and the runner.
-The status text comes from a script, like in other compositors. The runner opens
-with a keybind and launches apps from their `.desktop` files. Prefixes change what
-it does: search the web, do calculations or run a binary directly in a terminal.
-Notifications support images, urgency and history.
+The status text comes from a script. The runner opens with a keybind and launches
+apps from their `.desktop` files. It can also search the web and do calculations.
 
-**Title bars & tabbed:** title bars are on by default. Besides looking nice, they're
-what the tabbed mode uses, like in sway and i3.
+**Title bars & tabbed:** title bars are on by default. They're also what the
+tabbed mode uses, like in sway and i3.
 
-**Looks:** you can configure borders borders, background, style, window colors,
+**Looks:** you can configure borders, background, style, window colors,
 blur and more.
 
 More in [docs/features.md](docs/features.md).
 
 ## Install
 
-Grab a package from the [latest release][Release] (x86_64, wlroots and libscfg included):
+Grab a package from the [latest release][Release] (x86_64, wlroots and libscfg included)
 
-```sh
-sudo apt install ./g0wm_*_amd64.deb                            # Ubuntu 26.04+, Debian testing
-sudo dnf install ./g0wm-*.x86_64.rpm                           # Fedora 44+
-sudo zypper install --allow-unsigned-rpm ./g0wm-*.x86_64.rpm   # openSUSE Tumbleweed
-sudo tar -xzf g0wm-*.tar.gz -C /                               # others, no dependency check
-```
-
-If your distro is too old for the packages, see [Building][Build].
 To check the download: `sha256sum -c --ignore-missing SHA256SUMS`.
 
-## Build
-
-Needs a C23 compiler and wlroots 0.20. With the dependencies installed:
+Or build it yourself. Needs a C23 compiler and wlroots 0.20, with the dependencies installed:
 
 ```sh
 ./configure && make
@@ -82,18 +70,18 @@ leaving an unlocked shell behind the lock screen.
 
 If the session doesn't show up or something won't start, see
 [Troubleshooting][Troubleshooting].
-
 ## Screenshots
 
-<details>
-<summary>Show screenshots</summary>
-
-![g0wm with floating windows and a blue theme](.github/assets/floating-blue.webp)
-![g0wm in the tiling layout with the runner open](.github/assets/tiling-runner.webp)
-![g0wm with a green theme and cmatrix](.github/assets/floating-green.webp)
-![g0wm in the tabbed layout](.github/assets/tabbed.webp)
-
-</details>
+<table>
+  <tr>
+    <td width="50%"><a href=".github/assets/floating-blue.webp"><img src=".github/assets/floating-blue.webp" alt="g0wm with floating windows and a blue theme" width="100%"/></a></td>
+    <td width="50%"><a href=".github/assets/tiling-runner.webp"><img src=".github/assets/tiling-runner.webp" alt="g0wm in the tiling layout with the runner open" width="100%"/></a></td>
+  </tr>
+  <tr>
+    <td><a href=".github/assets/floating-green.webp"><img src=".github/assets/floating-green.webp" alt="g0wm with a green theme and cmatrix" width="100%"/></a></td>
+    <td><a href=".github/assets/tabbed.webp"><img src=".github/assets/tabbed.webp" alt="g0wm in the tabbed layout" width="100%"/></a></td>
+  </tr>
+</table>
 
 ## License
 
