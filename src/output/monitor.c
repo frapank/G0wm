@@ -693,14 +693,13 @@ static void monitor_handle_frame(struct wl_listener* listener, void*)
     struct wlr_output_state pending;
     struct timespec now;
 
+    layout_commit(monitor, lock_active);
     bar_flush_title_updates(monitor);
     wlr_output_state_init(&pending);
 
     /* Render if no XDG clients have an outstanding resize and are visible on
      * this monitor. */
     wl_list_for_each(client, &clients, link) {
-        if (!lock_active && VISIBLEON(client, monitor) && client->map_wait_timer)
-            goto skip;
         if (!client_is_rendered_on_monitor(client, monitor))
             continue;
         /* done here rather than on focus changes so that buffers a client
@@ -712,8 +711,10 @@ static void monitor_handle_frame(struct wl_listener* listener, void*)
 #endif
         /* a tab below the top one is not drawn and gets no frame callbacks,
          * so it never acks. The lock screen never waits for a client */
-        if (!lock_active && client->pending_resize_serial && !client->is_floating &&
-            client->scene_surface->node.enabled && !client_is_stopped(client))
+        if (!lock_active && !client->is_floating && client->scene_surface->node.enabled &&
+            (client->scene_geometry_pending ||
+             (client->pending_resize_serial && !client->resize_timed_out &&
+              !client_is_stopped(client))))
             goto skip;
     }
 
@@ -746,7 +747,8 @@ skip:
     /* a client held back by client_handle_map() still needs frame callbacks */
     wl_list_for_each(client, &clients, link)
         if (client->monitor == monitor && client_surface(client)->mapped &&
-            ((client->is_fullscreen && !VISIBLEON(client, monitor)) || client->map_wait_timer))
+            ((client->is_fullscreen && !VISIBLEON(client, monitor)) || client->map_wait_timer ||
+             (monitor->layout_pending && client->pending_resize_serial)))
             wlr_surface_send_frame_done(client_surface(client), &now);
 
     wlr_output_state_finish(&pending);
