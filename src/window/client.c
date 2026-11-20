@@ -102,6 +102,7 @@ static void client_apply_rules(WindowClient* client)
     client->private_background = client->private_foreground = 0;
     uint32_t newtags = 0;
     Monitor* monitor = selected_monitor;
+    client->is_floating = 0;
 
     const char* app_id = client_get_app_id(client);
     const char* title = client_get_title(client);
@@ -191,14 +192,23 @@ static void client_handle_commit(struct wl_listener* listener, void*)
         if (client->monitor) {
             client_set_scale(client_surface(client), client->monitor->wlr_output->scale);
         }
-        client_set_monitor(client, nullptr,
-                           0); /* Make sure to reapply rules in client_handle_map() */
-
         wlr_xdg_toplevel_set_wm_capabilities(client->surface.xdg->toplevel,
                                              WLR_XDG_TOPLEVEL_WM_CAPABILITIES_FULLSCREEN);
         if (client->decoration)
             client_handle_request_decoration_mode(&client->set_decoration_mode, client->decoration);
-        wlr_xdg_toplevel_set_size(client->surface.xdg->toplevel, 0, 0);
+        struct wlr_box geometry = {};
+        if (client_wants_fullscreen(client) && client->monitor) {
+            geometry = client->monitor->geometry;
+        } else if (layout_client_geometry(client, &geometry)) {
+            geometry.width = MAX(1, geometry.width - 2 * (int)client->border_width);
+            geometry.height =
+                MAX(1, geometry.height - 2 * (int)client->border_width - bar_title_height(client));
+            client_set_tiled(client,
+                             WLR_EDGE_TOP | WLR_EDGE_BOTTOM | WLR_EDGE_LEFT | WLR_EDGE_RIGHT);
+        }
+        client_set_bounds(client, geometry.width, geometry.height);
+        wlr_xdg_toplevel_set_size(client->surface.xdg->toplevel, geometry.width, geometry.height);
+        client_set_monitor(client, nullptr, 0);
         return;
     }
 
@@ -515,6 +525,7 @@ void client_handle_map(struct wl_listener* listener, void*)
         goto unset_fullscreen;
     }
 
+    client->border_width = client->is_fullscreen ? 0 : corner_border_width();
     for (int i = 0; i < 4; i++) {
         client->border_rects[i] =
             wlr_scene_rect_create(client->scene, 0, 0, (float[]){ 0.0f, 0.0f, 0.0f, 0.0f });
@@ -571,8 +582,6 @@ void client_handle_map(struct wl_listener* listener, void*)
 
     const int title_height = bar_title_height(client);
     if (title_height > 0 && client->is_floating) {
-        client->geometry.height += title_height;
-        client->restore_geometry.height += title_height;
         client->restore_geometry.y -= title_height / 2;
         client_resize(client, client->geometry, client->is_floating && !client->is_fullscreen);
     }
@@ -770,6 +779,12 @@ void client_set_monitor(WindowClient* client, Monitor* monitor, uint32_t newtags
     if (oldmon)
         layout_arrange(oldmon);
     if (monitor) {
+        if (!client->map_geometry_initialized && client_surface(client)->mapped) {
+            int title_height = bar_title_height(client);
+            client->geometry.height += title_height;
+            client->restore_geometry.height += title_height;
+            client->map_geometry_initialized = true;
+        }
         /* Make sure window actually overlaps with the monitor */
         client_resize(client, client->geometry, 0);
         client->tags =
@@ -852,6 +867,7 @@ void client_handle_unmap(struct wl_listener* listener, void*)
         client_surface(client)->data = nullptr;
     wlr_scene_node_destroy(&client->scene->node);
     client->title_scene_buffer = nullptr;
+    client->map_geometry_initialized = false;
 #ifdef INTEGRATED_BACKGROUND
     client->blur_scene_buffer = nullptr;
     client->blur_buffer = nullptr;

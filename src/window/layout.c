@@ -20,6 +20,7 @@
 #include "desktop/bar/bar.h"
 #include "input/pointer.h"
 #include "output/monitor.h"
+#include "render/corner.h"
 #include "window/client.h"
 #include "window/layout.h"
 
@@ -28,6 +29,77 @@ static unsigned int layout_tag_index(uint32_t tagset);
 static int layout_tag_beside(uint32_t set, int step);
 
 /* function implementations */
+static struct wlr_box layout_geometry(Monitor* monitor, int count, int index)
+{
+    const int gap = settings->windows.gap_size *
+                    (settings->windows.smart_gaps == count ? 0 : monitor->gaps_enabled);
+    struct wlr_box area = monitor->usable_area;
+    if (monitor->layouts[monitor->selected_layout_index]->arrange == layout_tabbed) {
+        area.x += gap;
+        area.y += gap;
+        area.width -= 2 * gap;
+        area.height -= 2 * gap;
+        return area;
+    }
+
+    int master_width = area.width;
+    if (count > monitor->master_count)
+        master_width =
+            monitor->master_count ? (int)roundf((area.width + gap) * monitor->master_factor) : 0;
+    int remaining;
+    int offset;
+    if (index < monitor->master_count) {
+        remaining = MIN(count, monitor->master_count);
+        offset = index;
+        area.x += gap;
+        area.width = master_width - 2 * gap;
+    } else {
+        remaining = count - monitor->master_count;
+        offset = index - monitor->master_count;
+        area.x += master_width;
+        area.width -= master_width + gap;
+    }
+    const int available = monitor->usable_area.height - gap * (remaining + 1);
+    const int minimum = 1 + 2 * (int)corner_border_width();
+    int y;
+    if (available < remaining * minimum) {
+        y = gap + offset * (minimum + gap);
+        remaining -= offset;
+        area.height = MAX(1, (monitor->usable_area.height - y - gap * remaining) / remaining);
+    } else {
+        const int height = available / remaining;
+        const int taller = available % remaining;
+        y = gap + offset * (height + gap) + MAX(0, offset - (remaining - taller));
+        area.height = height + (offset >= remaining - taller);
+    }
+    area.y += y;
+    return area;
+}
+
+bool layout_client_geometry(WindowClient* client, struct wlr_box* geometry)
+{
+    Monitor* monitor = client->monitor;
+    if (!monitor || client->is_floating || client_get_parent(client) || !VISIBLEON(client, monitor))
+        return false;
+    void (*arrange)(Monitor*) = monitor->layouts[monitor->selected_layout_index]->arrange;
+    if (arrange != layout_tile && arrange != layout_tabbed)
+        return false;
+    int count = 0;
+    int index = -1;
+    WindowClient* other;
+    wl_list_for_each(other, &clients, link) {
+        if (!VISIBLEON(other, monitor) || other->is_floating || other->is_fullscreen)
+            continue;
+        if (other == client)
+            index = count;
+        count++;
+    }
+    if (index < 0)
+        index = count++;
+    *geometry = layout_geometry(monitor, count, index);
+    return true;
+}
+
 void layout_arrange(Monitor* monitor)
 {
 
@@ -275,24 +347,14 @@ void layout_tag(const ActionArg* argument)
  * clients' title bars are packed into its one title row as tabs. */
 void layout_tabbed(Monitor* monitor)
 {
-    unsigned int gaps_enabled = monitor->gaps_enabled;
     int tiled_count = 0;
-
     WindowClient* client;
     wl_list_for_each(client, &clients, link)
         if (VISIBLEON(client, monitor) && !client->is_floating && !client->is_fullscreen)
             tiled_count++;
-    if (tiled_count == 0)
+    if (!tiled_count)
         return;
-    if (settings->windows.smart_gaps == tiled_count)
-        gaps_enabled = 0;
-
-    struct wlr_box area;
-    area.x = monitor->usable_area.x + (int)(settings->windows.gap_size * gaps_enabled);
-    area.y = monitor->usable_area.y + (int)(settings->windows.gap_size * gaps_enabled);
-    area.width = monitor->usable_area.width - 2 * (int)(settings->windows.gap_size * gaps_enabled);
-    area.height =
-        monitor->usable_area.height - 2 * (int)(settings->windows.gap_size * gaps_enabled);
+    struct wlr_box area = layout_geometry(monitor, tiled_count, 0);
 
     WindowClient* top_client = layout_tab_top(monitor);
     wl_list_for_each(client, &clients, link) {
@@ -324,70 +386,23 @@ static unsigned int layout_tag_index(uint32_t tagset)
 
 void layout_tile(Monitor* monitor)
 {
-    unsigned int gaps_enabled = monitor->gaps_enabled;
     int tiled_count = 0;
     WindowClient* client;
-
     wl_list_for_each(client, &clients, link)
         if (VISIBLEON(client, monitor) && !client->is_floating && !client->is_fullscreen)
             tiled_count++;
-    if (tiled_count == 0)
-        return;
-    if (settings->windows.smart_gaps == tiled_count)
-        gaps_enabled = 0;
-
-    unsigned int master_width;
-    if (tiled_count > monitor->master_count)
-        master_width = monitor->master_count
-                           ? (int)roundf((monitor->usable_area.width +
-                                          settings->windows.gap_size * gaps_enabled) *
-                                         monitor->master_factor)
-                           : 0;
-    else
-        master_width = monitor->usable_area.width;
     int index = 0;
-    int master_y = settings->windows.gap_size * gaps_enabled;
-    int stack_y = master_y;
     wl_list_for_each(client, &clients, link) {
         if (!VISIBLEON(client, monitor) || client->is_floating || client->is_fullscreen)
             continue;
-        if (index < monitor->master_count) {
-            const unsigned int remaining = MIN(tiled_count, monitor->master_count) - index;
-            const int height =
-                MAX(1, ((int)monitor->usable_area.height - master_y -
-                        (int)(settings->windows.gap_size * gaps_enabled * remaining)) /
-                           (int)remaining);
-            client_resize(
-                client,
-                (struct wlr_box){
-                    .x = monitor->usable_area.x + settings->windows.gap_size * gaps_enabled,
-                    .y = monitor->usable_area.y + master_y,
-                    .width = master_width - 2 * settings->windows.gap_size * gaps_enabled,
-                    .height = height },
-                0);
-            master_y += client->geometry.height + settings->windows.gap_size * gaps_enabled;
-        } else {
-            const unsigned int remaining = tiled_count - index;
-            const int height =
-                MAX(1, ((int)monitor->usable_area.height - stack_y -
-                        (int)(settings->windows.gap_size * gaps_enabled * remaining)) /
-                           (int)remaining);
-            client_resize(client,
-                          (struct wlr_box){ .x = monitor->usable_area.x + master_width,
-                                            .y = monitor->usable_area.y + stack_y,
-                                            .width = monitor->usable_area.width - master_width -
-                                                     settings->windows.gap_size * gaps_enabled,
-                                            .height = height },
-                          0);
-            stack_y += client->geometry.height + settings->windows.gap_size * gaps_enabled;
-        }
-        index++;
+        client_resize(client, layout_geometry(monitor, tiled_count, index++), 0);
     }
 }
 
 void layout_toggle_gaps(const ActionArg*)
 {
-    selected_monitor->gaps_enabled = !selected_monitor->gaps_enabled;
+    selected_monitor->gaps_enabled =
+        selected_monitor->gaps_enabled ? 0 : MAX(1, settings->windows.gaps);
     layout_arrange(selected_monitor);
 }
 

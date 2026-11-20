@@ -16,6 +16,7 @@ typedef struct {
 } WindowLayout;
 
 void layout_arrange(Monitor* monitor);
+bool layout_client_geometry(WindowClient* client, struct wlr_box* geometry);
 void layout_focus_stack(const ActionArg* argument);
 void layout_inc_master(const ActionArg* argument);
 void layout_move_stack(const ActionArg* argument);
