@@ -542,6 +542,10 @@ void client_handle_map(struct wl_listener* listener, void*)
     client->title_scene_buffer->node.data = client;
     wlr_scene_node_set_enabled(&client->title_scene_buffer->node, 0);
 
+    /* the square title must stay below the antialiased inner edge */
+    for (int i = 0; i < 4; i++)
+        wlr_scene_node_raise_to_top(&client->corner_buffers[i]->node);
+
 #ifdef INTEGRATED_BACKGROUND
     /* the frosted backdrop goes under the lot: the surface, which is what it
      * shows through, and the decorations, which opacity.decorations may fade
