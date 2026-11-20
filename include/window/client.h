@@ -59,6 +59,9 @@ struct WindowClient {
     /* in unmanaged_clients while mapped as unmanaged, not in clients */
     struct wl_list unmanaged_link;
     struct wlr_box geometry; /* layout-relative, includes border */
+    struct wlr_box scene_geometry;
+    bool scene_geometry_pending;
+    bool resize_timed_out;
     bool map_geometry_initialized;
     struct wlr_box restore_geometry; /* layout-relative, includes border */
     struct wlr_box bounds;           /* only width and height are used */

@@ -100,6 +100,44 @@ bool layout_client_geometry(WindowClient* client, struct wlr_box* geometry)
     return true;
 }
 
+void layout_commit(Monitor* monitor, bool force)
+{
+    if (!monitor->layout_pending)
+        return;
+    WindowClient* client;
+    bool waiting = false;
+    wl_list_for_each(client, &clients, link)
+        if (client->monitor == monitor && client->map_wait_timer)
+            waiting = true;
+    force |= !waiting;
+    if (!force) {
+        wl_list_for_each(client, &clients, link) {
+            if (!VISIBLEON(client, monitor) || !client->pending_resize_serial)
+                continue;
+            if (client->map_wait_timer ||
+                (!client->is_floating && client->scene_surface->node.enabled))
+                return;
+        }
+    }
+    monitor->layout_pending = false;
+    wl_list_for_each(client, &clients, link) {
+        if (client->monitor != monitor)
+            continue;
+        if (client->map_wait_timer) {
+            wl_event_source_remove(client->map_wait_timer);
+            client->map_wait_timer = nullptr;
+        }
+        if (client->scene_geometry_pending)
+            client_resize(client, client->geometry, 0);
+    }
+    layout_arrange(monitor);
+    if (force)
+        wl_list_for_each(client, &clients, link)
+            if (client->monitor == monitor && client->pending_resize_serial)
+                client->resize_timed_out = true;
+    bar_draw(monitor);
+}
+
 void layout_arrange(Monitor* monitor)
 {
 
@@ -374,7 +412,8 @@ WindowClient* layout_tab_top(Monitor* monitor)
 {
     WindowClient* client;
     wl_list_for_each(client, &focus_stack, focus_link)
-        if (VISIBLEON(client, monitor) && !client->is_floating && !client->is_fullscreen)
+        if (VISIBLEON(client, monitor) && !client->is_floating && !client->is_fullscreen &&
+            !client->map_wait_timer)
             return client;
     return nullptr;
 }

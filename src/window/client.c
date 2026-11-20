@@ -219,8 +219,8 @@ static void client_handle_commit(struct wl_listener* listener, void*)
         client->pending_resize_serial <= client->surface.xdg->current.configure_serial)
         client->pending_resize_serial = 0;
 
-    if (client->map_wait_timer && !client->pending_resize_serial)
-        client_map_wait_done(client);
+    if (client->monitor && client->monitor->layout_pending)
+        wlr_output_schedule_frame(client->monitor->wlr_output);
 }
 
 static void client_handle_popup_commit(struct wl_listener* listener, void* data)
@@ -563,6 +563,10 @@ void client_handle_map(struct wl_listener* listener, void*)
     client->geometry.width += 2 * client->border_width;
     client->geometry.height += 2 * client->border_width;
 
+    client->map_wait_timer = wl_event_loop_add_timer(event_loop, client_map_wait_done, client);
+    if (client->map_wait_timer)
+        wl_event_source_timer_update(client->map_wait_timer, MAPWAIT_MS);
+
     /* Insert this client into client lists. */
     wl_list_insert(clients.prev, &client->link); /* attach at the bottom of the stack */
     wl_list_insert(&focus_stack, &client->focus_link);
@@ -586,13 +590,8 @@ void client_handle_map(struct wl_listener* listener, void*)
         client_resize(client, client->geometry, client->is_floating && !client->is_fullscreen);
     }
 
-    /* the first buffer has the client's own size, not its tile's: stay hidden
-     * until the resize lands or MAPWAIT_MS passes */
-    if (client->pending_resize_serial) {
-        client->map_wait_timer = wl_event_loop_add_timer(event_loop, client_map_wait_done, client);
-        wl_event_source_timer_update(client->map_wait_timer, MAPWAIT_MS);
-        wlr_scene_node_set_enabled(&client->scene->node, 0);
-    }
+    if (client->monitor)
+        wlr_output_schedule_frame(client->monitor->wlr_output);
 
     bar_draw_all();
     toplevel_map(client);
@@ -612,13 +611,11 @@ static int client_map_wait_done(void* data)
 {
     WindowClient* client = data;
 
-    wl_event_source_remove(client->map_wait_timer);
-    client->map_wait_timer = nullptr;
     if (client->monitor) {
-        wlr_scene_node_set_enabled(&client->scene->node, VISIBLEON(client, client->monitor));
-        /* bar_draw_title_bar() skipped the title bar while the client was
-         * hidden */
-        bar_draw(client->monitor);
+        layout_commit(client->monitor, true);
+    } else {
+        wl_event_source_remove(client->map_wait_timer);
+        client->map_wait_timer = nullptr;
     }
     return 0;
 }
@@ -678,6 +675,19 @@ void client_resize(WindowClient* client, struct wlr_box geometry, int interact)
     client->geometry = geometry;
     client_apply_bounds(client, bbox);
 
+    uint32_t previous_serial = client->pending_resize_serial;
+    client->pending_resize_serial = client_set_size(
+        client, MAX(1, client->geometry.width - 2 * (int)client->border_width),
+        MAX(1, client->geometry.height - 2 * (int)client->border_width - title_height));
+    if (client->pending_resize_serial != previous_serial || !client->pending_resize_serial)
+        client->resize_timed_out = false;
+    if (client->monitor->layout_pending) {
+        client->scene_geometry_pending = !wlr_box_equal(&client->scene_geometry, &client->geometry);
+        return;
+    }
+    client->scene_geometry = client->geometry;
+    client->scene_geometry_pending = false;
+
     /* Update scene-graph, including borders */
     wlr_scene_node_set_position(&client->scene->node, client->geometry.x, client->geometry.y);
     wlr_scene_node_set_position(&client->scene_surface->node, client->border_width,
@@ -701,10 +711,6 @@ void client_resize(WindowClient* client, struct wlr_box geometry, int interact)
                                 client->geometry.width - client->border_width, vertical_inset);
     corner_draw_all(client);
 
-    /* this is a no-op if size hasn't changed */
-    client->pending_resize_serial = client_set_size(
-        client, MAX(1, client->geometry.width - 2 * (int)client->border_width),
-        MAX(1, client->geometry.height - 2 * (int)client->border_width - title_height));
     struct wlr_box clip;
     client_get_clip(client, &clip);
     clip.height -= title_height;
@@ -779,6 +785,8 @@ void client_set_monitor(WindowClient* client, Monitor* monitor, uint32_t newtags
     if (oldmon)
         layout_arrange(oldmon);
     if (monitor) {
+        if (client->map_wait_timer)
+            monitor->layout_pending = true;
         if (!client->map_geometry_initialized && client_surface(client)->mapped) {
             int title_height = bar_title_height(client);
             client->geometry.height += title_height;
@@ -867,6 +875,10 @@ void client_handle_unmap(struct wl_listener* listener, void*)
         client_surface(client)->data = nullptr;
     wlr_scene_node_destroy(&client->scene->node);
     client->title_scene_buffer = nullptr;
+    client->scene_geometry = (struct wlr_box){};
+    client->scene_geometry_pending = false;
+    client->pending_resize_serial = 0;
+    client->resize_timed_out = false;
     client->map_geometry_initialized = false;
 #ifdef INTEGRATED_BACKGROUND
     client->blur_scene_buffer = nullptr;

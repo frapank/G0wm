@@ -104,6 +104,7 @@ struct Monitor {
     RenderBuffer* capture_buffer_pool[1];
     int capture_x, capture_width;
     bool title_update_pending;
+    bool layout_pending;
 #ifdef INTEGRATED_BACKGROUND
     RenderBuffer* wallpaper_buffer_pool[1];
     RenderBuffer* blur_buffer_pool[1];           /* blurred wallpaper buffers */

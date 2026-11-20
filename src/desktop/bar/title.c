@@ -117,6 +117,8 @@ static void bar_paint_title_bar(WindowClient* client, RenderBuffer* buffer, int 
  * group shares one row, so these end up drawn side by side as tabs. */
 void bar_draw_title_bar(WindowClient* client)
 {
+    if (client->monitor && client->monitor->layout_pending)
+        return;
     client->title_update_pending = false;
     if (!client->title_scene_buffer)
         return;
@@ -226,7 +228,7 @@ void bar_place_title_bar(WindowClient* client)
 {
     Monitor* monitor = client->monitor;
 
-    if (!client->title_scene_buffer || !monitor)
+    if (!client->title_scene_buffer || !monitor || monitor->layout_pending)
         return;
 
     int slice_x = 0;
