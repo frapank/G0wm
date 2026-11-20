@@ -613,6 +613,8 @@ static void settings_apply_input(LoadedSettings* loaded, const struct scfg_block
     }
     loaded->values.input.repeat_rate =
         settings_get_int(block, "repeat_rate", loaded->values.input.repeat_rate);
+    loaded->values.input.tap_delay =
+        (int)settings_get_bounded(block, "tap_delay", 1, INT_MAX, loaded->values.input.tap_delay);
     loaded->values.input.repeat_delay =
         settings_get_int(block, "repeat_delay", loaded->values.input.repeat_delay);
     loaded->values.input.cursor_theme =
@@ -813,6 +815,28 @@ static void settings_apply_autostart(LoadedSettings* loaded, const struct scfg_b
     loaded->values.bindings.autostart = flat_commands;
 }
 
+static char* settings_tap_spec(LoadedSettings* loaded, const char* spec, unsigned int* taps)
+{
+    *taps = 1;
+    if (!spec)
+        return nullptr;
+    char* name = settings_alloc(loaded, strlen(spec) + 1, 1);
+    strcpy(name, spec);
+    char* suffix = strchr(name, '*');
+    if (suffix) {
+        char* end;
+        errno = 0;
+        unsigned long count = strtoul(suffix + 1, &end, 10);
+        if (suffix[1] < '0' || suffix[1] > '9' || *end || errno || !count || count > UINT_MAX) {
+            settings_warn("%s is not a tap count", spec);
+            return nullptr;
+        }
+        *suffix = '\0';
+        *taps = (unsigned int)count;
+    }
+    return name;
+}
+
 static void settings_apply_keys(LoadedSettings* loaded, const struct scfg_block* block)
 {
     KeyBinding* parsed_keys =
@@ -825,9 +849,21 @@ static void settings_apply_keys(LoadedSettings* loaded, const struct scfg_block*
         if (strcmp(directive->name, "key") ||
             !(action = settings_action_by_name(settings_param_at(directive, 1))))
             continue;
-        const char* key_name =
-            settings_split_mods(settings_param_at(directive, 0), &parsed_keys[count].modifiers);
-        const xkb_keysym_t keysym = xkb_keysym_from_name(key_name, XKB_KEYSYM_NO_FLAGS);
+        char* spec =
+            settings_tap_spec(loaded, settings_param_at(directive, 0), &parsed_keys[count].taps);
+        if (!spec)
+            continue;
+        const char* key_name = settings_split_mods(spec, &parsed_keys[count].modifiers);
+        xkb_keysym_t keysym = xkb_keysym_from_name(key_name, XKB_KEYSYM_NO_FLAGS);
+        if (keysym == XKB_KEY_VoidSymbol)
+            keysym = XKB_KEY_NoSymbol;
+        for (const EnumEntry* modifier = settings_modifier_names; modifier->name; modifier++) {
+            if (!parsed_keys[count].modifiers && !strcmp(key_name, modifier->name)) {
+                parsed_keys[count].modifiers = (uint32_t)modifier->value;
+                keysym = XKB_KEY_VoidSymbol;
+                break;
+            }
+        }
         if (keysym == XKB_KEY_NoSymbol) {
             settings_warn("%s is not a key", key_name);
             continue;
@@ -856,10 +892,17 @@ static void settings_apply_buttons(LoadedSettings* loaded, const struct scfg_blo
         MouseBinding* button = &parsed_buttons[count];
         button->click_area = (unsigned int)settings_enum_value(
             settings_click_areas, settings_param_at(directive, 0), CLICK_AREA_CLIENT, "click area");
+        char* spec = settings_tap_spec(loaded, settings_param_at(directive, 1), &button->taps);
+        if (!spec)
+            continue;
         button->button = (unsigned int)settings_enum_value(
-            settings_mouse_buttons,
-            settings_split_mods(settings_param_at(directive, 1), &button->modifiers), BTN_LEFT,
+            settings_mouse_buttons, settings_split_mods(spec, &button->modifiers), BTN_LEFT,
             "button");
+        if (button->taps > 1 && button->click_area == CLICK_AREA_CLIENT &&
+            !CLEANMASK(button->modifiers)) {
+            settings_warn("client multi-tap buttons need a modifier");
+            continue;
+        }
         button->callback = action->callback;
         button->argument = settings_get_arg(loaded, action->argument_kind, directive, 3);
         count++;

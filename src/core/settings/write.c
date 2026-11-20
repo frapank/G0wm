@@ -411,6 +411,7 @@ static void settings_write_input(const Settings* values)
     settings_write_close();
     settings_write_int("repeat_rate", values->input.repeat_rate);
     settings_write_int("repeat_delay", values->input.repeat_delay);
+    settings_write_int("tap_delay", values->input.tap_delay);
     settings_write_string("cursor_theme", values->input.cursor_theme);
     settings_write_int("cursor_size", values->input.cursor_size);
     settings_write_bool("hide_cursor_when_typing", values->input.hide_cursor_when_typing);
@@ -556,7 +557,14 @@ static void settings_write_keys(const Settings* values)
                                 sizeof key_name) < 0)
             continue;
         settings_start_group("key");
-        settings_write_combo(values->bindings.key_bindings[i].modifiers, key_name);
+        const KeyBinding* binding = &values->bindings.key_bindings[i];
+        if (binding->keysym == XKB_KEY_VoidSymbol)
+            settings_write_combo(
+                0, settings_enum_name(settings_modifier_names, (int)binding->modifiers));
+        else
+            settings_write_combo(binding->modifiers, key_name);
+        if (binding->taps > 1)
+            fprintf(settings_file, "*%u", binding->taps);
         settings_put_word(action->name);
         settings_write_arg(action->argument_kind, &values->bindings.key_bindings[i].argument);
         fputc('\n', settings_file);
@@ -580,6 +588,8 @@ static void settings_write_buttons(const Settings* values)
         settings_write_combo(values->bindings.mouse_bindings[i].modifiers,
                              settings_enum_name(settings_mouse_buttons,
                                                 (int)values->bindings.mouse_bindings[i].button));
+        if (values->bindings.mouse_bindings[i].taps > 1)
+            fprintf(settings_file, "*%u", values->bindings.mouse_bindings[i].taps);
         settings_put_word(action->name);
         settings_write_arg(action->argument_kind, &values->bindings.mouse_bindings[i].argument);
         fputc('\n', settings_file);

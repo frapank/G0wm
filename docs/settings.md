@@ -336,6 +336,7 @@ it on the fly with `setopacityfocus` and `setopacityunfocus`.
 | `sloppyfocus` | `true` | Focus follows the pointer. |
 | `repeat_rate` | `25` | Key repeats per second. |
 | `repeat_delay` | `600` | Milliseconds before a held key starts repeating. |
+| `tap_delay` | `300` | Maximum milliseconds between taps of a binding. Must be at least 1. |
 | `cursor_theme` | none | Cursor theme. Without it the default theme is used. |
 | `cursor_size` | `24` | Cursor size. |
 | `hide_cursor_when_typing` | `true` | Hide the cursor while typing. |
@@ -527,6 +528,21 @@ key Print spawn sh -c "grim -g \"$(slurp)\" - | swappy -f -"
 key logo+1 view 1
 ```
 
+Add `*N` to run a binding after N taps in a row. A modifier name on its own
+means pressing and releasing that modifier; using it with another key cancels
+its tap sequence.
+
+```scfg
+key logo*2 spawn foot
+key ctrl*2 togglefloating
+key logo+e*2 spawn thunar
+```
+
+The interval between taps is `input.tap_delay` (300 ms by default). A binding
+runs immediately unless the same combination has a binding with more taps.
+For example, with both `logo*2` and `logo*3`, the double tap waits to see if a
+third follows. Holding a key does not add taps.
+
 ### button
 
 ```
@@ -534,6 +550,15 @@ button <area> <modifiers>+<button> <action> [argument]
 ```
 
 Buttons are `left`, `middle`, `right`, `wheel-up` and `wheel-down`.
+They accept the same `*N` suffix and use the same delay as keys. On `client`,
+a multi-tap binding must include a modifier, so ordinary application clicks
+keep working. Taps must stay on the same window or bar item.
+
+```scfg
+button root left*2 spawn foot
+button tagbar right*2 tag
+button client logo+middle*2 togglefloating
+```
 
 | Area | Where |
 | --- | --- |

@@ -41,6 +41,7 @@
 #include "desktop/traypopup.h"
 #include "input/pointer.h"
 #include "input/tablet.h"
+#include "input/tap.h"
 #include "internal.h"
 #include "output/lock.h"
 #include "output/monitor.h"
@@ -76,6 +77,7 @@ WindowClient* input_grab_client;
 static struct wlr_pointer_constraint_v1* input_active_constraint;
 bool input_cursor_hidden = false;
 static int input_grab_x, input_grab_y; /* client-relative */
+static InputTap input_button_tap;
 static double input_press_x, input_press_y;
 
 /* function implementations */
@@ -165,6 +167,39 @@ void input_handle_axis(struct wl_listener*, void* data)
                                  event->delta_discrete, event->source, event->relative_direction);
 }
 
+static int input_button_binding(unsigned int click,
+                                uint32_t mods,
+                                unsigned int button,
+                                WindowClient* client,
+                                ActionArg argument,
+                                uint32_t time)
+{
+    unsigned int count = input_tap_begin(
+        &input_button_tap, CLEANMASK(mods), button, click + 1,
+        client ? (void*)client : selected_monitor,
+        click == CLICK_AREA_TAGS || click == CLICK_AREA_TRAY ? argument : (ActionArg){}, time);
+    const MouseBinding* match = nullptr;
+    int higher = 0;
+    for (size_t i = 0; i < settings->bindings.mouse_binding_count; i++) {
+        const MouseBinding* binding = &settings->bindings.mouse_bindings[i];
+        if (CLEANMASK(mods) != CLEANMASK(binding->modifiers) || button != binding->button ||
+            click != binding->click_area || !binding->callback)
+            continue;
+        unsigned int taps = binding->taps;
+        if (taps == count && !match)
+            match = binding;
+        if (taps > count)
+            higher = 1;
+    }
+    ActionArg bound_argument = match ? match->argument : (ActionArg){};
+    if (match &&
+        (click == CLICK_AREA_TAGS || click == CLICK_AREA_TRAY || click == CLICK_AREA_BAR_TITLE) &&
+        !bound_argument.integer)
+        bound_argument = argument;
+    return input_tap_end(&input_button_tap, match ? match->callback : nullptr, bound_argument,
+                         higher);
+}
+
 void input_handle_button(struct wl_listener*, void* data)
 {
     struct wlr_pointer_button_event* event = data;
@@ -173,6 +208,8 @@ void input_handle_button(struct wl_listener*, void* data)
 
     wlr_idle_notifier_v1_notify_activity(idle_notifier, seat);
     input_cursor_activity();
+    if (lock_active || traypopup_active())
+        input_tap_cancel(&input_button_tap);
 
     /* the open menu owns the pointer, nothing under it sees the click */
     if (!lock_active && traypopup_active()) {
@@ -227,20 +264,9 @@ void input_handle_button(struct wl_listener*, void* data)
             if (click == CLICK_AREA_CLIENT && !CLEANMASK(mods) && event->button == BTN_LEFT &&
                 bar_title_click(client, cursor->x, cursor->y))
                 return;
-            for (const MouseBinding *binding = settings->bindings.mouse_bindings,
-                                    *end = binding + settings->bindings.mouse_binding_count;
-                 binding < end; binding++) {
-                if (CLEANMASK(mods) == CLEANMASK(binding->modifiers) &&
-                    event->button == binding->button && click == binding->click_area &&
-                    binding->callback) {
-                    binding->callback((click == CLICK_AREA_TAGS || click == CLICK_AREA_TRAY ||
-                                       click == CLICK_AREA_BAR_TITLE) &&
-                                              binding->argument.integer == 0
-                                          ? &argument
-                                          : &binding->argument);
-                    return;
-                }
-            }
+            if (input_button_binding(click, mods, event->button, client, argument,
+                                     event->time_msec))
+                return;
             break;
         case WL_POINTER_BUTTON_STATE_RELEASED:
             /* If you released any buttons, we exit interactive move/resize
@@ -788,7 +814,7 @@ static int input_wheel_binding(const struct wlr_pointer_axis_event* event)
     WindowClient* client;
 
     input_node_at(cursor->x, cursor->y, nullptr, &client, nullptr, nullptr, nullptr);
-    ActionArg argument;
+    ActionArg argument = {};
     unsigned int click =
         client ? CLICK_AREA_CLIENT : input_bar_click(monitor_at(cursor->x, cursor->y), &argument);
     int title = client && bar_on_title_bar(client, cursor->x, cursor->y);
@@ -808,7 +834,8 @@ static int input_wheel_binding(const struct wlr_pointer_axis_event* event)
         mode = input_cursor_mode;
         input_cursor_mode = CURSOR_MODE_PRESSED;
         for (notches += step; fabs(notches) >= 1; notches -= notches < 0 ? -1 : 1)
-            binding->callback(&binding->argument);
+            input_button_binding(binding->click_area, mods, wheel, client, argument,
+                                 event->time_msec);
         input_cursor_mode = mode;
         return 1;
     }

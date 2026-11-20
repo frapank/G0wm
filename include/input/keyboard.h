@@ -17,9 +17,16 @@
 #include <xkbcommon/xkbcommon.h>
 
 #include "core/g0wm.h"
+#include "input/tap.h"
 
 struct KeyboardGroup {
     struct wlr_keyboard_group* wlr_group;
+
+    InputTap tap;
+    uint32_t tap_keycode;
+    int tap_modifier;
+    uint32_t tap_initial_mods;
+    unsigned int repeat_taps;
 
     int keysym_count;
     xkb_keysym_t keysyms[8]; /* invalid if keysym_count == 0 */
@@ -35,6 +42,7 @@ struct KeyboardGroup {
 
 static_assert(KEY_CNT % 32 == 0);
 
+int input_key_binding_allowed(void (*callback)(const ActionArg*));
 int input_has_keyboard(void);
 void input_handle_new_keyboard_inhibitor(struct wl_listener*, void* data);
 KeyboardGroup* input_create_keyboard_group(void);

@@ -65,3 +65,48 @@ for value in '/tmp/private image.png' 'imagesize 80' 'textscale 1.5' 'Hidden {ap
 done
 "$binary" -c 2>/dev/null >"$workdir/repeated"
 cmp -s "$output" "$workdir/repeated" || fail 'privacy settings changed on repeated reads'
+
+sed '/^key /d; /^button /d; s/tap_delay [0-9]*/tap_delay 250/' "$config" >"$workdir/base"
+mv "$workdir/base" "$config"
+cat >>"$config" <<'CONFIG'
+key logo*2 spawn foot
+key ctrl*3 togglefloating
+key logo+e*2 spawn thunar
+key a*1 spawn foot
+button root left*2 spawn foot
+button tagbar right*2 tag
+button client logo+middle*2 togglefloating
+CONFIG
+log=$("$binary" -c 2>&1 >"$output") || fail "reading multi-tap bindings failed: $log"
+case $log in
+    *"not a tap count"*|*"is not a key"*|*"need a modifier"*) fail "valid multi-tap binding rejected: $log" ;;
+esac
+for value in 'tap_delay 250' 'key logo*2 spawn foot' 'key ctrl*3 togglefloating' 'key logo+e*2 spawn thunar' 'key a spawn foot' 'button root left*2 spawn foot' 'button tagbar right*2 tag' 'button client logo+middle*2 togglefloating'; do
+    grep -Fq "$value" "$output" || fail "multi-tap binding was not preserved: $value"
+done
+cp "$output" "$config"
+"$binary" -c 2>/dev/null >"$workdir/repeated"
+cmp -s "$output" "$workdir/repeated" || fail 'multi-tap bindings changed on repeated reads'
+
+for spec in 'a*0' 'a*-2' 'a*' 'a*2x' 'a*4294967296' 'a*2*3'; do
+    printf '\nkey %s spawn foot\n' "$spec" >>"$config"
+done
+cat >>"$config" <<'CONFIG'
+button client left*2 spawn foot
+CONFIG
+sed 's/tap_delay 250/tap_delay 0/' "$config" >"$workdir/edited"
+mv "$workdir/edited" "$config"
+log=$("$binary" -c 2>&1 >"$output") || fail "reading invalid multi-tap bindings failed: $log"
+case $log in
+    *"tap_delay must be between"*) ;;
+    *) fail 'invalid tap delay was accepted' ;;
+esac
+grep -q 'tap_delay 300' "$output" || fail 'invalid tap delay did not fall back to the default'
+[ "$(printf '%s' "$log" | grep -c 'not a tap count')" -eq 6 ] || fail "invalid tap count accepted: $log"
+case $log in
+    *"client multi-tap buttons need a modifier"*) ;;
+    *) fail 'client multi-tap without a modifier was accepted' ;;
+esac
+if grep -Fq 'button client left*2' "$output"; then
+    fail 'invalid client multi-tap was preserved'
+fi

@@ -34,6 +34,7 @@ Here is a list of the main additions in g0wm:
 - `clickable status`: the status text can run commands when clicked
 - `scroll`: scrolling on the tags switches tag, and scrolling on a title switches window
 
+- `multi-tap bindings`: add `*2`, `*3` or another count to a key or button binding, including a modifier tapped on its own
 - `reload`: Super+Shift+R (by default) reloads the config file
 - `inhibit`: Super+Esc (by default) turns the g0wm shortcuts off, for apps that need them
 - `hide cursor`: the cursor is hidden while typing

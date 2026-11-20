@@ -18,14 +18,14 @@
     }
 
 #define TAGKEYS(KEY, SKEY, TAG)                                                                    \
-    { MODKEY, KEY, layout_view, { .unsigned_integer = 1 << TAG } },                                \
-        { MODKEY | WLR_MODIFIER_CTRL, KEY, layout_toggle_view, { .unsigned_integer = 1 << TAG } }, \
-        { MODKEY | WLR_MODIFIER_SHIFT, SKEY, layout_tag, { .unsigned_integer = 1 << TAG } },       \
+    { MODKEY, KEY, layout_view, { .unsigned_integer = 1 << TAG }, 1 },                             \
+        { MODKEY | WLR_MODIFIER_CTRL, KEY, layout_toggle_view, { .unsigned_integer = 1 << TAG }, 1 },\
+        { MODKEY | WLR_MODIFIER_SHIFT, SKEY, layout_tag, { .unsigned_integer = 1 << TAG }, 1 },    \
     {                                                                                              \
         MODKEY | WLR_MODIFIER_CTRL | WLR_MODIFIER_SHIFT, SKEY, layout_toggle_tag,                  \
         {                                                                                          \
             .unsigned_integer = 1 << TAG                                                           \
-        }                                                                                          \
+        }, 1                                                                                       \
     }
 
 #define CHVT(n)                                                                                    \
@@ -33,7 +33,7 @@
         WLR_MODIFIER_CTRL | WLR_MODIFIER_ALT, XKB_KEY_XF86Switch_VT_##n, change_virtual_console,   \
         {                                                                                          \
             .unsigned_integer = (n)                                                                \
-        }                                                                                          \
+        }, 1                                                                                       \
     }
 
 static const char* default_fonts[] = { "monospace:size=10" };
@@ -83,89 +83,96 @@ static const char* default_autostart[] = {
 };
 
 static KeyBinding default_keys[] = {
-    { MODKEY, XKB_KEY_q, spawn, { .pointer = terminal_command } },
-    { MODKEY, XKB_KEY_f, spawn, { .pointer = file_manager_command } },
-    { MODKEY, XKB_KEY_b, spawn, { .pointer = browser_command } },
-    { 0, XKB_KEY_Print, spawn, SHCMD("grim -g \"$(slurp)\" - | swappy -f -") },
-    { MODKEY, XKB_KEY_c, client_kill, {} },
-    { MODKEY | WLR_MODIFIER_SHIFT, XKB_KEY_v, client_toggle_floating, {} },
-    { MODKEY | WLR_MODIFIER_SHIFT, XKB_KEY_p, privacy_toggle, {} },
-    { MODKEY | WLR_MODIFIER_CTRL, XKB_KEY_p, bar_notification_toggle_private, {} },
-    { MODKEY | WLR_MODIFIER_SHIFT, XKB_KEY_g, layout_toggle_gaps, {} },
-    { MODKEY | WLR_MODIFIER_SHIFT, XKB_KEY_b, bar_toggle, {} },
-    { MODKEY | WLR_MODIFIER_SHIFT, XKB_KEY_t, bar_toggle_title_bars, {} },
-    { MODKEY, XKB_KEY_t, layout_toggle_tabbed, { .pointer = &default_layouts[1] } },
-    { MODKEY | WLR_MODIFIER_SHIFT, XKB_KEY_f, client_toggle_fullscreen, {} },
-    { MODKEY | WLR_MODIFIER_SHIFT, XKB_KEY_r, settings_reload, {} },
+    { MODKEY, XKB_KEY_q, spawn, { .pointer = terminal_command }, 1 },
+    { MODKEY, XKB_KEY_f, spawn, { .pointer = file_manager_command }, 1 },
+    { MODKEY, XKB_KEY_b, spawn, { .pointer = browser_command }, 1 },
+    { 0, XKB_KEY_Print, spawn, SHCMD("grim -g \"$(slurp)\" - | swappy -f -"), 1 },
+    { MODKEY, XKB_KEY_c, client_kill, {}, 1 },
+    { MODKEY | WLR_MODIFIER_SHIFT, XKB_KEY_v, client_toggle_floating, {}, 1 },
+    { MODKEY | WLR_MODIFIER_SHIFT, XKB_KEY_p, privacy_toggle, {}, 1 },
+    { MODKEY | WLR_MODIFIER_CTRL, XKB_KEY_p, bar_notification_toggle_private, {}, 1 },
+    { MODKEY | WLR_MODIFIER_SHIFT, XKB_KEY_g, layout_toggle_gaps, {}, 1 },
+    { MODKEY | WLR_MODIFIER_SHIFT, XKB_KEY_b, bar_toggle, {}, 1 },
+    { MODKEY | WLR_MODIFIER_SHIFT, XKB_KEY_t, bar_toggle_title_bars, {}, 1 },
+    { MODKEY, XKB_KEY_t, layout_toggle_tabbed, { .pointer = &default_layouts[1] }, 1 },
+    { MODKEY | WLR_MODIFIER_SHIFT, XKB_KEY_f, client_toggle_fullscreen, {}, 1 },
+    { MODKEY | WLR_MODIFIER_SHIFT, XKB_KEY_r, settings_reload, {}, 1 },
 
-    { MODKEY, XKB_KEY_r, runner_toggle, {} },
+    { MODKEY, XKB_KEY_r, runner_toggle, {}, 1 },
 
-    { MODKEY, XKB_KEY_n, bar_notification_scroll, {} },
-    { MODKEY | WLR_MODIFIER_SHIFT, XKB_KEY_n, bar_notification_open, {} },
-    { MODKEY | WLR_MODIFIER_CTRL, XKB_KEY_n, bar_notification_next, {} },
-    { MODKEY | WLR_MODIFIER_ALT, XKB_KEY_n, bar_notification_prev, {} },
+    { MODKEY, XKB_KEY_n, bar_notification_scroll, {}, 1 },
+    { MODKEY | WLR_MODIFIER_SHIFT, XKB_KEY_n, bar_notification_open, {}, 1 },
+    { MODKEY | WLR_MODIFIER_CTRL, XKB_KEY_n, bar_notification_next, {}, 1 },
+    { MODKEY | WLR_MODIFIER_ALT, XKB_KEY_n, bar_notification_prev, {}, 1 },
     { MODKEY | WLR_MODIFIER_CTRL | WLR_MODIFIER_SHIFT,
       XKB_KEY_n,
       bar_notification_dismiss_all,
-      {} },
-    { MODKEY, XKB_KEY_a, bar_notification_actions, {} },
+      {},
+      1 },
+    { MODKEY, XKB_KEY_a, bar_notification_actions, {}, 1 },
 
-    { MODKEY, XKB_KEY_h, layout_focus_stack, { .integer = -1 } },
-    { MODKEY, XKB_KEY_j, layout_focus_stack, { .integer = +1 } },
-    { MODKEY, XKB_KEY_k, layout_focus_stack, { .integer = -1 } },
-    { MODKEY, XKB_KEY_l, layout_focus_stack, { .integer = +1 } },
+    { MODKEY, XKB_KEY_h, layout_focus_stack, { .integer = -1 }, 1 },
+    { MODKEY, XKB_KEY_j, layout_focus_stack, { .integer = +1 }, 1 },
+    { MODKEY, XKB_KEY_k, layout_focus_stack, { .integer = -1 }, 1 },
+    { MODKEY, XKB_KEY_l, layout_focus_stack, { .integer = +1 }, 1 },
 
-    { MODKEY | WLR_MODIFIER_SHIFT, XKB_KEY_h, layout_move_stack, { .integer = -1 } },
-    { MODKEY | WLR_MODIFIER_SHIFT, XKB_KEY_j, layout_move_stack, { .integer = +1 } },
-    { MODKEY | WLR_MODIFIER_SHIFT, XKB_KEY_k, layout_move_stack, { .integer = -1 } },
-    { MODKEY | WLR_MODIFIER_SHIFT, XKB_KEY_l, layout_move_stack, { .integer = +1 } },
+    { MODKEY | WLR_MODIFIER_SHIFT, XKB_KEY_h, layout_move_stack, { .integer = -1 }, 1 },
+    { MODKEY | WLR_MODIFIER_SHIFT, XKB_KEY_j, layout_move_stack, { .integer = +1 }, 1 },
+    { MODKEY | WLR_MODIFIER_SHIFT, XKB_KEY_k, layout_move_stack, { .integer = -1 }, 1 },
+    { MODKEY | WLR_MODIFIER_SHIFT, XKB_KEY_l, layout_move_stack, { .integer = +1 }, 1 },
 
-    { MODKEY | WLR_MODIFIER_CTRL, XKB_KEY_h, layout_resize_width, { .integer = -50 } },
-    { MODKEY | WLR_MODIFIER_CTRL, XKB_KEY_l, layout_resize_width, { .integer = +50 } },
-    { MODKEY | WLR_MODIFIER_CTRL, XKB_KEY_k, layout_resize_height, { .integer = -50 } },
-    { MODKEY | WLR_MODIFIER_CTRL, XKB_KEY_j, layout_resize_height, { .integer = +50 } },
+    { MODKEY | WLR_MODIFIER_CTRL, XKB_KEY_h, layout_resize_width, { .integer = -50 }, 1 },
+    { MODKEY | WLR_MODIFIER_CTRL, XKB_KEY_l, layout_resize_width, { .integer = +50 }, 1 },
+    { MODKEY | WLR_MODIFIER_CTRL, XKB_KEY_k, layout_resize_height, { .integer = -50 }, 1 },
+    { MODKEY | WLR_MODIFIER_CTRL, XKB_KEY_j, layout_resize_height, { .integer = +50 }, 1 },
 
-    { MODKEY, XKB_KEY_o, opacity_change_focused, { .floating = +0.05f } },
-    { MODKEY | WLR_MODIFIER_ALT, XKB_KEY_o, opacity_change_focused, { .floating = -0.05f } },
-    { MODKEY | WLR_MODIFIER_CTRL, XKB_KEY_o, opacity_change_unfocused, { .floating = +0.05f } },
+    { MODKEY, XKB_KEY_o, opacity_change_focused, { .floating = +0.05f }, 1 },
+    { MODKEY | WLR_MODIFIER_ALT, XKB_KEY_o, opacity_change_focused, { .floating = -0.05f }, 1 },
+    { MODKEY | WLR_MODIFIER_CTRL, XKB_KEY_o, opacity_change_unfocused, { .floating = +0.05f }, 1 },
     { MODKEY | WLR_MODIFIER_CTRL | WLR_MODIFIER_ALT,
       XKB_KEY_o,
       opacity_change_unfocused,
-      { .floating = -0.05f } },
-    { MODKEY | WLR_MODIFIER_SHIFT, XKB_KEY_o, opacity_toggle, {} },
+      { .floating = -0.05f },
+      1 },
+    { MODKEY | WLR_MODIFIER_SHIFT, XKB_KEY_o, opacity_toggle, {}, 1 },
 
-    { MODKEY | WLR_MODIFIER_ALT, XKB_KEY_equal, magnifier_magnify, { .floating = +0.25f } },
-    { MODKEY | WLR_MODIFIER_ALT, XKB_KEY_minus, magnifier_magnify, { .floating = -0.25f } },
-    { MODKEY | WLR_MODIFIER_ALT, XKB_KEY_0, magnifier_magnify, { .floating = 0 } },
+    { MODKEY | WLR_MODIFIER_ALT, XKB_KEY_equal, magnifier_magnify, { .floating = +0.25f }, 1 },
+    { MODKEY | WLR_MODIFIER_ALT, XKB_KEY_minus, magnifier_magnify, { .floating = -0.25f }, 1 },
+    { MODKEY | WLR_MODIFIER_ALT, XKB_KEY_0, magnifier_magnify, { .floating = 0 }, 1 },
 
-    { 0, XKB_KEY_XF86AudioRaiseVolume, spawn, SHCMD("wpctl set-volume @DEFAULT_AUDIO_SINK@ 5%+") },
-    { 0, XKB_KEY_XF86AudioLowerVolume, spawn, SHCMD("wpctl set-volume @DEFAULT_AUDIO_SINK@ 5%-") },
-    { 0, XKB_KEY_XF86AudioMute, spawn, SHCMD("wpctl set-mute @DEFAULT_AUDIO_SINK@ toggle") },
-    { 0, XKB_KEY_XF86AudioMicMute, spawn, SHCMD("wpctl set-mute @DEFAULT_AUDIO_SOURCE@ toggle") },
-    { 0, XKB_KEY_XF86MonBrightnessUp, spawn, SHCMD("brightnessctl s 10%+") },
-    { 0, XKB_KEY_XF86MonBrightnessDown, spawn, SHCMD("brightnessctl s 10%-") },
-    { 0, XKB_KEY_XF86AudioNext, spawn, SHCMD("playerctl next") },
-    { 0, XKB_KEY_XF86AudioPause, spawn, SHCMD("playerctl play-pause") },
-    { 0, XKB_KEY_XF86AudioPlay, spawn, SHCMD("playerctl play-pause") },
-    { 0, XKB_KEY_XF86AudioPrev, spawn, SHCMD("playerctl previous") },
+    { 0, XKB_KEY_XF86AudioRaiseVolume, spawn, SHCMD("wpctl set-volume @DEFAULT_AUDIO_SINK@ 5%+"),
+      1 },
+    { 0, XKB_KEY_XF86AudioLowerVolume, spawn, SHCMD("wpctl set-volume @DEFAULT_AUDIO_SINK@ 5%-"),
+      1 },
+    { 0, XKB_KEY_XF86AudioMute, spawn, SHCMD("wpctl set-mute @DEFAULT_AUDIO_SINK@ toggle"), 1 },
+    { 0, XKB_KEY_XF86AudioMicMute, spawn, SHCMD("wpctl set-mute @DEFAULT_AUDIO_SOURCE@ toggle"),
+      1 },
+    { 0, XKB_KEY_XF86MonBrightnessUp, spawn, SHCMD("brightnessctl s 10%+"), 1 },
+    { 0, XKB_KEY_XF86MonBrightnessDown, spawn, SHCMD("brightnessctl s 10%-"), 1 },
+    { 0, XKB_KEY_XF86AudioNext, spawn, SHCMD("playerctl next"), 1 },
+    { 0, XKB_KEY_XF86AudioPause, spawn, SHCMD("playerctl play-pause"), 1 },
+    { 0, XKB_KEY_XF86AudioPlay, spawn, SHCMD("playerctl play-pause"), 1 },
+    { 0, XKB_KEY_XF86AudioPrev, spawn, SHCMD("playerctl previous"), 1 },
 
-    { MODKEY, XKB_KEY_i, layout_inc_master, { .integer = +1 } },
-    { MODKEY, XKB_KEY_d, layout_inc_master, { .integer = -1 } },
-    { MODKEY, XKB_KEY_Return, layout_zoom, {} },
-    { MODKEY, XKB_KEY_Tab, layout_view, {} },
-    { MODKEY, XKB_KEY_space, layout_set, {} },
-    { MODKEY, XKB_KEY_0, layout_view, { .unsigned_integer = ~0 } },
-    { MODKEY | WLR_MODIFIER_SHIFT, XKB_KEY_parenright, layout_tag, { .unsigned_integer = ~0 } },
-    { MODKEY, XKB_KEY_comma, monitor_focus, { .integer = WLR_DIRECTION_LEFT } },
-    { MODKEY, XKB_KEY_period, monitor_focus, { .integer = WLR_DIRECTION_RIGHT } },
+    { MODKEY, XKB_KEY_i, layout_inc_master, { .integer = +1 }, 1 },
+    { MODKEY, XKB_KEY_d, layout_inc_master, { .integer = -1 }, 1 },
+    { MODKEY, XKB_KEY_Return, layout_zoom, {}, 1 },
+    { MODKEY, XKB_KEY_Tab, layout_view, {}, 1 },
+    { MODKEY, XKB_KEY_space, layout_set, {}, 1 },
+    { MODKEY, XKB_KEY_0, layout_view, { .unsigned_integer = ~0 }, 1 },
+    { MODKEY | WLR_MODIFIER_SHIFT, XKB_KEY_parenright, layout_tag, { .unsigned_integer = ~0 }, 1 },
+    { MODKEY, XKB_KEY_comma, monitor_focus, { .integer = WLR_DIRECTION_LEFT }, 1 },
+    { MODKEY, XKB_KEY_period, monitor_focus, { .integer = WLR_DIRECTION_RIGHT }, 1 },
     { MODKEY | WLR_MODIFIER_SHIFT,
       XKB_KEY_less,
       monitor_send_client,
-      { .integer = WLR_DIRECTION_LEFT } },
+      { .integer = WLR_DIRECTION_LEFT },
+      1 },
     { MODKEY | WLR_MODIFIER_SHIFT,
       XKB_KEY_greater,
       monitor_send_client,
-      { .integer = WLR_DIRECTION_RIGHT } },
+      { .integer = WLR_DIRECTION_RIGHT },
+      1 },
     TAGKEYS(XKB_KEY_1, XKB_KEY_exclam, 0),
     TAGKEYS(XKB_KEY_2, XKB_KEY_at, 1),
     TAGKEYS(XKB_KEY_3, XKB_KEY_numbersign, 2),
@@ -175,10 +182,10 @@ static KeyBinding default_keys[] = {
     TAGKEYS(XKB_KEY_7, XKB_KEY_ampersand, 6),
     TAGKEYS(XKB_KEY_8, XKB_KEY_asterisk, 7),
     TAGKEYS(XKB_KEY_9, XKB_KEY_parenleft, 8),
-    { MODKEY | WLR_MODIFIER_SHIFT, XKB_KEY_Escape, quit, {} },
-    { MODKEY, XKB_KEY_Escape, input_toggle_inhibit, {} },
+    { MODKEY | WLR_MODIFIER_SHIFT, XKB_KEY_Escape, quit, {}, 1 },
+    { MODKEY, XKB_KEY_Escape, input_toggle_inhibit, {}, 1 },
 
-    { WLR_MODIFIER_CTRL | WLR_MODIFIER_ALT, XKB_KEY_Terminate_Server, quit, {} },
+    { WLR_MODIFIER_CTRL | WLR_MODIFIER_ALT, XKB_KEY_Terminate_Server, quit, {}, 1 },
     CHVT(1),
     CHVT(2),
     CHVT(3),
@@ -194,46 +201,47 @@ static KeyBinding default_keys[] = {
 };
 
 static MouseBinding default_buttons[] = {
-    { CLICK_AREA_LAYOUT_SYMBOL, 0, BTN_LEFT, layout_set, { .pointer = &default_layouts[0] } },
-    { CLICK_AREA_LAYOUT_SYMBOL, 0, BTN_RIGHT, layout_set, { .pointer = &default_layouts[1] } },
+    { CLICK_AREA_LAYOUT_SYMBOL, 0, BTN_LEFT, layout_set, { .pointer = &default_layouts[0] }, 1 },
+    { CLICK_AREA_LAYOUT_SYMBOL, 0, BTN_RIGHT, layout_set, { .pointer = &default_layouts[1] }, 1 },
 
-    { CLICK_AREA_BAR_TITLE, 0, BTN_MIDDLE, layout_zoom, {} },
-    { CLICK_AREA_BAR_TITLE, 0, BTN_LEFT, bar_notification_open, {} },
-    { CLICK_AREA_BAR_TITLE, 0, BTN_RIGHT, bar_notification_dismiss, {} },
+    { CLICK_AREA_BAR_TITLE, 0, BTN_MIDDLE, layout_zoom, {}, 1 },
+    { CLICK_AREA_BAR_TITLE, 0, BTN_LEFT, bar_notification_open, {}, 1 },
+    { CLICK_AREA_BAR_TITLE, 0, BTN_RIGHT, bar_notification_dismiss, {}, 1 },
 
-    { CLICK_AREA_STATUS, 0, BTN_MIDDLE, spawn, { .pointer = terminal_command } },
+    { CLICK_AREA_STATUS, 0, BTN_MIDDLE, spawn, { .pointer = terminal_command }, 1 },
 
-    { CLICK_AREA_TRAY, 0, BTN_LEFT, bar_tray_activate, {} },
-    { CLICK_AREA_TRAY, 0, BTN_RIGHT, bar_tray_menu, {} },
+    { CLICK_AREA_TRAY, 0, BTN_LEFT, bar_tray_activate, {}, 1 },
+    { CLICK_AREA_TRAY, 0, BTN_RIGHT, bar_tray_menu, {}, 1 },
 
-    { CLICK_AREA_TAGS, 0, BTN_LEFT, layout_view, {} },
-    { CLICK_AREA_TAGS, 0, BTN_RIGHT, layout_toggle_view, {} },
-    { CLICK_AREA_TAGS, MODKEY, BTN_LEFT, layout_tag, {} },
-    { CLICK_AREA_TAGS, MODKEY, BTN_RIGHT, layout_toggle_tag, {} },
-    { CLICK_AREA_TAGS, 0, MOUSE_WHEEL_UP, layout_shift_view, { .integer = -1 } },
-    { CLICK_AREA_TAGS, 0, MOUSE_WHEEL_DOWN, layout_shift_view, { .integer = +1 } },
+    { CLICK_AREA_TAGS, 0, BTN_LEFT, layout_view, {}, 1 },
+    { CLICK_AREA_TAGS, 0, BTN_RIGHT, layout_toggle_view, {}, 1 },
+    { CLICK_AREA_TAGS, MODKEY, BTN_LEFT, layout_tag, {}, 1 },
+    { CLICK_AREA_TAGS, MODKEY, BTN_RIGHT, layout_toggle_tag, {}, 1 },
+    { CLICK_AREA_TAGS, 0, MOUSE_WHEEL_UP, layout_shift_view, { .integer = -1 }, 1 },
+    { CLICK_AREA_TAGS, 0, MOUSE_WHEEL_DOWN, layout_shift_view, { .integer = +1 }, 1 },
 
-    { CLICK_AREA_WINDOW_TITLE, 0, MOUSE_WHEEL_UP, layout_focus_stack, { .integer = -1 } },
-    { CLICK_AREA_WINDOW_TITLE, 0, MOUSE_WHEEL_DOWN, layout_focus_stack, { .integer = +1 } },
+    { CLICK_AREA_WINDOW_TITLE, 0, MOUSE_WHEEL_UP, layout_focus_stack, { .integer = -1 }, 1 },
+    { CLICK_AREA_WINDOW_TITLE, 0, MOUSE_WHEEL_DOWN, layout_focus_stack, { .integer = +1 }, 1 },
 
     { CLICK_AREA_CLIENT,
       MODKEY,
       BTN_LEFT,
       input_move_resize,
-      { .unsigned_integer = CURSOR_MODE_MOVE } },
-    { CLICK_AREA_CLIENT, MODKEY, BTN_MIDDLE, client_toggle_floating, {} },
+      { .unsigned_integer = CURSOR_MODE_MOVE },
+      1 },
+    { CLICK_AREA_CLIENT, MODKEY, BTN_MIDDLE, client_toggle_floating, {}, 1 },
     { CLICK_AREA_CLIENT,
       MODKEY,
       BTN_RIGHT,
       input_move_resize,
-      { .unsigned_integer = CURSOR_MODE_RESIZE } },
+      { .unsigned_integer = CURSOR_MODE_RESIZE },
+      1 },
 
-    { CLICK_AREA_CLIENT, MODKEY, MOUSE_WHEEL_UP, magnifier_magnify, { .floating = +0.25f } },
-    { CLICK_AREA_CLIENT, MODKEY, MOUSE_WHEEL_DOWN, magnifier_magnify, { .floating = -0.25f } },
-    { CLICK_AREA_ROOT, MODKEY, MOUSE_WHEEL_UP, magnifier_magnify, { .floating = +0.25f } },
-    { CLICK_AREA_ROOT, MODKEY, MOUSE_WHEEL_DOWN, magnifier_magnify, { .floating = -0.25f } },
+    { CLICK_AREA_CLIENT, MODKEY, MOUSE_WHEEL_UP, magnifier_magnify, { .floating = +0.25f }, 1 },
+    { CLICK_AREA_CLIENT, MODKEY, MOUSE_WHEEL_DOWN, magnifier_magnify, { .floating = -0.25f }, 1 },
+    { CLICK_AREA_ROOT, MODKEY, MOUSE_WHEEL_UP, magnifier_magnify, { .floating = +0.25f }, 1 },
+    { CLICK_AREA_ROOT, MODKEY, MOUSE_WHEEL_DOWN, magnifier_magnify, { .floating = -0.25f }, 1 },
 };
-
 /* a finger count used here is taken from the apps */
 static GestureBinding default_gestures[] = {
     { GESTURE_SWIPE_LEFT, 3, layout_shift_view, { .integer = +1 } },
@@ -391,6 +399,7 @@ static const Settings default_settings = {
         },
         .repeat_rate = 25,
         .repeat_delay = 600,
+        .tap_delay = 300,
         .cursor_theme = nullptr,
         .cursor_size = 24,
         .hide_cursor_when_typing = 1,
