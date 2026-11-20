@@ -75,6 +75,7 @@ typedef struct {
     unsigned int button;
     void (*callback)(const ActionArg*);
     ActionArg argument;
+    unsigned int taps;
 } MouseBinding;
 
 typedef struct {
@@ -95,6 +96,7 @@ typedef struct {
     xkb_keysym_t keysym;
     void (*callback)(const ActionArg*);
     ActionArg argument;
+    unsigned int taps;
 } KeyBinding;
 
 typedef struct {
@@ -259,6 +261,7 @@ typedef struct {
     struct xkb_rule_names xkb_rules;
     int repeat_rate;
     int repeat_delay;
+    int tap_delay;
     const char* cursor_theme;
     int cursor_size;
     int hide_cursor_when_typing;
