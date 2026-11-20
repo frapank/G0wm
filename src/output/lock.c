@@ -15,6 +15,7 @@
 #include "core/util.h"
 #include "desktop/traypopup.h"
 #include "input/pointer.h"
+#include "input/tap.h"
 #include "output/lock.h"
 #include "output/monitor.h"
 #include "window/client.h"
@@ -154,6 +155,7 @@ void lock_handle_new_lock(struct wl_listener*, void* data)
     lock->scene = wlr_scene_tree_create(layers[SCENE_LAYER_LOCK]);
     lock_current = lock->lock = session_lock;
     lock_active = 1;
+    input_taps_cancel();
     /* clicks and motion must stop reaching the window under the lock */
     input_release_constraint();
     input_reset_cursor();

@@ -39,7 +39,8 @@
 /* function declarations */
 static int input_hide_cursor(void*);
 static struct wlr_keyboard_shortcuts_inhibitor_v1* input_focused_inhibitor(void);
-static int input_key_binding(uint32_t mods, xkb_keysym_t sym);
+static int input_key_binding(uint32_t mods, xkb_keysym_t sym, unsigned int taps);
+static int input_key_tap(KeyboardGroup* group, uint32_t mods, xkb_keysym_t sym, uint32_t time);
 static void input_handle_key(struct wl_listener* listener, void* data);
 static void input_handle_modifiers(struct wl_listener* listener, void*);
 static int input_key_repeat(void* data);
@@ -115,6 +116,7 @@ void input_handle_new_keyboard_inhibitor(struct wl_listener*, void* data)
 void input_handle_keyboard_group_destroy(struct wl_listener* listener, void*)
 {
     KeyboardGroup* group = wl_container_of(listener, group, destroy);
+    input_tap_destroy(&group->tap);
     wl_event_source_remove(group->key_repeat_source);
     wl_list_remove(&group->key.link);
     wl_list_remove(&group->modifiers.link);
@@ -145,27 +147,58 @@ static struct wlr_keyboard_shortcuts_inhibitor_v1* input_focused_inhibitor(void)
     return nullptr;
 }
 
-static int input_key_binding(uint32_t mods, xkb_keysym_t sym)
+int input_key_binding_allowed(void (*callback)(const ActionArg*))
 {
-    /*
-     * Here we handle compositor keybindings. This is when the compositor is
-     * processing keys, rather than passing them on to the client for its own
-     * processing.
-     */
     struct wlr_keyboard_shortcuts_inhibitor_v1* inhibitor = input_focused_inhibitor();
-    int inhibited = inhibitor && inhibitor->active;
+    return !inhibitor || !inhibitor->active || callback == input_toggle_inhibit;
+}
 
-    for (const KeyBinding *binding = settings->bindings.key_bindings,
-                          *end = binding + settings->bindings.key_binding_count;
-         binding < end; binding++) {
+static int input_key_binding(uint32_t mods, xkb_keysym_t sym, unsigned int taps)
+{
+    for (size_t i = 0; i < settings->bindings.key_binding_count; i++) {
+        const KeyBinding* binding = &settings->bindings.key_bindings[i];
+        if (binding->taps != taps || binding->keysym == XKB_KEY_VoidSymbol)
+            continue;
         if (CLEANMASK(mods) == CLEANMASK(binding->modifiers) &&
             xkb_keysym_to_lower(sym) == xkb_keysym_to_lower(binding->keysym) && binding->callback &&
-            (!inhibited || binding->callback == input_toggle_inhibit)) {
+            input_key_binding_allowed(binding->callback)) {
             binding->callback(&binding->argument);
             return 1;
         }
     }
     return 0;
+}
+
+static int input_key_tap(KeyboardGroup* group, uint32_t mods, xkb_keysym_t sym, uint32_t time)
+{
+    unsigned int count =
+        input_tap_begin(&group->tap, sym == XKB_KEY_VoidSymbol ? mods : CLEANMASK(mods),
+                        xkb_keysym_to_lower(sym), 0, selected_monitor, (ActionArg){}, time);
+    const KeyBinding* match = nullptr;
+    int higher = 0;
+    for (size_t i = 0; i < settings->bindings.key_binding_count; i++) {
+        const KeyBinding* binding = &settings->bindings.key_bindings[i];
+        if ((sym == XKB_KEY_VoidSymbol ? mods != binding->modifiers
+                                       : CLEANMASK(mods) != CLEANMASK(binding->modifiers)) ||
+            xkb_keysym_to_lower(sym) != xkb_keysym_to_lower(binding->keysym) ||
+            !binding->callback || !input_key_binding_allowed(binding->callback))
+            continue;
+        unsigned int taps = binding->taps;
+        if (taps == count && !match)
+            match = binding;
+        if (taps > count)
+            higher = 1;
+    }
+    group->repeat_taps = count;
+    return input_tap_end(&group->tap, match ? match->callback : nullptr,
+                         match ? match->argument : (ActionArg){}, higher);
+}
+
+static int input_is_modifier(xkb_keysym_t sym)
+{
+    return (sym >= XKB_KEY_Shift_L && sym <= XKB_KEY_Hyper_R) ||
+           (sym >= XKB_KEY_ISO_Lock && sym <= XKB_KEY_ISO_Last_Group) ||
+           sym == XKB_KEY_Mode_switch || sym == XKB_KEY_Num_Lock;
 }
 
 static void input_handle_key(struct wl_listener* listener, void* data)
@@ -181,8 +214,26 @@ static void input_handle_key(struct wl_listener* listener, void* data)
     int keysym_count =
         xkb_state_key_get_syms(group->wlr_group->keyboard.xkb_state, keycode, &keysyms);
 
-    int handled = 0;
     uint32_t mods = wlr_keyboard_get_modifiers(&group->wlr_group->keyboard);
+    int modifier = keysym_count && input_is_modifier(keysyms[0]);
+    if (event->state == WL_KEYBOARD_KEY_STATE_PRESSED) {
+        group->tap_modifier = modifier;
+        for (size_t i = 0; i < group->wlr_group->keyboard.num_keycodes; i++) {
+            if (group->wlr_group->keyboard.keycodes[i] != event->keycode)
+                group->tap_modifier = 0;
+        }
+        if (group->tap.code == XKB_KEY_VoidSymbol &&
+            (!modifier || group->tap_keycode != event->keycode))
+            input_tap_cancel(&group->tap);
+        group->tap_keycode = event->keycode;
+        group->tap_initial_mods = mods;
+    }
+    if (lock_active || runner_active || traypopup_active() || bar_notification_picking()) {
+        input_tap_cancel(&group->tap);
+        group->tap_modifier = 0;
+    }
+
+    int handled = 0;
 
     wlr_idle_notifier_v1_notify_activity(idle_notifier, seat);
 
@@ -245,11 +296,27 @@ static void input_handle_key(struct wl_listener* listener, void* data)
     /* On _press_ if there is no active screen locker,
      * attempt to process a compositor keybinding. */
     if (!lock_active && event->state == WL_KEYBOARD_KEY_STATE_PRESSED) {
-        for (int i = 0; i < keysym_count; i++)
-            handled = input_key_binding(mods, keysyms[i]) || handled;
+        for (int i = 0; i < keysym_count; i++) {
+            int bound = !modifier;
+            for (size_t j = 0; !bound && j < settings->bindings.key_binding_count; j++) {
+                const KeyBinding* binding = &settings->bindings.key_bindings[j];
+                bound = CLEANMASK(mods) == CLEANMASK(binding->modifiers) &&
+                        xkb_keysym_to_lower(keysyms[i]) == xkb_keysym_to_lower(binding->keysym);
+            }
+            if (bound) {
+                handled = input_key_tap(group, mods, keysyms[i], event->time_msec) || handled;
+                group->tap_modifier = 0;
+            }
+        }
+    } else if (!lock_active && event->state == WL_KEYBOARD_KEY_STATE_RELEASED &&
+               group->tap_modifier && group->tap_keycode == event->keycode) {
+        uint32_t tapped_mods = mods ^ group->tap_initial_mods;
+        if (tapped_mods && !(tapped_mods & (tapped_mods - 1)))
+            input_key_tap(group, tapped_mods, XKB_KEY_VoidSymbol, event->time_msec);
+        group->tap_modifier = 0;
     }
 
-    if (handled && group->wlr_group->keyboard.repeat_info.delay > 0) {
+    if (handled && !group->tap.count && group->wlr_group->keyboard.repeat_info.delay > 0) {
         input_keep_keysyms(group, mods, keysyms, keysym_count);
         wl_event_source_timer_update(group->key_repeat_source,
                                      group->wlr_group->keyboard.repeat_info.delay);
@@ -323,7 +390,7 @@ static int input_key_repeat(void* data)
                                  1000 / group->wlr_group->keyboard.repeat_info.rate);
 
     for (int i = 0; i < group->keysym_count; i++)
-        input_key_binding(group->modifiers_mask, group->keysyms[i]);
+        input_key_binding(group->modifiers_mask, group->keysyms[i], group->repeat_taps);
 
     return 0;
 }

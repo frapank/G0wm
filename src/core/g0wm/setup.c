@@ -100,6 +100,7 @@
 #include "input/pointer.h"
 #include "input/seat.h"
 #include "input/tablet.h"
+#include "input/tap.h"
 #include "input/textinput.h"
 #include "internal.h"
 #include "output/lock.h"
@@ -284,6 +285,7 @@ void check_idle_inhibitor(struct wlr_surface* exclude)
 void cleanup(void)
 {
     cleanup_listeners();
+    input_taps_destroy();
 #ifdef XWAYLAND
     wlr_xwayland_destroy(xwayland);
     xwayland = nullptr;

@@ -36,6 +36,7 @@
 #include "input/keyboard.h"
 #include "input/pointer.h"
 #include "input/tablet.h"
+#include "input/tap.h"
 #include "internal.h"
 #include "output/magnifier.h"
 #include "output/monitor.h"
@@ -434,6 +435,7 @@ bool settings_load(void)
         active_settings->next = retired_settings;
         retired_settings = active_settings;
     }
+    input_taps_cancel();
     active_settings = loaded;
     settings = &loaded->values;
     if (!event_loop)
