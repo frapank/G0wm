@@ -88,8 +88,10 @@ If the session doesn't show up or something won't start, see
 <details>
 <summary>Show screenshots</summary>
 
-![g0wm in the tiling layout](.github/assets/windows.png)
-![g0wm in the tabbed layout](.github/assets/tabbed.png)
+![g0wm with floating windows and a blue theme](.github/assets/floating-blue.webp)
+![g0wm in the tiling layout with the runner open](.github/assets/tiling-runner.webp)
+![g0wm with a green theme and cmatrix](.github/assets/floating-green.webp)
+![g0wm in the tabbed layout](.github/assets/tabbed.webp)
 
 </details>
 
