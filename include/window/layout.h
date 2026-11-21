@@ -17,6 +17,7 @@ typedef struct {
 
 void layout_arrange(Monitor* monitor);
 void layout_commit(Monitor* monitor, bool force);
+void layout_defer(Monitor* monitor);
 bool layout_client_geometry(WindowClient* client, struct wlr_box* geometry);
 void layout_focus_stack(const ActionArg* argument);
 void layout_inc_master(const ActionArg* argument);

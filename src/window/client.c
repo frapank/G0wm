@@ -866,6 +866,10 @@ void client_handle_unmap(struct wl_listener* listener, void*)
             client_focus(client_top(selected_monitor), 1);
         }
     } else {
+        if (VISIBLEON(client, client->monitor) && !client->is_floating && !client->is_fullscreen &&
+            client->monitor->layouts[client->monitor->selected_layout_index]->arrange ==
+                layout_tile)
+            layout_defer(client->monitor);
         wl_list_remove(&client->link);
         client_set_monitor(client, nullptr, 0);
         wl_list_remove(&client->focus_link);

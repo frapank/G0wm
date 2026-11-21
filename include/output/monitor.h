@@ -105,6 +105,7 @@ struct Monitor {
     int capture_x, capture_width;
     bool title_update_pending;
     bool layout_pending;
+    struct wl_event_source* layout_wait_timer;
 #ifdef INTEGRATED_BACKGROUND
     RenderBuffer* wallpaper_buffer_pool[1];
     RenderBuffer* blur_buffer_pool[1];           /* blurred wallpaper buffers */

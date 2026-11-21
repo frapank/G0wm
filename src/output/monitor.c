@@ -166,6 +166,10 @@ static void monitor_handle_destroy(struct wl_listener* listener, void*)
 
     bar_destroy_monitor(monitor);
     magnifier_drop(monitor);
+    if (monitor->layout_wait_timer) {
+        wl_event_source_remove(monitor->layout_wait_timer);
+        monitor->layout_wait_timer = nullptr;
+    }
 
     drwl_setimage(monitor->draw_context, nullptr);
     drwl_destroy(monitor->draw_context);

@@ -24,9 +24,12 @@
 #include "window/client.h"
 #include "window/layout.h"
 
+constexpr int LAYOUTWAIT_MS = 200; /* cap the wait for an unresponsive tile */
+
 /* function declarations */
 static unsigned int layout_tag_index(uint32_t tagset);
 static int layout_tag_beside(uint32_t set, int step);
+static int layout_wait_done(void* data);
 
 /* function implementations */
 static struct wlr_box layout_geometry(Monitor* monitor, int count, int index)
@@ -100,12 +103,32 @@ bool layout_client_geometry(WindowClient* client, struct wlr_box* geometry)
     return true;
 }
 
+static int layout_wait_done(void* data)
+{
+    Monitor* monitor = data;
+
+    layout_commit(monitor, true);
+    wlr_output_schedule_frame(monitor->wlr_output);
+    return 0;
+}
+
+/* keep the last frame until the remaining tiles have their new buffers */
+void layout_defer(Monitor* monitor)
+{
+    if (!monitor->layout_wait_timer)
+        monitor->layout_wait_timer = wl_event_loop_add_timer(event_loop, layout_wait_done, monitor);
+    if (monitor->layout_wait_timer) {
+        monitor->layout_pending = true;
+        wl_event_source_timer_update(monitor->layout_wait_timer, LAYOUTWAIT_MS);
+    }
+}
+
 void layout_commit(Monitor* monitor, bool force)
 {
     if (!monitor->layout_pending)
         return;
     WindowClient* client;
-    bool waiting = false;
+    bool waiting = monitor->layout_wait_timer != nullptr;
     wl_list_for_each(client, &clients, link)
         if (client->monitor == monitor && client->map_wait_timer)
             waiting = true;
@@ -120,6 +143,10 @@ void layout_commit(Monitor* monitor, bool force)
         }
     }
     monitor->layout_pending = false;
+    if (monitor->layout_wait_timer) {
+        wl_event_source_remove(monitor->layout_wait_timer);
+        monitor->layout_wait_timer = nullptr;
+    }
     wl_list_for_each(client, &clients, link) {
         if (client->monitor != monitor)
             continue;
